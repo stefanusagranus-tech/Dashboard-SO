@@ -4,9 +4,11 @@ Dashboard Stock Opname
 Toko C383 - Karang Satria
 
 Dashboard SO dengan tema Emerald & Copper.
+Hybrid: Hari Ini + Akumulasi + Trend.
+
 Struktur:
-- Halaman 1: Dashboard
-- Halaman 2: Input Harian (SPD + SO)
+- Halaman 1: Dashboard (default)
+- Halaman 2: Input Harian (SPD + SO Rak)
 - Halaman 3: Analisis
 - Halaman 4: Download Laporan
 - Halaman 5: Refresh
@@ -35,7 +37,6 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Quicksand:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700;900&display=swap');
 
-    /* HIDE SIDEBAR & HEADER */
     [data-testid="stSidebar"],
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="stHeader"],
@@ -59,7 +60,6 @@ st.markdown("""
         --text-muted: #7a9b8e;
     }
 
-    /* BACKGROUND */
     .stApp {
         background: 
             radial-gradient(circle at 20% 0%, #0F8A72 0%, transparent 50%),
@@ -75,7 +75,6 @@ st.markdown("""
         max-width: 1400px !important;
     }
 
-    /* SCROLLBAR */
     ::-webkit-scrollbar { width: 10px; height: 10px; }
     ::-webkit-scrollbar-track { background: #050d0a; }
     ::-webkit-scrollbar-thumb {
@@ -84,7 +83,6 @@ st.markdown("""
         border: 2px solid #050d0a;
     }
 
-    /* TYPOGRAPHY */
     h1, h2, h3, h4 {
         font-family: 'Cinzel', serif !important;
         color: var(--copper-light) !important;
@@ -93,7 +91,6 @@ st.markdown("""
     }
     p, span, div { color: var(--text-light); }
 
-    /* HEADER BANNER */
     .royal-header {
         position: relative;
         background: linear-gradient(135deg, #050d0a 0%, #0F8A72 50%, #050d0a 100%);
@@ -143,7 +140,6 @@ st.markdown("""
     .royal-orn-bl { bottom: 8px; left: 12px; }
     .royal-orn-br { bottom: 8px; right: 12px; }
 
-    /* JAM & TANGGAL DI HEADER */
     .header-clock {
         text-align: center;
         margin-top: 12px;
@@ -167,7 +163,6 @@ st.markdown("""
         margin-top: 4px;
     }
 
-    /* METRIC CARD */
     .metric-card-v2 {
         position: relative;
         background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
@@ -217,7 +212,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* MENU CARD */
     .menu-card-v2 {
         position: relative;
         background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
@@ -261,7 +255,6 @@ st.markdown("""
         line-height: 1.5;
     }
 
-    /* BUTTON */
     div.stButton > button {
         background: linear-gradient(135deg, #0a1612 0%, #0d1f1a 100%) !important;
         color: var(--copper-light) !important;
@@ -286,7 +279,6 @@ st.markdown("""
         transform: translateY(-2px) !important;
     }
 
-    /* FORM SUBMIT */
     div.stFormSubmitButton > button {
         background: linear-gradient(135deg, var(--emerald) 0%, var(--copper) 100%) !important;
         color: #ffffff !important;
@@ -301,14 +293,12 @@ st.markdown("""
         min-height: 54px !important;
     }
 
-    /* DATAFRAME */
     div[data-testid="stDataFrame"] {
         border: 2px solid var(--copper) !important;
         border-radius: 12px !important;
         overflow: hidden !important;
     }
 
-    /* INPUT & SELECTBOX */
     div[data-baseweb="input"] > div,
     div[data-baseweb="select"] > div {
         background-color: rgba(10, 22, 18, 0.95) !important;
@@ -331,7 +321,6 @@ st.markdown("""
         text-transform: uppercase !important;
     }
 
-    /* DIVIDER */
     hr {
         border: none !important;
         height: 2px !important;
@@ -339,7 +328,6 @@ st.markdown("""
         margin: 20px 0 !important;
     }
 
-    /* RAK RESULT CARD */
     .rak-result-card {
         background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
         border: 2px solid var(--emerald);
@@ -366,7 +354,6 @@ st.markdown("""
         margin-top: 2px;
     }
 
-    /* COPYRIGHT */
     .copyright-footer {
         text-align: center;
         margin-top: 60px;
@@ -378,7 +365,12 @@ st.markdown("""
         letter-spacing: 1.5px;
     }
 
-    /* MOBILE */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+
     @media (max-width: 768px) {
         .royal-title { font-size: 18px; letter-spacing: 1.5px; }
         .royal-subtitle { font-size: 9px; }
@@ -400,8 +392,11 @@ st.markdown("""
 if "current_page" not in st.session_state:
     st.session_state["current_page"] = "dashboard"
 
-if "selected_rak_id" not in st.session_state:
-    st.session_state["selected_rak_id"] = None
+if "selected_rak_list" not in st.session_state:
+    st.session_state["selected_rak_list"] = []
+
+if "last_loaded_date" not in st.session_state:
+    st.session_state["last_loaded_date"] = None
 
 # =========================================================================
 # IMPORT MODULES
@@ -415,20 +410,39 @@ try:
         analisis_btsb_vs_selisih,
     )
     from modules.input_handler import (
-        save_input_harian, get_spd_hari_ini,
-        get_rak_belum_so, get_so_hari_ini, search_rak,
+        save_input_harian,
+        load_spd_by_date,
+        load_so_rak_by_date,
+        search_rak,
+        get_akumulasi_nominal_bulan,
+        get_nominal_per_hari,
+        get_so_rak_detail,
+        get_rak_belum_so,
+        get_so_hari_ini,
+        get_spd_hari_ini,
+        get_rak_by_kode_exact,
     )
 except ImportError as e:
     st.error(f"❌ Gagal import modul: {e}")
+    st.info("💡 Pastikan semua file di folder `modules/` sudah di-upload:")
+    st.code("""
+modules/
+├── __init__.py
+├── supabase_client.py
+├── data_loader.py
+├── rak_monitor.py
+├── spd_calculator.py
+└── input_handler.py
+    """)
     st.stop()
 
 # =========================================================================
 # HELPER FUNCTIONS
 # =========================================================================
 def render_royal_header(show_clock=True):
-    """Render header banner royal dengan jam & tanggal."""
+    """Render header banner royal dengan jam & tanggal (tanpa detik)."""
     _now = datetime.now(ZoneInfo("Asia/Jakarta"))
-    _time_str = _now.strftime("%H:%M:%S")
+    _time_str = _now.strftime("%H:%M")
     
     _day_map = {
         "Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
@@ -525,16 +539,15 @@ def fmt_rp_short(value):
 
 
 def go_to_page(page):
-    """Navigasi ke halaman tertentu."""
     st.session_state["current_page"] = page
     st.rerun()
 
 
 # =========================================================================
-# 🏠 HALAMAN 1: DASHBOARD
+# 🏠 HALAMAN 1: DASHBOARD (HYBRID)
 # =========================================================================
 def render_dashboard():
-    """Render halaman dashboard utama."""
+    """Render dashboard — Hybrid: Hari Ini + Akumulasi + Trend."""
     render_royal_header()
     
     # ============================================================
@@ -543,6 +556,10 @@ def render_dashboard():
     with st.spinner("⏳ Memuat data..."):
         rak_df = load_rak_master()
         so_df = load_so_hasil()
+        _akumulasi = get_akumulasi_nominal_bulan()
+        _trend = get_nominal_per_hari()
+        _detail_so = get_so_rak_detail(limit=20)
+        _btsb_result = hitung_btsb_akumulatif()
     
     if rak_df.empty:
         st.error("❌ **Data rak kosong!**")
@@ -551,105 +568,164 @@ def render_dashboard():
         return
     
     # ============================================================
-    # METRIC CARDS
+    # METRIC HARI INI
     # ============================================================
-    progress = hitung_progress_so(rak_df, so_df)
+    st.markdown("### 📊 Ringkasan Hari Ini")
+    
+    _progress = hitung_progress_so(rak_df, so_df)
+    _so_today = get_so_hari_ini()
+    _spd_today = get_spd_hari_ini()
+    _nominal_today = sum(float(r.get("nominal_adjust", 0)) for r in _so_today) if _so_today else 0
+    _rak_so_today = len(_so_today) if _so_today else 0
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     
     with col_m1:
         render_metric_card(
-            label="Total Rak",
-            value=f"{progress['total_rak']}",
-            sub_text="Rak terdaftar",
+            label="Rak di-SO Hari Ini",
+            value=f"{_rak_so_today}",
+            sub_text=f"dari {_progress['total_rak']} total rak",
             accent="#E8B189",
             icon="📦"
         )
     
     with col_m2:
+        _btsb_today = hitung_btsb_harian(_spd_today) if _spd_today > 0 else 0
         render_metric_card(
-            label="Sudah SO",
-            value=f"{progress['rak_selesai']}",
-            sub_text="Rak selesai",
+            label="SPD Hari Ini",
+            value=fmt_rp_short(_spd_today),
+            sub_text=f"BTSB: {fmt_rp_short(_btsb_today)}",
             accent="#7FB99B",
-            icon="✅"
+            icon="💰"
         )
     
     with col_m3:
+        _color_today = "#E88B8B" if _nominal_today < 0 else "#7FB99B"
+        _sign_today = "+" if _nominal_today >= 0 else ""
         render_metric_card(
-            label="Belum SO",
-            value=f"{progress['rak_belum']}",
-            sub_text="Perlu di-SO",
-            accent="#E88B8B",
-            icon="❌"
+            label="Nominal SO Hari Ini",
+            value=f"{_sign_today}{fmt_rp_short(_nominal_today)}",
+            sub_text=f"{_rak_so_today} rak di-SO",
+            accent=_color_today,
+            icon="⚖️"
         )
     
     with col_m4:
-        _persen = progress['persen_selesai']
-        if _persen >= 80:
-            _color = "#7FB99B"
-            _status = "✅ TERCAPAI"
-        elif _persen >= 64:
-            _color = "#E8B189"
-            _status = "⚠️ MENDEKATI"
-        else:
-            _color = "#E88B8B"
-            _status = "🔴 BELUM"
-        
         render_metric_card(
-            label="Progres SO",
-            value=f"{_persen:.1f}%",
-            sub_text=f"Target: 80% • {_status}",
-            accent=_color,
+            label="Progres SO Bulan Ini",
+            value=f"{_progress['persen_selesai']:.1f}%",
+            sub_text=f"Target: 80% • {_progress['rak_selesai']}/{_progress['total_rak']} rak",
+            accent="#E8B189",
             icon="🎯"
         )
     
     st.markdown("---")
     
     # ============================================================
-    # SUMMARY SPD & BTSB
+    # METRIC AKUMULASI BULAN INI
     # ============================================================
-    st.markdown("### 💰 Summary SPD & BTSB")
+    st.markdown("### 📈 Akumulasi Bulan Ini")
     
-    _btsb_result = hitung_btsb_akumulatif()
-    _total_spd = _btsb_result["total_spd"]
-    _btsb_akum = _btsb_result["btsb_akumulatif"]
-    _jumlah_hari = _btsb_result["jumlah_hari"]
+    col_a1, col_a2, col_a3 = st.columns(3)
     
-    col_s1, col_s2, col_s3 = st.columns(3)
-    
-    with col_s1:
+    with col_a1:
         render_metric_card(
             label="Total SPD Bulan Ini",
-            value=fmt_rp_short(_total_spd),
-            sub_text=f"{_jumlah_hari} hari terinput",
+            value=fmt_rp_short(_btsb_result["total_spd"]),
+            sub_text=f"{_btsb_result['jumlah_hari']} hari terinput",
             accent="#7FB99B",
             icon="📅"
         )
     
-    with col_s2:
+    with col_a2:
+        _total_nominal = _akumulasi["total_nominal"]
+        _color_akum = "#E88B8B" if _total_nominal < 0 else "#7FB99B"
+        _sign_akum = "+" if _total_nominal >= 0 else ""
         render_metric_card(
-            label="BTSB Akumulatif",
-            value=fmt_rp_short(_btsb_akum),
-            sub_text="0,15% × Total SPD",
-            accent="#0F8A72",
+            label="Total Nominal SO",
+            value=f"{_sign_akum}{fmt_rp_short(_total_nominal)}",
+            sub_text=f"{_akumulasi['total_rak']} rak • {_akumulasi['jumlah_hari']} hari",
+            accent=_color_akum,
+            icon="⚖️"
+        )
+    
+    with col_a3:
+        _btsb_total = _btsb_result["btsb_akumulatif"]
+        _analisis = analisis_btsb_vs_selisih(_total_nominal, _btsb_total)
+        render_metric_card(
+            label="Status BTSB",
+            value=f"{_analisis['icon']} {_analisis['status']}",
+            sub_text=f"BTSB: {fmt_rp_short(_btsb_total)} • {_analisis['persen_penggunaan']:.1f}%",
+            accent=_analisis['warna'],
             icon="🎯"
         )
     
-    with col_s3:
-        _total_selisih = 0
-        if not so_df.empty and "selisih" in so_df.columns:
-            _total_selisih = int(pd.to_numeric(so_df["selisih"], errors="coerce").fillna(0).sum())
+    st.markdown("---")
+    
+    # ============================================================
+    # CHART: TREND NOMINAL SO
+    # ============================================================
+    if _trend and len(_trend) > 0:
+        st.markdown("### 📈 Trend Nominal SO")
         
-        _analisis = analisis_btsb_vs_selisih(_total_selisih, _btsb_akum)
+        try:
+            import plotly.graph_objects as go
+            
+            _dates = [t["tanggal"][-5:] if len(t["tanggal"]) > 5 else t["tanggal"] for t in _trend]
+            _values = [t["nominal"] for t in _trend]
+            _colors = ["#E88B8B" if v < 0 else "#7FB99B" for v in _values]
+            
+            _fig = go.Figure()
+            _fig.add_trace(go.Bar(
+                x=_dates,
+                y=_values,
+                marker=dict(color=_colors, line=dict(color="#B87333", width=1.5)),
+                text=[f"{v:+,.0f}" for v in _values],
+                textposition="outside",
+                textfont=dict(color="#E8B189", size=11, family="JetBrains Mono"),
+                hovertemplate="<b>%{x}</b><br>Nominal: %{y:+,.0f}<extra></extra>",
+            ))
+            
+            _fig.update_layout(
+                height=300,
+                margin=dict(l=10, r=10, t=20, b=20),
+                plot_bgcolor="rgba(10, 22, 18, 0.4)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#E8B189", family="JetBrains Mono", size=11),
+                xaxis=dict(title="Tanggal", gridcolor="rgba(232, 177, 137, 0.15)"),
+                yaxis=dict(title="Nominal (Rp)", gridcolor="rgba(232, 177, 137, 0.15)"),
+                showlegend=False,
+            )
+            
+            st.plotly_chart(_fig, use_container_width=True, key="chart_trend_nominal")
+        except Exception as e:
+            st.warning(f"⚠️ Chart gagal render: {str(e)[:100]}")
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # TABEL DETAIL SO RAK
+    # ============================================================
+    st.markdown("### 📋 Detail SO Rak (Terbaru)")
+    
+    if _detail_so:
+        _df_detail = pd.DataFrame(_detail_so)
+        _cols_show = ["so_date", "rak_id", "nominal_adjust", "pic", "keterangan"]
+        _cols_show = [c for c in _cols_show if c in _df_detail.columns]
+        _df_show = _df_detail[_cols_show].copy()
         
-        render_metric_card(
-            label="Selisih SO",
-            value=fmt_rp_short(_total_selisih),
-            sub_text=f"{_analisis['icon']} {_analisis['status']} • {_analisis['persen_penggunaan']:.1f}%",
-            accent=_analisis['warna'],
-            icon="⚖️"
-        )
+        if "nominal_adjust" in _df_show.columns:
+            _df_show["nominal_adjust"] = _df_show["nominal_adjust"].apply(
+                lambda v: f"{float(v):+,.0f}".replace(",", ".")
+            )
+        
+        _col_names = ["Tanggal", "Kode Rak", "Nominal (Rp)", "PIC", "Keterangan"]
+        _df_show.columns = _col_names[:len(_df_show.columns)]
+        
+        st.dataframe(_df_show, use_container_width=True, hide_index=True, height=400)
+        st.caption(f"📊 Menampilkan **{len(_df_show)}** SO rak terbaru")
+    else:
+        st.info("📭 Belum ada SO rak yang tercatat.")
     
     st.markdown("---")
     
@@ -682,7 +758,6 @@ def render_dashboard():
             target_page="analisis"
         )
     
-    # Menu sejajar: Refresh (kiri) + Download (kanan) — ukuran kecil
     col_menu3, col_menu4 = st.columns(2)
     
     with col_menu3:
@@ -747,39 +822,29 @@ def render_dashboard():
         if st.button("📥 Download", key="btn_menu_download", use_container_width=True):
             go_to_page("download")
     
-    # Copyright
     render_copyright()
 
 
 # =========================================================================
-# 📝 HALAMAN 2: INPUT HARIAN (SPD + SO)
+# 📝 HALAMAN 2: INPUT HARIAN (SPD + SO RAK)
 # =========================================================================
 def render_input_harian():
-    """Render halaman input harian: SPD + SO dengan search rak."""
+    """Render halaman input harian: SPD + SO rak (multiple)."""
     render_royal_header(show_clock=True)
     
     # Back button
     col_back, _ = st.columns([1, 4])
     with col_back:
         if st.button("← Dashboard", key="btn_back_from_input"):
-            st.session_state["selected_rak_id"] = None
+            st.session_state["selected_rak_list"] = []
+            st.session_state["last_loaded_date"] = None
             go_to_page("dashboard")
     
     st.markdown("### 📝 Input Harian")
-    st.caption("Input SPD dan SO dalam 1 form — hemat waktu!")
+    st.caption("Input SPD & SO rak dalam 1 form — bisa edit data yang sudah ada")
     
     # ============================================================
-    # LOAD DATA
-    # ============================================================
-    rak_df = load_rak_master()
-    
-    if rak_df.empty:
-        st.error("❌ Data rak kosong.")
-        render_copyright()
-        return
-    
-    # ============================================================
-    # BAGIAN A: TANGGAL & SPD
+    # BAGIAN A: TANGGAL
     # ============================================================
     st.markdown("#### 📅 Tanggal & SPD")
     
@@ -790,267 +855,262 @@ def render_input_harian():
         key="input_tanggal"
     )
     
-    _spd_existing = 0
-    _df_spd = load_spd_harian()
-    if not _df_spd.empty:
-        _match = _df_spd[_df_spd["tanggal"] == _tanggal]
-        if not _match.empty:
-            _spd_existing = int(_match.iloc[0]["spd"])
+    # AUTO-LOAD DATA EXISTING saat tanggal berubah
+    if st.session_state["last_loaded_date"] != _tanggal:
+        _existing_spd = load_spd_by_date(_tanggal)
+        _existing_so = load_so_rak_by_date(_tanggal)
+        
+        st.session_state["loaded_spd"] = int(_existing_spd["spd"]) if _existing_spd else 0
+        st.session_state["selected_rak_list"] = [
+            {
+                "rak_id": r["rak_id"],
+                "nominal_adjust": float(r.get("nominal_adjust", 0)),
+            }
+            for r in _existing_so
+        ]
+        st.session_state["last_loaded_date"] = _tanggal
+        st.rerun()
     
-    col_spd1, col_spd2 = st.columns([2, 1])
-    with col_spd1:
-        _spd_val = st.number_input(
-            "💰 SPD Hari Ini (Rp)",
-            min_value=0,
-            step=100000,
-            value=_spd_existing,
-            key="input_spd_val",
-            help="Total penjualan hari ini"
-        )
-    with col_spd2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if _spd_val > 0:
-            _btsb_harian = hitung_btsb_harian(_spd_val)
-            st.success(f"BTSB: {fmt_rp(_btsb_harian)}")
-        else:
-            st.info("BTSB: -")
+    # ============================================================
+    # BAGIAN B: SPD (OPSIONAL)
+    # ============================================================
+    _spd_val = st.number_input(
+        "💰 SPD Hari Ini (Rp) — Opsional, boleh 0",
+        min_value=0,
+        step=100000,
+        value=int(st.session_state.get("loaded_spd", 0)),
+        key="input_spd_val",
+        help="Kosongkan / isi 0 kalau belum ada SPD hari ini"
+    )
+    
+    if _spd_val > 0:
+        _btsb_harian = hitung_btsb_harian(_spd_val)
+        st.success(f"💡 BTSB Otomatis: **{fmt_rp(_btsb_harian)}** (0,15% × SPD)")
+    else:
+        st.info("💡 BTSB: — (SPD = 0)")
     
     st.markdown("---")
     
     # ============================================================
-    # BAGIAN B: SEARCH RAK
+    # BAGIAN C: SO RAK (SEARCH + ADD)
     # ============================================================
     st.markdown("#### 📦 Stock Opname (Opsional)")
-    st.caption("Ketik kode/nama rak di bawah, lalu klik hasilnya.")
+    st.caption("Cari rak, klik untuk menambahkan ke daftar SO")
     
-    # Kalau sudah ada rak terpilih
-    if st.session_state["selected_rak_id"]:
-        _selected_info = st.session_state["selected_rak_id"]
-        _rak_match = rak_df[rak_df["rak_id"].astype(str).str.upper() == _selected_info.upper()]
-        _rak_name_display = _rak_match.iloc[0]["rak_name"] if not _rak_match.empty else "-"
+    _search_query = st.text_input(
+        "🔍 Cari Rak",
+        key="input_rak_search",
+        placeholder="Ketik kode rak (contoh: AT, AU, CHILLER)"
+    )
+    
+    # Tampilkan hasil search
+    if _search_query and len(_search_query.strip()) >= 2:
+        _search_results = search_rak(_search_query, limit=10)
         
-        col_sel1, col_sel2 = st.columns([3, 1])
-        with col_sel1:
-            st.markdown(f"""
-            <div class='rak-result-card' style='border-color: #E8B189; background: rgba(15, 138, 114, 0.2);'>
-                <div>
-                    <div class='rak-result-id'>✅ {_selected_info}</div>
-                    <div class='rak-result-name'>{_rak_name_display}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col_sel2:
-            if st.button("❌ Ganti", key="btn_clear_rak"):
-                st.session_state["selected_rak_id"] = None
-                st.rerun()
-    else:
-        # Input pencarian
-        _search_query = st.text_input(
-            "🔍 Cari Rak",
-            key="input_rak_search",
-            placeholder="Ketik kode rak (contoh: AT, AU, CHILLER)"
-        )
-        
-        if _search_query and len(_search_query.strip()) >= 2:
-            _search_results = search_rak(_search_query, limit=15)
+        if _search_results:
+            st.caption(f"💡 {len(_search_results)} rak ditemukan:")
             
-            if _search_results:
-                st.markdown(f"##### 💡 Hasil Pencarian ({len(_search_results)} rak)")
+            for _idx, _rak in enumerate(_search_results):
+                _rid = _rak.get("rak_id", "-")
+                _rname = _rak.get("rak_name", "-")
+                _status = _rak.get("status_so", "BELUM")
                 
-                for _idx, _rak in enumerate(_search_results):
-                    _rid = _rak.get("rak_id", "-")
-                    _rname = _rak.get("rak_name", "-")
-                    
-                    col_r1, col_r2 = st.columns([4, 1])
-                    with col_r1:
-                        st.markdown(f"""
-                        <div class='rak-result-card'>
-                            <div>
-                                <div class='rak-result-id'>{_rid}</div>
-                                <div class='rak-result-name'>{_rname}</div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with col_r2:
-                        if st.button("Pilih", key=f"btn_select_rak_{_idx}_{_rid}"):
-                            st.session_state["selected_rak_id"] = _rid
-                            st.rerun()
-            else:
-                st.warning(f"⚠️ Rak **'{_search_query}'** tidak ditemukan.")
-        elif _search_query and len(_search_query.strip()) < 2:
-            st.info("💡 Ketik minimal **2 karakter**.")
-        else:
-            st.info("💡 Ketik kode rak (contoh: **AT**, **AU**, **CHILLER**).")
-    
-    # ============================================================
-    # BAGIAN C: INPUT ITEM SO (MUNCUL KALAU RAK DIPILIH)
-    # ============================================================
-    _selected_rak_id = st.session_state.get("selected_rak_id", None)
-    _so_items = []
-    
-    if _selected_rak_id:
-        st.markdown(f"##### 📋 Item SO untuk Rak `{_selected_rak_id}`")
-        
-        _num_items = st.number_input(
-            "Jumlah Item yang Di-SO",
-            min_value=1,
-            max_value=50,
-            value=1,
-            step=1,
-            key="input_num_items"
-        )
-        
-        st.caption("💡 Isi PLU, nama item, qty system, qty actual, dan harga")
-        
-        with st.form("form_input_items", clear_on_submit=False):
-            for _i in range(int(_num_items)):
-                st.markdown(f"**Item #{_i+1}**")
-                col_i1, col_i2 = st.columns(2)
+                _already_selected = any(
+                    r["rak_id"] == _rid for r in st.session_state["selected_rak_list"]
+                )
                 
-                with col_i1:
-                    _plu = st.text_input(f"PLU #{_i+1}", key=f"input_plu_{_i}", placeholder="Contoh: 100234")
-                    _nama_item = st.text_input(f"Nama Item #{_i+1}", key=f"input_nama_{_i}", placeholder="Contoh: AQUA 600ML")
-                
-                with col_i2:
-                    _qty_sys = st.number_input(f"Qty System #{_i+1}", min_value=0, step=1, value=0, key=f"input_qsys_{_i}")
-                    _qty_act = st.number_input(f"Qty Actual #{_i+1}", min_value=0, step=1, value=0, key=f"input_qact_{_i}")
-                
-                _harga = st.number_input(f"Harga Satuan #{_i+1} (Rp)", min_value=0, step=100, value=0, key=f"input_harga_{_i}")
-                
-                _selisih = int(_qty_act) - int(_qty_sys)
-                if _selisih != 0:
-                    _selisih_color = "#E88B8B" if _selisih < 0 else "#7FB99B"
+                col_r1, col_r2 = st.columns([4, 1])
+                with col_r1:
+                    _status_icon = "✅" if _status == "SELESAI" else "⬜"
                     st.markdown(
-                        f"<div style='text-align: right; font-family: monospace; "
-                        f"font-size: 12px; color: {_selisih_color}; font-weight: 900;'>"
-                        f"Selisih: {_selisih:+d}</div>",
+                        "<div class='rak-result-card'>"
+                        "<div>"
+                        "<div class='rak-result-id'>" + _status_icon + " " + _rid + "</div>"
+                        "<div class='rak-result-name'>" + _rname + "</div>"
+                        "</div>"
+                        "</div>",
                         unsafe_allow_html=True
                     )
-                
-                _so_items.append({
-                    "plu": _plu,
-                    "item_name": _nama_item,
-                    "qty_system": int(_qty_sys),
-                    "qty_actual": int(_qty_act),
-                    "harga": float(_harga),
-                })
-                
-                if _i < int(_num_items) - 1:
-                    st.markdown("---")
-            
-            st.markdown("---")
-            _keterangan = st.text_area(
-                "📝 Keterangan (Opsional)",
-                key="input_keterangan",
-                placeholder="Contoh: Ada event promo, barang rusak, dll",
-                height=80
-            )
-            
-            st.markdown("---")
-            
-            _btn_submit = st.form_submit_button(
-                "💾 SIMPAN SEMUA",
-                use_container_width=True,
-                type="primary"
-            )
-        
-        if _btn_submit:
-            if _spd_val <= 0 and _selected_rak_id is None:
-                st.error("⚠️ Minimal isi SPD atau pilih rak untuk SO!")
-            else:
-                with st.spinner("⏳ Menyimpan data..."):
-                    _items_valid = [it for it in _so_items if it["plu"] or it["item_name"]]
-                    
-                    _ok, _msg, _detail = save_input_harian(
-                        tanggal=_tanggal,
-                        spd=_spd_val,
-                        rak_id=_selected_rak_id,
-                        items_so=_items_valid,
-                        keterangan=_keterangan,
-                        update_status_rak=True,
-                    )
-                
-                if _ok:
-                    st.success(_msg)
-                    st.balloons()
-                    
-                    with st.expander("📊 Detail Tersimpan", expanded=True):
-                        st.write(f"- 💰 SPD: {fmt_rp(_spd_val)}")
-                        if _selected_rak_id:
-                            st.write(f"- 📦 Rak: {_selected_rak_id}")
-                            st.write(f"- 📋 Jumlah Item: {_detail.get('total_so_items', 0)}")
-                            st.write(f"- ⚖️ Total Selisih: {_detail.get('total_selisih', 0):+d}")
-                    
-                    st.session_state["selected_rak_id"] = None
-                    st.cache_data.clear()
-                    time.sleep(2)
-                    st.rerun()
-                else:
-                    st.error(_msg)
-    else:
-        # Simpan SPD aja (tanpa SO)
-        st.markdown("---")
-        _keterangan_no_so = st.text_area(
-            "📝 Keterangan (Opsional)",
-            key="input_keterangan_no_so",
-            placeholder="Contoh: Ada event promo, dll",
-            height=80
-        )
-        
-        _btn_submit_spd = st.button(
-            "💾 SIMPAN SPD",
-            use_container_width=True,
-            type="primary",
-            key="btn_save_spd_only"
-        )
-        
-        if _btn_submit_spd:
-            if _spd_val <= 0:
-                st.error("⚠️ SPD harus > 0!")
-            else:
-                with st.spinner("⏳ Menyimpan SPD..."):
-                    _ok, _msg, _detail = save_input_harian(
-                        tanggal=_tanggal,
-                        spd=_spd_val,
-                        rak_id=None,
-                        items_so=None,
-                        keterangan=_keterangan_no_so,
-                        update_status_rak=False,
-                    )
-                
-                if _ok:
-                    st.success(_msg)
-                    st.cache_data.clear()
-                    time.sleep(2)
-                    st.rerun()
-                else:
-                    st.error(_msg)
+                with col_r2:
+                    if _already_selected:
+                        st.button("✓ Ada", key=f"btn_add_{_idx}_{_rid}", disabled=True)
+                    else:
+                        if st.button("+ Add", key=f"btn_add_{_idx}_{_rid}"):
+                            st.session_state["selected_rak_list"].append({
+                                "rak_id": _rid,
+                                "nominal_adjust": 0.0,
+                            })
+                            st.rerun()
+        else:
+            st.warning(f"⚠️ Rak **'{_search_query}'** tidak ditemukan.")
+    elif _search_query and len(_search_query.strip()) < 2:
+        st.info("💡 Ketik minimal **2 karakter**.")
     
-    # ============================================================
-    # PREVIEW SO HARI INI
-    # ============================================================
     st.markdown("---")
-    st.markdown("### 📋 Preview SO Hari Ini")
     
-    _so_today = get_so_hari_ini()
-    if _so_today:
-        _so_today_df = pd.DataFrame(_so_today)
-        _cols_show = ["rak_id", "plu", "item_name", "qty_system", "qty_actual", "selisih"]
-        _cols_show = [c for c in _cols_show if c in _so_today_df.columns]
-        st.dataframe(_so_today_df[_cols_show], use_container_width=True, hide_index=True)
+    # ============================================================
+    # BAGIAN D: LIST RAK TERPILIH + INPUT NOMINAL
+    # ============================================================
+    if st.session_state["selected_rak_list"]:
+        st.markdown(f"#### 📋 Rak Terpilih ({len(st.session_state['selected_rak_list'])})")
+        st.caption("Isi nominal adjustment per rak (bisa +/-)")
         
-        _total_selisih_today = int(pd.to_numeric(_so_today_df["selisih"], errors="coerce").fillna(0).sum())
-        st.caption(f"📊 Total {len(_so_today)} item | Selisih: {_total_selisih_today:+d}")
-    else:
-        st.info("📭 Belum ada SO hari ini")
+        _items_to_remove = []
+        
+        for _idx, _item in enumerate(st.session_state["selected_rak_list"]):
+            _rid = _item["rak_id"]
+            _rak_info = get_rak_by_kode_exact(_rid)
+            _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
+            
+            col_d1, col_d2, col_d3 = st.columns([2, 2, 1])
+            
+            with col_d1:
+                st.markdown(
+                    "<div style='"
+                    "padding: 12px 14px;"
+                    "background: rgba(15, 138, 114, 0.15);"
+                    "border: 1.5px solid #7FB99B;"
+                    "border-radius: 10px;"
+                    "margin-top: 8px;"
+                    "'>"
+                    "<div style='"
+                    "font-family: \"JetBrains Mono\", monospace;"
+                    "font-size: 14px;"
+                    "font-weight: 900;"
+                    "color: #E8B189;"
+                    "'>" + _rid + "</div>"
+                    "<div style='"
+                    "font-family: \"Quicksand\", sans-serif;"
+                    "font-size: 10px;"
+                    "color: #7a9b8e;"
+                    "margin-top: 2px;"
+                    "'>" + _rname + "</div>"
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+            
+            with col_d2:
+                _new_nominal = st.number_input(
+                    f"Nominal #{_idx+1}",
+                    min_value=-999999999,
+                    max_value=999999999,
+                    step=1000,
+                    value=int(_item.get("nominal_adjust", 0)),
+                    key=f"nominal_{_rid}_{_idx}",
+                    label_visibility="collapsed"
+                )
+                st.session_state["selected_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
+            
+            with col_d3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️", key=f"btn_del_{_rid}_{_idx}"):
+                    _items_to_remove.append(_idx)
+        
+        if _items_to_remove:
+            for _i in sorted(_items_to_remove, reverse=True):
+                st.session_state["selected_rak_list"].pop(_i)
+            st.rerun()
+        
+        # Total nominal
+        _total_nominal_input = sum(
+            item.get("nominal_adjust", 0)
+            for item in st.session_state["selected_rak_list"]
+        )
+        _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
+        _sign_total = "+" if _total_nominal_input >= 0 else ""
+        
+        st.markdown(
+            "<div style='"
+            "background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.85));"
+            "border: 2px solid " + _color_total + ";"
+            "border-radius: 12px;"
+            "padding: 14px 20px;"
+            "margin-top: 16px;"
+            "text-align: center;"
+            "'>"
+            "<div style='"
+            "font-family: monospace;"
+            "font-size: 10px;"
+            "color: #7a9b8e;"
+            "letter-spacing: 1.5px;"
+            "'>💰 TOTAL NOMINAL SO</div>"
+            "<div style='"
+            "font-family: \"JetBrains Mono\", monospace;"
+            "font-size: 22px;"
+            "font-weight: 900;"
+            "color: " + _color_total + ";"
+            "margin-top: 6px;"
+            "'>" + _sign_total + fmt_rp(_total_nominal_input) + "</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
     
-    # Copyright
+    st.markdown("---")
+    
+    # ============================================================
+    # BAGIAN E: KETERANGAN & PIC
+    # ============================================================
+    col_k1, col_k2 = st.columns(2)
+    with col_k1:
+        _keterangan = st.text_input(
+            "📝 Keterangan",
+            placeholder="Contoh: Barang rusak, dll",
+            key="input_keterangan"
+        )
+    with col_k2:
+        _pic = st.text_input(
+            "👤 PIC (Nama)",
+            placeholder="Nama penanggung jawab",
+            key="input_pic"
+        )
+    
+    st.markdown("---")
+    
+    # ============================================================
+    # BAGIAN F: TOMBOL SIMPAN
+    # ============================================================
+    if st.button(
+        "💾 SIMPAN SEMUA",
+        use_container_width=True,
+        type="primary",
+        key="btn_save_all"
+    ):
+        _has_spd = _spd_val > 0
+        _has_so = len(st.session_state["selected_rak_list"]) > 0
+        
+        if not _has_spd and not _has_so:
+            st.error("⚠️ Minimal isi SPD atau tambahkan 1 rak SO!")
+        else:
+            with st.spinner("⏳ Menyimpan data..."):
+                _ok, _msg, _detail = save_input_harian(
+                    tanggal=_tanggal,
+                    spd=_spd_val,
+                    rak_items=st.session_state["selected_rak_list"],
+                    keterangan=_keterangan,
+                    pic=_pic,
+                    update_status_rak=True,
+                )
+            
+            if _ok:
+                st.success(_msg)
+                st.balloons()
+                
+                with st.expander("📊 Detail Tersimpan", expanded=True):
+                    if _detail.get("spd_saved"):
+                        st.write(f"- 💰 SPD: {fmt_rp(_spd_val)}")
+                    if _detail.get("rak_saved", 0) > 0:
+                        st.write(f"- 📦 Rak di-SO: {_detail['rak_saved']}")
+                        st.write(f"- ⚖️ Total Nominal: {fmt_rp(_detail.get('total_nominal', 0))}")
+                
+                st.session_state["selected_rak_list"] = []
+                st.session_state["last_loaded_date"] = None
+                st.cache_data.clear()
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error(_msg)
+    
     render_copyright()
-
-
-# =========================================================================
-# 📊 HALAMAN 3: ANALISIS
-# =========================================================================
 
 
 # =========================================================================
@@ -1067,10 +1127,14 @@ def render_analisis():
     
     st.markdown("### 📊 Analisis & Laporan")
     
+    # ============================================================
+    # LOAD DATA
+    # ============================================================
     with st.spinner("⏳ Memuat data..."):
         rak_df = load_rak_master()
         so_df = load_so_hasil()
         _btsb_result = hitung_btsb_akumulatif()
+        _akumulasi = get_akumulasi_nominal_bulan()
     
     if rak_df.empty:
         st.error("❌ Data rak kosong.")
@@ -1084,52 +1148,45 @@ def render_analisis():
     
     _total_spd = _btsb_result["total_spd"]
     _btsb_akum = _btsb_result["btsb_akumulatif"]
-    _jumlah_hari = _btsb_result["jumlah_hari"]
+    _total_nominal = _akumulasi["total_nominal"]
     
-    _total_selisih = 0
-    if not so_df.empty and "selisih" in so_df.columns:
-        _total_selisih = int(pd.to_numeric(so_df["selisih"], errors="coerce").fillna(0).sum())
+    _analisis = analisis_btsb_vs_selisih(_total_nominal, _btsb_akum)
     
-    _analisis = analisis_btsb_vs_selisih(_total_selisih, _btsb_akum)
+    # Card besar status
+    st.markdown(
+        "<div class='metric-card-v2 fade-in-up' style='--accent-color: " + _analisis["warna"] + "; padding: 24px 28px;'>"
+        "<div style='display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;'>"
+        "<div>"
+        "<div class='metric-label-v2' style='font-size: 11px;'>⚖️ STATUS BTSB</div>"
+        "<div style='font-family: \"Cinzel\", serif; font-size: 32px; font-weight: 900; "
+        "color: " + _analisis["warna"] + "; text-shadow: 0 0 20px " + _analisis["warna"] + "; "
+        "margin: 8px 0; letter-spacing: 3px;'>" + _analisis["icon"] + " " + _analisis["status"] + "</div>"
+        "<div class='metric-sub-v2'>"
+        "Penggunaan: <b style='color: " + _analisis["warna"] + ";'>" + f"{_analisis['persen_penggunaan']:.2f}%" + "</b> "
+        "dari BTSB • Gap: <b>" + fmt_rp(_analisis["gap"]) + "</b>"
+        "</div>"
+        "</div>"
+        "<div style='text-align: right;'>"
+        "<div class='metric-label-v2'>Total Nominal SO</div>"
+        "<div style='font-family: \"JetBrains Mono\", monospace; font-size: 22px; "
+        "font-weight: 900; color: #E88B8B;'>" + fmt_rp(_total_nominal) + "</div>"
+        "<div class='metric-label-v2' style='margin-top: 12px;'>BTSB Akumulatif</div>"
+        "<div style='font-family: \"JetBrains Mono\", monospace; font-size: 22px; "
+        "font-weight: 900; color: #0F8A72;'>" + fmt_rp(_btsb_akum) + "</div>"
+        "</div>"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
     
-    st.markdown(f"""
-    <div class='metric-card-v2 fade-in-up' style='--accent-color: {_analisis["warna"]}; padding: 24px 28px;'>
-        <div style='display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;'>
-            <div>
-                <div class='metric-label-v2' style='font-size: 11px;'>⚖️ STATUS BTSB</div>
-                <div style='font-family: "Cinzel", serif; font-size: 32px; font-weight: 900; 
-                            color: {_analisis["warna"]}; text-shadow: 0 0 20px {_analisis["warna"]}; 
-                            margin: 8px 0; letter-spacing: 3px;'>
-                    {_analisis["icon"]} {_analisis["status"]}
-                </div>
-                <div class='metric-sub-v2'>
-                    Penggunaan: <b style='color: {_analisis["warna"]};'>{_analisis["persen_penggunaan"]:.2f}%</b> 
-                    dari BTSB • Gap: <b>{fmt_rp(_analisis["gap"])}</b>
-                </div>
-            </div>
-            <div style='text-align: right;'>
-                <div class='metric-label-v2'>Total Selisih</div>
-                <div style='font-family: "JetBrains Mono", monospace; font-size: 22px; 
-                            font-weight: 900; color: #E88B8B;'>
-                    {fmt_rp(_total_selisih)}
-                </div>
-                <div class='metric-label-v2' style='margin-top: 12px;'>BTSB Akumulatif</div>
-                <div style='font-family: "JetBrains Mono", monospace; font-size: 22px; 
-                            font-weight: 900; color: #0F8A72;'>
-                    {fmt_rp(_btsb_akum)}
-                </div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
+    # 3 metric
     col_a1, col_a2, col_a3 = st.columns(3)
     
     with col_a1:
         render_metric_card(
             label="Total SPD Bulan Ini",
             value=fmt_rp_short(_total_spd),
-            sub_text=f"{_jumlah_hari} hari terinput",
+            sub_text=f"{_btsb_result['jumlah_hari']} hari terinput",
             accent="#7FB99B",
             icon="📅"
         )
@@ -1147,7 +1204,7 @@ def render_analisis():
         render_metric_card(
             label="Sisa Budget",
             value=fmt_rp_short(_analisis["gap"]),
-            sub_text="BTSB - |Selisih|",
+            sub_text="BTSB - |Nominal SO|",
             accent="#E8B189",
             icon="💰"
         )
@@ -1155,7 +1212,7 @@ def render_analisis():
     st.markdown("---")
     
     # ============================================================
-    # 📋 LIST RAK BELUM SO
+    # LIST RAK BELUM SO
     # ============================================================
     st.markdown("#### 📋 Rak Belum SO")
     
@@ -1174,18 +1231,15 @@ def render_analisis():
             
             for _j, _rak in enumerate(_chunk):
                 with _cols[_j]:
-                    st.markdown(f"""
-                    <div class='metric-card-v2' style='--accent-color: #E88B8B; padding: 12px 14px; text-align: center;'>
-                        <div style='font-family: "JetBrains Mono", monospace; font-size: 16px; 
-                                    font-weight: 900; color: #E8B189; letter-spacing: 1px;'>
-                            {_rak['rak_id']}
-                        </div>
-                        <div style='font-family: "Quicksand", sans-serif; font-size: 9px; 
-                                    color: #7a9b8e; margin-top: 4px; line-height: 1.3;'>
-                            {str(_rak['rak_name'])[:25]}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        "<div class='metric-card-v2' style='--accent-color: #E88B8B; padding: 12px 14px; text-align: center;'>"
+                        "<div style='font-family: \"JetBrains Mono\", monospace; font-size: 16px; "
+                        "font-weight: 900; color: #E8B189; letter-spacing: 1px;'>" + _rak['rak_id'] + "</div>"
+                        "<div style='font-family: \"Quicksand\", sans-serif; font-size: 9px; "
+                        "color: #7a9b8e; margin-top: 4px; line-height: 1.3;'>" + str(_rak['rak_name'])[:25] + "</div>"
+                        "</div>",
+                        unsafe_allow_html=True
+                    )
         
         st.markdown("---")
         _list_text = "\n".join([f"{r['rak_id']} — {r['rak_name']}" for r in _rak_belum_list])
@@ -1202,38 +1256,46 @@ def render_analisis():
     
     st.markdown("---")
     
-    # CHART: SELISIH PER RAK
-    if not so_df.empty and "rak_id" in so_df.columns and "selisih" in so_df.columns:
-        st.markdown("#### 📈 Selisih per Rak")
+    # ============================================================
+    # CHART: SELISIH PER RAK (dari so_rak_harian)
+    # ============================================================
+    _detail_so = get_so_rak_detail(limit=500)
+    
+    if _detail_so:
+        st.markdown("#### 📈 Nominal SO per Rak")
         
         try:
             import plotly.graph_objects as go
             
-            _so_grp = so_df.groupby("rak_id")["selisih"].sum().reset_index()
-            _so_grp = _so_grp.sort_values("selisih", ascending=True)
+            _df_so = pd.DataFrame(_detail_so)
+            _df_so["nominal_adjust"] = pd.to_numeric(_df_so["nominal_adjust"], errors="coerce").fillna(0)
             
-            _colors = ["#E88B8B" if v < 0 else "#7FB99B" for v in _so_grp["selisih"]]
+            _grp = _df_so.groupby("rak_id")["nominal_adjust"].sum().reset_index()
+            _grp = _grp.sort_values("nominal_adjust", ascending=True)
+            _grp = _grp.head(20)  # Top 20
+            
+            _colors = ["#E88B8B" if v < 0 else "#7FB99B" for v in _grp["nominal_adjust"]]
             
             _fig = go.Figure()
             _fig.add_trace(go.Bar(
-                x=_so_grp["selisih"],
-                y=_so_grp["rak_id"],
+                x=_grp["nominal_adjust"],
+                y=_grp["rak_id"],
                 orientation="h",
                 marker=dict(color=_colors, line=dict(color="#B87333", width=1.5)),
-                text=_so_grp["selisih"],
+                text=_grp["nominal_adjust"],
                 textposition="outside",
                 textfont=dict(color="#E8B189", size=11, family="JetBrains Mono"),
-                hovertemplate="<b>%{y}</b><br>Selisih: %{x:+d}<extra></extra>",
+                hovertemplate="<b>%{y}</b><br>Nominal: %{x:+,.0f}<extra></extra>",
             ))
             
             _fig.update_layout(
-                height=max(300, len(_so_grp) * 35),
+                height=max(300, len(_grp) * 30),
                 margin=dict(l=10, r=40, t=20, b=20),
                 plot_bgcolor="rgba(10, 22, 18, 0.4)",
                 paper_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#E8B189", family="JetBrains Mono", size=11),
                 xaxis=dict(
-                    title="Selisih (Qty)",
+                    title="Nominal (Rp)",
                     gridcolor="rgba(232, 177, 137, 0.15)",
                     zeroline=True,
                     zerolinecolor="#E8B189",
@@ -1243,64 +1305,11 @@ def render_analisis():
                 showlegend=False,
             )
             
-            st.plotly_chart(_fig, use_container_width=True, key="chart_selisih_rak")
+            st.plotly_chart(_fig, use_container_width=True, key="chart_nominal_per_rak")
         except Exception as e:
             st.warning(f"⚠️ Chart gagal render: {str(e)[:100]}")
-    
-    st.markdown("---")
-    
-    # TOP 10 ITEM MINUS
-    st.markdown("#### 🔥 Top 10 Item Minus Terbesar")
-    
-    if not so_df.empty and "selisih" in so_df.columns and "item_name" in so_df.columns:
-        _so_df_copy = so_df.copy()
-        _so_df_copy["selisih"] = pd.to_numeric(_so_df_copy["selisih"], errors="coerce").fillna(0)
-        _minus_df = _so_df_copy[_so_df_copy["selisih"] < 0].copy()
-        
-        if not _minus_df.empty:
-            _top_minus = (
-                _minus_df.groupby("item_name")
-                .agg(
-                    total_selisih=("selisih", "sum"),
-                    total_qty_sys=("qty_system", "sum"),
-                    total_qty_act=("qty_actual", "sum"),
-                    jumlah_rak=("rak_id", "nunique"),
-                )
-                .reset_index()
-                .sort_values("total_selisih", ascending=True)
-                .head(10)
-            )
-            
-            for _idx, _row in _top_minus.iterrows():
-                _rank = _idx + 1
-                _icon = ["🥇", "🥈", "🥉"][_rank - 1] if _rank <= 3 else f"#{_rank}"
-                
-                st.markdown(f"""
-                <div class='metric-card-v2' style='--accent-color: #E88B8B; padding: 12px 16px;'>
-                    <div style='display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;'>
-                        <div style='flex: 1; min-width: 200px;'>
-                            <div style='font-family: "JetBrains Mono", monospace; font-size: 12px; 
-                                        font-weight: 900; color: #E8B189; letter-spacing: 0.5px;'>
-                                {_icon} {_row['item_name']}
-                            </div>
-                            <div style='font-family: "Quicksand", sans-serif; font-size: 9px; 
-                                        color: #7a9b8e; margin-top: 4px;'>
-                                {_row['jumlah_rak']} rak • Sys: {int(_row['total_qty_sys'])} → Act: {int(_row['total_qty_act'])}
-                            </div>
-                        </div>
-                        <div style='text-align: right;'>
-                            <div style='font-family: "JetBrains Mono", monospace; font-size: 16px; 
-                                        font-weight: 900; color: #E88B8B;'>
-                                {int(_row['total_selisih']):+d}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("🎉 Tidak ada item minus!")
     else:
-        st.info("📭 Belum ada data SO.")
+        st.info("📭 Belum ada data SO untuk dianalisis.")
     
     render_copyright()
 
@@ -1323,28 +1332,17 @@ def render_download():
     rak_df = load_rak_master()
     so_df = load_so_hasil()
     spd_df = load_spd_harian()
+    _akumulasi = get_akumulasi_nominal_bulan()
+    _detail_so = get_so_rak_detail(limit=1000)
     
     if rak_df.empty:
         st.error("❌ Data rak kosong.")
         render_copyright()
         return
     
-    st.markdown("#### 📋 Pilih Jenis Laporan")
-    
-    _jenis = st.selectbox(
-        "Jenis Laporan",
-        options=[
-            "📊 Laporan Rak (Status SO)",
-            "📦 Laporan SO (Detail Item)",
-            "💰 Laporan SPD Harian",
-            "📈 Laporan Komprehensif (Semua)",
-        ],
-        key="pilih_jenis_laporan",
-        label_visibility="collapsed"
-    )
-    
-    st.markdown("---")
-    
+    # ============================================================
+    # EXPORT EXCEL
+    # ============================================================
     st.markdown("#### 📊 Export Excel")
     
     try:
@@ -1353,72 +1351,51 @@ def render_download():
         _output = io.BytesIO()
         
         with pd.ExcelWriter(_output, engine="xlsxwriter") as _writer:
-            if "Laporan Rak" in _jenis:
-                _df_rak = rak_df[["rak_id", "rak_name", "kategori", "pic", "status_so", "last_so_date"]].copy()
-                _df_rak.columns = ["Kode Rak", "Nama Rak", "Kategori", "PIC", "Status SO", "Tanggal SO"]
-                _df_rak.to_excel(_writer, sheet_name="Rak", index=False)
+            # Sheet 1: Rak Master
+            _df_rak = rak_df[["rak_id", "rak_name", "kategori", "pic", "status_so", "last_so_date"]].copy()
+            _df_rak.columns = ["Kode Rak", "Nama Rak", "Kategori", "PIC", "Status SO", "Tanggal SO"]
+            _df_rak.to_excel(_writer, sheet_name="Rak", index=False)
             
-            elif "Laporan SO" in _jenis:
-                if not so_df.empty:
-                    _df_so = so_df.copy()
-                    _cols = ["so_date", "rak_id", "plu", "item_name", "qty_system", "qty_actual", "selisih", "harga"]
-                    _cols = [c for c in _cols if c in _df_so.columns]
-                    _df_so = _df_so[_cols]
-                    _df_so.columns = ["Tanggal", "Kode Rak", "PLU", "Nama Item", "Qty System", "Qty Actual", "Selisih", "Harga"]
-                    _df_so.to_excel(_writer, sheet_name="SO", index=False)
-                else:
-                    pd.DataFrame({"Info": ["Tidak ada data SO"]}).to_excel(_writer, sheet_name="SO", index=False)
+            # Sheet 2: SO Rak Harian
+            if _detail_so:
+                _df_so = pd.DataFrame(_detail_so)
+                _cols = ["so_date", "rak_id", "nominal_adjust", "pic", "keterangan"]
+                _cols = [c for c in _cols if c in _df_so.columns]
+                _df_so = _df_so[_cols]
+                _df_so.columns = ["Tanggal", "Kode Rak", "Nominal (Rp)", "PIC", "Keterangan"][:len(_df_so.columns)]
+                _df_so.to_excel(_writer, sheet_name="SO Rak", index=False)
             
-            elif "Laporan SPD" in _jenis:
-                if not spd_df.empty:
-                    _df_spd = spd_df[["tanggal", "spd", "keterangan"]].copy()
-                    _df_spd.columns = ["Tanggal", "SPD (Rp)", "Keterangan"]
-                    _df_spd.to_excel(_writer, sheet_name="SPD", index=False)
-                else:
-                    pd.DataFrame({"Info": ["Tidak ada data SPD"]}).to_excel(_writer, sheet_name="SPD", index=False)
+            # Sheet 3: SPD
+            if not spd_df.empty:
+                _df_spd = spd_df[["tanggal", "spd", "keterangan"]].copy()
+                _df_spd.columns = ["Tanggal", "SPD (Rp)", "Keterangan"]
+                _df_spd.to_excel(_writer, sheet_name="SPD", index=False)
             
-            else:
-                # Komprehensif
-                _df_rak = rak_df[["rak_id", "rak_name", "kategori", "pic", "status_so", "last_so_date"]].copy()
-                _df_rak.columns = ["Kode Rak", "Nama Rak", "Kategori", "PIC", "Status SO", "Tanggal SO"]
-                _df_rak.to_excel(_writer, sheet_name="Rak", index=False)
-                
-                if not so_df.empty:
-                    _df_so = so_df.copy()
-                    _cols = ["so_date", "rak_id", "plu", "item_name", "qty_system", "qty_actual", "selisih", "harga"]
-                    _cols = [c for c in _cols if c in _df_so.columns]
-                    _df_so = _df_so[_cols]
-                    _df_so.columns = ["Tanggal", "Kode Rak", "PLU", "Nama Item", "Qty System", "Qty Actual", "Selisih", "Harga"]
-                    _df_so.to_excel(_writer, sheet_name="SO", index=False)
-                
-                if not spd_df.empty:
-                    _df_spd = spd_df[["tanggal", "spd", "keterangan"]].copy()
-                    _df_spd.columns = ["Tanggal", "SPD (Rp)", "Keterangan"]
-                    _df_spd.to_excel(_writer, sheet_name="SPD", index=False)
-                
-                _rak_belum_df = get_rak_belum_so_df(rak_df)
-                if not _rak_belum_df.empty:
-                    _df_belum = _rak_belum_df[["rak_id", "rak_name", "kategori", "pic"]].copy()
-                    _df_belum.columns = ["Kode Rak", "Nama Rak", "Kategori", "PIC"]
-                    _df_belum.to_excel(_writer, sheet_name="Rak Belum SO", index=False)
-                
-                _btsb_result = hitung_btsb_akumulatif()
-                _total_spd = _btsb_result["total_spd"]
-                _btsb_akum = _btsb_result["btsb_akumulatif"]
-                _total_selisih = int(pd.to_numeric(so_df["selisih"], errors="coerce").fillna(0).sum()) if not so_df.empty else 0
-                _analisis = analisis_btsb_vs_selisih(_total_selisih, _btsb_akum)
-                
-                _summary_data = {
-                    "Metric": ["Total SPD", "BTSB Akumulatif", "Total Selisih", "Sisa Budget", "Status"],
-                    "Nilai": [
-                        fmt_rp(_total_spd),
-                        fmt_rp(_btsb_akum),
-                        fmt_rp(_total_selisih),
-                        fmt_rp(_analisis["gap"]),
-                        f"{_analisis['icon']} {_analisis['status']}",
-                    ]
-                }
-                pd.DataFrame(_summary_data).to_excel(_writer, sheet_name="Summary", index=False)
+            # Sheet 4: Summary
+            _btsb_result = hitung_btsb_akumulatif()
+            _analisis = analisis_btsb_vs_selisih(_akumulasi["total_nominal"], _btsb_result["btsb_akumulatif"])
+            
+            _summary_data = {
+                "Metric": [
+                    "Total SPD Bulan Ini",
+                    "BTSB Akumulatif",
+                    "Total Nominal SO",
+                    "Sisa Budget",
+                    "Status",
+                    "Rak Selesai SO",
+                    "Rak Belum SO",
+                ],
+                "Nilai": [
+                    fmt_rp(_btsb_result["total_spd"]),
+                    fmt_rp(_btsb_result["btsb_akumulatif"]),
+                    fmt_rp(_akumulasi["total_nominal"]),
+                    fmt_rp(_analisis["gap"]),
+                    f"{_analisis['icon']} {_analisis['status']}",
+                    f"{len(rak_df[rak_df['status_so'] == 'SELESAI'])} rak",
+                    f"{len(rak_df[rak_df['status_so'] == 'BELUM'])} rak",
+                ]
+            }
+            pd.DataFrame(_summary_data).to_excel(_writer, sheet_name="Summary", index=False)
         
         _excel_bytes = _output.getvalue()
         _filename = f"Laporan_SO_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -1439,7 +1416,11 @@ def render_download():
     
     st.markdown("---")
     
+    # ============================================================
+    # EXPORT PDF
+    # ============================================================
     st.markdown("#### 📄 Export PDF")
+    st.caption("PDF ringkasan siap cetak")
     
     if st.button("📄 Generate PDF", use_container_width=True, key="btn_gen_pdf"):
         with st.spinner("⏳ Membuat PDF..."):
@@ -1471,12 +1452,10 @@ def render_download():
                 
                 _pdf.cell(0, 6, f"Total SPD: {fmt_rp(_btsb_result['total_spd'])}", ln=True)
                 _pdf.cell(0, 6, f"BTSB Akumulatif: {fmt_rp(_btsb_result['btsb_akumulatif'])}", ln=True)
+                _pdf.cell(0, 6, f"Total Nominal SO: {fmt_rp(_akumulasi['total_nominal'])}", ln=True)
                 
-                if not so_df.empty:
-                    _total_selisih = int(pd.to_numeric(so_df["selisih"], errors="coerce").fillna(0).sum())
-                    _analisis = analisis_btsb_vs_selisih(_total_selisih, _btsb_result['btsb_akumulatif'])
-                    _pdf.cell(0, 6, f"Total Selisih: {fmt_rp(_total_selisih)}", ln=True)
-                    _pdf.cell(0, 6, f"Status: {_analisis['status']} ({_analisis['persen_penggunaan']:.2f}%)", ln=True)
+                _analisis = analisis_btsb_vs_selisih(_akumulasi["total_nominal"], _btsb_result["btsb_akumulatif"])
+                _pdf.cell(0, 6, f"Status: {_analisis['status']} ({_analisis['persen_penggunaan']:.2f}%)", ln=True)
                 
                 _pdf_output = _pdf.output(dest="S")
                 if isinstance(_pdf_output, str):
@@ -1505,7 +1484,7 @@ def render_download():
 # 🔄 HALAMAN 5: REFRESH
 # =========================================================================
 def render_refresh():
-    """Halaman refresh."""
+    """Halaman refresh — clear cache & reload data."""
     render_royal_header(show_clock=True)
     
     col_back, _ = st.columns([1, 4])
@@ -1518,16 +1497,18 @@ def render_refresh():
     
     st.markdown("---")
     
-    st.markdown("""
-    <div class='metric-card-v2' style='--accent-color: #7FB99B; padding: 20px 24px;'>
-        <div class='metric-label-v2'>ℹ️ INFO</div>
-        <div style='font-family: "Quicksand", sans-serif; font-size: 12px; 
-                    color: #e8f3ee; margin-top: 8px; line-height: 1.6;'>
-            Refresh akan memuat ulang data dari Supabase. Gunakan ini kalau 
-            ada perubahan data di database yang belum muncul di dashboard.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Info card
+    st.markdown(
+        "<div class='metric-card-v2' style='--accent-color: #7FB99B; padding: 20px 24px;'>"
+        "<div class='metric-label-v2'>ℹ️ INFO</div>"
+        "<div style='font-family: \"Quicksand\", sans-serif; font-size: 12px; "
+        "color: #e8f3ee; margin-top: 8px; line-height: 1.6;'>"
+        "Refresh akan memuat ulang data dari Supabase. Gunakan ini kalau "
+        "ada perubahan data di database yang belum muncul di dashboard."
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True
+    )
     
     st.markdown("---")
     
@@ -1540,6 +1521,8 @@ def render_refresh():
         with st.spinner("⏳ Refresh data..."):
             clear_cache()
             st.cache_data.clear()
+            st.session_state["last_loaded_date"] = None
+            st.session_state["selected_rak_list"] = []
             time.sleep(1.5)
         st.success("✅ Data berhasil di-refresh!")
         st.balloons()
