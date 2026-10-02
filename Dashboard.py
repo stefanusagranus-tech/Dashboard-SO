@@ -1212,7 +1212,8 @@ def render_analisis():
     st.markdown("---")
     
     # ============================================================
-    # LIST RAK BELUM SO
+    # # ============================================================
+    # LIST RAK BELUM SO (GRID COMPACT + SEARCH)
     # ============================================================
     st.markdown("#### 📋 Rak Belum SO")
     
@@ -1222,29 +1223,123 @@ def render_analisis():
         _jumlah_belum = len(_rak_belum_df)
         st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO. Segera lakukan SO!")
         
-        _cols_per_row = 4
-        _rak_belum_list = _rak_belum_df[["rak_id", "rak_name"]].to_dict("records")
+        # ============================================
+        # SEARCH BOX
+        # ============================================
+        _search_belum = st.text_input(
+            "🔍 Cari Rak",
+            key="search_rak_belum_so",
+            placeholder="Ketik kode/nama rak (contoh: AT, CHILLER)",
+            label_visibility="collapsed"
+        )
         
-        for _i in range(0, len(_rak_belum_list), _cols_per_row):
-            _chunk = _rak_belum_list[_i:_i + _cols_per_row]
-            _cols = st.columns(_cols_per_row)
+        # Filter by search
+        _rak_filtered_df = _rak_belum_df.copy()
+        if _search_belum and len(_search_belum.strip()) >= 1:
+            _q = _search_belum.strip().upper()
+            _rak_filtered_df = _rak_filtered_df[
+                _rak_filtered_df["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
+                _rak_filtered_df["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
+            ]
+        
+        _jumlah_filtered = len(_rak_filtered_df)
+        if _search_belum:
+            st.caption(f"🔍 **{_jumlah_filtered}** rak ditemukan")
+        
+        # ============================================
+        # GRID COMPACT
+        # ============================================
+        if not _rak_filtered_df.empty:
+            # CSS Grid
+            st.markdown("""
+            <style>
+                .rak-grid-container {
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 8px;
+                    margin-top: 12px;
+                }
+                @media (max-width: 768px) {
+                    .rak-grid-container {
+                        grid-template-columns: repeat(3, 1fr);
+                        gap: 6px;
+                    }
+                }
+                @media (max-width: 480px) {
+                    .rak-grid-container {
+                        grid-template-columns: repeat(2, 1fr);
+                        gap: 6px;
+                    }
+                }
+                .rak-mini-card {
+                    background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
+                    border: 1.5px solid #E88B8B;
+                    border-left: 3px solid #E88B8B;
+                    border-radius: 8px;
+                    padding: 8px 10px;
+                    text-align: center;
+                    transition: all 0.25s ease;
+                    cursor: pointer;
+                }
+                .rak-mini-card:hover {
+                    border-color: #E8B189;
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 12px rgba(232, 177, 137, 0.3);
+                }
+                .rak-mini-id {
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 13px;
+                    font-weight: 900;
+                    color: #E8B189;
+                    letter-spacing: 1px;
+                    margin-bottom: 2px;
+                }
+                .rak-mini-name {
+                    font-family: 'Quicksand', sans-serif;
+                    font-size: 8px;
+                    color: #7a9b8e;
+                    line-height: 1.2;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+            </style>
+            """, unsafe_allow_html=True)
             
-            for _j, _rak in enumerate(_chunk):
-                with _cols[_j]:
-                    st.markdown(
-                        "<div class='metric-card-v2' style='--accent-color: #E88B8B; padding: 12px 14px; text-align: center;'>"
-                        "<div style='font-family: \"JetBrains Mono\", monospace; font-size: 16px; "
-                        "font-weight: 900; color: #E8B189; letter-spacing: 1px;'>" + _rak['rak_id'] + "</div>"
-                        "<div style='font-family: \"Quicksand\", sans-serif; font-size: 9px; "
-                        "color: #7a9b8e; margin-top: 4px; line-height: 1.3;'>" + str(_rak['rak_name'])[:25] + "</div>"
-                        "</div>",
-                        unsafe_allow_html=True
-                    )
+            # Build grid HTML
+            _grid_html = "<div class='rak-grid-container'>"
+            for _rak in _rak_filtered_df[["rak_id", "rak_name"]].to_dict("records"):
+                _rid = str(_rak.get("rak_id", "-"))
+                _rname = str(_rak.get("rak_name", "-"))[:20]
+                _grid_html += (
+                    "<div class='rak-mini-card'>"
+                    "<div class='rak-mini-id'>" + _rid + "</div>"
+                    "<div class='rak-mini-name'>" + _rname + "</div>"
+                    "</div>"
+                )
+            _grid_html += "</div>"
+            
+            st.markdown(_grid_html, unsafe_allow_html=True)
+        else:
+            st.info(f"📭 Tidak ada rak yang match dengan **'{_search_belum}'**")
         
         st.markdown("---")
-        _list_text = "\n".join([f"{r['rak_id']} — {r['rak_name']}" for r in _rak_belum_list])
+        
+        # Download list (yang terfilter atau semua?)
+        _list_download = _rak_filtered_df if _search_belum else _rak_belum_df
+        _list_text = "\n".join([
+            f"{r['rak_id']} — {r['rak_name']}"
+            for r in _list_download[["rak_id", "rak_name"]].to_dict("records")
+        ])
+        
+        _label_dl = (
+            f"📥 Download List Rak Belum SO ({_jumlah_filtered} terfilter)"
+            if _search_belum
+            else f"📥 Download List Rak Belum SO ({_jumlah_belum} rak)"
+        )
+        
         st.download_button(
-            label=f"📥 Download List Rak Belum SO ({_jumlah_belum} rak)",
+            label=_label_dl,
             data=_list_text,
             file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
             mime="text/plain",
@@ -1253,9 +1348,7 @@ def render_analisis():
         )
     else:
         st.success("🎉 **Semua rak sudah di-SO!** Mantap!")
-    
-    st.markdown("---")
-    
+        
     # ============================================================
     # CHART: SELISIH PER RAK (dari so_rak_harian)
     # ============================================================
