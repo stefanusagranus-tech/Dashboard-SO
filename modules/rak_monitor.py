@@ -95,3 +95,11 @@ def status_pencapaian(persen_selesai, target=80):
         return "⚠️ MENDEKATI"
     else:
         return "🔴 BELUM"
+        
+def get_rak_belum_so(rak_master):
+    """Ambil rak BELUM SO (DataFrame)."""
+    if rak_master is None or rak_master.empty:
+        return pd.DataFrame()
+    return rak_master[
+        rak_master["status_so"].astype(str).str.upper() == "BELUM"
+    ].copy()
