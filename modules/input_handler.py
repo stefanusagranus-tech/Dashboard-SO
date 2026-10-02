@@ -1,7 +1,7 @@
 """
 Input Handler
 =============
-Handle input harian: SPD + SO + update status rak.
+Handle input harian: SPD + SO rak + akumulasi.
 """
 
 import streamlit as st
@@ -11,24 +11,27 @@ from modules.supabase_client import get_supabase
 from modules.spd_calculator import save_spd_harian
 
 
+# =========================================================================
+# 💾 SAVE: INPUT HARIAN (SPD + SO RAK)
+# =========================================================================
 def save_input_harian(
     tanggal,
     spd,
-    rak_id=None,
-    items_so=None,
+    rak_items=None,
     keterangan="",
+    pic="",
     update_status_rak=True,
 ):
     """
-    Simpan input harian: SPD + SO (opsional).
+    Simpan input harian: SPD + SO rak (multiple).
     
     Args:
-        tanggal: date — tanggal input
-        spd: float — Sales Per Day
-        rak_id: str — kode rak (opsional, kalau ada SO)
-        items_so: list of dict — [{plu, item_name, qty_system, qty_actual, harga}]
-        keterangan: str — catatan
-        update_status_rak: bool — auto update status rak jadi SELESAI
+        tanggal: date
+        spd: float (boleh 0)
+        rak_items: list of dict [{rak_id, nominal_adjust}]
+        keterangan: str
+        pic: str
+        update_status_rak: bool
     
     Returns:
         (success, message, detail)
@@ -39,74 +42,76 @@ def save_input_harian(
             return False, "❌ Gagal koneksi Supabase", {}
         
         _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _tgl_str = tanggal.isoformat()[:10] if isinstance(tanggal, (date, datetime)) else str(tanggal)[:10]
+        
         _detail = {
             "spd_saved": False,
-            "so_saved": False,
-            "rak_updated": False,
-            "total_so_items": 0,
-            "total_selisih": 0,
+            "rak_saved": 0,
+            "rak_updated": 0,
+            "total_nominal": 0,
         }
         
         # ============================================================
-        # STEP 1: SIMPAN SPD
+        # STEP 1: SIMPAN SPD (kalau > 0)
         # ============================================================
-        _ok_spd, _msg_spd = save_spd_harian(tanggal, spd, keterangan)
-        if not _ok_spd:
-            return False, f"❌ Gagal simpan SPD: {_msg_spd}", _detail
-        _detail["spd_saved"] = True
+        if spd > 0:
+            _ok_spd, _msg_spd = save_spd_harian(tanggal, spd, keterangan)
+            if not _ok_spd:
+                return False, f"❌ Gagal simpan SPD: {_msg_spd}", _detail
+            _detail["spd_saved"] = True
         
         # ============================================================
-        # STEP 2: SIMPAN SO (kalau ada)
+        # STEP 2: SIMPAN SO RAK (kalau ada)
         # ============================================================
-        if rak_id and items_so and len(items_so) > 0:
-            _tgl_str = tanggal.isoformat()[:10] if isinstance(tanggal, (date, datetime)) else str(tanggal)[:10]
-            
+        if rak_items and len(rak_items) > 0:
             _rows = []
-            _total_selisih = 0
+            _total_nominal = 0
             
-            for _item in items_so:
-                _qty_sys = int(_item.get("qty_system", 0))
-                _qty_act = int(_item.get("qty_actual", 0))
-                _selisih = _qty_act - _qty_sys
-                _total_selisih += _selisih
+            for _item in rak_items:
+                _rak_id = str(_item.get("rak_id", "")).strip().upper()
+                if not _rak_id:
+                    continue
+                
+                _nominal = float(_item.get("nominal_adjust", 0))
+                _total_nominal += _nominal
                 
                 _rows.append({
                     "so_date": _tgl_str,
-                    "rak_id": str(rak_id).upper(),
-                    "plu": str(_item.get("plu", "")),
-                    "item_name": str(_item.get("item_name", "")).upper(),
-                    "qty_system": _qty_sys,
-                    "qty_actual": _qty_act,
-                    "selisih": _selisih,
-                    "harga": float(_item.get("harga", 0)),
+                    "rak_id": _rak_id,
+                    "nominal_adjust": _nominal,
+                    "keterangan": str(keterangan),
+                    "pic": str(pic).upper(),
+                    "updated_at": _now.isoformat(),
                 })
             
-            _res = sb.table("so_hasil").insert(_rows).execute()
-            
-            if _res.data:
-                _detail["so_saved"] = True
-                _detail["total_so_items"] = len(_rows)
-                _detail["total_selisih"] = _total_selisih
-            else:
-                return False, "❌ Gagal simpan SO", _detail
-            
-            # ============================================================
-            # STEP 3: UPDATE STATUS RAK → SELESAI
-            # ============================================================
-            if update_status_rak:
-                _update_data = {
-                    "status_so": "SELESAI",
-                    "last_so_date": _tgl_str,
-                    "updated_at": _now.isoformat(),
-                }
-                _res_upd = (
-                    sb.table("rak_master")
-                    .update(_update_data)
-                    .eq("rak_id", str(rak_id).upper())
-                    .execute()
-                )
-                if _res_upd.data:
-                    _detail["rak_updated"] = True
+            if _rows:
+                # UPSERT — update kalau (so_date, rak_id) sudah ada, insert kalau belum
+                _res = sb.table("so_rak_harian").upsert(
+                    _rows,
+                    on_conflict="so_date,rak_id"
+                ).execute()
+                
+                if _res.data:
+                    _detail["rak_saved"] = len(_res.data)
+                    _detail["total_nominal"] = _total_nominal
+                    
+                    # Update status rak di rak_master
+                    if update_status_rak:
+                        for _row in _rows:
+                            _upd = (
+                                sb.table("rak_master")
+                                .update({
+                                    "status_so": "SELESAI",
+                                    "last_so_date": _tgl_str,
+                                    "updated_at": _now.isoformat(),
+                                })
+                                .eq("rak_id", _row["rak_id"])
+                                .execute()
+                            )
+                            if _upd.data:
+                                _detail["rak_updated"] += 1
+                else:
+                    return False, "❌ Gagal simpan SO rak", _detail
         
         # ============================================================
         # BUILD MESSAGE
@@ -114,21 +119,266 @@ def save_input_harian(
         _msg_parts = []
         if _detail["spd_saved"]:
             _msg_parts.append(f"SPD tersimpan")
-        if _detail["so_saved"]:
-            _msg_parts.append(f"{_detail['total_so_items']} item SO tersimpan")
-        if _detail["rak_updated"]:
-            _msg_parts.append(f"Rak {rak_id} → SELESAI")
+        if _detail["rak_saved"] > 0:
+            _msg_parts.append(f"{_detail['rak_saved']} rak di-SO")
+        if _detail["rak_updated"] > 0:
+            _msg_parts.append(f"{_detail['rak_updated']} rak di-update status")
         
         _msg = "✅ " + " • ".join(_msg_parts) if _msg_parts else "✅ Tersimpan"
         
         return True, _msg, _detail
     
     except Exception as e:
-        return False, f"❌ Error: {str(e)[:150]}", {}
+        return False, f"❌ Error: {str(e)[:200]}", {}
+
+
+# =========================================================================
+# 📥 LOAD: SPD & SO RAK BY DATE
+# =========================================================================
+def load_spd_by_date(tanggal):
+    """Load SPD untuk tanggal tertentu."""
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return None
+        
+        _tgl = tanggal.isoformat()[:10] if isinstance(tanggal, (date, datetime)) else str(tanggal)[:10]
+        _res = sb.table("spd_harian").select("*").eq("tanggal", _tgl).execute()
+        
+        if _res.data and len(_res.data) > 0:
+            return _res.data[0]
+        return None
+    except Exception as e:
+        print(f"[LOAD_SPD ERROR] {e}")
+        return None
+
+
+def load_so_rak_by_date(tanggal):
+    """Load SO rak untuk tanggal tertentu."""
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return []
+        
+        _tgl = tanggal.isoformat()[:10] if isinstance(tanggal, (date, datetime)) else str(tanggal)[:10]
+        _res = (
+            sb.table("so_rak_harian")
+            .select("*")
+            .eq("so_date", _tgl)
+            .order("rak_id")
+            .execute()
+        )
+        
+        return _res.data if _res.data else []
+    except Exception as e:
+        print(f"[LOAD_SO_RAK ERROR] {e}")
+        return []
+
+
+# =========================================================================
+# 🔍 SEARCH RAK
+# =========================================================================
+def search_rak(query, limit=20):
+    """Cari rak berdasarkan kode atau nama."""
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return []
+        
+        _q = str(query).strip().upper()
+        if not _q:
+            return []
+        
+        _res = (
+            sb.table("rak_master")
+            .select("rak_id, rak_name, status_so")
+            .or_(f"rak_id.ilike.%{_q}%,rak_name.ilike.%{_q}%")
+            .order("rak_id")
+            .limit(limit)
+            .execute()
+        )
+        
+        if not _res.data:
+            return []
+        
+        return list(_res.data)
+    except Exception as e:
+        print(f"[SEARCH_RAK ERROR] {e}")
+        return []
+
+
+# =========================================================================
+# 📊 AKUMULASI & TREND
+# =========================================================================
+def get_akumulasi_nominal_bulan(bulan=None, tahun=None):
+    """
+    Hitung total nominal adjustment bulan ini.
+    
+    Returns:
+        dict {
+            total_nominal: float,
+            total_rak: int,
+            jumlah_hari: int,
+        }
+    """
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return {"total_nominal": 0, "total_rak": 0, "jumlah_hari": 0}
+        
+        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _bulan = bulan if bulan else _now.month
+        _tahun = tahun if tahun else _now.year
+        
+        _start = date(_tahun, _bulan, 1)
+        if _bulan == 12:
+            _end = date(_tahun + 1, 1, 1) - __import__('datetime').timedelta(days=1)
+        else:
+            _end = date(_tahun, _bulan + 1, 1) - __import__('datetime').timedelta(days=1)
+        
+        _res = (
+            sb.table("so_rak_harian")
+            .select("nominal_adjust, rak_id, so_date")
+            .gte("so_date", _start.isoformat())
+            .lte("so_date", _end.isoformat())
+            .execute()
+        )
+        
+        if not _res.data:
+            return {"total_nominal": 0, "total_rak": 0, "jumlah_hari": 0}
+        
+        _total = sum(float(r.get("nominal_adjust", 0)) for r in _res.data)
+        _unique_rak = len(set(r.get("rak_id", "") for r in _res.data))
+        _unique_hari = len(set(r.get("so_date", "") for r in _res.data))
+        
+        return {
+            "total_nominal": _total,
+            "total_rak": _unique_rak,
+            "jumlah_hari": _unique_hari,
+        }
+    except Exception as e:
+        print(f"[AKUMULASI ERROR] {e}")
+        return {"total_nominal": 0, "total_rak": 0, "jumlah_hari": 0}
+
+
+def get_nominal_per_hari(bulan=None, tahun=None, limit_days=7):
+    """
+    Ambil nominal SO per hari untuk chart trend.
+    """
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return []
+        
+        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _bulan = bulan if bulan else _now.month
+        _tahun = tahun if tahun else _now.year
+        
+        _start = date(_tahun, _bulan, 1)
+        if _bulan == 12:
+            _end = date(_tahun + 1, 1, 1) - __import__('datetime').timedelta(days=1)
+        else:
+            _end = date(_tahun, _bulan + 1, 1) - __import__('datetime').timedelta(days=1)
+        
+        _res = (
+            sb.table("so_rak_harian")
+            .select("nominal_adjust, so_date")
+            .gte("so_date", _start.isoformat())
+            .lte("so_date", _end.isoformat())
+            .order("so_date")
+            .execute()
+        )
+        
+        if not _res.data:
+            return []
+        
+        # Group by date
+        _dict = {}
+        for r in _res.data:
+            _d = r.get("so_date", "")
+            _dict[_d] = _dict.get(_d, 0) + float(r.get("nominal_adjust", 0))
+        
+        _result = [{"tanggal": k, "nominal": v} for k, v in sorted(_dict.items())]
+        return _result[-limit_days:] if len(_result) > limit_days else _result
+    except Exception as e:
+        print(f"[NOMINAL_PER_HARI ERROR] {e}")
+        return []
+
+
+def get_so_rak_detail(limit=50):
+    """Ambil detail SO rak terbaru."""
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return []
+        
+        _res = (
+            sb.table("so_rak_harian")
+            .select("*")
+            .order("so_date", desc=True)
+            .order("rak_id")
+            .limit(limit)
+            .execute()
+        )
+        
+        return _res.data if _res.data else []
+    except Exception as e:
+        print(f"[SO_RAK_DETAIL ERROR] {e}")
+        return []
+
+
+# =========================================================================
+# 📋 GET RAK BELUM SO (untuk dropdown — semua rak)
+# =========================================================================
+def get_rak_belum_so():
+    """Ambil semua rak (untuk search, gak filter status)."""
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return []
+        
+        _res = (
+            sb.table("rak_master")
+            .select("rak_id, rak_name")
+            .order("rak_id")
+            .execute()
+        )
+        
+        if not _res.data:
+            return []
+        
+        return [f"{r['rak_id']} — {r['rak_name']}" for r in _res.data]
+    except Exception as e:
+        print(f"[GET_RAK_BELUM ERROR] {e}")
+        return []
+
+
+def get_so_hari_ini(tanggal=None):
+    """Ambil SO hari ini."""
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return []
+        
+        _tgl = tanggal or datetime.now(ZoneInfo("Asia/Jakarta")).date()
+        _tgl_str = _tgl.isoformat()[:10] if isinstance(_tgl, (date, datetime)) else str(_tgl)[:10]
+        
+        _res = (
+            sb.table("so_rak_harian")
+            .select("*")
+            .eq("so_date", _tgl_str)
+            .order("rak_id")
+            .execute()
+        )
+        
+        return _res.data if _res.data else []
+    except Exception as e:
+        print(f"[GET_SO_TODAY ERROR] {e}")
+        return []
 
 
 def get_spd_hari_ini():
-    """Ambil SPD hari ini (kalau ada)."""
+    """Ambil SPD hari ini."""
     try:
         sb = get_supabase()
         if sb is None:
@@ -145,114 +395,8 @@ def get_spd_hari_ini():
         return 0
 
 
-def get_rak_belum_so():
-    """Ambil daftar rak yang belum SO (untuk dropdown)."""
-    try:
-        sb = get_supabase()
-        if sb is None:
-            return []
-        
-        _res = (
-            sb.table("rak_master")
-            .select("rak_id, rak_name")
-            .eq("status_so", "BELUM")
-            .order("rak_id")
-            .execute()
-        )
-        
-        if not _res.data:
-            return []
-        
-        return [f"{r['rak_id']} — {r['rak_name']}" for r in _res.data]
-    except Exception as e:
-        print(f"[GET_RAK_BELUM ERROR] {e}")
-        return []
-
-
-def get_so_hari_ini(tanggal=None):
-    """Ambil SO hari ini (untuk preview)."""
-    try:
-        sb = get_supabase()
-        if sb is None:
-            return []
-        
-        _tgl = tanggal or datetime.now(ZoneInfo("Asia/Jakarta")).date()
-        _tgl_str = _tgl.isoformat()[:10] if isinstance(_tgl, (date, datetime)) else str(_tgl)[:10]
-        
-        _res = (
-            sb.table("so_hasil")
-            .select("*")
-            .eq("so_date", _tgl_str)
-            .order("rak_id")
-            .execute()
-        )
-        
-        return _res.data if _res.data else []
-    except Exception as e:
-        print(f"[GET_SO_TODAY ERROR] {e}")
-        return []
-
-
-# =========================================================================
-# 🔍 SEARCH RAK
-# =========================================================================
-def search_rak(query, limit=20):
-    """
-    Cari rak berdasarkan kode atau nama.
-    
-    Args:
-        query: kata kunci (contoh: "AT", "CHILLER")
-        limit: maksimum hasil
-    
-    Returns:
-        list of dict: [{"rak_id": "AT1", "rak_name": "REG BEVERAGES 1"}, ...]
-    """
-    try:
-        sb = get_supabase()
-        if sb is None:
-            return []
-        
-        _q = str(query).strip().upper()
-        if not _q:
-            return []
-        
-        # Query: rak_id ILIKE %q% OR rak_name ILIKE %q%
-        # Supabase pakai .or_() untuk multi kondisi
-        _res = (
-            sb.table("rak_master")
-            .select("rak_id, rak_name, status_so")
-            .or_(f"rak_id.ilike.%{_q}%,rak_name.ilike.%{_q}%")
-            .order("rak_id")
-            .limit(limit)
-            .execute()
-        )
-        
-        if not _res.data:
-            return []
-        
-        # Filter: hanya yang BELUM SO
-        _results = [
-            r for r in _res.data 
-            if str(r.get("status_so", "")).upper() == "BELUM"
-        ]
-        
-        return _results
-    
-    except Exception as e:
-        print(f"[SEARCH_RAK ERROR] {e}")
-        return []
-
-
 def get_rak_by_kode_exact(rak_id):
-    """
-    Ambil rak berdasarkan kode PERSIS.
-    
-    Args:
-        rak_id: kode rak (contoh: "AT1")
-    
-    Returns:
-        dict atau None
-    """
+    """Ambil rak by kode exact."""
     try:
         sb = get_supabase()
         if sb is None:
@@ -268,7 +412,6 @@ def get_rak_by_kode_exact(rak_id):
         if _res.data and len(_res.data) > 0:
             return _res.data[0]
         return None
-    
     except Exception as e:
         print(f"[GET_RAK_EXACT ERROR] {e}")
         return None
