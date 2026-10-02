@@ -429,9 +429,7 @@ def render_royal_header(show_clock=True):
     """Render header banner royal dengan jam & tanggal."""
     _now = datetime.now(ZoneInfo("Asia/Jakarta"))
     _time_str = _now.strftime("%H:%M:%S")
-    _date_str = _now.strftime("%A, %d %B %Y")
     
-    # Mapping hari Inggris → Indonesia
     _day_map = {
         "Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
         "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu"
@@ -448,24 +446,26 @@ def render_royal_header(show_clock=True):
     
     _clock_html = ""
     if show_clock:
-        _clock_html = f"""
-        <div class='header-clock'>
-            <div class='clock-time'>🕐 {_time_str} WIB</div>
-            <div class='clock-date'>📅 {_date_id}</div>
-        </div>
-        """
+        _clock_html = (
+            "<div class='header-clock'>"
+            "<div class='clock-time'>🕐 " + _time_str + " WIB</div>"
+            "<div class='clock-date'>📅 " + _date_id + "</div>"
+            "</div>"
+        )
     
-    st.markdown(f"""
-    <div class='royal-header fade-in-up'>
-        <div class='royal-ornament royal-orn-tl'>⚜</div>
-        <div class='royal-ornament royal-orn-tr'>⚜</div>
-        <div class='royal-ornament royal-orn-bl'>⚜</div>
-        <div class='royal-ornament royal-orn-br'>⚜</div>
-        <div class='royal-title'>DASHBOARD STOCK OPNAME</div>
-        <div class='royal-subtitle'>⚜ Toko C383 - Karang Satria ⚜</div>
-        {_clock_html}
-    </div>
-    """, unsafe_allow_html=True)
+    _header_html = (
+        "<div class='royal-header fade-in-up'>"
+        "<div class='royal-ornament royal-orn-tl'>⚜</div>"
+        "<div class='royal-ornament royal-orn-tr'>⚜</div>"
+        "<div class='royal-ornament royal-orn-bl'>⚜</div>"
+        "<div class='royal-ornament royal-orn-br'>⚜</div>"
+        "<div class='royal-title'>DASHBOARD STOCK OPNAME</div>"
+        "<div class='royal-subtitle'>⚜ Toko C383 - Karang Satria ⚜</div>"
+        + _clock_html +
+        "</div>"
+    )
+    
+    st.markdown(_header_html, unsafe_allow_html=True)
 
 
 def render_copyright():
