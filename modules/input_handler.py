@@ -261,51 +261,41 @@ def get_akumulasi_nominal_bulan(bulan=None, tahun=None):
         return {"total_nominal": 0, "total_rak": 0, "jumlah_hari": 0}
 
 
-def get_nominal_per_hari(bulan=None, tahun=None, limit_days=7):
-    """
-    Ambil nominal SO per hari untuk chart trend.
-    """
+def get_nominal_per_hari(limit=None):
+    """Ambil semua nominal SO per hari (tanpa batas)."""
     try:
-        sb = get_supabase()
-        if sb is None:
-            return []
-        
-        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
-        _bulan = bulan if bulan else _now.month
-        _tahun = tahun if tahun else _now.year
-        
-        _start = date(_tahun, _bulan, 1)
-        if _bulan == 12:
-            _end = date(_tahun + 1, 1, 1) - __import__('datetime').timedelta(days=1)
-        else:
-            _end = date(_tahun, _bulan + 1, 1) - __import__('datetime').timedelta(days=1)
-        
-        _res = (
-            sb.table("so_rak_harian")
-            .select("nominal_adjust, so_date")
-            .gte("so_date", _start.isoformat())
-            .lte("so_date", _end.isoformat())
-            .order("so_date")
+        _sb = get_supabase()
+        _res = _sb.table("so_rak_harian") \
+            .select("so_date, nominal_adjust") \
+            .order("so_date", desc=False) \
             .execute()
-        )
         
         if not _res.data:
             return []
         
-        # Group by date
-        _dict = {}
-        for r in _res.data:
-            _d = r.get("so_date", "")
-            _dict[_d] = _dict.get(_d, 0) + float(r.get("nominal_adjust", 0))
+        _df = pd.DataFrame(_res.data)
+        _df["so_date"] = pd.to_datetime(_df["so_date"])
+        _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
         
-        _result = [{"tanggal": k, "nominal": v} for k, v in sorted(_dict.items())]
-        return _result[-limit_days:] if len(_result) > limit_days else _result
+        _grp = _df.groupby("so_date")["nominal_adjust"].sum().reset_index()
+        
+        # ✅ FIX: Kalau limit ada, apply. Kalau None, ambil semua
+        if limit is not None and limit > 0:
+            _grp = _grp.tail(limit)
+        
+        return [
+            {
+                "tanggal": r["so_date"].strftime("%Y-%m-%d"),
+                "nominal": float(r["nominal_adjust"]),
+            }
+            for _, r in _grp.iterrows()
+        ]
     except Exception as e:
-        print(f"[NOMINAL_PER_HARI ERROR] {e}")
+        print(f"[get_nominal_per_hari ERROR] {e}")
         return []
 
 
-def get_so_rak_detail(limit=50):
+def get_so_rak_detail(limit=10):
     """Ambil detail SO rak terbaru."""
     try:
         sb = get_supabase()
