@@ -748,7 +748,7 @@ def render_input_harian():
         
         _selected_rak_id = None
         if _selected_rak_opt != "-- Tidak Ada SO --":
-            _selected_rak_id = _selected_rak_opt.split(" — ")[0].strip()
+            _selected_rak_id = _selected_rak_opt.split()[0].strip()
         
         # Kalau ada rak dipilih, tampilkan input items
         _so_items = []
