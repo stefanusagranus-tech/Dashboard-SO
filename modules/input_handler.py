@@ -191,3 +191,84 @@ def get_so_hari_ini(tanggal=None):
     except Exception as e:
         print(f"[GET_SO_TODAY ERROR] {e}")
         return []
+
+
+# =========================================================================
+# 🔍 SEARCH RAK
+# =========================================================================
+def search_rak(query, limit=20):
+    """
+    Cari rak berdasarkan kode atau nama.
+    
+    Args:
+        query: kata kunci (contoh: "AT", "CHILLER")
+        limit: maksimum hasil
+    
+    Returns:
+        list of dict: [{"rak_id": "AT1", "rak_name": "REG BEVERAGES 1"}, ...]
+    """
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return []
+        
+        _q = str(query).strip().upper()
+        if not _q:
+            return []
+        
+        # Query: rak_id ILIKE %q% OR rak_name ILIKE %q%
+        # Supabase pakai .or_() untuk multi kondisi
+        _res = (
+            sb.table("rak_master")
+            .select("rak_id, rak_name, status_so")
+            .or_(f"rak_id.ilike.%{_q}%,rak_name.ilike.%{_q}%")
+            .order("rak_id")
+            .limit(limit)
+            .execute()
+        )
+        
+        if not _res.data:
+            return []
+        
+        # Filter: hanya yang BELUM SO
+        _results = [
+            r for r in _res.data 
+            if str(r.get("status_so", "")).upper() == "BELUM"
+        ]
+        
+        return _results
+    
+    except Exception as e:
+        print(f"[SEARCH_RAK ERROR] {e}")
+        return []
+
+
+def get_rak_by_kode_exact(rak_id):
+    """
+    Ambil rak berdasarkan kode PERSIS.
+    
+    Args:
+        rak_id: kode rak (contoh: "AT1")
+    
+    Returns:
+        dict atau None
+    """
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return None
+        
+        _res = (
+            sb.table("rak_master")
+            .select("*")
+            .eq("rak_id", str(rak_id).strip().upper())
+            .execute()
+        )
+        
+        if _res.data and len(_res.data) > 0:
+            return _res.data[0]
+        return None
+    
+    except Exception as e:
+        print(f"[GET_RAK_EXACT ERROR] {e}")
+        return None
