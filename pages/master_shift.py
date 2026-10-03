@@ -482,117 +482,222 @@ if st.session_state["shift_sub_tab"] == "chat":
     # Tampilkan hasil parse
     if st.session_state.get("chat_shift_parsed"):
         _parsed = st.session_state["chat_shift_parsed"]
-
+        _mode = _parsed.get("mode", "update")   # ✅ DETEKSI MODE
+    
+        # Warning (kalau ada)
         if _parsed.get("warning"):
             st.markdown(
                 f"<div class='warning-box'>⚠️ {_parsed['warning']}</div>",
                 unsafe_allow_html=True
             )
-
-        st.success(
-            f"✅ Tanggal terdeteksi: **{_parsed['tanggal'].strftime('%d/%m/%Y')}** "
-            f"({_parsed.get('tanggal_detect', '-')})"
-        )
-
-        if _parsed["shift_map"]:
-            st.markdown("#### 📊 Preview Perubahan:")
-
-            _preview_rows = []
-            for _nama, _kode in _parsed["shift_map"].items():
-                _info = KODE_SHIFT.get(_kode, {"label": "-", "icon": "❓", "warna": "#CCCCCC"})
-                _preview_rows.append({
-                    "👤 Nama": _nama,
-                    "📝 Kode": _kode,
-                    "📋 Keterangan": _info["label"],
-                    "🎨 Icon": _info["icon"],
-                })
-
-            _preview_df = pd.DataFrame(_preview_rows)
-            st.dataframe(_preview_df, use_container_width=True, hide_index=True)
-
-            st.markdown("##### 📅 Konfirmasi Tanggal:")
-            _tanggal_final = st.date_input(
-                "Tanggal yang akan disimpan:",
-                value=_parsed["tanggal"],
-                key="chat_shift_tanggal_final",
-            )
-
-            _catatan = st.text_input(
-                "📝 Catatan (opsional):",
-                placeholder="Contoh: Ganti shift dadakan",
-                key="chat_shift_catatan",
-            )
-
-            col_save1, col_save2 = st.columns([2, 1])
-
-            with col_save1:
-                if st.button(
-                    "💾 KONFIRMASI SIMPAN",
+    
+        # ============================================
+        # 🗑️ MODE DELETE — HAPUS SHIFT
+        # ============================================
+        if _mode == "delete":
+            _targets = _parsed.get("delete_targets", [])
+            _all_dates = _parsed.get("delete_all_dates", False)
+    
+            st.markdown("#### 🗑️ Preview Hapus Shift")
+    
+            if not _targets:
+                st.warning("⚠️ Tidak ada nama yang terdeteksi untuk dihapus.")
+                st.caption("Contoh: `Hapus shift TIA hari ini`")
+            else:
+                st.info(f"👤 **Nama target:** {', '.join(_targets)}")
+    
+                if _all_dates:
+                    st.warning("📅 **Mode:** Hapus **SEMUA tanggal** untuk nama ini!")
+                else:
+                    st.info(
+                        f"📅 **Mode:** Hapus hanya tanggal "
+                        f"**{_parsed['tanggal'].strftime('%d/%m/%Y')}**"
+                    )
+    
+                # Pilihan tanggal (kalau bukan all_dates)
+                if not _all_dates:
+                    _tanggal_hapus = st.date_input(
+                        "📅 Tanggal yang dihapus:",
+                        value=_parsed["tanggal"],
+                        key="chat_delete_tanggal",
+                    )
+                else:
+                    _tanggal_hapus = None
+    
+                # Preview tabel
+                _preview_data = []
+                for _t in _targets:
+                    _preview_data.append({
+                        "👤 Nama": _t,
+                        "📅 Mode": (
+                            "Semua Tanggal" if _all_dates 
+                            else _parsed["tanggal"].strftime("%d/%m/%Y")
+                        ),
+                    })
+                st.dataframe(
+                    pd.DataFrame(_preview_data),
                     use_container_width=True,
-                    type="primary",
-                    key="btn_chat_save",
-                ):
-                    with st.spinner("⏳ Menyimpan..."):
-                        _ok, _msg = save_master_shift(
-                            tanggal=_tanggal_final,
-                            shift_map=_parsed["shift_map"],
-                            sumber="chat",
-                            catatan=f"{_catatan} | Raw: {_parsed['raw_text'][:200]}",
+                    hide_index=True
+                )
+    
+                # Tombol konfirmasi
+                col_del1, col_del2 = st.columns([2, 1])
+    
+                with col_del1:
+                    if st.button(
+                        "🗑️ KONFIRMASI HAPUS",
+                        use_container_width=True,
+                        type="primary",
+                        key="btn_delete_confirm",
+                    ):
+                        # Import fungsi delete
+                        from modules.master_shift_handler import (
+                            delete_shift_by_name,
+                            delete_shift_all_dates,
                         )
-
-                    if _ok:
-                        st.success(_msg)
-                        st.balloons()
+    
+                        _total_deleted = 0
+    
+                        with st.spinner("⏳ Menghapus..."):
+                            if _all_dates:
+                                for _t in _targets:
+                                    _ok, _msg = delete_shift_all_dates(_t)
+                                    if _ok:
+                                        _total_deleted += 1
+                            else:
+                                _ok, _msg, _detail = delete_shift_by_name(
+                                    _tanggal_hapus, _targets
+                                )
+                                _total_deleted = _detail.get("deleted", 0)
+    
+                        if _total_deleted > 0:
+                            st.success(f"🗑️ {_total_deleted} shift berhasil dihapus!")
+                            st.balloons()
+                            st.session_state["chat_shift_parsed"] = None
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ Tidak ada yang dihapus.")
+    
+                with col_del2:
+                    if st.button(
+                        "❌ BATAL",
+                        use_container_width=True,
+                        key="btn_delete_cancel",
+                    ):
                         st.session_state["chat_shift_parsed"] = None
-                        time.sleep(1.5)
                         st.rerun()
-                    else:
-                        st.error(_msg)
-
-            with col_save2:
-                if st.button(
-                    "❌ BATAL",
-                    use_container_width=True,
-                    key="btn_chat_cancel",
-                ):
-                    st.session_state["chat_shift_parsed"] = None
-                    st.rerun()
+    
+        # ============================================
+        # ✅ MODE UPDATE — SIMPAN SHIFT (yang sudah ada)
+        # ============================================
         else:
-            st.warning("⚠️ Tidak ada data shift yang ke-parse. Cek format chat.")
-
-    with st.expander("📖 Format Chat yang Didukung"):
-        st.markdown("""
-        **1. Format Multi-Shift (Utama):**
-        ```
-        Besok Tika libur, ganti jadi:
-        - Pagi: Reza, Pandu
-        - Siang: Zaki
-        - Malam: Kusdewi
-        - Libur: Tika, Adel
-        ```
-
-        **2. Format Simple (1 Shift):**
-        ```
-        Tika libur besok
-        Zaki sakit hari ini
-        ```
-
-        **3. Format Tanggal Eksplisit:**
-        ```
-        05/10: Tika libur
-        05-10-2026: Rotasi shift pagi
-        ```
-
-        **4. Keyword yang Didukung:**
-        - `pagi` → P7
-        - `siang` → S15
-        - `malam` → M22
-        - `libur` / `off` → O
-        - `cuti` → C
-        - `ao` / `additional off` → AO
-        """)
-
-
+            st.success(
+                f"✅ Tanggal terdeteksi: **{_parsed['tanggal'].strftime('%d/%m/%Y')}** "
+                f"({_parsed.get('tanggal_detect', '-')})"
+            )
+    
+            if _parsed["shift_map"]:
+                st.markdown("#### 📊 Preview Perubahan:")
+    
+                _preview_rows = []
+                for _nama, _kode in _parsed["shift_map"].items():
+                    _info = KODE_SHIFT.get(
+                        _kode, {"label": "-", "icon": "❓", "warna": "#CCCCCC"}
+                    )
+                    _preview_rows.append({
+                        "👤 Nama": _nama,
+                        "📝 Kode": _kode,
+                        "📋 Keterangan": _info["label"],
+                        "🎨 Icon": _info["icon"],
+                    })
+    
+                _preview_df = pd.DataFrame(_preview_rows)
+                st.dataframe(_preview_df, use_container_width=True, hide_index=True)
+    
+                st.markdown("##### 📅 Konfirmasi Tanggal:")
+                _tanggal_final = st.date_input(
+                    "Tanggal yang akan disimpan:",
+                    value=_parsed["tanggal"],
+                    key="chat_shift_tanggal_final",
+                )
+    
+                _catatan = st.text_input(
+                    "📝 Catatan (opsional):",
+                    placeholder="Contoh: Ganti shift dadakan",
+                    key="chat_shift_catatan",
+                )
+    
+                col_save1, col_save2 = st.columns([2, 1])
+    
+                with col_save1:
+                    if st.button(
+                        "💾 KONFIRMASI SIMPAN",
+                        use_container_width=True,
+                        type="primary",
+                        key="btn_chat_save",
+                    ):
+                        with st.spinner("⏳ Menyimpan..."):
+                            _ok, _msg = save_master_shift(
+                                tanggal=_tanggal_final,
+                                shift_map=_parsed["shift_map"],
+                                sumber="chat",
+                                catatan=f"{_catatan} | Raw: {_parsed['raw_text'][:200]}",
+                            )
+    
+                        if _ok:
+                            st.success(_msg)
+                            st.balloons()
+                            st.session_state["chat_shift_parsed"] = None
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.error(_msg)
+    
+                with col_save2:
+                    if st.button(
+                        "❌ BATAL",
+                        use_container_width=True,
+                        key="btn_chat_cancel",
+                    ):
+                        st.session_state["chat_shift_parsed"] = None
+                        st.rerun()
+            else:
+                st.warning(
+                    "⚠️ Tidak ada data shift yang ke-parse. Cek format chat."
+                )
+    
+        with st.expander("📖 Format Chat yang Didukung"):
+            st.markdown("""
+            **1. Format Multi-Shift (Utama):**
+            ```
+            Besok Tika libur, ganti jadi:
+            - Pagi: Reza, Pandu
+            - Siang: Zaki
+            - Malam: Kusdewi
+            - Libur: Tika, Adel
+            ```
+    
+            **2. Format Simple (1 Shift):**
+            ```
+            Tika libur besok
+            Zaki sakit hari ini
+            ```
+    
+            **3. Format Tanggal Eksplisit:**
+            ```
+            05/10: Tika libur
+            05-10-2026: Rotasi shift pagi
+            ```
+    
+            **4. Keyword yang Didukung:**
+            - `pagi` → P7
+            - `siang` → S15
+            - `malam` → M22
+            - `libur` / `off` → O
+            - `cuti` → C
+            - `ao` / `additional off` → AO
+            """)
 
 # ============================================================
 # TAB 2: MATRIX VIEW (2 TABEL — TGL 1-15 & 16-31)
