@@ -1195,33 +1195,53 @@ elif st.session_state["shift_sub_tab"] == "screenshot":
                     st.rerun()
             
             if _btn_proses_ocr:
-                with st.spinner("⏳ OCR..."):
-                    from modules.ocr_handler import ocr_kalender_screenshot
-                    _ocr_result = ocr_kalender_screenshot(
+                st.info("🤖 Menggunakan AI Vision (Gemini) — lebih akurat...")
+                with st.spinner("⏳ AI membaca kalender... (10-20 detik)"):
+                    from modules.ocr_ai_handler import ocr_ai_smart
+                    _ai_result = ocr_ai_smart(
                         _uploaded_file.getvalue(),
-                        calib=_calib,
+                        nama_personil=_nama_pilih,
+                        bulan=_bulan_ocr,
+                        tahun=_tahun_ocr,
                     )
+                
+                if _ai_result["success"]:
+                    _shift_map_ai = _ai_result["shift_map"]
                     
-                    if _ocr_result["success"]:
-                        from modules.ocr_handler import parse_kalender_ke_shift
-                        _parsed_ocr = parse_kalender_ke_shift(
-                            _ocr_result["tanggal_list"],
-                            _bulan_ocr, _tahun_ocr, _nama_pilih,
-                        )
-                        st.session_state["ocr_result"] = {
-                            "ocr": _ocr_result,
-                            "parsed": _parsed_ocr,
+                    _tanggal_list_ai = []
+                    for _tgl_str, _kode in sorted(_shift_map_ai.items()):
+                        _tanggal_list_ai.append({
+                            "tanggal_int": int(_tgl_str.split("-")[2]),
+                            "kode": _kode,
+                            "confidence": "AI",
+                            "sumber": _ai_result.get("provider", "ai"),
+                        })
+                    
+                    st.session_state["ocr_result"] = {
+                        "ocr": {
+                            "success": True,
+                            "tanggal_list": _tanggal_list_ai,
+                            "raw_text": _ai_result.get("raw_response", "")[:500],
+                            "provider": _ai_result.get("provider"),
+                        },
+                        "parsed": {
                             "nama": _nama_pilih,
                             "bulan": _bulan_ocr,
                             "tahun": _tahun_ocr,
-                            "file_name": _uploaded_file.name,
-                        }
-                    else:
-                        st.session_state["ocr_result"] = {
-                            "ocr": _ocr_result,
-                            "error": _ocr_result.get("error", "Gagal OCR"),
-                        }
+                            "shift_map": _shift_map_ai,
+                        },
+                        "nama": _nama_pilih,
+                        "bulan": _bulan_ocr,
+                        "tahun": _tahun_ocr,
+                        "file_name": _uploaded_file.name,
+                    }
                     st.rerun()
+                else:
+                    st.error(f"❌ AI OCR gagal: {_ai_result.get('error')}")
+                    if _ai_result.get("raw_response"):
+                        with st.expander("🔍 Raw AI Response"):
+                            st.text(_ai_result["raw_response"][:1000])
+                            
         # ============================================================
         # LANGKAH 3: PREVIEW HASIL OCR
         # ============================================================
