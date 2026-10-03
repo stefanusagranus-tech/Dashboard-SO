@@ -223,15 +223,10 @@ def _huruf_to_kode(text):
 # =========================================================
 def ocr_kalender_screenshot(image_bytes):
     """
-    OCR screenshot v9 — Auto-detect grid dengan merge.
+    OCR screenshot v10 — Deteksi kalender dari area BERWARNA solid.
     """
     if not TESSERACT_AVAILABLE:
-        return {
-            "success": False,
-            "tanggal_list": [],
-            "raw_text": "",
-            "error": "Tesseract tidak tersedia",
-        }
+        return {"success": False, "tanggal_list": [], "raw_text": "", "error": "Tesseract tidak tersedia"}
     
     try:
         _img = Image.open(io.BytesIO(image_bytes))
@@ -239,159 +234,68 @@ def ocr_kalender_screenshot(image_bytes):
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
-        print(f"[OCR v9] Image: {_w}x{_h}")
+        print(f"[OCR v10] Image: {_w}x{_h}")
         
-        # OCR TEXT FULL
         _text_full = pytesseract.image_to_string(_img, config="--psm 6")
-        print(f"[OCR v9] Text length: {len(_text_full)}")
         
         _np_img = np.array(_img)
-        
-        # ============================================
-        # 1. AUTO-DETECT AREA KALENDER
-        # ============================================
         _grayscale = np.mean(_np_img, axis=2)
+        
+        # ============================================
+        # 1. CARI BARIS DENGAN WARNA SOLID
+        # ============================================
+        # Baris dianggap "berwarna" kalau ada banyak pixel warna (bukan putih/abu)
         _is_white = _grayscale > 240
-        _row_color_density = 1 - np.mean(_is_white, axis=1)
+        _is_colored = ~_is_white
         
-        print(f"[OCR v9] Row density max: {_row_color_density.max():.3f}")
+        # Hitung pixel berwarna per baris
+        _colored_pct = np.mean(_is_colored, axis=1)
         
-        _kalender_start = None
-        _kalender_end = None
+        # Cari baris yang colored_pct > 0.3 (30% pixel berwarna)
+        _color_rows = np.where(_colored_pct > 0.3)[0]
         
-        for _i in range(int(_h * 0.20), _h - 5):
-            if _row_color_density[_i] > 0.05:
-                if _kalender_start is None:
-                    _kalender_start = _i
-                _kalender_end = _i
+        print(f"[OCR v10] Baris berwarna: {len(_color_rows)}")
         
-        if _kalender_start is None:
-            print(f"[OCR v9] WARNING: Kalender gak ke-detect, pakai fallback 50-95%")
-            _kalender_start = int(_h * 0.50)
-            _kalender_end = int(_h * 0.95)
+        if len(_color_rows) < 10:
+            print(f"[OCR v10] ERROR: gak cukup baris berwarna")
+            return {"success": False, "tanggal_list": [], "raw_text": _text_full, "error": "Kalender gak ke-detect"}
         
-        print(f"[OCR v9] Kalender area: y={_kalender_start}-{_kalender_end}")
+        # Kalender area = range dari baris warna pertama sampai terakhir
+        _kalender_start = int(_color_rows.min())
+        _kalender_end = int(_color_rows.max())
         
-        # ============================================
-        # 2. AUTO-DETECT KOLOM DENGAN MERGE
-        # ============================================
-        _kalender_region = _np_img[_kalender_start:_kalender_end, :]
-        _region_gray = np.mean(_kalender_region, axis=2)
-        _region_white = _region_gray > 240
-        _col_color_density = 1 - np.mean(_region_white, axis=0)
-        
-        # Deteksi kolom dengan gap threshold
-        _col_raw = []
-        _in_col = False
-        _start = 0
-        _gap = 0
-        _gap_threshold = 5
-        
-        for _i in range(_w):
-            if _col_color_density[_i] > 0.05:
-                if not _in_col:
-                    _start = _i
-                    _in_col = True
-                _gap = 0
-            else:
-                if _in_col:
-                    _gap += 1
-                    if _gap >= _gap_threshold:
-                        _col_raw.append((_start, _i - _gap + 1))
-                        _in_col = False
-                        _gap = 0
-        
-        if _in_col:
-            _col_raw.append((_start, _w))
-        
-        # Filter kolom sempit (< 15px)
-        _col_filtered = [(s, e) for s, e in _col_raw if (e - s) >= 15]
-        
-        print(f"[OCR v9] Kolom raw: {len(_col_raw)}, filtered: {len(_col_filtered)}")
-        
-        # Kalau masih > 7, ambil 7 terbesar
-        if len(_col_filtered) > 7:
-            _col_filtered = sorted(_col_filtered, key=lambda x: x[1]-x[0], reverse=True)[:7]
-            _col_filtered = sorted(_col_filtered, key=lambda x: x[0])
-        
-        _col_starts = [_s for _s, _e in _col_filtered]
-        _col_ends = [_e for _s, _e in _col_filtered]
-        
-        print(f"[OCR v9] Kolom final: {len(_col_starts)}")
+        print(f"[OCR v10] Kalender area: y={_kalender_start}-{_kalender_end}")
         
         # ============================================
-        # 3. AUTO-DETECT ROW DENGAN MERGE
+        # 2. BAGI GRID 7 KOLOM × N BARIS
         # ============================================
-        _row_color_density_kal = _row_color_density[_kalender_start:_kalender_end]
+        _grid_cols = 7
+        _kalender_h = _kalender_end - _kalender_start
         
-        _row_raw = []
-        _in_row = False
-        _start_row = 0
-        _gap_row = 0
-        _gap_threshold_row = 8
+        # Estimasi jumlah baris: dari tinggi & lebar cell
+        _cell_w_est = _w // _grid_cols
+        _cell_h_est = _cell_w_est  # Asumsi cell kotak
         
-        for _i in range(len(_row_color_density_kal)):
-            if _row_color_density_kal[_i] > 0.03:
-                if not _in_row:
-                    _start_row = _i
-                    _in_row = True
-                _gap_row = 0
-            else:
-                if _in_row:
-                    _gap_row += 1
-                    if _gap_row >= _gap_threshold_row:
-                        _row_raw.append((_start_row, _i - _gap_row + 1))
-                        _in_row = False
-                        _gap_row = 0
+        _grid_rows_est = max(4, _kalender_h // _cell_h_est)
+        _grid_rows = min(6, _grid_rows_est)
         
-        if _in_row:
-            _row_raw.append((_start_row, len(_row_color_density_kal)))
+        print(f"[OCR v10] Grid estimasi: {_grid_cols}×{_grid_rows}")
         
-        # Filter row sempit
-        _row_filtered = [(s, e) for s, e in _row_raw if (e - s) >= 20]
-        
-        print(f"[OCR v9] Row raw: {len(_row_raw)}, filtered: {len(_row_filtered)}")
-        
-        # Kalau > 5, ambil 5 terbesar
-        if len(_row_filtered) > 5:
-            _row_filtered = sorted(_row_filtered, key=lambda x: x[1]-x[0], reverse=True)[:5]
-            _row_filtered = sorted(_row_filtered, key=lambda x: x[0])
-        
-        _row_starts = [_s for _s, _e in _row_filtered]
-        _row_ends = [_e for _s, _e in _row_filtered]
-        
-        print(f"[OCR v9] Row final: {len(_row_starts)}")
+        _cell_w = _w // _grid_cols
+        _cell_h = _kalender_h // _grid_rows
         
         # ============================================
-        # 4. FALLBACK KALAU AUTO-DETECT GAGAL
-        # ============================================
-        if len(_col_starts) < 5 or len(_row_starts) < 4:
-            print(f"[OCR v9] Fallback: pakai grid fixed 7x5")
-            _grid_cols = 7
-            _grid_rows = 5
-            _cell_h = (_kalender_end - _kalender_start) // _grid_rows
-            _cell_w = _w // _grid_cols
-            
-            _col_starts = [_c * _cell_w for _c in range(_grid_cols)]
-            _col_ends = [(_c + 1) * _cell_w for _c in range(_grid_cols)]
-            _row_starts = [_r * _cell_h for _r in range(_grid_rows)]
-            _row_ends = [(_r + 1) * _cell_h for _r in range(_grid_rows)]
-        
-        # ============================================
-        # 5. ANALISIS PER CELL
+        # 3. ANALISIS PER CELL
         # ============================================
         _tanggal_list = []
         _debug_info = []
         
-        for _r_idx, (_y_start, _y_end) in enumerate(zip(_row_starts, _row_ends)):
-            for _c_idx, (_x_start, _x_end) in enumerate(zip(_col_starts, _col_ends)):
-                if (_x_end - _x_start) < 15 or (_y_end - _y_start) < 10:
-                    continue
-                
-                _y1 = _kalender_start + _y_start
-                _y2 = _kalender_start + _y_end
-                _x1 = _x_start
-                _x2 = _x_end
+        for _r_idx in range(_grid_rows):
+            for _c_idx in range(_grid_cols):
+                _y1 = _kalender_start + _r_idx * _cell_h
+                _y2 = _y1 + _cell_h
+                _x1 = _c_idx * _cell_w
+                _x2 = _x1 + _cell_w
                 
                 _cell_img = _img.crop((_x1, _y1, _x2, _y2))
                 _cell_np = np.array(_cell_img)
@@ -399,39 +303,32 @@ def ocr_kalender_screenshot(image_bytes):
                 if _cell_np.size == 0:
                     continue
                 
+                # Cek apakah cell punya warna
                 _cell_gray = np.mean(_cell_np, axis=2)
-                _cell_white_pct = np.mean(_cell_gray > 240)
+                _cell_colored_pct = np.mean(_cell_gray < 240)
                 
-                # Skip kalau terlalu putih
-                if _cell_white_pct > 0.90:
+                if _cell_colored_pct < 0.3:
                     continue
                 
-                # Deteksi warna (sample 5 titik)
-                _h_cell, _w_cell = _cell_np.shape[:2]
-                _points = [
-                    _cell_np[_h_cell // 2, _w_cell // 2],
-                    _cell_np[_h_cell // 4, _w_cell // 4],
-                    _cell_np[_h_cell // 4, 3 * _w_cell // 4],
-                    _cell_np[3 * _h_cell // 4, _w_cell // 4],
-                    _cell_np[3 * _h_cell // 4, 3 * _w_cell // 4],
-                ]
+                # Sample warna MEDIAN (bukan mean) — biar gak ketarik putih
+                _flat = _cell_np.reshape(-1, 3)
+                # Filter: skip pixel putih
+                _non_white = _flat[~((_flat[:, 0] > 240) & (_flat[:, 1] > 240) & (_flat[:, 2] > 240))]
                 
-                _r_val = int(np.median([p[0] for p in _points]))
-                _g_val = int(np.median([p[1] for p in _points]))
-                _b_val = int(np.median([p[2] for p in _points]))
+                if len(_non_white) == 0:
+                    continue
+                
+                _r_val = int(np.median(_non_white[:, 0]))
+                _g_val = int(np.median(_non_white[:, 1]))
+                _b_val = int(np.median(_non_white[:, 2]))
                 
                 _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(_r_val, _g_val, _b_val)
                 
-                # Deteksi text
+                # Text OCR
                 _kode_huruf = None
                 _text_cell = ""
-                
                 try:
-                    _text_cell = pytesseract.image_to_string(
-                        _cell_img,
-                        config="--psm 7",
-                    ).strip()
-                    
+                    _text_cell = pytesseract.image_to_string(_cell_img, config="--psm 7").strip()
                     if _text_cell:
                         _kode_huruf, _conf_huruf = _huruf_to_kode(_text_cell)
                 except Exception:
@@ -442,30 +339,24 @@ def ocr_kalender_screenshot(image_bytes):
                 _confidence = "LOW"
                 _sumber = ""
                 
-                if _kode_huruf and _kode_warna:
-                    if _kode_huruf == _kode_warna:
-                        _kode_final = _kode_huruf
-                        _confidence = "HIGH"
-                        _sumber = "huruf+warna"
-                    else:
-                        _kode_final = _kode_warna
-                        _confidence = "MEDIUM"
-                        _sumber = f"warna({_kode_warna}) vs huruf({_kode_huruf})"
-                elif _kode_warna:
+                if _kode_warna:
                     _kode_final = _kode_warna
-                    _confidence = "MEDIUM"
+                    _confidence = "HIGH" if _conf_warna > 70 else "MEDIUM"
                     _sumber = "warna"
-                elif _kode_huruf:
+                if _kode_huruf and not _kode_final:
                     _kode_final = _kode_huruf
                     _confidence = "MEDIUM"
                     _sumber = "huruf"
+                elif _kode_huruf and _kode_warna and _kode_huruf == _kode_warna:
+                    _confidence = "HIGH"
+                    _sumber = "huruf+warna"
                 
                 _debug_info.append({
                     "row": _r_idx,
                     "col": _c_idx,
                     "x": f"{_x1},{_x2}",
                     "y": f"{_y1},{_y2}",
-                    "text_cell": _text_cell,
+                    "text_cell": _text_cell[:20],
                     "kode_huruf": _kode_huruf,
                     "kode_warna": _kode_warna,
                     "rgb": f"{_r_val},{_g_val},{_b_val}",
@@ -481,15 +372,15 @@ def ocr_kalender_screenshot(image_bytes):
                         "sumber": _sumber,
                     })
         
-        print(f"[OCR v9] Cells analyzed: {len(_debug_info)}")
-        print(f"[OCR v9] Detected: {len(_tanggal_list)} cells")
+        print(f"[OCR v10] Cells analyzed: {len(_debug_info)}")
+        print(f"[OCR v10] Detected: {len(_tanggal_list)} cells")
         
         return {
             "success": True,
             "tanggal_list": _tanggal_list,
             "debug_cells": _debug_info,
-            "kolom_detected": len(_col_starts),
-            "baris_detected": len(_row_starts),
+            "kolom_detected": _grid_cols,
+            "baris_detected": _grid_rows,
             "kalender_area": (_kalender_start, _kalender_end),
             "raw_text": _text_full,
             "error": "",
@@ -498,13 +389,7 @@ def ocr_kalender_screenshot(image_bytes):
     except Exception as e:
         import traceback
         print(traceback.format_exc())
-        return {
-            "success": False,
-            "tanggal_list": [],
-            "raw_text": "",
-            "error": str(e)[:200],
-        }
-
+        return {"success": False, "tanggal_list": [], "raw_text": "", "error": str(e)[:200]}
 
 # =========================================================
 # 🧠 PARSER: KALENDER → SHIFT MAP
