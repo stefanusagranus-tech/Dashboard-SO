@@ -561,23 +561,6 @@ def render_dashboard():
         _detail_so = get_so_rak_detail(limit=20)
         _btsb_result = hitung_btsb_akumulatif()
     
-    # ✅ DEBUG (HAPUS SETELAH FIX!)
-    st.warning("🔍 DEBUG:")
-    st.write(f"- `_trend` type: `{type(_trend)}`")
-    st.write(f"- `_trend` length: `{len(_trend) if _trend else 0}`")
-    st.write(f"- `_trend` content: `{_trend}`")
-    
-    # Test langsung query Supabase
-    try:
-        from modules.supabase_client import get_supabase
-        _sb = get_supabase()
-        _raw = _sb.table("so_rak_harian").select("*").execute()
-        st.write(f"- Raw Supabase rows: `{len(_raw.data) if _raw.data else 0}`")
-        if _raw.data:
-            st.write(f"- Sample row: `{_raw.data[0]}`")
-    except Exception as e:
-        st.error(f"❌ Error test: {e}")
-    
     if rak_df.empty:
         st.error("❌ **Data rak kosong!**")
         st.info("💡 Pastikan tabel `rak_master` di Supabase sudah di-import.")
@@ -1073,7 +1056,7 @@ def render_dashboard():
                 y=0.15,
                 line=dict(color="#E88B8B", width=2, dash="dash"),
                 annotation_text="⚠️ Target: 0.15%",
-                annotation_position="top right",
+                annotation_position="ight",
                 annotation_font=dict(color="#E88B8B", size=10, family="JetBrains Mono"),
             )
             

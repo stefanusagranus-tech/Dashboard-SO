@@ -265,33 +265,63 @@ def get_nominal_per_hari(limit=None):
     """Ambil semua nominal SO per hari (tanpa batas)."""
     try:
         _sb = get_supabase()
-        _res = _sb.table("so_rak_harian") \
-            .select("so_date, nominal_adjust") \
-            .order("so_date", desc=False) \
-            .execute()
+        
+        # ✅ FIX: Select * dulu (jangan spesifik kolom)
+        _res = _sb.table("so_rak_harian").select("*").execute()
+        
+        # ✅ DEBUG (sementara)
+        print(f"[DEBUG get_nominal_per_hari] Raw rows: {len(_res.data) if _res.data else 0}")
         
         if not _res.data:
             return []
         
+        # ✅ FIX: Parse pakai try-except per row
         _df = pd.DataFrame(_res.data)
-        _df["so_date"] = pd.to_datetime(_df["so_date"])
+        print(f"[DEBUG] DataFrame shape: {_df.shape}")
+        print(f"[DEBUG] Columns: {list(_df.columns)}")
+        
+        if "so_date" not in _df.columns or "nominal_adjust" not in _df.columns:
+            print(f"[ERROR] Kolom tidak lengkap: {list(_df.columns)}")
+            return []
+        
+        _df["so_date"] = pd.to_datetime(_df["so_date"], errors="coerce")
         _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
         
-        _grp = _df.groupby("so_date")["nominal_adjust"].sum().reset_index()
+        # Drop rows dengan so_date NaT
+        _df = _df.dropna(subset=["so_date"])
+        print(f"[DEBUG] After dropna: {len(_df)} rows")
         
-        # ✅ FIX: Kalau limit ada, apply. Kalau None, ambil semua
+        if _df.empty:
+            return []
+        
+        _grp = _df.groupby("so_date")["nominal_adjust"].sum().reset_index()
+        _grp = _grp.sort_values("so_date", ascending=True)
+        
+        # Apply limit
         if limit is not None and limit > 0:
             _grp = _grp.tail(limit)
         
-        return [
-            {
-                "tanggal": r["so_date"].strftime("%Y-%m-%d"),
-                "nominal": float(r["nominal_adjust"]),
-            }
-            for _, r in _grp.iterrows()
-        ]
+        # ✅ Build result
+        _result = []
+        for _, r in _grp.iterrows():
+            try:
+                _tgl_str = r["so_date"].strftime("%Y-%m-%d")
+                _nominal = float(r["nominal_adjust"])
+                _result.append({
+                    "tanggal": _tgl_str,
+                    "nominal": _nominal,
+                })
+            except Exception as e_row:
+                print(f"[ROW ERROR] {e_row} — row: {r.to_dict()}")
+                continue
+        
+        print(f"[DEBUG] Result: {_result}")
+        return _result
+    
     except Exception as e:
         print(f"[get_nominal_per_hari ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
         return []
 
 
