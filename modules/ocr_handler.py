@@ -1,262 +1,6 @@
-"""
-OCR Handler v6
-==============
-Handle OCR screenshot kalender shift web absen.
-
-Mode:
-- Full palette (semua kode)
-- Deteksi huruf awal (P, S, M, D, H, O, C, I, A, L, R, E)
-- Warna sebagai fallback
-"""
-
-import io
-import re
-import pandas as pd
-from datetime import datetime, date, timedelta
-from zoneinfo import ZoneInfo
-
-try:
-    import pytesseract
-    from PIL import Image, ImageEnhance, ImageFilter
-    import numpy as np
-    TESSERACT_AVAILABLE = True
-except ImportError as e:
-    print(f"[OCR] Library gak tersedia: {e}")
-    TESSERACT_AVAILABLE = False
-
-
-# =========================================================
-# 🎨 COLOR PALETTE — Berdasarkan Screenshot Web Absen
-# =========================================================
-# Setiap kode dipetakan ke WARNA RGB + HURUF AWAL
-COLOR_PALETTE = {
-    # ═══════════════════════════════════════════
-    # 🟡 DINI HARI & HARI PENDEK (Kuning Terang)
-    # ═══════════════════════════════════════════
-    "D": {
-        "label": "Dini Hari",
-        "rgb": (240, 240, 100),      # Kuning terang
-        "hex": "#F0F064",
-        "tolerance": 80,
-        "huruf": ["D"],
-    },
-    "HP": {
-        "label": "Hari Pendek",
-        "rgb": (240, 240, 100),      # Kuning terang (sama dengan D)
-        "hex": "#F0F064",
-        "tolerance": 80,
-        "huruf": ["HP", "H"],
-    },
-    
-    # ═══════════════════════════════════════════
-    # 🟢 PAGI (Hijau Sedang)
-    # ═══════════════════════════════════════════
-    "P": {
-        "label": "Pagi",
-        "rgb": (100, 230, 180),      # Hijau medium
-        "hex": "#64E6B4",
-        "tolerance": 70,
-        "huruf": ["P"],
-    },
-    
-    # ═══════════════════════════════════════════
-    # 💚 SIANG (Hijau Sangat Terang)
-    # ═══════════════════════════════════════════
-    "S": {
-        "label": "Siang",
-        "rgb": (100, 250, 210),      # Hijau sangat terang
-        "hex": "#64FAD2",
-        "tolerance": 70,
-        "huruf": ["S"],
-    },
-    
-    # ═══════════════════════════════════════════
-    # 🟣 MALAM (Biru/Ungu)
-    # ═══════════════════════════════════════════
-    "M": {
-        "label": "Malam",
-        "rgb": (130, 130, 240),      # Biru/ungu
-        "hex": "#8282F0",
-        "tolerance": 70,
-        "huruf": ["M"],
-    },
-    
-    # ═══════════════════════════════════════════
-    # ⚫ OFF / CUTI / IZIN (Hitam)
-    # ═══════════════════════════════════════════
-    "O": {
-        "label": "Off",
-        "rgb": (20, 20, 20),
-        "hex": "#141414",
-        "tolerance": 50,
-        "huruf": ["O"],
-    },
-    "C": {
-        "label": "Cuti",
-        "rgb": (20, 20, 20),
-        "hex": "#141414",
-        "tolerance": 50,
-        "huruf": ["C"],
-    },
-    "I": {
-        "label": "Izin",
-        "rgb": (20, 20, 20),
-        "hex": "#141414",
-        "tolerance": 50,
-        "huruf": ["I"],
-    },
-    "SK": {
-        "label": "Sakit",
-        "rgb": (20, 20, 20),
-        "hex": "#141414",
-        "tolerance": 50,
-        "huruf": ["S"],
-    },
-    "AO": {
-        "label": "Additional Off",
-        "rgb": (20, 20, 20),
-        "hex": "#141414",
-        "tolerance": 50,
-        "huruf": ["AO", "A"],
-    },
-    "EO": {
-        "label": "Extra Off",
-        "rgb": (20, 20, 20),
-        "hex": "#141414",
-        "tolerance": 50,
-        "huruf": ["EO", "E"],
-    },
-    "RO": {
-        "label": "Replace Off",
-        "rgb": (20, 20, 20),
-        "hex": "#141414",
-        "tolerance": 50,
-        "huruf": ["RO", "R"],
-    },
-    
-    # ═══════════════════════════════════════════
-    # 🔴 LIBUR (Merah Muda)
-    # ═══════════════════════════════════════════
-    "L": {
-        "label": "Libur",
-        "rgb": (250, 150, 150),
-        "hex": "#FA9696",
-        "tolerance": 70,
-        "huruf": ["L"],
-    },
-    
-    # ═══════════════════════════════════════════
-    # 🟣 LONG SHIFT (Ungu)
-    # ═══════════════════════════════════════════
-    "LO": {
-        "label": "Long Shift",
-        "rgb": (150, 50, 200),
-        "hex": "#9632C8",
-        "tolerance": 70,
-        "huruf": ["LO"],
-    },
-}
-
-
-# =========================================================
-# 🎨 DETEKSI WARNA → KODE
-# =========================================================
-def _rgb_to_kode_v2(r, g, b):
-    """
-    Deteksi kode shift dari warna RGB.
-    Return: (kode, confidence, distance)
-    """
-    # Skip background putih
-    if r > 230 and g > 230 and b > 230:
-        return None, 0, 999999
-    
-    # Skip abu-abu netral (border/background)
-    _max_c = max(r, g, b)
-    _min_c = min(r, g, b)
-    if (_max_c - _min_c) < 20 and r > 150:
-        return None, 0, 999999
-    
-    _best_match = None
-    _best_distance = 999999
-    
-    for _kode, _info in COLOR_PALETTE.items():
-        _pal_r, _pal_g, _pal_b = _info["rgb"]
-        
-        _distance = (
-            (r - _pal_r) ** 2 +
-            (g - _pal_g) ** 2 +
-            (b - _pal_b) ** 2
-        ) ** 0.5
-        
-        if _distance < _best_distance:
-            _best_distance = _distance
-            _best_match = _kode
-    
-    if _best_match:
-        _tol = COLOR_PALETTE[_best_match]["tolerance"]
-        if _best_distance <= _tol:
-            _confidence = max(0, 100 - int((_best_distance / _tol) * 50))
-            return _best_match, _confidence, _best_distance
-    
-    return None, 0, _best_distance
-
-
-# =========================================================
-# 🔤 DETEKSI HURUF AWAL → KODE
-# =========================================================
-def _huruf_to_kode(text):
-    """
-    Deteksi kode dari huruf awal text.
-    
-    Contoh:
-        "M22-MALAM" → M22 (kategori M)
-        "S15-SIANG" → S15 (kategori S)
-        "O-OFF" → O
-        "P7" → P7
-        "HP3" → HP
-    """
-    if not text:
-        return None, 0
-    
-    _text_upper = str(text).upper().strip()
-    
-    # Bersihkan whitespace & simbol
-    _text_upper = re.sub(r'[^A-Z0-9]', '', _text_upper)
-    
-    if not _text_upper:
-        return None, 0
-    
-    # Cek exact match dengan huruf di palette
-    for _kode, _info in COLOR_PALETTE.items():
-        for _huruf in _info["huruf"]:
-            _huruf_upper = _huruf.upper()
-            
-            if _text_upper == _huruf_upper:
-                return _kode, 100
-            if _text_upper.startswith(_huruf_upper):
-                return _kode, 90
-    
-    # Fallback: cek 2 huruf pertama
-    _first_2 = _text_upper[:2]
-    _first_1 = _text_upper[:1]
-    
-    for _kode, _info in COLOR_PALETTE.items():
-        for _huruf in _info["huruf"]:
-            _h_up = _huruf.upper()
-            if len(_h_up) == 2 and _first_2 == _h_up:
-                return _kode, 85
-            if len(_h_up) == 1 and _first_1 == _h_up:
-                return _kode, 70
-    
-    return None, 0
-
-
-# =========================================================
-# 🔍 OCR UTAMA — v6 (Priority Huruf Awal)
-# =========================================================
 def ocr_kalender_screenshot(image_bytes):
     """
-    OCR screenshot v6 — Deteksi via HURUF AWAL.
+    OCR screenshot v7 — Auto-detect grid dari screenshot.
     """
     if not TESSERACT_AVAILABLE:
         return {
@@ -272,70 +16,167 @@ def ocr_kalender_screenshot(image_bytes):
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
-        print(f"[OCR v6] Image: {_w}x{_h}")
+        print(f"[OCR v7] Image: {_w}x{_h}")
         
         # ============================================
-        # OCR TEXT FULL
+        # OCR TEXT FULL (untuk debug)
         # ============================================
         _text_full = pytesseract.image_to_string(_img, config="--psm 6")
         
-        # ============================================
-        # DETEKSI KALENDER AREA
-        # ============================================
         _np_img = np.array(_img)
         
-        # Cari area kalender (bagian bawah biasanya)
-        _kalender_top = int(_h * 0.60)
-        _kalender_bottom = int(_h * 0.95)
-        _kalender_height = _kalender_bottom - _kalender_top
+        # ============================================
+        # 1. AUTO-DETECT AREA KALENDER
+        # ============================================
+        # Cari baris yang BUKAN putih/abu terang (ada warna)
+        _grayscale = np.mean(_np_img, axis=2)
+        _is_white = _grayscale > 230
         
-        _grid_cols = 7
-        _grid_rows = 5
-        _cell_h = _kalender_height // _grid_rows
-        _cell_w = _w // _grid_cols
+        # Hitung berapa pixel warna di tiap baris
+        _row_color_density = 1 - np.mean(_is_white, axis=1)
         
-        print(f"[OCR v6] Grid: {_grid_cols}×{_grid_rows}, cell: {_cell_w}×{_cell_h}")
+        # Cari baris pertama yang mulai ada warna
+        _kalender_start = None
+        _kalender_end = None
+        
+        # Scan dari atas, cari density > 0.1 (artinya ada warna)
+        for _i in range(int(_h * 0.3), _h - 10):
+            if _row_color_density[_i] > 0.10:
+                if _kalender_start is None:
+                    _kalender_start = _i
+                _kalender_end = _i
+        
+        # Fallback
+        if _kalender_start is None:
+            _kalender_start = int(_h * 0.55)
+            _kalender_end = int(_h * 0.95)
+        
+        _kalender_height = _kalender_end - _kalender_start
+        print(f"[OCR v7] Kalender area: y={_kalender_start}-{_kalender_end}, h={_kalender_height}")
         
         # ============================================
-        # ASUNSI: Tanggal 1 di kolom ke-4 (Kamis)
-        # Sesuaikan kalau perlu
+        # 2. AUTO-DETECT KOLOM
         # ============================================
-        _tanggal_1_col = 3
-        _tanggal_1_row = 0
+        # Cari kolom yang ada warna di area kalender
+        _kalender_region = _np_img[_kalender_start:_kalender_end, :]
+        _region_gray = np.mean(_kalender_region, axis=2)
+        _region_white = _region_gray > 230
+        
+        _col_color_density = 1 - np.mean(_region_white, axis=0)
+        
+        # Deteksi start/end tiap kolom
+        _col_starts = []
+        _col_ends = []
+        _in_col = False
+        
+        for _i in range(_w):
+            if _col_color_density[_i] > 0.10:
+                if not _in_col:
+                    _col_starts.append(_i)
+                    _in_col = True
+            else:
+                if _in_col:
+                    _col_ends.append(_i)
+                    _in_col = False
+        
+        if _in_col:
+            _col_ends.append(_w)
+        
+        print(f"[OCR v7] Kolom detected: {len(_col_starts)}")
         
         # ============================================
-        # ANALISIS PER CELL
+        # 3. AUTO-DETECT ROW (per minggu)
+        # ============================================
+        _row_color_density_kal = _row_color_density[_kalender_start:_kalender_end]
+        
+        _row_starts = []
+        _row_ends = []
+        _in_row = False
+        
+        for _i in range(len(_row_color_density_kal)):
+            if _row_color_density_kal[_i] > 0.05:
+                if not _in_row:
+                    _row_starts.append(_i)
+                    _in_row = True
+            else:
+                if _in_row:
+                    _row_ends.append(_i)
+                    _in_row = False
+        
+        if _in_row:
+            _row_ends.append(len(_row_color_density_kal))
+        
+        print(f"[OCR v7] Baris detected: {len(_row_starts)}")
+        
+        # ============================================
+        # 4. FALLBACK KALAU AUTO-DETECT GAGAL
+        # ============================================
+        if len(_col_starts) < 5 or len(_row_starts) < 4:
+            # Pakai grid fixed
+            print(f"[OCR v7] Fallback: pakai grid fixed 7×5")
+            _grid_cols = 7
+            _grid_rows = 5
+            _cell_h = _kalender_height // _grid_rows
+            _cell_w = _w // _grid_cols
+            
+            _col_starts = [_c * _cell_w for _c in range(_grid_cols)]
+            _col_ends = [(_c + 1) * _cell_w for _c in range(_grid_cols)]
+            _row_starts = [_r * _cell_h for _r in range(_grid_rows)]
+            _row_ends = [(_r + 1) * _cell_h for _r in range(_grid_rows)]
+        
+        # ============================================
+        # 5. ANALISIS PER CELL
         # ============================================
         _tanggal_list = []
         _debug_info = []
         
-        for _row in range(_grid_rows):
-            for _col in range(_grid_cols):
-                _y1 = _kalender_top + _row * _cell_h
-                _y2 = _y1 + _cell_h
-                _x1 = _col * _cell_w
-                _x2 = _x1 + _cell_w
-                
-                # Crop cell (fokus di bagian atas-tengah cell)
-                _cx1 = max(0, _x1 + int(_cell_w * 0.05))
-                _cx2 = min(_w, _x2 - int(_cell_w * 0.05))
-                _cy1 = max(0, _y1 + int(_cell_h * 0.15))
-                _cy2 = min(_h, _y2 - int(_cell_h * 0.15))
-                
-                if _cx2 <= _cx1 or _cy2 <= _cy1:
+        # Iterasi kombinasi row × col
+        for _r_idx, (_y_start, _y_end) in enumerate(zip(_row_starts, _row_ends)):
+            for _c_idx, (_x_start, _x_end) in enumerate(zip(_col_starts, _col_ends)):
+                # Skip cell yang terlalu kecil
+                if (_x_end - _x_start) < 20 or (_y_end - _y_start) < 15:
                     continue
                 
-                _cell_img = _img.crop((_cx1, _cy1, _cx2, _cy2))
+                # Absolute position
+                _y1 = _kalender_start + _y_start
+                _y2 = _kalender_start + _y_end
+                _x1 = _x_start
+                _x2 = _x_end
+                
+                # Crop cell
+                _cell_img = _img.crop((_x1, _y1, _x2, _y2))
                 _cell_np = np.array(_cell_img)
                 
                 if _cell_np.size == 0:
                     continue
                 
+                # Skip cell yang putih (kosong)
+                _cell_gray = np.mean(_cell_np, axis=2)
+                _cell_white_pct = np.mean(_cell_gray > 230)
+                
+                if _cell_white_pct > 0.85:
+                    continue
+                
                 # ============================================
-                # METODE 1: OCR TEXT CELL (PRIORITAS)
+                # DETEKSI WARNA
+                # ============================================
+                _h_cell, _w_cell = _cell_np.shape[:2]
+                _points = [
+                    _cell_np[_h_cell // 2, _w_cell // 2],
+                    _cell_np[_h_cell // 3, _w_cell // 3],
+                    _cell_np[_h_cell // 3, 2 * _w_cell // 3],
+                ]
+                
+                _r_val = int(np.median([p[0] for p in _points]))
+                _g_val = int(np.median([p[1] for p in _points]))
+                _b_val = int(np.median([p[2] for p in _points]))
+                
+                _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(_r_val, _g_val, _b_val)
+                
+                # ============================================
+                # DETEKSI TEXT CELL
                 # ============================================
                 _kode_huruf = None
-                _conf_huruf = 0
                 _text_cell = ""
                 
                 try:
@@ -350,25 +191,6 @@ def ocr_kalender_screenshot(image_bytes):
                     pass
                 
                 # ============================================
-                # METODE 2: WARNA (FALLBACK)
-                # ============================================
-                # Sample multiple pixel points
-                _h_cell, _w_cell = _cell_np.shape[:2]
-                _points = [
-                    _cell_np[_h_cell // 2, _w_cell // 2],
-                    _cell_np[_h_cell // 3, _w_cell // 3],
-                    _cell_np[_h_cell // 3, 2 * _w_cell // 3],
-                ]
-                
-                _r = int(np.median([p[0] for p in _points]))
-                _g = int(np.median([p[1] for p in _points]))
-                _b = int(np.median([p[2] for p in _points]))
-                
-                _warna_hex = f"#{_r:02X}{_g:02X}{_b:02X}"
-                
-                _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(_r, _g, _b)
-                
-                # ============================================
                 # VOTING
                 # ============================================
                 _kode_final = None
@@ -381,7 +203,6 @@ def ocr_kalender_screenshot(image_bytes):
                         _confidence = "HIGH"
                         _sumber = "huruf+warna"
                     else:
-                        # Prioritaskan huruf (text lebih akurat)
                         _kode_final = _kode_huruf
                         _confidence = "MEDIUM"
                         _sumber = f"huruf({_kode_huruf}) vs warna({_kode_warna})"
@@ -394,44 +215,36 @@ def ocr_kalender_screenshot(image_bytes):
                     _confidence = "MEDIUM"
                     _sumber = "warna"
                 
-                # Hitung tanggal
-                _tanggal_int = (
-                    (_row - _tanggal_1_row) * 7 +
-                    (_col - _tanggal_1_col) + 1
-                )
-                
-                # Skip kalau di luar 1-31
-                if _tanggal_int < 1 or _tanggal_int > 31:
-                    continue
-                
-                # Debug info
                 _debug_info.append({
-                    "tanggal": _tanggal_int,
-                    "row": _row,
-                    "col": _col,
+                    "row": _r_idx,
+                    "col": _c_idx,
+                    "x": (_x1, _x2),
+                    "y": (_y1, _y2),
                     "text_cell": _text_cell,
                     "kode_huruf": _kode_huruf,
                     "kode_warna": _kode_warna,
+                    "rgb": (_r_val, _g_val, _b_val),
                     "final": _kode_final,
-                    "rgb": (_r, _g, _b),
                 })
                 
                 if _kode_final:
                     _tanggal_list.append({
-                        "tanggal_int": _tanggal_int,
+                        "row": _r_idx,
+                        "col": _c_idx,
                         "kode": _kode_final,
                         "confidence": _confidence,
                         "sumber": _sumber,
-                        "rgb": (_r, _g, _b),
-                        "hex": _warna_hex,
+                        "rgb": (_r_val, _g_val, _b_val),
                     })
         
-        print(f"[OCR v6] Detected: {len(_tanggal_list)} cells")
+        print(f"[OCR v7] Detected: {len(_tanggal_list)} cells")
         
         return {
             "success": True,
             "tanggal_list": _tanggal_list,
             "debug_cells": _debug_info,
+            "kolom_detected": len(_col_starts),
+            "baris_detected": len(_row_starts),
             "raw_text": _text_full,
             "error": "",
         }
@@ -445,138 +258,3 @@ def ocr_kalender_screenshot(image_bytes):
             "raw_text": "",
             "error": str(e)[:200],
         }
-
-
-# =========================================================
-# 🧠 PARSER: KALENDER → SHIFT MAP
-# =========================================================
-def parse_kalender_ke_shift(tanggal_list, bulan, tahun, nama):
-    """Convert hasil OCR ke shift_map."""
-    _shift_map = {}
-    
-    if not tanggal_list:
-        return {
-            "nama": str(nama).strip().upper(),
-            "bulan": bulan,
-            "tahun": tahun,
-            "shift_map": {},
-        }
-    
-    for _item in tanggal_list:
-        try:
-            if not isinstance(_item, dict):
-                continue
-            
-            _kode = _item.get("kode")
-            _tgl_num = _item.get("tanggal_int")
-            
-            if not _kode or not _tgl_num:
-                continue
-            
-            _tgl_num = int(_tgl_num)
-            if _tgl_num < 1 or _tgl_num > 31:
-                continue
-            
-            try:
-                _tgl = date(tahun, bulan, _tgl_num)
-            except ValueError:
-                continue
-            
-            _shift_map[_tgl.isoformat()] = _kode
-        
-        except Exception as _e:
-            print(f"[PARSE ERROR] {_e}")
-            continue
-    
-    return {
-        "nama": str(nama).strip().upper(),
-        "bulan": bulan,
-        "tahun": tahun,
-        "shift_map": _shift_map,
-    }
-
-
-# =========================================================
-# 💾 SIMPAN & LOG
-# =========================================================
-def save_ocr_to_master_shift(nama, bulan, tahun, shift_map, sumber="ocr"):
-    """Simpan hasil OCR ke master_shift."""
-    try:
-        from modules.supabase_client import get_supabase
-        sb = get_supabase()
-        
-        if not shift_map:
-            return False, "❌ Tidak ada data"
-        
-        _now = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
-        _rows = []
-        
-        for _tgl_str, _kode in shift_map.items():
-            _rows.append({
-                "tanggal": _tgl_str,
-                "nama": str(nama).strip().upper(),
-                "kode_shift": str(_kode).strip().upper(),
-                "sumber": str(sumber),
-                "catatan": "",
-                "updated_at": _now,
-            })
-        
-        _res = sb.table("master_shift").upsert(
-            _rows,
-            on_conflict="tanggal,nama"
-        ).execute()
-        
-        return True, f"✅ {len(_res.data)} shift tersimpan untuk {nama}"
-    
-    except Exception as e:
-        return False, f"❌ {str(e)[:200]}"
-
-
-def log_ocr_upload(nama, bulan, tahun, file_name, ocr_result, uploaded_by=""):
-    """Catat log upload OCR."""
-    try:
-        from modules.supabase_client import get_supabase
-        sb = get_supabase()
-        
-        _res = sb.table("screenshot_log").insert({
-            "nama": str(nama).strip().upper(),
-            "bulan": int(bulan),
-            "tahun": int(tahun),
-            "file_name": str(file_name)[:200],
-            "ocr_result": ocr_result.get("tanggal_list", []),
-            "jumlah_hari_terdeteksi": len(ocr_result.get("tanggal_list", [])),
-            "status": "success" if ocr_result.get("success") else "failed",
-            "error_message": ocr_result.get("error", "")[:500],
-            "uploaded_by": str(uploaded_by),
-        }).execute()
-        
-        return True, "Logged"
-    except Exception as e:
-        print(f"[LOG_OCR ERROR] {e}")
-        return False, str(e)[:100]
-
-
-# =========================================================
-# 🎨 HELPER: UPDATE PALETTE
-# =========================================================
-def update_palette_warna(kode, r, g, b):
-    """Update sample warna palette."""
-    if kode in COLOR_PALETTE:
-        COLOR_PALETTE[kode]["rgb"] = (int(r), int(g), int(b))
-        COLOR_PALETTE[kode]["hex"] = f"#{int(r):02X}{int(g):02X}{int(b):02X}"
-        return True, f"✅ Palette {kode} diupdate"
-    return False, f"❌ Kode {kode} tidak ditemukan"
-
-
-def get_palette_info():
-    """Ambil info palette."""
-    _info = []
-    for _kode, _data in COLOR_PALETTE.items():
-        _info.append({
-            "Kode": _kode,
-            "Label": _data["label"],
-            "Warna": _data["hex"],
-            "RGB": f"({_data['rgb'][0]}, {_data['rgb'][1]}, {_data['rgb'][2]})",
-            "Huruf": ", ".join(_data["huruf"]),
-        })
-    return pd.DataFrame(_info)
