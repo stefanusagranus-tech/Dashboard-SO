@@ -1,656 +1,1308 @@
 """
-OCR Handler v9
-==============
-Handle OCR screenshot kalender shift web absen.
+Master Shift Page
+=================
+Halaman untuk kelola master shift dengan Chat AI.
 
-Perubahan v9:
-- Palette warna ASLI dari CSV debug
-- Grid detection merge (fix kolom ke-split)
-- Auto-detect kalender area lebih fleksibel
-- Debug print detail
+Kode shift:
+- P7  = Pagi jam 07:00
+- S15 = Siang jam 15:00
+- M22 = Malam jam 22:00
+- O   = Off (Libur)
+- C   = Cuti
+- AO  = Additional Off
 """
 
-import io
-import re
+import streamlit as st
 import pandas as pd
+import time
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
-try:
-    import pytesseract
-    from PIL import Image, ImageEnhance, ImageFilter
-    import numpy as np
-    TESSERACT_AVAILABLE = True
-except ImportError as e:
-    print(f"[OCR] Library gak tersedia: {e}")
-    TESSERACT_AVAILABLE = False
+# =========================================================================
+# KONFIGURASI HALAMAN
+# =========================================================================
+st.set_page_config(
+    page_title="Master Shift | Toko C383",
+    page_icon="📅",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
+# =========================================================================
+# CUSTOM CSS — SAMA DENGAN DASHBOARD UTAMA
+# =========================================================================
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Quicksand:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700;900&display=swap');
 
-# =========================================================
-# 🎨 COLOR PALETTE v9 — WARNA ASLI DARI CSV DEBUG
-# =========================================================
-COLOR_PALETTE = {
-    # Dini Hari (Kuning)
-    "D": {
-        "label": "Dini Hari",
-        "rgb": (230, 230, 100),
-        "hex": "#E6E664",
-        "tolerance": 80,
-        "huruf": ["D"],
-    },
-    # Hari Pendek (Kuning)
-    "HP": {
-        "label": "Hari Pendek",
-        "rgb": (230, 230, 100),
-        "hex": "#E6E664",
-        "tolerance": 80,
-        "huruf": ["HP", "H"],
-    },
-    # Pagi (Hijau)
-    "P": {
-        "label": "Pagi",
-        "rgb": (60, 220, 200),
-        "hex": "#3CDCC8",
-        "tolerance": 100,
-        "huruf": ["P"],
-    },
-    # ✅ Siang — WARNA ASLI: RGB(0, 255, 173)
-    "S": {
-        "label": "Siang",
-        "rgb": (0, 255, 173),
-        "hex": "#00FFAD",
-        "tolerance": 80,
-        "huruf": ["S"],
-    },
-    # ✅ Malam — WARNA ASLI: RGB(100, 133, 255)
-    "M": {
-        "label": "Malam",
-        "rgb": (100, 133, 255),
-        "hex": "#6485FF",
-        "tolerance": 80,
-        "huruf": ["M"],
-    },
-    # ✅ Off — WARNA ASLI: RGB(13, 13, 13)
-    "O": {
-        "label": "Off",
-        "rgb": (13, 13, 13),
-        "hex": "#0D0D0D",
-        "tolerance": 40,
-        "huruf": ["O"],
-    },
-    "C": {
-        "label": "Cuti",
-        "rgb": (13, 13, 13),
-        "hex": "#0D0D0D",
-        "tolerance": 40,
-        "huruf": ["C"],
-    },
-    "I": {
-        "label": "Izin",
-        "rgb": (13, 13, 13),
-        "hex": "#0D0D0D",
-        "tolerance": 40,
-        "huruf": ["I"],
-    },
-    "SK": {
-        "label": "Sakit",
-        "rgb": (13, 13, 13),
-        "hex": "#0D0D0D",
-        "tolerance": 40,
-        "huruf": ["SK"],
-    },
-    "AO": {
-        "label": "Additional Off",
-        "rgb": (13, 13, 13),
-        "hex": "#0D0D0D",
-        "tolerance": 40,
-        "huruf": ["AO", "A"],
-    },
-    "EO": {
-        "label": "Extra Off",
-        "rgb": (13, 13, 13),
-        "hex": "#0D0D0D",
-        "tolerance": 40,
-        "huruf": ["EO", "E"],
-    },
-    "RO": {
-        "label": "Replace Off",
-        "rgb": (13, 13, 13),
-        "hex": "#0D0D0D",
-        "tolerance": 40,
-        "huruf": ["RO", "R"],
-    },
-    # Libur (Merah muda)
-    "L": {
-        "label": "Libur",
-        "rgb": (250, 150, 150),
-        "hex": "#FA9696",
-        "tolerance": 80,
-        "huruf": ["L"],
-    },
-    # Long Shift (Ungu)
-    "LO": {
-        "label": "Long Shift",
-        "rgb": (150, 50, 200),
-        "hex": "#9632C8",
-        "tolerance": 80,
-        "huruf": ["LO"],
-    },
-}
-
-
-# =========================================================
-# 🎨 DETEKSI WARNA → KODE
-# =========================================================
-def _rgb_to_kode_v2(r, g, b):
-    """Deteksi kode shift dari warna RGB."""
-    # Skip putih
-    if r > 240 and g > 240 and b > 240:
-        return None, 0, 999999
-    
-    # Skip abu netral
-    _max_c = max(r, g, b)
-    _min_c = min(r, g, b)
-    if (_max_c - _min_c) < 15 and r > 150:
-        return None, 0, 999999
-    
-    _best_match = None
-    _best_distance = 999999
-    
-    for _kode, _info in COLOR_PALETTE.items():
-        _pal_r, _pal_g, _pal_b = _info["rgb"]
-        
-        _distance = (
-            (r - _pal_r) ** 2 +
-            (g - _pal_g) ** 2 +
-            (b - _pal_b) ** 2
-        ) ** 0.5
-        
-        if _distance < _best_distance:
-            _best_distance = _distance
-            _best_match = _kode
-    
-    if _best_match:
-        _tol = COLOR_PALETTE[_best_match]["tolerance"]
-        if _best_distance <= _tol:
-            _confidence = max(0, 100 - int((_best_distance / _tol) * 50))
-            return _best_match, _confidence, _best_distance
-    
-    return None, 0, _best_distance
-
-
-# =========================================================
-# 🔤 DETEKSI HURUF AWAL → KODE
-# =========================================================
-def _huruf_to_kode(text):
-    """Deteksi kode dari huruf awal text."""
-    if not text:
-        return None, 0
-    
-    _text_upper = str(text).upper().strip()
-    _text_upper = re.sub(r'[^A-Z0-9]', '', _text_upper)
-    
-    if not _text_upper:
-        return None, 0
-    
-    for _kode, _info in COLOR_PALETTE.items():
-        for _huruf in _info["huruf"]:
-            _huruf_upper = _huruf.upper()
-            
-            if _text_upper == _huruf_upper:
-                return _kode, 100
-            if _text_upper.startswith(_huruf_upper):
-                return _kode, 90
-    
-    _first_2 = _text_upper[:2]
-    _first_1 = _text_upper[:1]
-    
-    for _kode, _info in COLOR_PALETTE.items():
-        for _huruf in _info["huruf"]:
-            _h_up = _huruf.upper()
-            if len(_h_up) == 2 and _first_2 == _h_up:
-                return _kode, 85
-            if len(_h_up) == 1 and _first_1 == _h_up:
-                return _kode, 70
-    
-    return None, 0
-
-
-# === BAGIAN 2 MULAI ===
-
-# =========================================================
-# 🔍 OCR UTAMA — v9 (Auto-detect Grid + Merge)
-# =========================================================
-def ocr_kalender_screenshot(image_bytes):
-    """
-    OCR screenshot v9 — Auto-detect grid dengan merge.
-    """
-    if not TESSERACT_AVAILABLE:
-        return {
-            "success": False,
-            "tanggal_list": [],
-            "raw_text": "",
-            "error": "Tesseract tidak tersedia",
-        }
-    
-    try:
-        _img = Image.open(io.BytesIO(image_bytes))
-        if _img.mode != "RGB":
-            _img = _img.convert("RGB")
-        
-        _w, _h = _img.size
-        print(f"[OCR v9] Image: {_w}x{_h}")
-        
-        # OCR TEXT FULL
-        _text_full = pytesseract.image_to_string(_img, config="--psm 6")
-        print(f"[OCR v9] Text length: {len(_text_full)}")
-        
-        _np_img = np.array(_img)
-        
-        # ============================================
-        # 1. AUTO-DETECT AREA KALENDER
-        # ============================================
-        _grayscale = np.mean(_np_img, axis=2)
-        _is_white = _grayscale > 240
-        _row_color_density = 1 - np.mean(_is_white, axis=1)
-        
-        print(f"[OCR v9] Row density max: {_row_color_density.max():.3f}")
-        
-        _kalender_start = None
-        _kalender_end = None
-        
-        for _i in range(int(_h * 0.20), _h - 5):
-            if _row_color_density[_i] > 0.05:
-                if _kalender_start is None:
-                    _kalender_start = _i
-                _kalender_end = _i
-        
-        if _kalender_start is None:
-            print(f"[OCR v9] WARNING: Kalender gak ke-detect, pakai fallback 50-95%")
-            _kalender_start = int(_h * 0.50)
-            _kalender_end = int(_h * 0.95)
-        
-        print(f"[OCR v9] Kalender area: y={_kalender_start}-{_kalender_end}")
-        
-        # ============================================
-        # 2. AUTO-DETECT KOLOM DENGAN MERGE
-        # ============================================
-        _kalender_region = _np_img[_kalender_start:_kalender_end, :]
-        _region_gray = np.mean(_kalender_region, axis=2)
-        _region_white = _region_gray > 240
-        _col_color_density = 1 - np.mean(_region_white, axis=0)
-        
-        # Deteksi kolom dengan gap threshold
-        _col_raw = []
-        _in_col = False
-        _start = 0
-        _gap = 0
-        _gap_threshold = 5
-        
-        for _i in range(_w):
-            if _col_color_density[_i] > 0.05:
-                if not _in_col:
-                    _start = _i
-                    _in_col = True
-                _gap = 0
-            else:
-                if _in_col:
-                    _gap += 1
-                    if _gap >= _gap_threshold:
-                        _col_raw.append((_start, _i - _gap + 1))
-                        _in_col = False
-                        _gap = 0
-        
-        if _in_col:
-            _col_raw.append((_start, _w))
-        
-        # Filter kolom sempit (< 15px)
-        _col_filtered = [(s, e) for s, e in _col_raw if (e - s) >= 15]
-        
-        print(f"[OCR v9] Kolom raw: {len(_col_raw)}, filtered: {len(_col_filtered)}")
-        
-        # Kalau masih > 7, ambil 7 terbesar
-        if len(_col_filtered) > 7:
-            _col_filtered = sorted(_col_filtered, key=lambda x: x[1]-x[0], reverse=True)[:7]
-            _col_filtered = sorted(_col_filtered, key=lambda x: x[0])
-        
-        _col_starts = [_s for _s, _e in _col_filtered]
-        _col_ends = [_e for _s, _e in _col_filtered]
-        
-        print(f"[OCR v9] Kolom final: {len(_col_starts)}")
-        
-        # ============================================
-        # 3. AUTO-DETECT ROW DENGAN MERGE
-        # ============================================
-        _row_color_density_kal = _row_color_density[_kalender_start:_kalender_end]
-        
-        _row_raw = []
-        _in_row = False
-        _start_row = 0
-        _gap_row = 0
-        _gap_threshold_row = 8
-        
-        for _i in range(len(_row_color_density_kal)):
-            if _row_color_density_kal[_i] > 0.03:
-                if not _in_row:
-                    _start_row = _i
-                    _in_row = True
-                _gap_row = 0
-            else:
-                if _in_row:
-                    _gap_row += 1
-                    if _gap_row >= _gap_threshold_row:
-                        _row_raw.append((_start_row, _i - _gap_row + 1))
-                        _in_row = False
-                        _gap_row = 0
-        
-        if _in_row:
-            _row_raw.append((_start_row, len(_row_color_density_kal)))
-        
-        # Filter row sempit
-        _row_filtered = [(s, e) for s, e in _row_raw if (e - s) >= 20]
-        
-        print(f"[OCR v9] Row raw: {len(_row_raw)}, filtered: {len(_row_filtered)}")
-        
-        # Kalau > 5, ambil 5 terbesar
-        if len(_row_filtered) > 5:
-            _row_filtered = sorted(_row_filtered, key=lambda x: x[1]-x[0], reverse=True)[:5]
-            _row_filtered = sorted(_row_filtered, key=lambda x: x[0])
-        
-        _row_starts = [_s for _s, _e in _row_filtered]
-        _row_ends = [_e for _s, _e in _row_filtered]
-        
-        print(f"[OCR v9] Row final: {len(_row_starts)}")
-        
-        # ============================================
-        # 4. FALLBACK KALAU AUTO-DETECT GAGAL
-        # ============================================
-        if len(_col_starts) < 5 or len(_row_starts) < 4:
-            print(f"[OCR v9] Fallback: pakai grid fixed 7x5")
-            _grid_cols = 7
-            _grid_rows = 5
-            _cell_h = (_kalender_end - _kalender_start) // _grid_rows
-            _cell_w = _w // _grid_cols
-            
-            _col_starts = [_c * _cell_w for _c in range(_grid_cols)]
-            _col_ends = [(_c + 1) * _cell_w for _c in range(_grid_cols)]
-            _row_starts = [_r * _cell_h for _r in range(_grid_rows)]
-            _row_ends = [(_r + 1) * _cell_h for _r in range(_grid_rows)]
-        
-        # ============================================
-        # 5. ANALISIS PER CELL
-        # ============================================
-        _tanggal_list = []
-        _debug_info = []
-        
-        for _r_idx, (_y_start, _y_end) in enumerate(zip(_row_starts, _row_ends)):
-            for _c_idx, (_x_start, _x_end) in enumerate(zip(_col_starts, _col_ends)):
-                if (_x_end - _x_start) < 15 or (_y_end - _y_start) < 10:
-                    continue
-                
-                _y1 = _kalender_start + _y_start
-                _y2 = _kalender_start + _y_end
-                _x1 = _x_start
-                _x2 = _x_end
-                
-                _cell_img = _img.crop((_x1, _y1, _x2, _y2))
-                _cell_np = np.array(_cell_img)
-                
-                if _cell_np.size == 0:
-                    continue
-                
-                _cell_gray = np.mean(_cell_np, axis=2)
-                _cell_white_pct = np.mean(_cell_gray > 240)
-                
-                # Skip kalau terlalu putih
-                if _cell_white_pct > 0.90:
-                    continue
-                
-                # Deteksi warna (sample 5 titik)
-                _h_cell, _w_cell = _cell_np.shape[:2]
-                _points = [
-                    _cell_np[_h_cell // 2, _w_cell // 2],
-                    _cell_np[_h_cell // 4, _w_cell // 4],
-                    _cell_np[_h_cell // 4, 3 * _w_cell // 4],
-                    _cell_np[3 * _h_cell // 4, _w_cell // 4],
-                    _cell_np[3 * _h_cell // 4, 3 * _w_cell // 4],
-                ]
-                
-                _r_val = int(np.median([p[0] for p in _points]))
-                _g_val = int(np.median([p[1] for p in _points]))
-                _b_val = int(np.median([p[2] for p in _points]))
-                
-                _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(_r_val, _g_val, _b_val)
-                
-                # Deteksi text
-                _kode_huruf = None
-                _text_cell = ""
-                
-                try:
-                    _text_cell = pytesseract.image_to_string(
-                        _cell_img,
-                        config="--psm 7",
-                    ).strip()
-                    
-                    if _text_cell:
-                        _kode_huruf, _conf_huruf = _huruf_to_kode(_text_cell)
-                except Exception:
-                    pass
-                
-                # Voting
-                _kode_final = None
-                _confidence = "LOW"
-                _sumber = ""
-                
-                if _kode_huruf and _kode_warna:
-                    if _kode_huruf == _kode_warna:
-                        _kode_final = _kode_huruf
-                        _confidence = "HIGH"
-                        _sumber = "huruf+warna"
-                    else:
-                        _kode_final = _kode_warna
-                        _confidence = "MEDIUM"
-                        _sumber = f"warna({_kode_warna}) vs huruf({_kode_huruf})"
-                elif _kode_warna:
-                    _kode_final = _kode_warna
-                    _confidence = "MEDIUM"
-                    _sumber = "warna"
-                elif _kode_huruf:
-                    _kode_final = _kode_huruf
-                    _confidence = "MEDIUM"
-                    _sumber = "huruf"
-                
-                _debug_info.append({
-                    "row": _r_idx,
-                    "col": _c_idx,
-                    "x": f"{_x1},{_x2}",
-                    "y": f"{_y1},{_y2}",
-                    "text_cell": _text_cell,
-                    "kode_huruf": _kode_huruf,
-                    "kode_warna": _kode_warna,
-                    "rgb": f"{_r_val},{_g_val},{_b_val}",
-                    "final": _kode_final,
-                })
-                
-                if _kode_final:
-                    _tanggal_list.append({
-                        "row": _r_idx,
-                        "col": _c_idx,
-                        "kode": _kode_final,
-                        "confidence": _confidence,
-                        "sumber": _sumber,
-                    })
-        
-        print(f"[OCR v9] Cells analyzed: {len(_debug_info)}")
-        print(f"[OCR v9] Detected: {len(_tanggal_list)} cells")
-        
-        return {
-            "success": True,
-            "tanggal_list": _tanggal_list,
-            "debug_cells": _debug_info,
-            "kolom_detected": len(_col_starts),
-            "baris_detected": len(_row_starts),
-            "kalender_area": (_kalender_start, _kalender_end),
-            "raw_text": _text_full,
-            "error": "",
-        }
-    
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return {
-            "success": False,
-            "tanggal_list": [],
-            "raw_text": "",
-            "error": str(e)[:200],
-        }
-
-
-# =========================================================
-# 🧠 PARSER: KALENDER → SHIFT MAP
-# =========================================================
-def parse_kalender_ke_shift(tanggal_list, bulan, tahun, nama):
-    """
-    Convert hasil OCR ke shift_map.
-    
-    Mapping tanggal dari posisi grid:
-    - row 0, col 0-6 → tanggal 1-7
-    - row 1, col 0-6 → tanggal 8-14
-    - row 2, col 0-6 → tanggal 15-21
-    - row 3, col 0-6 → tanggal 22-28
-    - row 4, col 0-6 → tanggal 29-31
-    """
-    _shift_map = {}
-    
-    if not tanggal_list:
-        return {
-            "nama": str(nama).strip().upper(),
-            "bulan": bulan,
-            "tahun": tahun,
-            "shift_map": {},
-        }
-    
-    for _item in tanggal_list:
-        try:
-            if not isinstance(_item, dict):
-                continue
-            
-            _kode = _item.get("kode")
-            _row = _item.get("row")
-            _col = _item.get("col")
-            
-            if not _kode or _row is None or _col is None:
-                continue
-            
-            # Mapping: tanggal = row * 7 + col + 1
-            _tgl_num = int(_row) * 7 + int(_col) + 1
-            
-            if _tgl_num < 1 or _tgl_num > 31:
-                continue
-            
-            try:
-                _tgl = date(tahun, bulan, _tgl_num)
-            except ValueError:
-                continue
-            
-            _shift_map[_tgl.isoformat()] = _kode
-        
-        except Exception as _e:
-            print(f"[PARSE ERROR] {_e}")
-            continue
-    
-    return {
-        "nama": str(nama).strip().upper(),
-        "bulan": bulan,
-        "tahun": tahun,
-        "shift_map": _shift_map,
+    /* Hide sidebar */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarNav"],
+    [data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    .stDeployButton,
+    #MainMenu,
+    footer {
+        display: none !important;
     }
 
+    :root {
+        --emerald: #0F8A72;
+        --emerald-light: #7FB99B;
+        --copper: #B87333;
+        --copper-light: #E8B189;
+        --bg-dark: #0a1612;
+        --text-light: #e8f3ee;
+        --text-muted: #7a9b8e;
+    }
 
-# =========================================================
-# 💾 SIMPAN KE MASTER SHIFT
-# =========================================================
-def save_ocr_to_master_shift(nama, bulan, tahun, shift_map, sumber="ocr"):
-    """Simpan hasil OCR ke master_shift."""
+    .stApp {
+        background:
+            radial-gradient(circle at 20% 0%, #0F8A72 0%, transparent 50%),
+            radial-gradient(circle at 80% 100%, #B87333 0%, transparent 50%),
+            linear-gradient(180deg, #050d0a 0%, #0a1612 50%, #050d0a 100%);
+        background-attachment: fixed;
+        color: var(--text-light);
+        font-family: 'Quicksand', sans-serif;
+    }
+
+    .main .block-container {
+        padding: 1rem 1.5rem 6rem 1.5rem !important;
+        max-width: 1400px !important;
+    }
+
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: #050d0a; }
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, var(--emerald), var(--copper));
+        border-radius: 5px;
+        border: 2px solid #050d0a;
+    }
+
+    h1, h2, h3, h4 {
+        font-family: 'Cinzel', serif !important;
+        color: var(--copper-light) !important;
+        letter-spacing: 1.5px;
+    }
+    p, span, div { color: var(--text-light); }
+
+    .royal-header {
+        position: relative;
+        background: linear-gradient(135deg, #050d0a 0%, #0F8A72 50%, #050d0a 100%);
+        border: 3px double var(--copper);
+        border-radius: 18px;
+        padding: 24px 32px;
+        margin-bottom: 24px;
+        box-shadow: 0 0 40px rgba(184, 115, 51, 0.35), inset 0 0 30px rgba(0, 0, 0, 0.7);
+        overflow: hidden;
+    }
+    .royal-header::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, transparent, var(--copper) 20%, var(--copper-light) 50%, var(--copper) 80%, transparent);
+        box-shadow: 0 0 15px rgba(232, 177, 137, 0.9);
+    }
+    .royal-title {
+        font-family: 'Cinzel', serif;
+        font-size: 28px;
+        font-weight: 900;
+        color: var(--copper-light);
+        text-align: center;
+        margin: 0;
+        letter-spacing: 3px;
+        text-shadow: 0 0 20px rgba(232, 177, 137, 0.7), 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+    .royal-subtitle {
+        font-family: 'Quicksand', sans-serif;
+        font-size: 12px;
+        color: var(--emerald-light);
+        text-align: center;
+        margin-top: 6px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+    .royal-ornament {
+        position: absolute;
+        color: var(--copper);
+        font-size: 16px;
+        opacity: 0.85;
+        filter: drop-shadow(0 0 5px rgba(184, 115, 51, 0.9));
+    }
+    .royal-orn-tl { top: 8px; left: 12px; }
+    .royal-orn-tr { top: 8px; right: 12px; }
+    .royal-orn-bl { bottom: 8px; left: 12px; }
+    .royal-orn-br { bottom: 8px; right: 12px; }
+
+    .header-clock {
+        text-align: center;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px dashed rgba(232, 177, 137, 0.3);
+    }
+    .clock-time {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 20px;
+        font-weight: 900;
+        color: var(--copper-light);
+        letter-spacing: 3px;
+        text-shadow: 0 0 12px rgba(232, 177, 137, 0.6);
+    }
+    .clock-date {
+        font-family: 'Quicksand', sans-serif;
+        font-size: 10px;
+        color: var(--emerald-light);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        margin-top: 4px;
+    }
+
+    /* BUTTONS */
+    div.stButton > button {
+        background: linear-gradient(135deg, #0a1612 0%, #0d1f1a 100%) !important;
+        color: var(--copper-light) !important;
+        border: 2px solid var(--copper) !important;
+        border-radius: 10px !important;
+        font-family: 'Cinzel', serif !important;
+        font-weight: 700 !important;
+        font-size: 12px !important;
+        padding: 10px 16px !important;
+        letter-spacing: 1px !important;
+        text-transform: uppercase !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+        width: 100% !important;
+        min-height: 44px !important;
+    }
+    div.stButton > button:hover {
+        background: linear-gradient(135deg, var(--emerald) 0%, var(--copper) 100%) !important;
+        color: #ffffff !important;
+        border-color: var(--copper-light) !important;
+        box-shadow: 0 0 20px rgba(232, 177, 137, 0.7) !important;
+        transform: translateY(-2px) !important;
+    }
+
+    /* FORM INPUT */
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="textarea"] > div {
+        background-color: rgba(10, 22, 18, 0.95) !important;
+        border: 2px solid var(--copper) !important;
+        border-radius: 10px !important;
+        min-height: 44px !important;
+    }
+    div[data-baseweb="input"] input,
+    div[data-baseweb="select"] span,
+    div[data-baseweb="textarea"] textarea {
+        color: var(--copper-light) !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 700 !important;
+    }
+    label, div[data-testid="stWidgetLabel"] label {
+        color: var(--text-muted) !important;
+        font-family: 'Quicksand', sans-serif !important;
+        font-weight: 700 !important;
+        font-size: 11px !important;
+        letter-spacing: 1px !important;
+        text-transform: uppercase !important;
+    }
+
+    hr {
+        border: none !important;
+        height: 2px !important;
+        background: linear-gradient(90deg, transparent, var(--copper) 50%, transparent) !important;
+        margin: 20px 0 !important;
+    }
+
+    /* SUB-TAB NAVIGATION */
+    .shift-subtab-btn {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
+
+    /* PREVIEW CARD */
+    .preview-card {
+        background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
+        border: 2px solid #7FB99B;
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin: 10px 0;
+    }
+    .preview-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: #7FB99B;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed rgba(127, 185, 155, 0.3);
+    }
+
+    .warning-box {
+        background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.15));
+        border: 2px solid #fbbf24;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin: 10px 0;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: #fcd34d;
+    }
+
+    .copyright-footer {
+        text-align: center;
+        margin-top: 60px;
+        padding-top: 20px;
+        border-top: 1px dashed rgba(232, 177, 137, 0.3);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        color: var(--text-muted);
+        letter-spacing: 1.5px;
+    }
+
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+
+    @media (max-width: 768px) {
+        .royal-title { font-size: 18px; letter-spacing: 1.5px; }
+        .royal-subtitle { font-size: 9px; }
+        .royal-header { padding: 16px 20px; }
+        .clock-time { font-size: 16px; }
+        .clock-date { font-size: 9px; }
+        .main .block-container { padding: 0.5rem 1rem 5rem 1rem !important; }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# =========================================================================
+# IMPORT MODULE
+# =========================================================================
+try:
+    from modules.master_shift_handler import (
+        load_personil_master,
+        add_personil,
+        update_personil_status,
+        parse_chat_update,
+        save_master_shift,
+        load_master_shift_matrix,
+        get_shift_hari_ini,
+        generate_master_shift_excel,
+        delete_master_shift_by_date,
+        KODE_SHIFT,
+        NAMA_BULAN_ID,
+    )
+except ImportError as e:
+    st.error(f"❌ Gagal import `master_shift_handler`: {e}")
+    st.info("💡 Pastikan file `modules/master_shift_handler.py` udah di-upload.")
+    st.stop()
+
+
+# =========================================================================
+# HELPER FUNCTIONS
+# =========================================================================
+def render_royal_header(show_clock=True):
+    """Render header banner royal."""
+    _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+    _time_str = _now.strftime("%H:%M")
+
+    _day_map = {
+        "Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
+        "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu"
+    }
+    _month_map = {
+        "January": "Januari", "February": "Februari", "March": "Maret",
+        "April": "April", "May": "Mei", "June": "Juni", "July": "Juli",
+        "August": "Agustus", "September": "September", "October": "Oktober",
+        "November": "November", "December": "Desember"
+    }
+    _day_id = _day_map.get(_now.strftime("%A"), _now.strftime("%A"))
+    _month_id = _month_map.get(_now.strftime("%B"), _now.strftime("%B"))
+    _date_id = f"{_day_id}, {_now.day} {_month_id} {_now.year}"
+
+    _clock_html = ""
+    if show_clock:
+        _clock_html = (
+            "<div class='header-clock'>"
+            "<div class='clock-time'>🕐 " + _time_str + " WIB</div>"
+            "<div class='clock-date'>📅 " + _date_id + "</div>"
+            "</div>"
+        )
+
+    _header_html = (
+        "<div class='royal-header fade-in-up'>"
+        "<div class='royal-ornament royal-orn-tl'>⚜</div>"
+        "<div class='royal-ornament royal-orn-tr'>⚜</div>"
+        "<div class='royal-ornament royal-orn-bl'>⚜</div>"
+        "<div class='royal-ornament royal-orn-br'>⚜</div>"
+        "<div class='royal-title'>📅 MASTER SHIFT 📅</div>"
+        "<div class='royal-subtitle'>⚜ Kelola Jadwal dengan Chat AI ⚜</div>"
+        + _clock_html +
+        "</div>"
+    )
+
+    st.markdown(_header_html, unsafe_allow_html=True)
+
+
+def render_copyright():
+    """Render footer copyright."""
+    st.markdown("""
+    <div class='copyright-footer'>
+        ⚜ Dashboard SO KGS V.1 ⚜
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def go_home():
+    """Kembali ke Dashboard utama."""
     try:
-        from modules.supabase_client import get_supabase
-        sb = get_supabase()
+        st.switch_page("Dashboard.py")
+    except Exception as e:
+        st.warning(f"⚠️ Gagal pindah halaman: {e}")
+
+
+# =========================================================================
+# 🎯 RENDER HALAMAN MASTER SHIFT
+# =========================================================================
+render_royal_header(show_clock=True)
+
+# Back button
+col_back, _ = st.columns([1, 4])
+with col_back:
+    if st.button("← Dashboard", key="btn_back_shift_home"):
+        go_home()
+
+# =========================================================================
+# 🎛️ SUB-TAB NAVIGATION
+# =========================================================================
+st.markdown("---")
+
+if "shift_sub_tab" not in st.session_state:
+    st.session_state["shift_sub_tab"] = "chat"
+
+col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
+
+with col_t1:
+    if st.button(
+        "💬 Chat Update",
+        use_container_width=True,
+        key="btn_shift_tab_chat",
+        type="primary" if st.session_state["shift_sub_tab"] == "chat" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "chat"
+        st.rerun()
+
+with col_t2:
+    if st.button(
+        "📊 Matrix View",
+        use_container_width=True,
+        key="btn_shift_tab_matrix",
+        type="primary" if st.session_state["shift_sub_tab"] == "matrix" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "matrix"
+        st.rerun()
+
+with col_t3:
+    if st.button(
+        "👥 Personil",
+        use_container_width=True,
+        key="btn_shift_tab_personil",
+        type="primary" if st.session_state["shift_sub_tab"] == "personil" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "personil"
+        st.rerun()
+
+with col_t4:
+    if st.button(
+        "📥 Download",
+        use_container_width=True,
+        key="btn_shift_tab_download",
+        type="primary" if st.session_state["shift_sub_tab"] == "download" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "download"
+        st.rerun()
+with col_t5:
+    if st.button(
+        "📸 Screenshot",
+        use_container_width=True,
+        key="btn_shift_tab_screenshot",
+        type="primary" if st.session_state["shift_sub_tab"] == "screenshot" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "screenshot"
+        st.rerun()
         
-        if not shift_map:
-            return False, "Tidak ada data"
-        
-        _now = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
-        _rows = []
-        
-        for _tgl_str, _kode in shift_map.items():
-            _rows.append({
-                "tanggal": _tgl_str,
-                "nama": str(nama).strip().upper(),
-                "kode_shift": str(_kode).strip().upper(),
-                "sumber": str(sumber),
-                "catatan": "",
-                "updated_at": _now,
-            })
-        
-        _res = sb.table("master_shift").upsert(
-            _rows,
-            on_conflict="tanggal,nama"
-        ).execute()
-        
-        return True, f"{len(_res.data)} shift tersimpan untuk {nama}"
+st.markdown("---")
+
+
+# ============================================================
+# TAB 1: CHAT UPDATE
+# ============================================================
+if st.session_state["shift_sub_tab"] == "chat":
+    st.markdown("### 💬 Chat Update Master Shift")
+    st.caption("💡 Ketik update dalam bahasa natural. AI akan parse otomatis.")
+
+    _placeholder = (
+        "Besok Tika libur, ganti jadi:\n"
+        "- Pagi: Reza, Pandu\n"
+        "- Siang: Zaki\n"
+        "- Malam: Kusdewi\n"
+        "- Libur: Tika, Adel"
+    )
+
+    _chat_input = st.text_area(
+        "📝 Ketik update:",
+        placeholder=_placeholder,
+        height=180,
+        key="chat_shift_input",
+    )
+
+    col_btn1, col_btn2 = st.columns([2, 1])
+    with col_btn1:
+        _btn_proses = st.button(
+            "🤖 PROSES CHAT",
+            use_container_width=True,
+            type="primary",
+            key="btn_chat_proses",
+        )
+    with col_btn2:
+        if st.button("🗑️ Clear", use_container_width=True, key="btn_chat_clear"):
+            st.session_state["chat_shift_parsed"] = None
+            st.rerun()
+
+    if _btn_proses and _chat_input.strip():
+        with st.spinner("⏳ Parsing chat..."):
+            _parsed = parse_chat_update(
+                _chat_input,
+                datetime.now(ZoneInfo("Asia/Jakarta")).date()
+            )
+        st.session_state["chat_shift_parsed"] = _parsed
+        st.rerun()
+    elif _btn_proses and not _chat_input.strip():
+        st.warning("⚠️ Chat kosong. Ketik dulu update-nya.")
+
+    # Tampilkan hasil parse
+    if st.session_state.get("chat_shift_parsed"):
+        _parsed = st.session_state["chat_shift_parsed"]
+        _mode = _parsed.get("mode", "update")   # ✅ DETEKSI MODE
     
-    except Exception as e:
-        return False, f"{str(e)[:200]}"
+        # Warning (kalau ada)
+        if _parsed.get("warning"):
+            st.markdown(
+                f"<div class='warning-box'>⚠️ {_parsed['warning']}</div>",
+                unsafe_allow_html=True
+            )
+    
+        # ============================================
+        # 🗑️ MODE DELETE — HAPUS SHIFT
+        # ============================================
+        if _mode == "delete":
+            _targets = _parsed.get("delete_targets", [])
+            _all_dates = _parsed.get("delete_all_dates", False)
+    
+            st.markdown("#### 🗑️ Preview Hapus Shift")
+    
+            if not _targets:
+                st.warning("⚠️ Tidak ada nama yang terdeteksi untuk dihapus.")
+                st.caption("Contoh: `Hapus shift TIA hari ini`")
+            else:
+                st.info(f"👤 **Nama target:** {', '.join(_targets)}")
+    
+                if _all_dates:
+                    st.warning("📅 **Mode:** Hapus **SEMUA tanggal** untuk nama ini!")
+                else:
+                    st.info(
+                        f"📅 **Mode:** Hapus hanya tanggal "
+                        f"**{_parsed['tanggal'].strftime('%d/%m/%Y')}**"
+                    )
+    
+                # Pilihan tanggal (kalau bukan all_dates)
+                if not _all_dates:
+                    _tanggal_hapus = st.date_input(
+                        "📅 Tanggal yang dihapus:",
+                        value=_parsed["tanggal"],
+                        key="chat_delete_tanggal",
+                    )
+                else:
+                    _tanggal_hapus = None
+    
+                # Preview tabel
+                _preview_data = []
+                for _t in _targets:
+                    _preview_data.append({
+                        "👤 Nama": _t,
+                        "📅 Mode": (
+                            "Semua Tanggal" if _all_dates 
+                            else _parsed["tanggal"].strftime("%d/%m/%Y")
+                        ),
+                    })
+                st.dataframe(
+                    pd.DataFrame(_preview_data),
+                    use_container_width=True,
+                    hide_index=True
+                )
+    
+                # Tombol konfirmasi
+                col_del1, col_del2 = st.columns([2, 1])
+    
+                with col_del1:
+                    if st.button(
+                        "🗑️ KONFIRMASI HAPUS",
+                        use_container_width=True,
+                        type="primary",
+                        key="btn_delete_confirm",
+                    ):
+                        # Import fungsi delete
+                        from modules.master_shift_handler import (
+                            delete_shift_by_name,
+                            delete_shift_all_dates,
+                        )
+    
+                        _total_deleted = 0
+    
+                        with st.spinner("⏳ Menghapus..."):
+                            if _all_dates:
+                                for _t in _targets:
+                                    _ok, _msg = delete_shift_all_dates(_t)
+                                    if _ok:
+                                        _total_deleted += 1
+                            else:
+                                _ok, _msg, _detail = delete_shift_by_name(
+                                    _tanggal_hapus, _targets
+                                )
+                                _total_deleted = _detail.get("deleted", 0)
+    
+                        if _total_deleted > 0:
+                            st.success(f"🗑️ {_total_deleted} shift berhasil dihapus!")
+                            st.balloons()
+                            st.session_state["chat_shift_parsed"] = None
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ Tidak ada yang dihapus.")
+    
+                with col_del2:
+                    if st.button(
+                        "❌ BATAL",
+                        use_container_width=True,
+                        key="btn_delete_cancel",
+                    ):
+                        st.session_state["chat_shift_parsed"] = None
+                        st.rerun()
+    
+        # ============================================
+        # ✅ MODE UPDATE — SIMPAN SHIFT (yang sudah ada)
+        # ============================================
+        else:
+            st.success(
+                f"✅ Tanggal terdeteksi: **{_parsed['tanggal'].strftime('%d/%m/%Y')}** "
+                f"({_parsed.get('tanggal_detect', '-')})"
+            )
+    
+            if _parsed["shift_map"]:
+                st.markdown("#### 📊 Preview Perubahan:")
+    
+                _preview_rows = []
+                for _nama, _kode in _parsed["shift_map"].items():
+                    _info = KODE_SHIFT.get(
+                        _kode, {"label": "-", "icon": "❓", "warna": "#CCCCCC"}
+                    )
+                    _preview_rows.append({
+                        "👤 Nama": _nama,
+                        "📝 Kode": _kode,
+                        "📋 Keterangan": _info["label"],
+                        "🎨 Icon": _info["icon"],
+                    })
+    
+                _preview_df = pd.DataFrame(_preview_rows)
+                st.dataframe(_preview_df, use_container_width=True, hide_index=True)
+    
+                st.markdown("##### 📅 Konfirmasi Tanggal:")
+                _tanggal_final = st.date_input(
+                    "Tanggal yang akan disimpan:",
+                    value=_parsed["tanggal"],
+                    key="chat_shift_tanggal_final",
+                )
+    
+                _catatan = st.text_input(
+                    "📝 Catatan (opsional):",
+                    placeholder="Contoh: Ganti shift dadakan",
+                    key="chat_shift_catatan",
+                )
+    
+                col_save1, col_save2 = st.columns([2, 1])
+    
+                with col_save1:
+                    if st.button(
+                        "💾 KONFIRMASI SIMPAN",
+                        use_container_width=True,
+                        type="primary",
+                        key="btn_chat_save",
+                    ):
+                        with st.spinner("⏳ Menyimpan..."):
+                            _ok, _msg = save_master_shift(
+                                tanggal=_tanggal_final,
+                                shift_map=_parsed["shift_map"],
+                                sumber="chat",
+                                catatan=f"{_catatan} | Raw: {_parsed['raw_text'][:200]}",
+                            )
+    
+                        if _ok:
+                            st.success(_msg)
+                            st.balloons()
+                            st.session_state["chat_shift_parsed"] = None
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.error(_msg)
+    
+                with col_save2:
+                    if st.button(
+                        "❌ BATAL",
+                        use_container_width=True,
+                        key="btn_chat_cancel",
+                    ):
+                        st.session_state["chat_shift_parsed"] = None
+                        st.rerun()
+            else:
+                st.warning(
+                    "⚠️ Tidak ada data shift yang ke-parse. Cek format chat."
+                )
+    
+        with st.expander("📖 Format Chat yang Didukung"):
+            st.markdown("""
+            **1. Format Multi-Shift (Utama):**
+            ```
+            Besok Tika libur, ganti jadi:
+            - Pagi: Reza, Pandu
+            - Siang: Zaki
+            - Malam: Kusdewi
+            - Libur: Tika, Adel
+            ```
+    
+            **2. Format Simple (1 Shift):**
+            ```
+            Tika libur besok
+            Zaki sakit hari ini
+            ```
+    
+            **3. Format Tanggal Eksplisit:**
+            ```
+            05/10: Tika libur
+            05-10-2026: Rotasi shift pagi
+            ```
+    
+            **4. Keyword yang Didukung:**
+            - `pagi` → P7
+            - `siang` → S15
+            - `malam` → M22
+            - `libur` / `off` → O
+            - `cuti` → C
+            - `ao` / `additional off` → AO
+            """)
+
+# ============================================================
+# TAB 2: MATRIX VIEW (2 TABEL — TGL 1-15 & 16-31)
+# ============================================================
+elif st.session_state["shift_sub_tab"] == "matrix":
+    st.markdown("### 📊 Master Shift (Matrix)")
+    st.caption("💡 Tabel dipecah 2 bagian (mirip Excel master shift)")
+
+    col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
+
+    with col_b1:
+        _bulan_pilihan = st.selectbox(
+            "📅 Bulan",
+            options=list(NAMA_BULAN_ID.keys()),
+            format_func=lambda x: NAMA_BULAN_ID[x],
+            index=datetime.now(ZoneInfo("Asia/Jakarta")).month - 1,
+            key="matrix_bulan",
+        )
+    with col_b2:
+        _tahun_pilihan = st.number_input(
+            "📆 Tahun",
+            min_value=2024,
+            max_value=2100,
+            value=datetime.now(ZoneInfo("Asia/Jakarta")).year,
+            key="matrix_tahun",
+        )
+    with col_b3:
+        if st.button("🔄 Refresh", use_container_width=True, key="btn_matrix_refresh"):
+            st.cache_data.clear()
+            st.rerun()
+
+    with st.spinner("⏳ Load matrix..."):
+        _matrix_df = load_master_shift_matrix(_bulan_pilihan, _tahun_pilihan)
+
+    if _matrix_df.empty:
+        st.info("📭 Belum ada data shift untuk bulan ini.")
+        st.caption("Mulai isi di tab **💬 Chat Update**.")
+    else:
+        st.markdown(
+            f"<div class='preview-card'>"
+            f"<div class='preview-title'>"
+            f"📊 {NAMA_BULAN_ID[_bulan_pilihan]} {_tahun_pilihan} — {len(_matrix_df)} Personil"
+            f"</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        # Split data tgl 1-15 & 16-31
+        _all_cols = list(_matrix_df.columns)
+        _nama_col = "NAMA"
+
+        _cols_1_15 = [_nama_col] + [
+            c for c in _all_cols
+            if c != _nama_col and str(c).isdigit() and 1 <= int(c) <= 15
+        ]
+        _cols_16_31 = [_nama_col] + [
+            c for c in _all_cols
+            if c != _nama_col and str(c).isdigit() and 16 <= int(c) <= 31
+        ]
+
+        _df_part1 = _matrix_df[_cols_1_15].copy() if len(_cols_1_15) > 1 else pd.DataFrame()
+        _df_part2 = _matrix_df[_cols_16_31].copy() if len(_cols_16_31) > 1 else pd.DataFrame()
+
+        # Tabel 1: Tgl 1-15
+        st.markdown("#### 📅 Tabel 1: Tanggal 1 - 15")
+        if not _df_part1.empty:
+            st.dataframe(
+                _df_part1,
+                use_container_width=True,
+                hide_index=True,
+                height=min(500, 40 + len(_df_part1) * 38),
+            )
+        else:
+            st.info("📭 Tidak ada data tanggal 1-15.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Tabel 2: Tgl 16-31
+        st.markdown("#### 📅 Tabel 2: Tanggal 16 - 31")
+        if not _df_part2.empty:
+            st.dataframe(
+                _df_part2,
+                use_container_width=True,
+                hide_index=True,
+                height=min(500, 40 + len(_df_part2) * 38),
+            )
+        else:
+            st.info("📭 Tidak ada data tanggal 16-31.")
+
+        # Legenda
+        st.markdown("---")
+        _legenda_html = (
+            "<div style='"
+            "background: rgba(10, 22, 18, 0.6);"
+            "border: 1.5px solid #B87333;"
+            "border-radius: 10px;"
+            "padding: 12px 16px;"
+            "margin-top: 10px;"
+            "'>"
+            "<div style='"
+            "font-family: JetBrains Mono, monospace;"
+            "font-size: 10px;"
+            "color: #E8B189;"
+            "letter-spacing: 1.5px;"
+            "margin-bottom: 8px;"
+            "text-transform: uppercase;"
+            "'>🎨 Legenda Kode Shift</div>"
+            "<div style='"
+            "display: flex;"
+            "flex-wrap: wrap;"
+            "gap: 8px;"
+            "font-family: JetBrains Mono, monospace;"
+            "font-size: 11px;"
+            "'>"
+        )
+
+        for _kode, _info in KODE_SHIFT.items():
+            _legenda_html += (
+                f"<div style='"
+                f"background: {_info['warna']}20;"
+                f"border: 1.5px solid {_info['warna']};"
+                f"border-radius: 8px;"
+                f"padding: 6px 10px;"
+                f"color: {_info['warna']};"
+                f"font-weight: 900;"
+                f"'>"
+                f"{_info['icon']} <b>{_kode}</b> = {_info['label']}"
+                f"</div>"
+            )
+
+        _legenda_html += "</div></div>"
+        st.markdown(_legenda_html, unsafe_allow_html=True)
 
 
-# =========================================================
-# 📝 LOG OCR
-# =========================================================
-def log_ocr_upload(nama, bulan, tahun, file_name, ocr_result, uploaded_by=""):
-    """Catat log upload OCR."""
+# ============================================================
+# TAB 3: PERSONIL MANAGEMENT
+# ============================================================
+elif st.session_state["shift_sub_tab"] == "personil":
+    st.markdown("### 👥 Manajemen Personil")
+
+    _personil_all = load_personil_master(only_active=False)
+    _personil_aktif = load_personil_master(only_active=True)
+
+    col_pm1, col_pm2 = st.columns(2)
+    with col_pm1:
+        st.metric("👥 Personil Aktif", len(_personil_aktif))
+    with col_pm2:
+        st.metric("👤 Total Personil", len(_personil_all))
+
+    st.markdown("---")
+
+    with st.expander("➕ Tambah Personil Baru", expanded=False):
+        with st.form("form_add_personil"):
+            col_f1, col_f2 = st.columns([2, 1])
+            with col_f1:
+                _new_nama = st.text_input(
+                    "Nama Personil",
+                    placeholder="Contoh: BUDI",
+                    key="new_personil_nama",
+                ).strip().upper()
+            with col_f2:
+                _new_urutan = st.number_input(
+                    "Urutan (opsional)",
+                    min_value=0,
+                    value=0,
+                    key="new_personil_urutan",
+                    help="0 = otomatis di paling bawah",
+                )
+
+            _btn_add = st.form_submit_button(
+                "💾 TAMBAH PERSONIL",
+                use_container_width=True,
+                type="primary",
+            )
+
+            if _btn_add:
+                if not _new_nama:
+                    st.error("⚠️ Nama wajib diisi!")
+                else:
+                    _ok, _msg = add_personil(
+                        _new_nama,
+                        _new_urutan if _new_urutan > 0 else None,
+                    )
+                    if _ok:
+                        st.success(_msg)
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(_msg)
+
+    st.markdown("#### 📋 Daftar Personil")
+
+    if _personil_all.empty:
+        st.info("📭 Belum ada personil.")
+    else:
+        for _, _row in _personil_all.sort_values("urutan").iterrows():
+            _nama = _row["nama"]
+            _aktif = _row["aktif"]
+            _urutan = _row["urutan"]
+
+            col_l1, col_l2 = st.columns([3, 1])
+
+            with col_l1:
+                _status_icon = "✅" if _aktif else "❌"
+                _status_text = "AKTIF" if _aktif else "NON-AKTIF"
+                _status_color = "#7FB99B" if _aktif else "#E88B8B"
+
+                st.markdown(
+                    f"<div style='"
+                    f"padding: 12px 16px;"
+                    f"background: rgba(15, 138, 114, 0.1);"
+                    f"border: 1.5px solid {_status_color};"
+                    f"border-radius: 10px;"
+                    f"margin-bottom: 8px;"
+                    f"'>"
+                    f"<span style='font-family: JetBrains Mono, monospace; "
+                    f"font-size: 14px; font-weight: 900; color: #E8B189;'>"
+                    f"{_status_icon} {_nama}</span>"
+                    f"<span style='font-family: JetBrains Mono, monospace; "
+                    f"font-size: 10px; color: {_status_color}; margin-left: 10px;'>"
+                    f"#{_urutan} • {_status_text}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+            with col_l2:
+                if _aktif:
+                    if st.button(
+                        "🚫 Non-aktif",
+                        key=f"btn_deact_{_nama}",
+                        use_container_width=True,
+                    ):
+                        _ok, _msg = update_personil_status(_nama, False)
+                        if _ok:
+                            st.success(_msg)
+                            time.sleep(0.8)
+                            st.rerun()
+                else:
+                    if st.button(
+                        "✅ Aktifkan",
+                        key=f"btn_act_{_nama}",
+                        use_container_width=True,
+                    ):
+                        _ok, _msg = update_personil_status(_nama, True)
+                        if _ok:
+                            st.success(_msg)
+                            time.sleep(0.8)
+                            st.rerun()
+
+
+# ============================================================
+# TAB 4: DOWNLOAD EXCEL
+# ============================================================
+elif st.session_state["shift_sub_tab"] == "download":
+    st.markdown("### 📥 Download Excel Master Shift")
+
+    col_d1, col_d2 = st.columns(2)
+
+    with col_d1:
+        _dl_bulan = st.selectbox(
+            "📅 Bulan",
+            options=list(NAMA_BULAN_ID.keys()),
+            format_func=lambda x: NAMA_BULAN_ID[x],
+            index=datetime.now(ZoneInfo("Asia/Jakarta")).month - 1,
+            key="dl_shift_bulan",
+        )
+    with col_d2:
+        _dl_tahun = st.number_input(
+            "📆 Tahun",
+            min_value=2024,
+            max_value=2100,
+            value=datetime.now(ZoneInfo("Asia/Jakarta")).year,
+            key="dl_shift_tahun",
+        )
+
+    with st.spinner("⏳ Prepare Excel..."):
+        _dl_matrix = load_master_shift_matrix(_dl_bulan, _dl_tahun)
+
+    if _dl_matrix.empty:
+        st.warning("📭 Belum ada data untuk bulan ini.")
+    else:
+        st.success(f"✅ Siap download: **{len(_dl_matrix)} personil**")
+
+        _excel_bytes = generate_master_shift_excel(_dl_matrix, _dl_bulan, _dl_tahun)
+
+        if _excel_bytes:
+            st.download_button(
+                label="📥 DOWNLOAD EXCEL MASTER SHIFT",
+                data=_excel_bytes,
+                file_name=(
+                    f"Master_Shift_{NAMA_BULAN_ID[_dl_bulan]}_"
+                    f"{_dl_tahun}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                ),
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                type="primary",
+            )
+        else:
+            st.error("❌ Gagal generate Excel.")
+
+# ============================================================
+# TAB 5: UPLOAD SCREENSHOT (OCR)
+# ============================================================
+elif st.session_state["shift_sub_tab"] == "screenshot":
+    st.markdown("### 📸 Upload Screenshot Kalender Shift")
+    st.caption("💡 Upload screenshot dari web absen → AI baca kode shift otomatis")
+
+    # Import OCR handler
     try:
-        from modules.supabase_client import get_supabase
-        sb = get_supabase()
-        
-        _res = sb.table("screenshot_log").insert({
-            "nama": str(nama).strip().upper(),
-            "bulan": int(bulan),
-            "tahun": int(tahun),
-            "file_name": str(file_name)[:200],
-            "ocr_result": ocr_result.get("tanggal_list", []),
-            "jumlah_hari_terdeteksi": len(ocr_result.get("tanggal_list", [])),
-            "status": "success" if ocr_result.get("success") else "failed",
-            "error_message": ocr_result.get("error", "")[:500],
-            "uploaded_by": str(uploaded_by),
-        }).execute()
-        
-        return True, "Logged"
-    except Exception as e:
-        print(f"[LOG_OCR ERROR] {e}")
-        return False, str(e)[:100]
+        from modules.ocr_handler import (
+            ocr_kalender_screenshot,
+            parse_kalender_ke_shift,
+            save_ocr_to_master_shift,
+            log_ocr_upload,
+        )
+        _ocr_available = True
+    except ImportError as _e_ocr:
+        _ocr_available = False
+        st.error(f"❌ OCR handler tidak tersedia: {_e_ocr}")
+        st.info("💡 Pastikan file `modules/ocr_handler.py` sudah di-upload.")
 
+    if _ocr_available:
+        # ============================================================
+        # LANGKAH 1: PILIH NAMA & BULAN
+        # ============================================================
+        st.markdown("#### 📋 Langkah 1: Pilih Nama & Bulan")
 
-# =========================================================
-# 🎨 HELPER: PALETTE
-# =========================================================
-def update_palette_warna(kode, r, g, b):
-    """Update sample warna palette."""
-    if kode in COLOR_PALETTE:
-        COLOR_PALETTE[kode]["rgb"] = (int(r), int(g), int(b))
-        COLOR_PALETTE[kode]["hex"] = f"#{int(r):02X}{int(g):02X}{int(b):02X}"
-        return True, f"Palette {kode} diupdate"
-    return False, f"Kode {kode} tidak ditemukan"
+        col_n1, col_n2, col_n3 = st.columns([2, 1, 1])
 
+        with col_n1:
+            # Load personil aktif
+            _personil_df = load_personil_master(only_active=True)
+            _personil_list = _personil_df["nama"].tolist() if not _personil_df.empty else []
 
-def get_palette_info():
-    """Ambil info palette."""
-    _info = []
-    for _kode, _data in COLOR_PALETTE.items():
-        _info.append({
-            "Kode": _kode,
-            "Label": _data["label"],
-            "Warna": _data["hex"],
-            "RGB": f"({_data['rgb'][0]}, {_data['rgb'][1]}, {_data['rgb'][2]})",
-            "Huruf": ", ".join(_data["huruf"]),
-        })
-    return pd.DataFrame(_info)
+            if not _personil_list:
+                st.warning("⚠️ Belum ada personil aktif. Tambah dulu di tab 👥 Personil.")
+            else:
+                _nama_pilih = st.selectbox(
+                    "👤 Nama Personil",
+                    options=_personil_list,
+                    key="ocr_nama_personil",
+                )
+
+        with col_n2:
+            _bulan_ocr = st.selectbox(
+                "📅 Bulan",
+                options=list(NAMA_BULAN_ID.keys()),
+                format_func=lambda x: NAMA_BULAN_ID[x],
+                index=datetime.now(ZoneInfo("Asia/Jakarta")).month - 1,
+                key="ocr_bulan",
+            )
+
+        with col_n3:
+            _tahun_ocr = st.number_input(
+                "📆 Tahun",
+                min_value=2024,
+                max_value=2100,
+                value=datetime.now(ZoneInfo("Asia/Jakarta")).year,
+                key="ocr_tahun",
+            )
+
+        st.markdown("---")
+
+        # ============================================================
+        # LANGKAH 2: UPLOAD SCREENSHOT
+        # ============================================================
+        st.markdown("#### 📸 Langkah 2: Upload Screenshot Kalender")
+
+        _uploaded_file = st.file_uploader(
+            "Upload screenshot dari web absen",
+            type=["png", "jpg", "jpeg"],
+            key="ocr_file_uploader",
+            help="Format: PNG/JPG. Screenshot kalender shift per orang.",
+        )
+
+        if _uploaded_file:
+            # Preview gambar
+            st.image(
+                _uploaded_file,
+                caption=f"Preview: {_uploaded_file.name}",
+                use_container_width=True,
+            )
+
+            # Tombol proses OCR
+            col_p1, col_p2 = st.columns([2, 1])
+            with col_p1:
+                _btn_proses_ocr = st.button(
+                    "🔍 PROSES OCR",
+                    use_container_width=True,
+                    type="primary",
+                    key="btn_ocr_proses",
+                )
+            with col_p2:
+                if st.button(
+                    "🗑️ Clear",
+                    use_container_width=True,
+                    key="btn_ocr_clear",
+                ):
+                    st.session_state["ocr_result"] = None
+                    st.rerun()
+
+            if _btn_proses_ocr:
+                with st.spinner("⏳ Membaca screenshot..."):
+                    # Read image bytes
+                    _img_bytes = _uploaded_file.getvalue()
+
+                    # OCR
+                    _ocr_result = ocr_kalender_screenshot(_img_bytes)
+
+                    # Parse
+                    if _ocr_result["success"]:
+                        _parsed_ocr = parse_kalender_ke_shift(
+                            _ocr_result["tanggal_list"],
+                            _bulan_ocr,
+                            _tahun_ocr,
+                            _nama_pilih,
+                        )
+                        st.session_state["ocr_result"] = {
+                            "ocr": _ocr_result,
+                            "parsed": _parsed_ocr,
+                            "nama": _nama_pilih,
+                            "bulan": _bulan_ocr,
+                            "tahun": _tahun_ocr,
+                            "file_name": _uploaded_file.name,
+                        }
+                    else:
+                        st.session_state["ocr_result"] = {
+                            "ocr": _ocr_result,
+                            "error": _ocr_result.get("error", "Gagal OCR"),
+                        }
+                    st.rerun()
+
+        # ============================================================
+        # LANGKAH 3: PREVIEW HASIL OCR
+        # ============================================================
+        if st.session_state.get("ocr_result"):
+            _res = st.session_state["ocr_result"]
+
+            st.markdown("---")
+
+            if "error" in _res:
+                st.error(f"❌ Gagal OCR: {_res['error']}")
+                st.caption("💡 Coba screenshot dengan resolusi lebih tinggi / kontras lebih baik.")
+            else:
+                _ocr_data = _res["ocr"]
+                _parsed_data = _res["parsed"]
+                _shift_map = _parsed_data["shift_map"]
+
+                # Metrics
+                st.markdown("#### 📊 Langkah 3: Preview Hasil OCR")
+
+                col_m1, col_m2, col_m3 = st.columns(3)
+                with col_m1:
+                    st.metric("👤 Nama", _parsed_data["nama"])
+                with col_m2:
+                    st.metric("📅 Periode", f"{NAMA_BULAN_ID[_res['bulan']]} {_res['tahun']}")
+                with col_m3:
+                    st.metric("📊 Hari Terdeteksi", len(_shift_map))
+
+                # Raw text (debug)
+                with st.expander("🔍 DEBUG INFO", expanded=True):
+                    st.write("**Kalender area Y:**", _ocr_data.get("kalender_area", "?"))
+                    st.write("**Kolom detected:**", _ocr_data.get("kolom_detected", 0))
+                    st.write("**Baris detected:**", _ocr_data.get("baris_detected", 0))
+                    st.write("**Total cells analyzed:**", len(_ocr_data.get("debug_cells", [])))
+                    
+                    _debug_cells = _ocr_data.get("debug_cells", [])
+                    if _debug_cells:
+                        st.write("**Sample debug cells:**")
+                        _debug_df = pd.DataFrame(_debug_cells[:30])
+                        st.dataframe(_debug_df, use_container_width=True)
+                    else:
+                        st.error("❌ TIDAK ADA CELL YANG DI-ANALISIS!")
+                        st.write("**Kemungkinan penyebab:**")
+                        st.write("- Kalender area gak ke-detect")
+                        st.write("- Kolom/baris gak ke-detect")
+                        st.write("- Semua cell ke-skip karena putih")
+                    
+                    st.write("**Raw OCR text:**")
+                    st.text(_ocr_data.get("raw_text", "")[:800])
+
+                # Preview tabel
+                if _shift_map:
+                    st.markdown("##### 📋 Preview Kode Shift")
+
+                    _preview_rows = []
+                    for _tgl_str, _kode in sorted(_shift_map.items()):
+                        _tgl = pd.to_datetime(_tgl_str)
+                        _info = KODE_SHIFT.get(_kode, {
+                            "label": "-", "icon": "❓", "warna": "#CCCCCC"
+                        })
+                        _preview_rows.append({
+                            "📅 Tanggal": _tgl.strftime("%d/%m/%Y"),
+                            "🎨 Kode": _kode,
+                            "📋 Keterangan": _info["label"],
+                            "🔖 Icon": _info["icon"],
+                        })
+
+                    _preview_df = pd.DataFrame(_preview_rows)
+                    st.dataframe(
+                        _preview_df,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    # ============================================================
+                    # LANGKAH 4: KONFIRMASI SIMPAN
+                    # ============================================================
+                    st.markdown("#### 💾 Langkah 4: Simpan ke Master Shift")
+
+                    st.info(
+                        f"Akan **{len(_shift_map)} shift** disimpan untuk "
+                        f"**{_parsed_data['nama']}** periode "
+                        f"**{NAMA_BULAN_ID[_res['bulan']]} {_res['tahun']}**."
+                    )
+
+                    col_s1, col_s2 = st.columns([2, 1])
+
+                    with col_s1:
+                        if st.button(
+                            "💾 KONFIRMASI SIMPAN",
+                            use_container_width=True,
+                            type="primary",
+                            key="btn_ocr_save",
+                        ):
+                            with st.spinner("⏳ Menyimpan..."):
+                                # Save
+                                _ok, _msg = save_ocr_to_master_shift(
+                                    nama=_parsed_data["nama"],
+                                    bulan=_res["bulan"],
+                                    tahun=_res["tahun"],
+                                    shift_map=_shift_map,
+                                    sumber="ocr",
+                                )
+
+                                # Log
+                                if _ok:
+                                    log_ocr_upload(
+                                        nama=_parsed_data["nama"],
+                                        bulan=_res["bulan"],
+                                        tahun=_res["tahun"],
+                                        file_name=_res["file_name"],
+                                        ocr_result=_ocr_data,
+                                        uploaded_by=st.session_state.get("username", "admin"),
+                                    )
+
+                            if _ok:
+                                st.success(_msg)
+                                st.balloons()
+                                st.session_state["ocr_result"] = None
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error(_msg)
+
+                    with col_s2:
+                        if st.button(
+                            "❌ BATAL",
+                            use_container_width=True,
+                            key="btn_ocr_cancel",
+                        ):
+                            st.session_state["ocr_result"] = None
+                            st.rerun()
+
+                else:
+                    st.warning(
+                        "⚠️ Tidak ada kode shift yang terdeteksi. "
+                        "Coba screenshot dengan kualitas lebih baik."
+                    )
+
+        # ============================================================
+        # INFO FORMAT SCREENSHOT
+        # ============================================================
+        with st.expander("📖 Tips Screenshot yang Bagus"):
+            st.markdown("""
+            **✅ Yang bikin OCR akurat:**
+            - 📸 Screenshot **zoom out** (kode keliatan full)
+            - 🖼️ **Resolusi tinggi** (min 1080px lebar)
+            - 💡 **Kontras bagus** (jangan gelap/blur)
+            - 📐 **Kalender full** keliatan (tanggal 1-31)
+            - 🎨 **Warna jelas** (hijau/biru/hitam kelihatan)
+
+            **❌ Yang bikin OCR gagal:**
+            - Kode shift **kepotong** (`P7~F`, `M2?`)
+            - Screenshot **blur**
+            - Warna **pudar** atau gelap
+            - Ada **notifikasi** nutupin
+            - **Zoom in** terlalu dekat
+
+            **🔧 Kalau OCR gagal:**
+            - Coba screenshot ulang dengan kualitas lebih baik
+            - Atau pakai **Chat Update** sebagai alternatif
+            - Atau **edit manual** via Grid Editor (next step)
+            """)
+
+# ============================================================
+# FOOTER
+# ============================================================
+render_copyright()
