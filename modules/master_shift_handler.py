@@ -414,18 +414,17 @@ def get_shift_hari_ini(tanggal=None):
 # 📥 EXPORT: EXCEL
 # =========================================================
 def generate_master_shift_excel(matrix_df, bulan, tahun):
-    """Generate Excel master shift dengan conditional formatting."""
+    """Generate Excel master shift dengan conditional formatting AUTO."""
     try:
         _output = io.BytesIO()
 
         with pd.ExcelWriter(_output, engine="xlsxwriter") as _writer:
-            # Sheet utama
             matrix_df.to_excel(_writer, sheet_name="Master Shift", index=False)
 
             _workbook = _writer.book
             _worksheet = _writer.sheets["Master Shift"]
 
-            # Header format
+            # Header
             _fmt_header = _workbook.add_format({
                 "bold": True,
                 "bg_color": "#FFD700",
@@ -434,42 +433,22 @@ def generate_master_shift_excel(matrix_df, bulan, tahun):
                 "valign": "vcenter",
             })
 
-            # Kode shift format
-            _fmt_p7 = _workbook.add_format({
-                "bg_color": "#7FB99B", "bold": True, "align": "center", "border": 1,
-            })
-            _fmt_s15 = _workbook.add_format({
-                "bg_color": "#87CEEB", "bold": True, "align": "center", "border": 1,
-            })
-            _fmt_m22 = _workbook.add_format({
-                "bg_color": "#DDA0DD", "bold": True, "align": "center", "border": 1,
-            })
-            _fmt_o = _workbook.add_format({
-                "bg_color": "#FF6B6B", "bold": True, "align": "center", "border": 1,
-            })
-            _fmt_c = _workbook.add_format({
-                "bg_color": "#FFD700", "bold": True, "align": "center", "border": 1,
-            })
-            _fmt_ao = _workbook.add_format({
-                "bg_color": "#C0C0C0", "bold": True, "align": "center", "border": 1,
-            })
-
-            # Apply header format
             _worksheet.set_column("A:A", 15, _fmt_header)
             _worksheet.set_column("B:AF", 5)
 
-            # Apply conditional formatting per kode
+            # ✅ AUTO-GENERATE FORMAT dari KODE_SHIFT
             _last_col = chr(ord("A") + len(matrix_df.columns) - 1)
             _last_row = len(matrix_df) + 1
 
-            for _kode, _fmt in [
-                ("P7", _fmt_p7),
-                ("S15", _fmt_s15),
-                ("M22", _fmt_m22),
-                ("O", _fmt_o),
-                ("C", _fmt_c),
-                ("AO", _fmt_ao),
-            ]:
+            for _kode, _info in KODE_SHIFT.items():
+                _warna = _info.get("warna", "#CCCCCC")
+                _fmt = _workbook.add_format({
+                    "bg_color": _warna,
+                    "bold": True,
+                    "align": "center",
+                    "border": 1,
+                })
+
                 _worksheet.conditional_format(
                     f"B2:{_last_col}{_last_row}",
                     {
@@ -485,7 +464,6 @@ def generate_master_shift_excel(matrix_df, bulan, tahun):
     except Exception as e:
         print(f"[EXPORT_EXCEL ERROR] {e}")
         return None
-
 
 # =========================================================
 # 📅 HELPER: DAFTAR NAMA BULAN
