@@ -388,7 +388,7 @@ st.markdown("---")
 if "shift_sub_tab" not in st.session_state:
     st.session_state["shift_sub_tab"] = "chat"
 
-col_t1, col_t2, col_t3, col_t4 = st.columns(4)
+col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
 
 with col_t1:
     if st.button(
@@ -429,7 +429,16 @@ with col_t4:
     ):
         st.session_state["shift_sub_tab"] = "download"
         st.rerun()
-
+with col_t5:
+    if st.button(
+        "📸 Screenshot",
+        use_container_width=True,
+        key="btn_shift_tab_screenshot",
+        type="primary" if st.session_state["shift_sub_tab"] == "screenshot" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "screenshot"
+        st.rerun()
+        
 st.markdown("---")
 
 
@@ -998,6 +1007,282 @@ elif st.session_state["shift_sub_tab"] == "download":
         else:
             st.error("❌ Gagal generate Excel.")
 
+# ============================================================
+# TAB 5: UPLOAD SCREENSHOT (OCR)
+# ============================================================
+elif st.session_state["shift_sub_tab"] == "screenshot":
+    st.markdown("### 📸 Upload Screenshot Kalender Shift")
+    st.caption("💡 Upload screenshot dari web absen → AI baca kode shift otomatis")
+
+    # Import OCR handler
+    try:
+        from modules.ocr_handler import (
+            ocr_kalender_screenshot,
+            parse_kalender_ke_shift,
+            save_ocr_to_master_shift,
+            log_ocr_upload,
+        )
+        _ocr_available = True
+    except ImportError as _e_ocr:
+        _ocr_available = False
+        st.error(f"❌ OCR handler tidak tersedia: {_e_ocr}")
+        st.info("💡 Pastikan file `modules/ocr_handler.py` sudah di-upload.")
+
+    if _ocr_available:
+        # ============================================================
+        # LANGKAH 1: PILIH NAMA & BULAN
+        # ============================================================
+        st.markdown("#### 📋 Langkah 1: Pilih Nama & Bulan")
+
+        col_n1, col_n2, col_n3 = st.columns([2, 1, 1])
+
+        with col_n1:
+            # Load personil aktif
+            _personil_df = load_personil_master(only_active=True)
+            _personil_list = _personil_df["nama"].tolist() if not _personil_df.empty else []
+
+            if not _personil_list:
+                st.warning("⚠️ Belum ada personil aktif. Tambah dulu di tab 👥 Personil.")
+            else:
+                _nama_pilih = st.selectbox(
+                    "👤 Nama Personil",
+                    options=_personil_list,
+                    key="ocr_nama_personil",
+                )
+
+        with col_n2:
+            _bulan_ocr = st.selectbox(
+                "📅 Bulan",
+                options=list(NAMA_BULAN_ID.keys()),
+                format_func=lambda x: NAMA_BULAN_ID[x],
+                index=datetime.now(ZoneInfo("Asia/Jakarta")).month - 1,
+                key="ocr_bulan",
+            )
+
+        with col_n3:
+            _tahun_ocr = st.number_input(
+                "📆 Tahun",
+                min_value=2024,
+                max_value=2100,
+                value=datetime.now(ZoneInfo("Asia/Jakarta")).year,
+                key="ocr_tahun",
+            )
+
+        st.markdown("---")
+
+        # ============================================================
+        # LANGKAH 2: UPLOAD SCREENSHOT
+        # ============================================================
+        st.markdown("#### 📸 Langkah 2: Upload Screenshot Kalender")
+
+        _uploaded_file = st.file_uploader(
+            "Upload screenshot dari web absen",
+            type=["png", "jpg", "jpeg"],
+            key="ocr_file_uploader",
+            help="Format: PNG/JPG. Screenshot kalender shift per orang.",
+        )
+
+        if _uploaded_file:
+            # Preview gambar
+            st.image(
+                _uploaded_file,
+                caption=f"Preview: {_uploaded_file.name}",
+                use_container_width=True,
+            )
+
+            # Tombol proses OCR
+            col_p1, col_p2 = st.columns([2, 1])
+            with col_p1:
+                _btn_proses_ocr = st.button(
+                    "🔍 PROSES OCR",
+                    use_container_width=True,
+                    type="primary",
+                    key="btn_ocr_proses",
+                )
+            with col_p2:
+                if st.button(
+                    "🗑️ Clear",
+                    use_container_width=True,
+                    key="btn_ocr_clear",
+                ):
+                    st.session_state["ocr_result"] = None
+                    st.rerun()
+
+            if _btn_proses_ocr:
+                with st.spinner("⏳ Membaca screenshot..."):
+                    # Read image bytes
+                    _img_bytes = _uploaded_file.getvalue()
+
+                    # OCR
+                    _ocr_result = ocr_kalender_screenshot(_img_bytes)
+
+                    # Parse
+                    if _ocr_result["success"]:
+                        _parsed_ocr = parse_kalender_ke_shift(
+                            _ocr_result["tanggal_list"],
+                            _bulan_ocr,
+                            _tahun_ocr,
+                            _nama_pilih,
+                        )
+                        st.session_state["ocr_result"] = {
+                            "ocr": _ocr_result,
+                            "parsed": _parsed_ocr,
+                            "nama": _nama_pilih,
+                            "bulan": _bulan_ocr,
+                            "tahun": _tahun_ocr,
+                            "file_name": _uploaded_file.name,
+                        }
+                    else:
+                        st.session_state["ocr_result"] = {
+                            "ocr": _ocr_result,
+                            "error": _ocr_result.get("error", "Gagal OCR"),
+                        }
+                    st.rerun()
+
+        # ============================================================
+        # LANGKAH 3: PREVIEW HASIL OCR
+        # ============================================================
+        if st.session_state.get("ocr_result"):
+            _res = st.session_state["ocr_result"]
+
+            st.markdown("---")
+
+            if "error" in _res:
+                st.error(f"❌ Gagal OCR: {_res['error']}")
+                st.caption("💡 Coba screenshot dengan resolusi lebih tinggi / kontras lebih baik.")
+            else:
+                _ocr_data = _res["ocr"]
+                _parsed_data = _res["parsed"]
+                _shift_map = _parsed_data["shift_map"]
+
+                # Metrics
+                st.markdown("#### 📊 Langkah 3: Preview Hasil OCR")
+
+                col_m1, col_m2, col_m3 = st.columns(3)
+                with col_m1:
+                    st.metric("👤 Nama", _parsed_data["nama"])
+                with col_m2:
+                    st.metric("📅 Periode", f"{NAMA_BULAN_ID[_res['bulan']]} {_res['tahun']}")
+                with col_m3:
+                    st.metric("📊 Hari Terdeteksi", len(_shift_map))
+
+                # Raw text (debug)
+                with st.expander("🔍 Raw OCR Text (debug)"):
+                    st.text(_ocr_data.get("raw_text", "")[:500])
+
+                # Preview tabel
+                if _shift_map:
+                    st.markdown("##### 📋 Preview Kode Shift")
+
+                    _preview_rows = []
+                    for _tgl_str, _kode in sorted(_shift_map.items()):
+                        _tgl = pd.to_datetime(_tgl_str)
+                        _info = KODE_SHIFT.get(_kode, {
+                            "label": "-", "icon": "❓", "warna": "#CCCCCC"
+                        })
+                        _preview_rows.append({
+                            "📅 Tanggal": _tgl.strftime("%d/%m/%Y"),
+                            "🎨 Kode": _kode,
+                            "📋 Keterangan": _info["label"],
+                            "🔖 Icon": _info["icon"],
+                        })
+
+                    _preview_df = pd.DataFrame(_preview_rows)
+                    st.dataframe(
+                        _preview_df,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    # ============================================================
+                    # LANGKAH 4: KONFIRMASI SIMPAN
+                    # ============================================================
+                    st.markdown("#### 💾 Langkah 4: Simpan ke Master Shift")
+
+                    st.info(
+                        f"Akan **{len(_shift_map)} shift** disimpan untuk "
+                        f"**{_parsed_data['nama']}** periode "
+                        f"**{NAMA_BULAN_ID[_res['bulan']]} {_res['tahun']}**."
+                    )
+
+                    col_s1, col_s2 = st.columns([2, 1])
+
+                    with col_s1:
+                        if st.button(
+                            "💾 KONFIRMASI SIMPAN",
+                            use_container_width=True,
+                            type="primary",
+                            key="btn_ocr_save",
+                        ):
+                            with st.spinner("⏳ Menyimpan..."):
+                                # Save
+                                _ok, _msg = save_ocr_to_master_shift(
+                                    nama=_parsed_data["nama"],
+                                    bulan=_res["bulan"],
+                                    tahun=_res["tahun"],
+                                    shift_map=_shift_map,
+                                    sumber="ocr",
+                                )
+
+                                # Log
+                                if _ok:
+                                    log_ocr_upload(
+                                        nama=_parsed_data["nama"],
+                                        bulan=_res["bulan"],
+                                        tahun=_res["tahun"],
+                                        file_name=_res["file_name"],
+                                        ocr_result=_ocr_data,
+                                        uploaded_by=st.session_state.get("username", "admin"),
+                                    )
+
+                            if _ok:
+                                st.success(_msg)
+                                st.balloons()
+                                st.session_state["ocr_result"] = None
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error(_msg)
+
+                    with col_s2:
+                        if st.button(
+                            "❌ BATAL",
+                            use_container_width=True,
+                            key="btn_ocr_cancel",
+                        ):
+                            st.session_state["ocr_result"] = None
+                            st.rerun()
+
+                else:
+                    st.warning(
+                        "⚠️ Tidak ada kode shift yang terdeteksi. "
+                        "Coba screenshot dengan kualitas lebih baik."
+                    )
+
+        # ============================================================
+        # INFO FORMAT SCREENSHOT
+        # ============================================================
+        with st.expander("📖 Tips Screenshot yang Bagus"):
+            st.markdown("""
+            **✅ Yang bikin OCR akurat:**
+            - 📸 Screenshot **zoom out** (kode keliatan full)
+            - 🖼️ **Resolusi tinggi** (min 1080px lebar)
+            - 💡 **Kontras bagus** (jangan gelap/blur)
+            - 📐 **Kalender full** keliatan (tanggal 1-31)
+            - 🎨 **Warna jelas** (hijau/biru/hitam kelihatan)
+
+            **❌ Yang bikin OCR gagal:**
+            - Kode shift **kepotong** (`P7~F`, `M2?`)
+            - Screenshot **blur**
+            - Warna **pudar** atau gelap
+            - Ada **notifikasi** nutupin
+            - **Zoom in** terlalu dekat
+
+            **🔧 Kalau OCR gagal:**
+            - Coba screenshot ulang dengan kualitas lebih baik
+            - Atau pakai **Chat Update** sebagai alternatif
+            - Atau **edit manual** via Grid Editor (next step)
+            """)
 
 # ============================================================
 # FOOTER
