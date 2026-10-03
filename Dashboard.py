@@ -728,7 +728,7 @@ def render_dashboard():
     # ============================================================
     # 📊 CARD METRIC + MINI TREND CHART (TRADING STYLE)
     # ============================================================
-    if _trend and len(_trend) > 0:
+    if _trend and len(_trend) >= 2:
         # ✅ Siapkan data
         _dates_full = [pd.to_datetime(t["tanggal"]) for t in _trend]
         _dates_label = [d.strftime("%d/%m") for d in _dates_full]
@@ -802,33 +802,6 @@ def render_dashboard():
                 padding-top: 8px;
                 border-top: 1px dashed rgba(232, 177, 137, 0.2);
             }
-            .trading-mini-chart {
-                background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
-                border: 2px solid #B87333;
-                border-radius: 14px;
-                padding: 8px 4px 4px 4px;
-                margin-bottom: 12px;
-                position: relative;
-                overflow: hidden;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-                min-height: 180px;
-            }
-            .trading-mini-chart::before {
-                content: "";
-                position: absolute;
-                top: 0; left: 0; right: 0;
-                height: 2px;
-                background: linear-gradient(90deg, transparent, #7FB99B, transparent);
-                box-shadow: 0 0 12px #7FB99B;
-            }
-            .trading-mini-label {
-                font-family: 'JetBrains Mono', monospace;
-                font-size: 9px;
-                color: #7a9b8e;
-                letter-spacing: 1.5px;
-                text-transform: uppercase;
-                padding: 6px 12px 0 12px;
-            }
         </style>
         """, unsafe_allow_html=True)
         
@@ -845,7 +818,7 @@ def render_dashboard():
                 "<div class='trading-value' style='color: " + _color_main + ";'>"
                 + fmt_rp_short(_last_val) + "</div>"
                 "<div class='trading-delta' style='color: " + _color_delta + ";'>"
-                + _icon_delta + " " + _sign_delta + f"{_delta:,.0f}".replace(",", ".") +
+                + _icon_delta + " Δ vs kemarin: " + _sign_delta + f"{_delta:,.0f}".replace(",", ".") +
                 " <span style='color:#7a9b8e;'>(" + _sign_delta + f"{_delta_pct:.1f}%)" + "</span>"
                 "</div>"
                 "<div class='trading-sub'>"
@@ -922,6 +895,102 @@ def render_dashboard():
             
             except Exception as e:
                 st.warning(f"⚠️ Mini chart gagal render: {str(e)[:100]}")
+        
+        # ============================================================
+        # 📊 CHART BESAR (DETAIL HARIAN)
+        # ============================================================
+        st.markdown("#### 📊 Detail Harian")
+        
+        try:
+            import plotly.graph_objects as go
+            
+            _colors_bar = ["#E88B8B" if v < 0 else "#7FB99B" for v in _values]
+            
+            _max_abs_bar = max([abs(v) for v in _values]) if _values else 1000000
+            _y_max_bar = max(_max_abs_bar * 1.5, 100000)
+            
+            _fig_bar = go.Figure()
+            
+            _fig_bar.add_trace(go.Bar(
+                x=_dates_label,
+                y=_values,
+                marker=dict(
+                    color=_colors_bar,
+                    line=dict(color="#B87333", width=1.5),
+                ),
+                text=[f"{v:+,.0f}".replace(",", ".") for v in _values],
+                textposition="outside",
+                textfont=dict(color="#E8B189", size=10, family="JetBrains Mono"),
+                hovertemplate="<b>%{x}</b><br>Nominal: Rp %{y:+,.0f}<extra></extra>",
+            ))
+            
+            _fig_bar.add_hline(
+                y=0,
+                line=dict(color="#7FB99B", width=2, dash="dash"),
+                annotation_text="Batas Aman",
+                annotation_position="right",
+                annotation_font=dict(color="#7FB99B", size=10, family="JetBrains Mono"),
+            )
+            
+            _fig_bar.update_layout(
+                height=320,
+                margin=dict(l=10, r=10, t=30, b=50),
+                plot_bgcolor="rgba(10, 22, 18, 0.4)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#E8B189", family="JetBrains Mono", size=11),
+                xaxis=dict(
+                    title="Tanggal",
+                    gridcolor="rgba(232, 177, 137, 0.15)",
+                    type="category",
+                ),
+                yaxis=dict(
+                    title="Nominal (Rp)",
+                    gridcolor="rgba(232, 177, 137, 0.15)",
+                    zeroline=True,
+                    zerolinecolor="#7FB99B",
+                    zerolinewidth=2,
+                    range=[-_y_max_bar, _y_max_bar],
+                ),
+                showlegend=False,
+            )
+            
+            st.plotly_chart(_fig_bar, use_container_width=True, key="chart_trend_nominal")
+        
+        except Exception as e:
+            st.warning(f"⚠️ Chart gagal render: {str(e)[:100]}")
+    
+    elif _trend and len(_trend) == 1:
+        # ✅ Handle 1 hari — empty state
+        st.markdown("### 📈 Trend Nominal SO")
+        st.markdown("""
+        <div style='
+            background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
+            border: 2px dashed #B87333;
+            border-radius: 14px;
+            padding: 40px 20px;
+            text-align: center;
+        '>
+            <div style='font-size: 48px; opacity: 0.5; margin-bottom: 12px;'>📊</div>
+            <div style='
+                font-family: "Cinzel", serif;
+                font-size: 14px;
+                color: #E8B189;
+                letter-spacing: 2px;
+                margin-bottom: 8px;
+            '>BUTUH MINIMAL 2 HARI</div>
+            <div style='
+                font-family: "Quicksand", sans-serif;
+                font-size: 11px;
+                color: #7a9b8e;
+                line-height: 1.6;
+            '>Input data minimal 2 hari untuk melihat trend.<br>
+            Baru ada <b>1 hari</b> data: <b>""" + _trend[0]["tanggal"] + """</b></div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    else:
+        st.markdown("### 📈 Trend Nominal SO")
+        st.info("📭 Belum ada data. Input SPD & SO di menu **📝 Input Harian**.")
     
     st.markdown("---")
     
@@ -959,7 +1028,7 @@ def render_dashboard():
             
             # ✅ Range Y fixed
             _max_pct = max(_pct_nsb_per_hari) if _pct_nsb_per_hari else 0.15
-            _y_max_pct = max(_max_pct * 1.5, 0.3)
+            _y_max_pct = max(_max_pct * 2.0, 0.5)
             
             _fig_pct = go.Figure()
             
@@ -975,7 +1044,7 @@ def render_dashboard():
                     line=dict(color="#B87333", width=2),
                 ),
                 text=[f"{p:.3f}%" for p in _pct_nsb_per_hari],
-                textposition="top center",
+                textposition="bottom center",
                 textfont=dict(color="#E8B189", size=10, family="JetBrains Mono"),
                 fill="tozeroy",
                 fillcolor="rgba(232, 177, 137, 0.12)",
@@ -987,7 +1056,7 @@ def render_dashboard():
                 y=0.15,
                 line=dict(color="#E88B8B", width=2, dash="dash"),
                 annotation_text="⚠️ Target: 0.15%",
-                annotation_position="right",
+                annotation_position="top right",
                 annotation_font=dict(color="#E88B8B", size=10, family="JetBrains Mono"),
             )
             
