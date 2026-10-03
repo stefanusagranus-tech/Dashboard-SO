@@ -1,8 +1,7 @@
 """
-OCR AI Handler
-=============
-Pakai Google Gemini untuk baca screenshot kalender shift.
-Jauh lebih akurat dari Tesseract.
+OCR AI Handler v21
+==============
+Pakai Google Gemini 3.8 Flash + Auto-Fallback.
 """
 
 import io
@@ -21,60 +20,87 @@ except ImportError:
 
 
 # =========================================================
-# 🤖 OCR VIA GEMINI
+# 📋 MODEL PRIORITY (urut dari paling baru)
+# =========================================================
+MODEL_PRIORITY = [
+    "gemini-3.8-flash",         # ← PALING BARU (rekomendasi Google)
+    "gemini-3-flash",            # ← Fallback 1
+    "gemini-2.0-flash",          # ← Fallback 2
+    "gemini-2.0-flash-exp",      # ← Fallback 3
+    "gemini-1.5-flash-latest",   # ← Fallback 4
+    "gemini-1.5-pro-latest",     # ← Fallback 5
+]
+
+
+# =========================================================
+# 🤖 LIST MODEL YANG TERSEDIA
+# =========================================================
+def list_available_models(api_key=None):
+    """Ambil daftar model yang tersedia untuk API key ini."""
+    if not GEMINI_AVAILABLE:
+        return []
+    
+    try:
+        _api_key = api_key or st.secrets.get("GEMINI_API_KEY", "")
+        if not _api_key:
+            return []
+        
+        genai.configure(api_key=_api_key)
+        
+        _models = []
+        for _m in genai.list_models():
+            if "generateContent" in _m.supported_generation_methods:
+                _models.append(_m.name.replace("models/", ""))
+        
+        return _models
+    except Exception as e:
+        print(f"[LIST MODEL ERROR] {e}")
+        return []
+
+
+# =========================================================
+# 🤖 OCR VIA GEMINI (v21)
 # =========================================================
 def ocr_via_gemini(image_bytes, nama_personil="", bulan=1, tahun=2026):
     """
     Kirim gambar ke Gemini, minta baca kalender shift.
+    Auto-fallback ke model lain kalau error.
     """
     if not GEMINI_AVAILABLE:
         return {"success": False, "shift_map": {}, "error": "google-generativeai belum install"}
     
     try:
         _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        print(f"[GEMINI v21] API key length: {len(_api_key)}")
+        print(f"[GEMINI v21] API key prefix: {_api_key[:15]}...")
+        
         if not _api_key:
             return {"success": False, "shift_map": {}, "error": "GEMINI_API_KEY belum diset di secrets"}
         
         genai.configure(api_key=_api_key)
+        print(f"[GEMINI v21] Configured OK")
         
-        # Coba model terbaru
-        _model_names = [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-        ]
-        
-        _model = None
-        _last_error = None
-        for _name in _model_names:
-            try:
-                _model = genai.GenerativeModel(_name)
-                # Test aja
-                break
-            except Exception as _e:
-                _last_error = str(_e)
-                continue
-        
-        if _model is None:
-            return {"success": False, "shift_map": {}, "error": f"Model gak bisa di-load: {_last_error}"}
-        
-        # Open image
+        # ============================================
+        # OPEN IMAGE
+        # ============================================
         _img = Image.open(io.BytesIO(image_bytes))
+        print(f"[GEMINI v21] Image: {_img.size}")
         
-        # Prompt
+        # ============================================
+        # BUILD PROMPT
+        # ============================================
         _nama_bulan = ["Januari","Februari","Maret","April","Mei","Juni",
                        "Juli","Agustus","September","Oktober","November","Desember"][bulan-1]
         
         _prompt = f"""Baca kalender shift ini dengan SANGAT TELITI.
 
 Konteks:
-- Nama: {nama_personil}
+- Nama Personil: {nama_personil}
 - Bulan: {_nama_bulan} {tahun}
 
-Kode shift yang mungkin ada di kalender:
-- P7/P8/P9 = Pagi (hijau terang)
-- S12/S15/S17 = Siang (hijau muda)
+Kode shift yang mungkin:
+- P7/P8/P9 = Pagi (hijau)
+- S12/S15/S17 = Siang (hijau terang)
 - M18/M22/M23 = Malam (biru/ungu)
 - O = Off/Libur (hitam)
 - C = Cuti
@@ -84,48 +110,77 @@ Kode shift yang mungkin ada di kalender:
 - AO = Additional Off
 - I = Izin
 - SK = Sakit
-- LO = Long Shift (ungu)
 
 TUGAS:
-Lihat setiap kotak tanggal 1-31 pada kalender. 
-Untuk tiap tanggal yang ADA kotak shift-nya, tulis kode shift-nya.
+1. Lihat setiap kotak tanggal 1-31 pada kalender
+2. Untuk tiap tanggal yang ADA kotak shift-nya, tulis kodenya
+3. Ambil huruf depan + angka (contoh: "M22-MALAM" → "M22")
+4. Kalau kotak kosong, SKIP
 
-FORMAT OUTPUT (JSON valid, TANPA markdown backtick):
+FORMAT OUTPUT (JSON valid, TANPA markdown):
 {{
   "shift_map": {{
     "1": "M22",
     "2": "M22",
-    "3": "S15",
-    "4": "S15",
-    "5": "O",
-    "...": "..."
+    "3": "S15"
   }}
 }}
 
-ATURAN PENTING:
-1. HANYA tulis tanggal yang ada shift-nya (ada warna)
-2. Kalau tanggal kosong/tidak ada kotak, SKIP
-3. Kode harus SINGKAT: ambil huruf depan + angka (contoh: "M22-MALAM" → "M22")
-4. Output HANYA JSON, gak ada penjelasan
-5. Tanggal dalam string angka ("1", "2", "3", dst)
+Output HANYA JSON, tidak ada penjelasan.
 """
         
-        # Generate
-        _response = _model.generate_content([_prompt, _img])
-        _text = _response.text.strip()
+        # ============================================
+        # COBA MODEL SATU-SATU (AUTO-FALLBACK)
+        # ============================================
+        _last_error = None
+        _response = None
+        _model_used = None
         
-        print(f"[GEMINI] Response length: {len(_text)}")
-        print(f"[GEMINI] First 300 chars: {_text[:300]}")
+        for _model_name in MODEL_PRIORITY:
+            try:
+                print(f"[GEMINI v21] Trying model: {_model_name}")
+                _model = genai.GenerativeModel(_model_name)
+                
+                _response = _model.generate_content([_prompt, _img])
+                _model_used = _model_name
+                print(f"[GEMINI v21] ✅ Success with: {_model_name}")
+                break
+            
+            except Exception as _e:
+                _last_error = str(_e)
+                print(f"[GEMINI v21] ❌ {_model_name} gagal: {_last_error[:150]}")
+                continue
+        
+        if _response is None:
+            return {
+                "success": False,
+                "shift_map": {},
+                "error": f"Semua model gagal. Last error: {_last_error[:200]}",
+            }
+        
+        # ============================================
+        # PARSE RESPONSE
+        # ============================================
+        _text = _response.text.strip()
+        print(f"[GEMINI v21] Response length: {len(_text)}")
+        print(f"[GEMINI v21] First 300: {_text[:300]}")
         
         # Clean JSON
         _json_match = re.search(r'\{[\s\S]*\}', _text)
         if not _json_match:
-            return {"success": False, "shift_map": {}, "error": f"Response gak ada JSON", "raw_response": _text}
+            return {
+                "success": False,
+                "shift_map": {},
+                "error": "Response gak ada JSON",
+                "raw_response": _text,
+            }
         
         _json_str = _json_match.group(0)
         _data = json.loads(_json_str)
         
-        # Build shift_map
+        # ============================================
+        # BUILD SHIFT MAP
+        # ============================================
         _shift_map = {}
         for _tgl_str, _kode in _data.get("shift_map", {}).items():
             try:
@@ -140,6 +195,7 @@ ATURAN PENTING:
             "success": True,
             "shift_map": _shift_map,
             "raw_response": _text,
+            "model_used": _model_used,
             "error": "",
         }
     
@@ -150,16 +206,16 @@ ATURAN PENTING:
 
 
 # =========================================================
-# 🎯 WRAPPER
+# 🎯 WRAPPER — v21
 # =========================================================
 def ocr_ai_smart(image_bytes, nama_personil="", bulan=1, tahun=2026):
     """
-    Wrapper utama — pakai Gemini.
+    Wrapper utama — pakai Gemini 3.8 Flash + auto-fallback.
     """
     _result = ocr_via_gemini(image_bytes, nama_personil, bulan, tahun)
     
     if _result["success"] and _result["shift_map"]:
-        _result["provider"] = "gemini"
+        _result["provider"] = f"gemini ({_result.get('model_used', '?')})"
         return _result
     
     return {
@@ -169,3 +225,101 @@ def ocr_ai_smart(image_bytes, nama_personil="", bulan=1, tahun=2026):
         "raw_response": _result.get("raw_response", ""),
         "provider": None,
     }
+
+
+# === BAGIAN 2 MULAI ===
+
+# =========================================================
+# 🔍 HELPER: DEBUG INFO
+# =========================================================
+def get_debug_info():
+    """
+    Return info debug: model tersedia, API status.
+    """
+    _info = {
+        "gemini_available": GEMINI_AVAILABLE,
+        "api_key_set": False,
+        "api_key_length": 0,
+        "available_models": [],
+        "priority_models": MODEL_PRIORITY,
+        "error": "",
+    }
+    
+    try:
+        _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        _info["api_key_set"] = bool(_api_key)
+        _info["api_key_length"] = len(_api_key)
+        
+        if _api_key and GEMINI_AVAILABLE:
+            _models = list_available_models(_api_key)
+            _info["available_models"] = _models
+            
+            # Cek model prioritas mana yang tersedia
+            _available_priority = [m for m in MODEL_PRIORITY if m in _models]
+            _info["available_priority"] = _available_priority
+    
+    except Exception as e:
+        _info["error"] = str(e)[:200]
+    
+    return _info
+
+
+# =========================================================
+# 🧪 TEST: QUICK TEST GEMINI
+# =========================================================
+def quick_test_gemini():
+    """
+    Test koneksi Gemini dengan prompt simple.
+    Return: (success, message, model_used)
+    """
+    if not GEMINI_AVAILABLE:
+        return False, "Library google-generativeai belum install", None
+    
+    try:
+        _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        if not _api_key:
+            return False, "GEMINI_API_KEY belum diset", None
+        
+        genai.configure(api_key=_api_key)
+        
+        # Test dengan model prioritas
+        for _model_name in MODEL_PRIORITY:
+            try:
+                print(f"[QUICK TEST] Trying: {_model_name}")
+                _model = genai.GenerativeModel(_model_name)
+                _response = _model.generate_content("Jawab hanya: OK")
+                
+                if _response and _response.text:
+                    return True, f"✅ Model {_model_name} works!", _model_name
+            except Exception as _e:
+                print(f"[QUICK TEST] {_model_name} error: {_e}")
+                continue
+        
+        return False, "Semua model gagal", None
+    
+    except Exception as e:
+        return False, f"Error: {str(e)[:200]}", None
+
+
+# =========================================================
+# 📋 LIST MODEL UNTUK UI
+# =========================================================
+def get_model_info_df():
+    """
+    Return DataFrame info model untuk display.
+    """
+    import pandas as pd
+    
+    _debug = get_debug_info()
+    _rows = []
+    
+    for _model in MODEL_PRIORITY:
+        _available = _model in _debug.get("available_models", [])
+        _rows.append({
+            "Model": _model,
+            "Priority": MODEL_PRIORITY.index(_model) + 1,
+            "Available": "✅" if _available else "❌",
+            "Note": "Paling baru" if MODEL_PRIORITY.index(_model) == 0 else "-",
+        })
+    
+    return pd.DataFrame(_rows)
