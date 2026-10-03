@@ -223,7 +223,13 @@ def _huruf_to_kode(text):
 # =========================================================
 def ocr_kalender_screenshot(image_bytes):
     """
-    OCR screenshot v11 — Skip header, cari kalender dari warna solid.
+    OCR v12 — Regex text (balik ke metode v4 yang berhasil).
+    
+    Strategi:
+    1. OCR full image
+    2. Regex extract tanggal (1-31)
+    3. Regex extract shift (S15, M22, O, dll)
+    4. Match by urutan
     """
     if not TESSERACT_AVAILABLE:
         return {"success": False, "tanggal_list": [], "raw_text": "", "error": "Tesseract tidak tersedia"}
@@ -234,189 +240,146 @@ def ocr_kalender_screenshot(image_bytes):
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
-        print(f"[OCR v11] Image: {_w}x{_h}")
-        
-        _text_full = pytesseract.image_to_string(_img, config="--psm 6")
-        
-        _np_img = np.array(_img)
-        _grayscale = np.mean(_np_img, axis=2)
+        print(f"[OCR v12] Image: {_w}x{_h}")
         
         # ============================================
-        # 1. CARI AREA KALENDER: ABAIKAN HEADER PUTIH
+        # 1. OCR TEXT FULL (PSM 6 — konsisten)
         # ============================================
-        # Baris dianggap "warna kalender" kalau:
-        # - Ada warna SOLID (bukan putih) di 30-80% area (khas kalender grid)
-        # - BUKAN baris full warna (khas header merah)
-        
-        _is_white = _grayscale > 240
-        _colored_pct = 1 - np.mean(_is_white, axis=1)
-        
-        # Kalender: colored_pct antara 0.3-0.85 (warna sedang)
-        # Header: colored_pct > 0.85 (warna full)
-        # Info: colored_pct < 0.3 (putih semua)
-        
-        _kalender_mask = (_colored_pct > 0.25) & (_colored_pct < 0.80)
-        
-        print(f"[OCR v11] Baris berwarna sedang: {np.sum(_kalender_mask)}")
-        
-        # Cari KELOMPOK baris berwarna sedang (minimal 100 baris berturut-turut)
-        _kalender_rows = np.where(_kalender_mask)[0]
-        
-        if len(_kalender_rows) < 20:
-            print(f"[OCR v11] ERROR: gak cukup baris kalender")
-            return {"success": False, "tanggal_list": [], "raw_text": _text_full, "error": "Kalender gak ke-detect"}
-        
-        # Cari cluster terbesar
-        _clusters = []
-        _cluster_start = _kalender_rows[0]
-        _prev = _kalender_rows[0]
-        
-        for _r in _kalender_rows[1:]:
-            if _r - _prev > 15:  # gap 15px → cluster baru
-                _clusters.append((_cluster_start, _prev))
-                _cluster_start = _r
-            _prev = _r
-        _clusters.append((_cluster_start, _prev))
-        
-        # Ambil cluster terbesar
-        _clusters = sorted(_clusters, key=lambda x: x[1]-x[0], reverse=True)
-        _kalender_start, _kalender_end = _clusters[0]
-        
-        print(f"[OCR v11] Kalender area: y={_kalender_start}-{_kalender_end} (h={_kalender_end - _kalender_start})")
+        _text = pytesseract.image_to_string(_img, config="--psm 6")
+        print(f"[OCR v12] Text length: {len(_text)}")
         
         # ============================================
-        # 2. AUTO-DETECT JUMLAH BARIS KALENDER
+        # 2. EXTRACT SHIFT PATTERN (huruf awal + angka)
         # ============================================
-        # Cari "dip" (jarak antar baris kalender) untuk deteksi jumlah baris
-        _row_density_region = _colored_pct[_kalender_start:_kalender_end]
+        # Pattern shift: S15, M22, P7, O, C, L, HP3, DI2, DH1, dll
+        # Match: 1-2 huruf + 0-2 angka
+        _pattern_shift = r'\b([A-Z]{1,2})(\d{1,2})?\b'
         
-        # Smooth
-        _kernel = np.ones(10) / 10
-        _row_density_smooth = np.convolve(_row_density_region, _kernel, mode='same')
+        # Pattern tanggal: 1-31
+        _pattern_tanggal = r'\b(0?[1-9]|[12][0-9]|3[01])\b'
         
-        # Cari gap (density < 0.2) → pemisah antar baris
-        _gap_rows = np.where(_row_density_smooth < 0.15)[0]
+        # Split per baris
+        _lines = _text.split("\n")
         
-        # Hitung jumlah baris kalender
-        if len(_gap_rows) > 0:
-            _gaps_grouped = []
-            _gap_start = _gap_rows[0]
-            _prev_gap = _gap_rows[0]
-            for _g in _gap_rows[1:]:
-                if _g - _prev_gap > 10:
-                    _gaps_grouped.append((_gap_start, _prev_gap))
-                    _gap_start = _g
-                _prev_gap = _g
-            _gaps_grouped.append((_gap_start, _prev_gap))
+        # ============================================
+        # 3. EKSTRAK TANGGAL & SHIFT BERDASARKAN BARIS
+        # ============================================
+        # Karena layout: baris 1 = "04 05 06 07 08 09 10"
+        #              baris 2 = "S15 O M22 M22 M22 S15 S15"
+        # Kita cari pasangan (tanggal, shift) berurutan
+        
+        _tanggal_pairs = []  # list of (tanggal, kode)
+        
+        _buffer_tanggal = []
+        
+        for _line in _lines:
+            _line_clean = _line.strip().upper()
+            if not _line_clean:
+                continue
             
-            _grid_rows = min(len(_gaps_grouped) + 1, 6)
-        else:
-            _grid_rows = 5
+            # Deteksi shift di baris ini (pattern "S15-SIANG", "M22-MALAM")
+            _shifts = []
+            
+            # Pattern 1: S15-SIANG, M22-MALAM, O-OFF
+            for _m in re.finditer(r'([A-Z]{1,2})(\d{1,2})?[\-\s~]*(SIANG|MALAM|PAGI|OFF|CUTI|LIBUR|SIONG|SIANG|MALOM)?', _line_clean):
+                _kode_raw = _m.group(1)
+                _angka = _m.group(2) or ""
+                
+                # Validasi: kode harus P, S, M, O, C, L, D, H, A, I, E, R
+                if _kode_raw in ["P", "S", "M", "O", "C", "L", "D", "H", "A", "I", "E", "R", "HP", "DI", "DH", "PH", "PI", "SI", "MI", "SH", "MH", "AO", "EO", "RO", "LO", "SK"]:
+                    _shifts.append(_kode_raw)
+            
+            # Deteksi tanggal di baris ini
+            _tgl_matches = re.findall(_pattern_tanggal, _line_clean)
+            _tgl_ints = []
+            for _t in _tgl_matches:
+                try:
+                    _t_int = int(_t)
+                    if 1 <= _t_int <= 31:
+                        _tgl_ints.append(_t_int)
+                except:
+                    continue
+            
+            # Kalau ada shift & tanggal → langsung pair
+            if _shifts and _tgl_ints:
+                for _i, _tgl in enumerate(_tgl_ints):
+                    if _i < len(_shifts):
+                        _tanggal_pairs.append((_tgl, _shifts[_i]))
+            elif _tgl_ints:
+                # Cuma tanggal → masuk buffer
+                _buffer_tanggal.extend(_tgl_ints)
+            elif _shifts and _buffer_tanggal:
+                # Ada shift, dan ada buffer tanggal dari baris sebelumnya
+                for _i, _tgl in enumerate(_buffer_tanggal):
+                    if _i < len(_shifts):
+                        _tanggal_pairs.append((_tgl, _shifts[_i]))
+                _buffer_tanggal = []
         
-        # Kalau kurang dari 4, fallback
-        if _grid_rows < 4:
-            _grid_rows = 5
-        
-        _grid_cols = 7
-        
-        print(f"[OCR v11] Grid: {_grid_cols}×{_grid_rows}")
-        
-        _kalender_h = _kalender_end - _kalender_start
-        _cell_w = _w // _grid_cols
-        _cell_h = _kalender_h // _grid_rows
+        print(f"[OCR v12] Tanggal-Shift pairs: {len(_tanggal_pairs)}")
         
         # ============================================
-        # 3. ANALISIS PER CELL
+        # 4. KALAU PAIRS KOSONG, FALLBACK KE URUTAN
+        # ============================================
+        if not _tanggal_pairs:
+            # Ambil semua tanggal & semua shift, pair by index
+            _all_tgl = []
+            _all_shift = []
+            
+            for _line in _lines:
+                _line_clean = _line.strip().upper()
+                _tgl_matches = re.findall(_pattern_tanggal, _line_clean)
+                for _t in _tgl_matches:
+                    try:
+                        _t_int = int(_t)
+                        if 1 <= _t_int <= 31:
+                            _all_tgl.append(_t_int)
+                    except:
+                        continue
+                
+                for _m in re.finditer(r'\b([A-Z]{1,2})(\d{1,2})?\b', _line_clean):
+                    _k = _m.group(1)
+                    if _k in ["P", "S", "M", "O", "C", "L", "D", "H", "A", "I", "E", "R", "HP", "AO", "EO", "RO", "LO"]:
+                        _all_shift.append(_k)
+            
+            # Deduplicate tanggal & sort
+            _all_tgl = sorted(set(_all_tgl))
+            
+            # Pair by index
+            for _i, _tgl in enumerate(_all_tgl):
+                if _i < len(_all_shift):
+                    _tanggal_pairs.append((_tgl, _all_shift[_i]))
+        
+        print(f"[OCR v12] Total pairs: {len(_tanggal_pairs)}")
+        
+        # ============================================
+        # 5. BUILD TANGGAL_LIST
         # ============================================
         _tanggal_list = []
         _debug_info = []
         
-        for _r_idx in range(_grid_rows):
-            for _c_idx in range(_grid_cols):
-                _y1 = _kalender_start + _r_idx * _cell_h
-                _y2 = _y1 + _cell_h
-                _x1 = _c_idx * _cell_w
-                _x2 = _x1 + _cell_w
-                
-                _cell_img = _img.crop((_x1, _y1, _x2, _y2))
-                _cell_np = np.array(_cell_img)
-                
-                if _cell_np.size == 0:
-                    continue
-                
-                # Cek warna dominant
-                _flat = _cell_np.reshape(-1, 3)
-                # Skip pixel putih
-                _non_white = _flat[~((_flat[:, 0] > 240) & (_flat[:, 1] > 240) & (_flat[:, 2] > 240))]
-                
-                if len(_non_white) == 0:
-                    continue
-                
-                _r_val = int(np.median(_non_white[:, 0]))
-                _g_val = int(np.median(_non_white[:, 1]))
-                _b_val = int(np.median(_non_white[:, 2]))
-                
-                _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(_r_val, _g_val, _b_val)
-                
-                # OCR text
-                _kode_huruf = None
-                _text_cell = ""
-                try:
-                    _text_cell = pytesseract.image_to_string(_cell_img, config="--psm 7").strip()
-                    if _text_cell:
-                        _kode_huruf, _conf_huruf = _huruf_to_kode(_text_cell)
-                except Exception:
-                    pass
-                
-                # Voting
-                _kode_final = None
-                _confidence = "LOW"
-                _sumber = ""
-                
-                if _kode_warna:
-                    _kode_final = _kode_warna
-                    _confidence = "HIGH" if _conf_warna > 70 else "MEDIUM"
-                    _sumber = "warna"
-                    if _kode_huruf and _kode_huruf == _kode_warna:
-                        _confidence = "HIGH"
-                        _sumber = "huruf+warna"
-                elif _kode_huruf:
-                    _kode_final = _kode_huruf
-                    _confidence = "MEDIUM"
-                    _sumber = "huruf"
-                
-                _debug_info.append({
-                    "row": _r_idx,
-                    "col": _c_idx,
-                    "x": f"{_x1},{_x2}",
-                    "y": f"{_y1},{_y2}",
-                    "text_cell": _text_cell[:20],
-                    "kode_huruf": _kode_huruf,
-                    "kode_warna": _kode_warna,
-                    "rgb": f"{_r_val},{_g_val},{_b_val}",
-                    "final": _kode_final,
-                })
-                
-                if _kode_final:
-                    _tanggal_list.append({
-                        "row": _r_idx,
-                        "col": _c_idx,
-                        "kode": _kode_final,
-                        "confidence": _confidence,
-                        "sumber": _sumber,
-                    })
+        for _tgl, _kode in _tanggal_pairs:
+            _tanggal_list.append({
+                "tanggal_int": _tgl,
+                "kode": _kode,
+                "confidence": "MEDIUM",
+                "sumber": "text_regex",
+            })
+            
+            _debug_info.append({
+                "tanggal": _tgl,
+                "kode": _kode,
+            })
         
-        print(f"[OCR v11] Cells analyzed: {len(_debug_info)}")
-        print(f"[OCR v11] Detected: {len(_tanggal_list)} cells")
+        print(f"[OCR v12] Detected: {len(_tanggal_list)} days")
         
         return {
             "success": True,
             "tanggal_list": _tanggal_list,
             "debug_cells": _debug_info,
-            "kolom_detected": _grid_cols,
-            "baris_detected": _grid_rows,
-            "kalender_area": (_kalender_start, _kalender_end),
-            "raw_text": _text_full,
+            "kolom_detected": 0,
+            "baris_detected": 0,
+            "kalender_area": (0, 0),
+            "raw_text": _text,
             "error": "",
         }
     
@@ -424,7 +387,7 @@ def ocr_kalender_screenshot(image_bytes):
         import traceback
         print(traceback.format_exc())
         return {"success": False, "tanggal_list": [], "raw_text": "", "error": str(e)[:200]}
-
+        
 # =========================================================
 # 🧠 PARSER: KALENDER → SHIFT MAP
 # =========================================================
