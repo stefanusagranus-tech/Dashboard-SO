@@ -390,7 +390,7 @@ st.markdown("---")
 if "shift_sub_tab" not in st.session_state:
     st.session_state["shift_sub_tab"] = "chat"
 
-col_t1, col_t2, col_t3, col_t4, col_t5 = st.columns(5)
+col_t1, col_t2, col_t3, col_t4, col_t5, col_t6 = st.columns(6)
 
 with col_t1:
     if st.button(
@@ -439,6 +439,15 @@ with col_t5:
         type="primary" if st.session_state["shift_sub_tab"] == "screenshot" else "secondary",
     ):
         st.session_state["shift_sub_tab"] = "screenshot"
+        st.rerun()
+with col_t6:
+    if st.button(
+        "📊 Usage",
+        use_container_width=True,
+        key="btn_shift_tab_usage",
+        type="primary" if st.session_state["shift_sub_tab"] == "usage" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "usage"
         st.rerun()
         
 st.markdown("---")
@@ -1404,7 +1413,105 @@ elif st.session_state["shift_sub_tab"] == "screenshot":
             - Atau pakai **Chat Update** sebagai alternatif
             - Atau **edit manual** via Grid Editor (next step)
             """)
-
+# ============================================================
+# TAB 6: API USAGE MONITORING
+# ============================================================
+elif st.session_state["shift_sub_tab"] == "usage":
+    st.markdown("### 📊 Gemini API Usage Monitor")
+    st.caption("Pantau penggunaan API Gemini kamu hari ini")
+    
+    try:
+        from modules.ocr_ai_handler import (
+            get_api_usage_summary,
+            MODEL_PRIORITY,
+            GEMINI_AVAILABLE,
+        )
+        
+        # Info API Key
+        _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        
+        col_a1, col_a2, col_a3 = st.columns(3)
+        with col_a1:
+            st.metric("🔑 API Key", "✅ Set" if _api_key else "❌ Belum")
+        with col_a2:
+            st.metric("📏 Key Length", len(_api_key))
+        with col_a3:
+            st.metric("🤖 Library", "✅ Ready" if GEMINI_AVAILABLE else "❌ Missing")
+        
+        st.markdown("---")
+        
+        # Usage hari ini
+        _usage = get_api_usage_summary()
+        
+        st.markdown("#### 📈 Penggunaan Hari Ini")
+        
+        col_u1, col_u2, col_u3, col_u4 = st.columns(4)
+        with col_u1:
+            st.metric("📤 Requests", _usage.get("requests", 0))
+        with col_u2:
+            st.metric("📥 Input Tokens", f"{_usage.get('input_tokens', 0):,}")
+        with col_u3:
+            st.metric("📤 Output Tokens", f"{_usage.get('output_tokens', 0):,}")
+        with col_u4:
+            st.metric("❌ Errors", _usage.get("errors", 0))
+        
+        # Estimasi quota
+        st.markdown("---")
+        st.markdown("#### 🎯 Estimasi Sisa Kuota")
+        
+        _used = _usage.get("requests", 0)
+        _limit_rpd = 1500  # Free tier RPD
+        _sisa = max(0, _limit_rpd - _used)
+        _pct = min(100, int((_used / _limit_rpd) * 100))
+        
+        st.progress(_pct / 100)
+        st.caption(f"📊 **{_used} / ~{_limit_rpd}** requests hari ini (~{_pct}%)")
+        st.caption(f"✅ Sisa: **~{_sisa} requests**")
+        
+        if _pct >= 80:
+            st.warning(f"⚠️ Kuota hampir habis! Tunggu reset jam 14:00-15:00 WIB")
+        elif _pct >= 50:
+            st.info(f"ℹ️ Setengah kuota terpakai")
+        else:
+            st.success(f"✅ Kuota aman")
+        
+        # Info reset
+        st.markdown("---")
+        st.markdown("#### ⏰ Info Reset Quota")
+        
+        st.markdown("""
+        **Reset Harian (RPD):**
+        - 🌍 **Pacific Time**: 00:00 (tengah malam)
+        - 🇮🇩 **Waktu Indonesia (WIB)**: **14:00 - 15:00** (siang/sore)
+        
+        **Reset Per Menit (RPM):**
+        - ⏱️ Setiap **60 detik**
+        
+        **Limit Free Tier (perkiraan):**
+        - 📤 **RPM**: 10-15 request/menit
+        - 📅 **RPD**: ~1,500 request/hari
+        - 🎫 **TPM**: ~1 juta token/menit
+        """)
+        
+        # Model priority
+        st.markdown("---")
+        st.markdown("#### 🤖 Model Priority (Auto-Fallback)")
+        
+        for _i, _model in enumerate(MODEL_PRIORITY):
+            _used_models = _usage.get("model_used", [])
+            _is_used = _model in _used_models
+            st.write(f"**{_i+1}.** `{_model}` {'✅' if _is_used else ''}")
+        
+        # Tombol reset tracker (untuk admin)
+        st.markdown("---")
+        if st.button("🗑️ Reset Tracker", key="btn_reset_usage"):
+            st.session_state["api_usage_tracker"] = {}
+            st.success("✅ Tracker direset!")
+            time.sleep(0.5)
+            st.rerun()
+    
+    except ImportError as _e_usage:
+        st.error(f"❌ Module error: {_e_usage}")
 # ============================================================
 # FOOTER
 # ============================================================

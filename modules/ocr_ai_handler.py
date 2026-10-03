@@ -323,3 +323,99 @@ def get_model_info_df():
         })
     
     return pd.DataFrame(_rows)
+
+# =========================================================
+# 📊 API USAGE TRACKING
+# =========================================================
+def get_api_usage_summary():
+    """
+    Return ringkasan usage dari session state.
+    """
+    _today = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
+    
+    if "api_usage_tracker" not in st.session_state:
+        st.session_state["api_usage_tracker"] = {}
+    
+    _tracker = st.session_state["api_usage_tracker"]
+    
+    if _today not in _tracker:
+        _tracker[_today] = {
+            "requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "model_used": [],
+            "errors": 0,
+        }
+    
+    return _tracker[_today]
+
+
+def record_api_usage(prompt_tokens=0, output_tokens=0, model_name="", success=True):
+    """Catat usage ke session state."""
+    _today = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
+    
+    if "api_usage_tracker" not in st.session_state:
+        st.session_state["api_usage_tracker"] = {}
+    
+    if _today not in st.session_state["api_usage_tracker"]:
+        st.session_state["api_usage_tracker"][_today] = {
+            "requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "model_used": [],
+            "errors": 0,
+        }
+    
+    _t = st.session_state["api_usage_tracker"][_today]
+    
+    if success:
+        _t["requests"] += 1
+        _t["input_tokens"] += prompt_tokens
+        _t["output_tokens"] += output_tokens
+        _t["total_tokens"] += (prompt_tokens + output_tokens)
+        if model_name:
+            _t["model_used"].append(model_name)
+    else:
+        _t["errors"] += 1
+    
+    return _t
+
+
+# =========================================================
+# UPDATE: OCR VIA GEMINI — DENGAN USAGE TRACKING
+# =========================================================
+def ocr_via_gemini(image_bytes, nama_personil="", bulan=1, tahun=2026):
+    # ... (kode sama seperti v21) ...
+    
+    try:
+        # ... (sampai response sukses) ...
+        
+        _response = _model.generate_content([_prompt, _img])
+        _model_used = _model_name
+        
+        # ✅ RECORD USAGE
+        try:
+            _usage = getattr(_response, "usage_metadata", None)
+            if _usage:
+                record_api_usage(
+                    prompt_tokens=getattr(_usage, "prompt_token_count", 0),
+                    output_tokens=getattr(_usage, "candidates_token_count", 0),
+                    model_name=_model_used,
+                    success=True,
+                )
+            else:
+                record_api_usage(model_name=_model_used, success=True)
+        except Exception as _e_usage:
+            print(f"[USAGE TRACK ERROR] {_e_usage}")
+        
+        # ... (parse response) ...
+    
+    except Exception as e:
+        # ✅ RECORD ERROR
+        try:
+            record_api_usage(success=False)
+        except:
+            pass
+        return {"success": False, "shift_map": {}, "error": str(e)[:300]}
