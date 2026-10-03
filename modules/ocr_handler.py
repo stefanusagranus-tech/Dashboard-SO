@@ -221,7 +221,7 @@ def _huruf_to_kode(text):
 # =========================================================
 def ocr_kalender_screenshot(image_bytes):
     """
-    OCR screenshot v7 — Auto-detect grid dari screenshot.
+    OCR screenshot v8 — Lebih fleksibel & banyak debug.
     """
     if not TESSERACT_AVAILABLE:
         return {
@@ -237,50 +237,57 @@ def ocr_kalender_screenshot(image_bytes):
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
-        print(f"[OCR v7] Image: {_w}x{_h}")
+        print(f"[OCR v8] Image: {_w}x{_h}")
         
         # OCR TEXT FULL
         _text_full = pytesseract.image_to_string(_img, config="--psm 6")
+        print(f"[OCR v8] Text length: {len(_text_full)}")
         
         _np_img = np.array(_img)
         
         # ============================================
-        # 1. AUTO-DETECT AREA KALENDER
+        # 1. AUTO-DETECT AREA KALENDER (MORE FLEXIBLE)
         # ============================================
         _grayscale = np.mean(_np_img, axis=2)
-        _is_white = _grayscale > 230
+        _is_white = _grayscale > 240  # threshold lebih tinggi
         _row_color_density = 1 - np.mean(_is_white, axis=1)
+        
+        print(f"[OCR v8] Row density max: {_row_color_density.max():.3f}")
+        print(f"[OCR v8] Row density > 0.05: {sum(_row_color_density > 0.05)}")
         
         _kalender_start = None
         _kalender_end = None
         
-        for _i in range(int(_h * 0.3), _h - 10):
-            if _row_color_density[_i] > 0.10:
+        # Threshold lebih rendah: 0.05
+        for _i in range(int(_h * 0.20), _h - 5):
+            if _row_color_density[_i] > 0.05:
                 if _kalender_start is None:
                     _kalender_start = _i
                 _kalender_end = _i
         
         if _kalender_start is None:
-            _kalender_start = int(_h * 0.55)
+            print(f"[OCR v8] WARNING: Kalender area gak ke-detect, pakai fallback 50-95%")
+            _kalender_start = int(_h * 0.50)
             _kalender_end = int(_h * 0.95)
         
-        _kalender_height = _kalender_end - _kalender_start
-        print(f"[OCR v7] Kalender area: y={_kalender_start}-{_kalender_end}, h={_kalender_height}")
+        print(f"[OCR v8] Kalender area: y={_kalender_start}-{_kalender_end}")
         
         # ============================================
         # 2. AUTO-DETECT KOLOM
         # ============================================
         _kalender_region = _np_img[_kalender_start:_kalender_end, :]
         _region_gray = np.mean(_kalender_region, axis=2)
-        _region_white = _region_gray > 230
+        _region_white = _region_gray > 240
         _col_color_density = 1 - np.mean(_region_white, axis=0)
+        
+        print(f"[OCR v8] Col density max: {_col_color_density.max():.3f}")
         
         _col_starts = []
         _col_ends = []
         _in_col = False
         
         for _i in range(_w):
-            if _col_color_density[_i] > 0.10:
+            if _col_color_density[_i] > 0.05:  # threshold lebih rendah
                 if not _in_col:
                     _col_starts.append(_i)
                     _in_col = True
@@ -292,7 +299,7 @@ def ocr_kalender_screenshot(image_bytes):
         if _in_col:
             _col_ends.append(_w)
         
-        print(f"[OCR v7] Kolom detected: {len(_col_starts)}")
+        print(f"[OCR v8] Kolom detected: {len(_col_starts)}")
         
         # ============================================
         # 3. AUTO-DETECT ROW
@@ -304,7 +311,7 @@ def ocr_kalender_screenshot(image_bytes):
         _in_row = False
         
         for _i in range(len(_row_color_density_kal)):
-            if _row_color_density_kal[_i] > 0.05:
+            if _row_color_density_kal[_i] > 0.03:  # threshold lebih rendah
                 if not _in_row:
                     _row_starts.append(_i)
                     _in_row = True
@@ -316,16 +323,16 @@ def ocr_kalender_screenshot(image_bytes):
         if _in_row:
             _row_ends.append(len(_row_color_density_kal))
         
-        print(f"[OCR v7] Baris detected: {len(_row_starts)}")
+        print(f"[OCR v8] Baris detected: {len(_row_starts)}")
         
         # ============================================
-        # 4. FALLBACK KALAU AUTO-DETECT GAGAL
+        # 4. FALLBACK
         # ============================================
         if len(_col_starts) < 5 or len(_row_starts) < 4:
-            print(f"[OCR v7] Fallback: pakai grid fixed 7x5")
+            print(f"[OCR v8] Fallback: pakai grid fixed 7x5")
             _grid_cols = 7
             _grid_rows = 5
-            _cell_h = _kalender_height // _grid_rows
+            _cell_h = (_kalender_end - _kalender_start) // _grid_rows
             _cell_w = _w // _grid_cols
             
             _col_starts = [_c * _cell_w for _c in range(_grid_cols)]
@@ -341,7 +348,7 @@ def ocr_kalender_screenshot(image_bytes):
         
         for _r_idx, (_y_start, _y_end) in enumerate(zip(_row_starts, _row_ends)):
             for _c_idx, (_x_start, _x_end) in enumerate(zip(_col_starts, _col_ends)):
-                if (_x_end - _x_start) < 20 or (_y_end - _y_start) < 15:
+                if (_x_end - _x_start) < 15 or (_y_end - _y_start) < 10:
                     continue
                 
                 _y1 = _kalender_start + _y_start
@@ -356,9 +363,10 @@ def ocr_kalender_screenshot(image_bytes):
                     continue
                 
                 _cell_gray = np.mean(_cell_np, axis=2)
-                _cell_white_pct = np.mean(_cell_gray > 230)
+                _cell_white_pct = np.mean(_cell_gray > 240)
                 
-                if _cell_white_pct > 0.85:
+                # Skip kalau terlalu putih
+                if _cell_white_pct > 0.90:
                     continue
                 
                 # Deteksi warna
@@ -435,7 +443,8 @@ def ocr_kalender_screenshot(image_bytes):
                         "rgb": (_r_val, _g_val, _b_val),
                     })
         
-        print(f"[OCR v7] Detected: {len(_tanggal_list)} cells")
+        print(f"[OCR v8] Cells analyzed: {len(_debug_info)}")
+        print(f"[OCR v8] Detected: {len(_tanggal_list)} cells")
         
         return {
             "success": True,
@@ -443,6 +452,7 @@ def ocr_kalender_screenshot(image_bytes):
             "debug_cells": _debug_info,
             "kolom_detected": len(_col_starts),
             "baris_detected": len(_row_starts),
+            "kalender_area": (_kalender_start, _kalender_end),
             "raw_text": _text_full,
             "error": "",
         }
@@ -456,7 +466,6 @@ def ocr_kalender_screenshot(image_bytes):
             "raw_text": "",
             "error": str(e)[:200],
         }
-
 
 # =========================================================
 # 🧠 PARSER: KALENDER → SHIFT MAP
