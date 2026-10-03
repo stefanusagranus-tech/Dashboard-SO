@@ -1,11 +1,193 @@
+"""
+OCR Handler v3
+==============
+Handle OCR screenshot kalender shift dari web absen.
+
+Fitur:
+- 2 metode deteksi: warna + huruf
+- Voting system untuk akurasi
+- Color palette dari sample warna
+- Auto-extract text huruf
+"""
+
+import io
+import re
+import pandas as pd
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
+
+# Pytesseract & PIL
+try:
+    import pytesseract
+    from PIL import Image, ImageEnhance, ImageFilter
+    import numpy as np
+    TESSERACT_AVAILABLE = True
+except ImportError as e:
+    print(f"[OCR] Library gak tersedia: {e}")
+    TESSERACT_AVAILABLE = False
+
+
+# =========================================================
+# 🎨 COLOR PALETTE — Sample Warna Resmi Web Absen
+# =========================================================
+# Update manual kalau warna web berubah
+COLOR_PALETTE = {
+    "P7": {
+        "label": "Pagi (07:00)",
+        "rgb": (15, 138, 114),        # Hijau tua
+        "hex": "#0F8A72",
+        "tolerance": 50,
+        "huruf": ["P", "P7", "P7-F", "P7~F"],
+    },
+    "S15": {
+        "label": "Siang (15:00)",
+        "rgb": (0, 255, 204),          # Hijau muda
+        "hex": "#00FFCC",
+        "tolerance": 60,
+        "huruf": ["S", "S15", "S15-"],
+    },
+    "M22": {
+        "label": "Malam (22:00)",
+        "rgb": (102, 102, 255),        # Biru/ungu
+        "hex": "#6666FF",
+        "tolerance": 50,
+        "huruf": ["M", "M22", "M2"],
+    },
+    "O": {
+        "label": "Off (Libur)",
+        "rgb": (0, 0, 0),              # Hitam
+        "hex": "#000000",
+        "tolerance": 40,
+        "huruf": ["O", "O-C", "OFF"],
+    },
+    "C": {
+        "label": "Cuti",
+        "rgb": (255, 200, 0),          # Kuning (kalau ada)
+        "hex": "#FFC800",
+        "tolerance": 50,
+        "huruf": ["C", "CUTI"],
+    },
+    "AO": {
+        "label": "Additional Off",
+        "rgb": (150, 150, 150),        # Abu
+        "hex": "#969696",
+        "tolerance": 50,
+        "huruf": ["A", "AO"],
+    },
+}
+
+
+# =========================================================
+# 🎨 DETEKSI WARNA → KODE
+# =========================================================
+def _rgb_to_kode_v2(r, g, b):
+    """
+    Deteksi kode shift dari warna RGB dengan palette matching.
+    
+    Return:
+        (kode, confidence, distance)
+    """
+    # Skip putih/abu terang (background)
+    if r > 220 and g > 220 and b > 220:
+        return None, 0, 999999
+    
+    # Skip abu netral (mungkin background atau border)
+    if abs(r - g) < 10 and abs(g - b) < 10 and 100 < r < 220:
+        return None, 0, 999999
+    
+    _best_match = None
+    _best_distance = 999999
+    
+    for _kode, _info in COLOR_PALETTE.items():
+        _pal_r, _pal_g, _pal_b = _info["rgb"]
+        
+        # Euclidean distance
+        _distance = (
+            (r - _pal_r) ** 2 +
+            (g - _pal_g) ** 2 +
+            (b - _pal_b) ** 2
+        ) ** 0.5
+        
+        if _distance < _best_distance:
+            _best_distance = _distance
+            _best_match = _kode
+    
+    # Cek toleransi
+    if _best_match:
+        _tol = COLOR_PALETTE[_best_match]["tolerance"]
+        if _best_distance <= _tol:
+            _confidence = max(0, 100 - int((_best_distance / _tol) * 50))
+            return _best_match, _confidence, _best_distance
+    
+    return None, 0, _best_distance
+
+
+# =========================================================
+# 🔤 DETEKSI HURUF → KODE
+# =========================================================
+def _huruf_to_kode(text):
+    """
+    Deteksi kode dari text huruf.
+    
+    Contoh:
+        "P7~F" → P7
+        "S15" → S15
+        "M22" → M22
+        "O-C" → O
+        "OFF" → O
+    """
+    if not text:
+        return None, 0
+    
+    _text_upper = str(text).upper().strip()
+    
+    # Cari match dengan huruf di palette
+    for _kode, _info in COLOR_PALETTE.items():
+        for _huruf in _info["huruf"]:
+            _huruf_upper = _huruf.upper()
+            
+            # Exact match
+            if _text_upper == _huruf_upper:
+                return _kode, 100
+            
+            # Starts with
+            if _text_upper.startswith(_huruf_upper):
+                return _kode, 90
+    
+    # Fallback: cek 1 huruf pertama
+    _first_char = _text_upper[:1] if _text_upper else ""
+    
+    if _first_char == "P":
+        return "P7", 70
+    if _first_char == "S":
+        return "S15", 70
+    if _first_char == "M":
+        return "M22", 70
+    if _first_char == "O":
+        return "O", 70
+    if _first_char == "C":
+        return "C", 70
+    if _first_char == "A":
+        return "AO", 70
+    
+    return None, 0
+
+
+# =========================================================
+# 🔍 OCR UTAMA — VERSI 3 (2 METODE)
+# =========================================================
 def ocr_kalender_screenshot(image_bytes):
     """
-    OCR screenshot kalender shift v2.
+    OCR screenshot kalender shift v3.
     
-    Strategy:
-    1. OCR angka tanggal (posisi baris)
-    2. Deteksi warna per cell dari tengah
-    3. Match tanggal + warna → kode
+    Metode:
+    1. 🎨 Warna — sample dari tengah cell
+    2. 🔤 Huruf — OCR text per cell
+    
+    Voting System:
+    - 2 vote (warna + huruf): HIGH confidence
+    - 1 vote: MEDIUM confidence
+    - 0 vote: skip
     """
     if not TESSERACT_AVAILABLE:
         return {
@@ -22,73 +204,40 @@ def ocr_kalender_screenshot(image_bytes):
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
+        print(f"[OCR v3] Image size: {_w}x{_h}")
         
         # ============================================
-        # 1. OCR TEXT — extract angka tanggal
+        # 1. OCR TEXT FULL (untuk tanggal & huruf)
         # ============================================
-        _text = pytesseract.image_to_string(
+        _text_full = pytesseract.image_to_string(
             _img,
-            config="--psm 6 -c tessedit_char_whitelist=0123456789",
+            config="--psm 6",
         )
         
-        # ✅ FIX v2: Parse angka dari text, prioritas angka 1-31
-        _tanggal_detected = []
-        for _line in _text.split("\n"):
-            _nums = re.findall(r'\d+', _line)
-            for _n in _nums:
-                try:
-                    _n_int = int(_n)
-                    if 1 <= _n_int <= 31:
-                        _tanggal_detected.append(_n_int)
-                except Exception:
-                    continue
-        
-        # Remove duplicate & sort
-        _tanggal_detected = sorted(set(_tanggal_detected))
-        
-        # ✅ FIX: Kalau ada 1-3 tanpa 0 di depan, mungkin 01-03
-        # Kalau ada 11-17 tanpa 11, coba perbaiki
-        _tanggal_fixed = _fix_tanggal_sequence(_tanggal_detected)
-        
-        print(f"[OCR v2] Tanggal detected: {_tanggal_fixed}")
-        
         # ============================================
-        # 2. ANALISIS WARNA
+        # 2. GRID ANALYSIS
         # ============================================
         _np_img = np.array(_img)
         
-        # ✅ FIX: Grid kalender (7 kolom)
-        # Layout: baris = minggu, kolom = hari (Min-Sab)
-        # Kita bikin grid lebih fleksibel
-        
-        # Area kalender (biasanya setelah header, sebelum tombol)
-        # Dari screenshot: kalender di 25%-85% tinggi
-        _kalender_top = int(_h * 0.22)
+        # Area kalender (kasar)
+        _kalender_top = int(_h * 0.20)
         _kalender_bottom = int(_h * 0.85)
         _kalender_height = _kalender_bottom - _kalender_top
         
-        # 7 kolom × 5-6 baris
+        # Grid 7 kolom × 6 baris (max)
         _grid_cols = 7
-        _grid_rows = 5  # 5 baris biasanya cukup untuk 31 hari (31/7 ≈ 4.4)
-        
-        # ⚠️ KALAU ADA 6 BARIS (bulan tertentu)
-        # Cek kalau ada 6 baris
+        _grid_rows = 6
         
         _cell_h = _kalender_height // _grid_rows
         _cell_w = _w // _grid_cols
         
-        # ✅ FIX: Sample warna dari TENGAH cell
+        print(f"[OCR v3] Grid: {_grid_cols}x{_grid_rows}, cell: {_cell_w}x{_cell_h}")
+        
+        # ============================================
+        # 3. ANALISIS PER CELL
+        # ============================================
         _tanggal_list = []
-        
-        # Mapping tanggal ke posisi grid:
-        # Baris 0: tanggal 1-7 (atau 01-03 dulu di kolom yang sesuai)
-        # Kita perlu tau hari pertama bulan itu jatuh di hari apa
-        
-        # Untuk saat ini: asumsi tanggal 1 selalu di kolom ke-4 (Rabu)
-        # Nanti bisa dinamis dari input user
-        
-        # Simplified: Ambil warna dari cell yang ada warnanya
-        _cells_with_color = []
+        _debug_cells = []
         
         for _row in range(_grid_rows):
             for _col in range(_grid_cols):
@@ -98,54 +247,121 @@ def ocr_kalender_screenshot(image_bytes):
                 _x1 = _col * _cell_w
                 _x2 = _x1 + _cell_w
                 
-                # Sample TITIK TENGAH cell (bukan rata-rata)
-                _center_y = (_y1 + _y2) // 2
-                _center_x = (_x1 + _x2) // 2
+                # Crop cell (tengah aja)
+                _cx1 = max(0, _x1 + int(_cell_w * 0.10))
+                _cx2 = min(_w, _x2 - int(_cell_w * 0.10))
+                _cy1 = max(0, _y1 + int(_cell_h * 0.25))
+                _cy2 = min(_h, _y2 - int(_cell_h * 0.10))
                 
-                # Sample 5x5 pixel di tengah cell
-                _sample_y1 = max(0, _center_y - 10)
-                _sample_y2 = min(_h, _center_y + 10)
-                _sample_x1 = max(0, _center_x - 10)
-                _sample_x2 = min(_w, _center_x + 10)
-                
-                _sample = _np_img[_sample_y1:_sample_y2, _sample_x1:_sample_x2]
-                
-                if _sample.size == 0:
+                if _cx2 <= _cx1 or _cy2 <= _cy1:
                     continue
                 
-                # Rata-rata warna sample
-                _avg_r = int(np.median(_sample[:, :, 0]))
-                _avg_g = int(np.median(_sample[:, :, 1]))
-                _avg_b = int(np.median(_sample[:, :, 2]))
+                _cell_img = _img.crop((_cx1, _cy1, _cx2, _cy2))
+                _cell_np = np.array(_cell_img)
                 
-                _warna_hex = f"#{_avg_r:02X}{_avg_g:02X}{_avg_b:02X}"
+                if _cell_np.size == 0:
+                    continue
                 
-                _cells_with_color.append({
+                # ============================================
+                # METODE 1: WARNA
+                # ============================================
+                # Sample warna median
+                _median_r = int(np.median(_cell_np[:, :, 0]))
+                _median_g = int(np.median(_cell_np[:, :, 1]))
+                _median_b = int(np.median(_cell_np[:, :, 2]))
+                
+                _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(
+                    _median_r, _median_g, _median_b
+                )
+                
+                # ============================================
+                # METODE 2: HURUF (OCR cell)
+                # ============================================
+                _kode_huruf = None
+                _conf_huruf = 0
+                
+                try:
+                    _cell_text = pytesseract.image_to_string(
+                        _cell_img,
+                        config="--psm 7 -c tessedit_char_whitelist=PSMOCA0123456789-~fF",
+                    ).strip()
+                    
+                    if _cell_text:
+                        _kode_huruf, _conf_huruf = _huruf_to_kode(_cell_text)
+                except Exception:
+                    pass
+                
+                # ============================================
+                # VOTING SYSTEM
+                # ============================================
+                _kode_final = None
+                _confidence = "LOW"
+                _sumber = ""
+                
+                if _kode_warna and _kode_huruf:
+                    if _kode_warna == _kode_huruf:
+                        # ✅ 2 vote SAMA — HIGH confidence
+                        _kode_final = _kode_warna
+                        _confidence = "HIGH"
+                        _sumber = "warna+huruf"
+                    else:
+                        # ⚠️ 2 vote BEDA — pilih warna (biasanya lebih akurat)
+                        _kode_final = _kode_warna
+                        _confidence = "MEDIUM"
+                        _sumber = f"warna ({_kode_warna}) vs huruf ({_kode_huruf})"
+                elif _kode_warna:
+                    # 1 vote — warna aja
+                    _kode_final = _kode_warna
+                    _confidence = "MEDIUM"
+                    _sumber = "warna"
+                elif _kode_huruf:
+                    # 1 vote — huruf aja
+                    _kode_final = _kode_huruf
+                    _confidence = "MEDIUM"
+                    _sumber = "huruf"
+                
+                # Debug info
+                _debug_info = {
                     "row": _row,
                     "col": _col,
-                    "rgb": (_avg_r, _avg_g, _avg_b),
-                    "hex": _warna_hex,
-                })
+                    "rgb": (_median_r, _median_g, _median_b),
+                    "warna_detect": _kode_warna,
+                    "huruf_detect": _kode_huruf,
+                    "final": _kode_final,
+                    "confidence": _confidence,
+                    "sumber": _sumber,
+                }
+                _debug_cells.append(_debug_info)
+                
+                # Add ke result kalau ada kode
+                if _kode_final:
+                    _tanggal_list.append({
+                        "row": _row,
+                        "col": _col,
+                        "kode": _kode_final,
+                        "confidence": _confidence,
+                        "sumber": _sumber,
+                        "rgb": (_median_r, _median_g, _median_b),
+                    })
         
-        # ✅ Deteksi warna per cell
-        for _cell in _cells_with_color:
-            _r, _g, _b = _cell["rgb"]
-            _kode = _rgb_to_kode_v2(_r, _g, _b)
-            
-            if _kode:
-                _tanggal_list.append({
-                    "row": _cell["row"],
-                    "col": _cell["col"],
-                    "kode": _kode,
-                    "hex": _cell["hex"],
-                    "rgb": _cell["rgb"],
-                })
+        print(f"[OCR v3] Cells analyzed: {len(_debug_cells)}")
+        print(f"[OCR v3] Cells with kode: {len(_tanggal_list)}")
+        
+        # ============================================
+        # 4. POST-PROCESSING: AUTO-FILL TANGGAL
+        # ============================================
+        # Sekarang kita perlu mapping row/col → tanggal
+        
+        # Untuk sementara, kasih "tanggal" sequential berdasarkan urutan
+        # Nanti user bisa koreksi manual
+        for _idx, _item in enumerate(_tanggal_list):
+            _item["tanggal_int"] = _idx + 1
         
         return {
             "success": True,
             "tanggal_list": _tanggal_list,
-            "tanggal_detected": _tanggal_fixed,
-            "raw_text": _text,
+            "debug_cells": _debug_cells,
+            "raw_text": _text_full,
             "error": "",
         }
     
@@ -160,82 +376,164 @@ def ocr_kalender_screenshot(image_bytes):
         }
 
 
-def _fix_tanggal_sequence(tanggal_list):
+# =========================================================
+# 🧠 PARSER: KALENDER → SHIFT MAP
+# =========================================================
+def parse_kalender_ke_shift(tanggal_list, bulan, tahun, nama):
     """
-    Perbaiki sequence tanggal yang mungkin salah OCR.
+    Convert hasil OCR ke shift_map.
     
-    Contoh:
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 12, 13, ...] 
-    → [1, 2, 3, ..., 31]
+    Args:
+        tanggal_list: list dict dari OCR
+        bulan: int
+        tahun: int
+        nama: str
     
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, ...]
-    → [1, 2, ..., 11, 12, ...]  (insert 11 yang hilang)
+    Returns:
+        dict {nama, bulan, tahun, shift_map}
     """
-    _fixed = sorted(set(tanggal_list))
+    _shift_map = {}
     
-    # Kalau ada 1-31 lengkap, mantap
-    if len(_fixed) >= 28:
-        return list(range(1, 32))
+    if not tanggal_list:
+        return {
+            "nama": str(nama).strip().upper(),
+            "bulan": bulan,
+            "tahun": tahun,
+            "shift_map": {},
+        }
     
-    # Detect "1" yang harusnya "11" (kalau ada 12-17)
-    if 1 in _fixed and 12 in _fixed and 11 not in _fixed:
-        _fixed.append(11)
-        _fixed = sorted(set(_fixed))
+    for _item in tanggal_list:
+        try:
+            # Ambil tanggal
+            if isinstance(_item, dict):
+                _kode = _item.get("kode")
+                
+                # Coba ambil tanggal dari berbagai field
+                _tgl_num = None
+                if "tanggal_int" in _item:
+                    _tgl_num = int(_item["tanggal_int"])
+                elif "tanggal" in _item:
+                    _tgl_num = int(_item["tanggal"])
+                
+                if not _kode or not _tgl_num:
+                    continue
+            else:
+                continue
+            
+            # Validasi
+            if _tgl_num < 1 or _tgl_num > 31:
+                continue
+            
+            # Build date
+            try:
+                _tgl = date(tahun, bulan, _tgl_num)
+            except ValueError:
+                continue
+            
+            _shift_map[_tgl.isoformat()] = _kode
+        
+        except Exception as _e:
+            print(f"[PARSE ERROR] {_e}")
+            continue
     
-    # Detect "2" yang harusnya "22" (kalau ada 23)
-    if 2 in _fixed and 23 in _fixed and 22 not in _fixed:
-        _fixed.append(22)
-        _fixed = sorted(set(_fixed))
-    
-    return _fixed
+    return {
+        "nama": str(nama).strip().upper(),
+        "bulan": bulan,
+        "tahun": tahun,
+        "shift_map": _shift_map,
+    }
 
 
-def _rgb_to_kode_v2(r, g, b):
+# =========================================================
+# 💾 SIMPAN HASIL OCR
+# =========================================================
+def save_ocr_to_master_shift(nama, bulan, tahun, shift_map, sumber="ocr"):
+    """Simpan hasil OCR ke master_shift."""
+    try:
+        from modules.supabase_client import get_supabase
+        sb = get_supabase()
+        
+        if not shift_map:
+            return False, "❌ Tidak ada data"
+        
+        _now = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+        _rows = []
+        
+        for _tgl_str, _kode in shift_map.items():
+            _rows.append({
+                "tanggal": _tgl_str,
+                "nama": str(nama).strip().upper(),
+                "kode_shift": str(_kode).strip().upper(),
+                "sumber": str(sumber),
+                "catatan": "",
+                "updated_at": _now,
+            })
+        
+        _res = sb.table("master_shift").upsert(
+            _rows,
+            on_conflict="tanggal,nama"
+        ).execute()
+        
+        return True, f"✅ {len(_res.data)} shift tersimpan untuk {nama}"
+    
+    except Exception as e:
+        return False, f"❌ {str(e)[:200]}"
+
+
+# =========================================================
+# 📝 LOG OCR
+# =========================================================
+def log_ocr_upload(nama, bulan, tahun, file_name, ocr_result, uploaded_by=""):
+    """Catat log upload OCR."""
+    try:
+        from modules.supabase_client import get_supabase
+        sb = get_supabase()
+        
+        _res = sb.table("screenshot_log").insert({
+            "nama": str(nama).strip().upper(),
+            "bulan": int(bulan),
+            "tahun": int(tahun),
+            "file_name": str(file_name)[:200],
+            "ocr_result": ocr_result.get("tanggal_list", []),
+            "jumlah_hari_terdeteksi": len(ocr_result.get("tanggal_list", [])),
+            "status": "success" if ocr_result.get("success") else "failed",
+            "error_message": ocr_result.get("error", "")[:500],
+            "uploaded_by": str(uploaded_by),
+        }).execute()
+        
+        return True, "Logged"
+    except Exception as e:
+        print(f"[LOG_OCR ERROR] {e}")
+        return False, str(e)[:100]
+
+
+# =========================================================
+# 🎨 HELPER: UPDATE PALETTE (untuk admin)
+# =========================================================
+def update_palette_warna(kode, r, g, b):
     """
-    Deteksi kode shift dari warna RGB (v2 — lebih akurat).
+    Update sample warna palette.
     
-    Warna berdasarkan screenshot:
-    - Hijau tua (dark green): Pagi  → P7
-    - Hijau muda (light green): Siang → S15
-    - Biru/ungu: Malam → M22
-    - Hitam: Off → O
-    - Putih/abu: Skip (kosong)
+    Args:
+        kode: "P7", "S15", "M22", "O", "C", "AO"
+        r, g, b: int (0-255)
     """
-    # Filter putih/abu-abu (background kosong)
-    if r > 200 and g > 200 and b > 200:
-        return None
-    if abs(r - g) < 15 and abs(g - b) < 15 and r > 150:
-        return None
-    
-    # Hitam = Off
-    if r < 100 and g < 100 and b < 100:
-        return "O"
-    
-    # Biru/Ungu = Malam
-    # Biru: R rendah, G rendah, B tinggi
-    if b > 180 and r < 150 and g < 150:
-        return "M22"
-    if b > 200 and r < 120 and g < 120:
-        return "M22"
-    if b > 200 and r > 100 and r < 180 and g < 150:
-        # Biru-ungu
-        return "M22"
-    
-    # Hijau = Pagi atau Siang
-    # Hijau punya G > R dan G > B
-    if g > r and g > b:
-        # Hijau muda (terang) = Siang
-        if g > 180 and r > 80:
-            return "S15"
-        # Hijau tua = Pagi
-        if g > 100 and g < 180:
-            return "P7"
-        # Fallback hijau
-        return "S15"
-    
-    # Coklat/tan (kuning muda)
-    if r > 180 and g > 150 and b < 150:
-        return "O"  # atau maybe P7
-    
-    # Default: skip
-    return None
+    if kode in COLOR_PALETTE:
+        COLOR_PALETTE[kode]["rgb"] = (int(r), int(g), int(b))
+        COLOR_PALETTE[kode]["hex"] = f"#{int(r):02X}{int(g):02X}{int(b):02X}"
+        return True, f"✅ Palette {kode} diupdate ke RGB({r}, {g}, {b})"
+    return False, f"❌ Kode {kode} tidak ditemukan"
+
+
+def get_palette_info():
+    """Ambil info palette untuk display."""
+    _info = []
+    for _kode, _data in COLOR_PALETTE.items():
+        _info.append({
+            "Kode": _kode,
+            "Label": _data["label"],
+            "Warna": _data["hex"],
+            "RGB": f"({_data['rgb'][0]}, {_data['rgb'][1]}, {_data['rgb'][2]})",
+            "Tolerance": _data["tolerance"],
+        })
+    return pd.DataFrame(_info)
