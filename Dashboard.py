@@ -1056,7 +1056,7 @@ def render_dashboard():
                 y=0.15,
                 line=dict(color="#E88B8B", width=2, dash="dash"),
                 annotation_text="⚠️ Target: 0.15%",
-                annotation_position="ight",
+                annotation_position="right",
                 annotation_font=dict(color="#E88B8B", size=10, family="JetBrains Mono"),
             )
             

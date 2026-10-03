@@ -5,6 +5,7 @@ Handle input harian: SPD + SO rak + akumulasi.
 """
 
 import streamlit as st
+import pandas as pd         
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from modules.supabase_client import get_supabase
