@@ -156,6 +156,54 @@ def parse_chat_update(chat_text, tanggal_hari_ini=None):
     _text_lower = _text.lower()
 
     # ============================================
+    # 0. DETEKSI INTENT "HAPUS"
+    # ============================================
+    _is_delete_mode = False
+    _delete_targets = []
+    _delete_all_dates = False
+
+    _keyword_hapus = ["hapus", "delete", "hilangkan", "buang", "remove"]
+    _keyword_semua = ["semua", "seluruh", "all"]
+
+    # Cek ada keyword hapus?
+    if any(_kw in _text_lower for _kw in _keyword_hapus):
+        _is_delete_mode = True
+
+        # Cek hapus semua tanggal?
+        if any(_kw in _text_lower for _kw in _keyword_semua):
+            _delete_all_dates = True
+
+        # Ekstrak nama-nama target
+        # Hapus kata-kata keyword dulu biar gampang
+        _text_clean = _text_lower
+        for _kw in _keyword_hapus + _keyword_semua + [
+            "shift", "hari", "ini", "besok", "tanggal", "dari", "untuk",
+            "resign", "keluar", "berhenti", "sudah", "gak", "ga", "tidak",
+            "mulai", "sekarang", "ya", "dong", "aja", "saja",
+        ]:
+            _text_clean = _text_clean.replace(_kw, " ")
+
+        # Hapus angka & tanggal (DD/MM/YY)
+        _text_clean = re.sub(r'\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?', ' ', _text_clean)
+        _text_clean = re.sub(r'\d+', ' ', _text_clean)
+
+        # Ambil kata-kata tersisa (kandidat nama)
+        _words = re.findall(r'\b[A-Za-z]{2,}\b', _text_clean)
+        _delete_targets = [w.upper() for w in _words]
+
+        # Return awal — gak perlu lanjut parsing shift
+        return {
+            "tanggal": tanggal_hari_ini,
+            "tanggal_detect": "hari ini",
+            "shift_map": {},
+            "raw_text": _text,
+            "warning": None,
+            "mode": "delete",
+            "delete_targets": _delete_targets,
+            "delete_all_dates": _delete_all_dates,
+        }
+        
+    # ============================================
     # 1. DETEKSI TANGGAL
     # ============================================
     _tanggal = tanggal_hari_ini
@@ -279,6 +327,9 @@ def parse_chat_update(chat_text, tanggal_hari_ini=None):
         "shift_map": _shift_map,
         "raw_text": _text,
         "warning": _warning,
+        "mode": "update",  # ← default mode
+        "delete_targets": [],
+        "delete_all_dates": False,
     }
 
 
@@ -510,3 +561,131 @@ NAMA_BULAN_ID = {
     5: "Mei", 6: "Juni", 7: "Juli", 8: "Agustus",
     9: "September", 10: "Oktober", 11: "November", 12: "Desember",
 }
+
+#hapus#
+def delete_shift_by_name(tanggal, nama_list):
+    """
+    Hapus shift berdasarkan nama (untuk tanggal tertentu).
+    
+    Args:
+        tanggal: date
+        nama_list: list of str (nama yang mau dihapus)
+    
+    Returns:
+        (success, message, detail)
+    """
+    try:
+        sb = get_supabase()
+        
+        if not nama_list:
+            return False, "❌ Tidak ada nama yang dihapus", {}
+        
+        _tgl_str = tanggal.isoformat()[:10] if isinstance(tanggal, (date, datetime)) else str(tanggal)[:10]
+        
+        _deleted = 0
+        _not_found = []
+        
+        for _nama in nama_list:
+            _nama_clean = str(_nama).strip().upper()
+            
+            _res = sb.table("master_shift") \
+                .delete() \
+                .eq("tanggal", _tgl_str) \
+                .eq("nama", _nama_clean) \
+                .execute()
+            
+            if _res.data:
+                _deleted += len(_res.data)
+            else:
+                _not_found.append(_nama_clean)
+        
+        _msg_parts = []
+        if _deleted > 0:
+            _msg_parts.append(f"🗑️ {_deleted} shift dihapus")
+        if _not_found:
+            _msg_parts.append(f"⚠️ Tidak ditemukan: {', '.join(_not_found)}")
+        
+        _msg = " • ".join(_msg_parts) if _msg_parts else "Tidak ada perubahan"
+        
+        return True, _msg, {
+            "tanggal": _tgl_str,
+            "deleted": _deleted,
+            "not_found": _not_found,
+        }
+    
+    except Exception as e:
+        return False, f"❌ {str(e)[:150]}", {}
+
+
+def delete_shift_by_name(tanggal, nama_list):
+    """
+    Hapus shift berdasarkan nama (untuk tanggal tertentu).
+    
+    Args:
+        tanggal: date
+        nama_list: list of str (nama yang mau dihapus)
+    
+    Returns:
+        (success, message, detail)
+    """
+    try:
+        sb = get_supabase()
+        
+        if not nama_list:
+            return False, "❌ Tidak ada nama yang dihapus", {}
+        
+        _tgl_str = tanggal.isoformat()[:10] if isinstance(tanggal, (date, datetime)) else str(tanggal)[:10]
+        
+        _deleted = 0
+        _not_found = []
+        
+        for _nama in nama_list:
+            _nama_clean = str(_nama).strip().upper()
+            
+            _res = sb.table("master_shift") \
+                .delete() \
+                .eq("tanggal", _tgl_str) \
+                .eq("nama", _nama_clean) \
+                .execute()
+            
+            if _res.data:
+                _deleted += len(_res.data)
+            else:
+                _not_found.append(_nama_clean)
+        
+        _msg_parts = []
+        if _deleted > 0:
+            _msg_parts.append(f"🗑️ {_deleted} shift dihapus")
+        if _not_found:
+            _msg_parts.append(f"⚠️ Tidak ditemukan: {', '.join(_not_found)}")
+        
+        _msg = " • ".join(_msg_parts) if _msg_parts else "Tidak ada perubahan"
+        
+        return True, _msg, {
+            "tanggal": _tgl_str,
+            "deleted": _deleted,
+            "not_found": _not_found,
+        }
+    
+    except Exception as e:
+        return False, f"❌ {str(e)[:150]}", {}
+
+
+def delete_shift_all_dates(nama):
+    """Hapus SEMUA shift nama ini di semua tanggal."""
+    try:
+        sb = get_supabase()
+        _nama_clean = str(nama).strip().upper()
+        
+        _res = sb.table("master_shift") \
+            .delete() \
+            .eq("nama", _nama_clean) \
+            .execute()
+        
+        if _res.data:
+            return True, f"🗑️ Semua shift {_nama_clean} dihapus ({len(_res.data)} baris)"
+        else:
+            return False, f"⚠️ Tidak ada shift untuk {_nama_clean}"
+    
+    except Exception as e:
+        return False, f"❌ {str(e)[:150]}"
