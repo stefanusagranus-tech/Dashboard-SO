@@ -1167,8 +1167,26 @@ elif st.session_state["shift_sub_tab"] == "screenshot":
                     st.metric("📊 Hari Terdeteksi", len(_shift_map))
 
                 # Raw text (debug)
-                with st.expander("🔍 Raw OCR Text (debug)"):
-                    st.text(_ocr_data.get("raw_text", "")[:500])
+                with st.expander("🔍 DEBUG INFO", expanded=True):
+                    st.write("**Kalender area Y:**", _ocr_data.get("kalender_area", "?"))
+                    st.write("**Kolom detected:**", _ocr_data.get("kolom_detected", 0))
+                    st.write("**Baris detected:**", _ocr_data.get("baris_detected", 0))
+                    st.write("**Total cells analyzed:**", len(_ocr_data.get("debug_cells", [])))
+                    
+                    _debug_cells = _ocr_data.get("debug_cells", [])
+                    if _debug_cells:
+                        st.write("**Sample debug cells:**")
+                        _debug_df = pd.DataFrame(_debug_cells[:30])
+                        st.dataframe(_debug_df, use_container_width=True)
+                    else:
+                        st.error("❌ TIDAK ADA CELL YANG DI-ANALISIS!")
+                        st.write("**Kemungkinan penyebab:**")
+                        st.write("- Kalender area gak ke-detect")
+                        st.write("- Kolom/baris gak ke-detect")
+                        st.write("- Semua cell ke-skip karena putih")
+                    
+                    st.write("**Raw OCR text:**")
+                    st.text(_ocr_data.get("raw_text", "")[:800])
 
                 # Preview tabel
                 if _shift_map:
