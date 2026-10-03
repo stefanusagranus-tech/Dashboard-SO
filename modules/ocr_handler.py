@@ -1,11 +1,11 @@
 """
 OCR Handler v15
 ==============
-KALIBRASI MODE:
-- Tampil semua text + koordinat X,Y
-- Annotated image
-- Slider kalibrasi X/Y
-- Save/load preset kalibrasi
+FULL SCRIPT dengan:
+- Auto-detect calibration (dari keyword header)
+- Fuzzy matching kode & tanggal
+- Grid-based pairing
+- Fix font error di annotated image
 """
 
 import io
@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 try:
     import pytesseract
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
     import numpy as np
     TESSERACT_AVAILABLE = True
 except ImportError as e:
@@ -26,7 +26,7 @@ except ImportError as e:
 
 
 # =========================================================
-# 🎨 FUZZY MAPPING
+# 🎨 FUZZY MAPPING (OCR ERROR FIX)
 # =========================================================
 HURUF_FUZZY_MAP = {
     "P": "P", "S": "S", "M": "M", "D": "D",
@@ -49,7 +49,7 @@ TANGGAL_FIX_MAP = {
 
 
 # =========================================================
-# 🔤 EKSTRAK KODE (FUZZY)
+# 🔤 EKSTRAK KODE DARI TEXT
 # =========================================================
 def _extract_kode_from_text(text):
     if not text:
@@ -90,7 +90,7 @@ def _fix_tanggal_text(text):
 # 🔍 OCR WITH COORDINATES
 # =========================================================
 def _ocr_with_coords(image):
-    """OCR gambar, return list of {text, x, y, w, h, conf, jenis}."""
+    """OCR gambar, return list of {text, x, y, w, h, conf, jenis, ...}."""
     try:
         _data = pytesseract.image_to_data(
             image,
@@ -117,7 +117,6 @@ def _ocr_with_coords(image):
         _w = int(_data["width"][_i])
         _h = int(_data["height"][_i])
         
-        # Deteksi jenis
         _tgl = _fix_tanggal_text(_text)
         _kode = _extract_kode_from_text(_text)
         
@@ -130,10 +129,7 @@ def _ocr_with_coords(image):
         
         _items.append({
             "text": _text,
-            "x": _x,
-            "y": _y,
-            "w": _w,
-            "h": _h,
+            "x": _x, "y": _y, "w": _w, "h": _h,
             "conf": _conf,
             "x_center": _x + _w // 2,
             "y_center": _y + _h // 2,
@@ -148,79 +144,75 @@ def _ocr_with_coords(image):
 
 
 # =========================================================
-# 🎨 ANNOTATED IMAGE (VISUAL KALIBRASI)
+# 🤖 AUTO-DETECT CALIBRATION
 # =========================================================
-def ocr_debug_visual(image_bytes, calib=None):
+def _auto_detect_calibration(items, image_w, image_h):
     """
-    Gambar annotated dengan kotak warna + info X,Y.
-    
-    Args:
-        image_bytes: bytes gambar
-        calib: dict {x_start, x_end, y_start, y_end} untuk highlight area
+    Auto-detect area kalender dari keyword header.
     """
-    if not TESSERACT_AVAILABLE:
-        return None
+    _y_start = int(image_h * 0.30)
+    _y_end = int(image_h * 0.95)
+    _x_start = 0
+    _x_end = image_w
     
-    try:
-        _img = Image.open(io.BytesIO(image_bytes))
-        if _img.mode != "RGB":
-            _img = _img.convert("RGB")
-        
-        _w, _h = _img.size
-        _items = _ocr_with_coords(_img)
-        _draw = ImageDraw.Draw(_img)
-        
-        # Highlight area kalibrasi
-        if calib:
-            _x1 = calib.get("x_start", 0)
-            _x2 = calib.get("x_end", _w)
-            _y1 = calib.get("y_start", 0)
-            _y2 = calib.get("y_end", _h)
-            
-            # Area terpilih = hijau
-            _draw.rectangle([_x1, _y1, _x2, _y2], outline=(0, 255, 0), width=4)
-            
-            # Area di luar = abu-abu transparan (draw garis tepi doang)
-            _draw.rectangle([0, 0, _w, _y1], fill=(100, 100, 100))
-            _draw.rectangle([0, _y2, _w, _h], fill=(100, 100, 100))
-            _draw.rectangle([0, _y1, _x1, _y2], fill=(100, 100, 100))
-            _draw.rectangle([_x2, _y1, _w, _y2], fill=(100, 100, 100))
-        
-        # Draw tiap item
-        for _item in _items:
-            _x1 = _item["x"]
-            _y1 = _item["y"]
-            _x2 = _item["x_end"]
-            _y2 = _item["y_end"]
-            
-            # Warna per jenis
-            if _item["jenis"] == "TANGGAL":
-                _color = (0, 255, 0)      # hijau
-            elif _item["jenis"] == "KODE":
-                _color = (0, 150, 255)    # biru
-            else:
-                _color = (255, 100, 100)  # merah
-            
-            _draw.rectangle([_x1, _y1, _x2, _y2], outline=_color, width=2)
-            
-            # Label dengan X,Y
-            _label = f"{_item['text'][:8]} ({_x1},{_y1})"
-            _draw.text((_x1, max(0, _y1 - 12)), _label, fill=_color)
-        
-        return _img, _items
+    # Cari header keyword (untuk Y_START)
+    _header_keywords = [
+        "TAMBAH", "PERIODE", "NIK", "JABATAN",
+        "STATUS", "KARYAWAN", "HAK", "TOTAL",
+    ]
+    _header_y_list = []
     
-    except Exception as e:
-        print(f"[DEBUG VISUAL ERROR] {e}")
-        return None, []
+    for _item in items:
+        _text_upper = _item["text"].upper().strip()
+        for _kw in _header_keywords:
+            if _kw in _text_upper:
+                _header_y_list.append(_item["y_end"])
+                break
+    
+    if _header_y_list:
+        _y_start = max(_header_y_list) + 40
+    
+    # Cari footer keyword (untuk Y_END)
+    _footer_keywords = ["KEMBALI", "SIMPAN", "JADWAL", "SIMPAN JADWAL"]
+    _footer_y_list = []
+    
+    for _item in items:
+        _text_upper = _item["text"].upper().strip()
+        for _kw in _footer_keywords:
+            if _kw in _text_upper and _item["y"] > _y_start:
+                _footer_y_list.append(_item["y"])
+                break
+    
+    if _footer_y_list:
+        _y_end = min(_footer_y_list) - 30
+    
+    # Cari X dari kalender
+    _kalender_items = [
+        i for i in items
+        if _y_start <= i["y"] <= _y_end and i["jenis"] in ["TANGGAL", "KODE"]
+    ]
+    
+    if _kalender_items:
+        _x_list = [i["x"] for i in _kalender_items]
+        _x_end_list = [i["x_end"] for i in _kalender_items]
+        
+        _x_start = max(0, min(_x_list) - 30)
+        _x_end = min(image_w, max(_x_end_list) + 30)
+    
+    return {
+        "x_start": _x_start,
+        "x_end": _x_end,
+        "y_start": _y_start,
+        "y_end": _y_end,
+        "auto": True,
+    }
 
 
 # =========================================================
 # 🎯 FILTER BERDASARKAN KALIBRASI
 # =========================================================
 def filter_items_by_calib(items, calib):
-    """
-    Filter items berdasarkan kalibrasi X/Y.
-    """
+    """Filter items berdasarkan kalibrasi X/Y."""
     if not calib:
         return items
     
@@ -239,8 +231,6 @@ def filter_items_by_calib(items, calib):
     
     return _filtered
 
-
-# === BAGIAN 2 MULAI ===
 
 # =========================================================
 # 🔍 KELOMPOKKAN PER BARIS
@@ -271,12 +261,10 @@ def _group_by_row(items, tolerance=25):
 
 
 # =========================================================
-# 🔍 PAIR TANGGAL & KODE (GRID-BASED)
+# 🔍 PAIR TANGGAL & KODE
 # =========================================================
 def _pair_tanggal_kode(tanggal_items, kode_items):
-    """
-    Pair tanggal & kode via grid logic.
-    """
+    """Pair tanggal & kode via grid logic."""
     _pairs = []
     
     if not tanggal_items or not kode_items:
@@ -293,7 +281,6 @@ def _pair_tanggal_kode(tanggal_items, kode_items):
         
         _tgl_y = _tgl_row[0]["y_center"]
         
-        # Cari kode row di bawah (dy > 5, tapi < 150)
         _best_kode_row = None
         _best_dy = 999999
         
@@ -310,7 +297,6 @@ def _pair_tanggal_kode(tanggal_items, kode_items):
         if _best_kode_row is None:
             continue
         
-        # Pair by index
         for _i, _tgl_item in enumerate(_tgl_row):
             if _i < len(_best_kode_row):
                 _pairs.append({
@@ -327,16 +313,18 @@ def _pair_tanggal_kode(tanggal_items, kode_items):
     return list(_unique.values())
 
 
+# === BAGIAN 2 MULAI ===
+
 # =========================================================
-# 🔍 OCR UTAMA v15 — KALIBRASI MODE
+# 🔍 OCR UTAMA v15
 # =========================================================
 def ocr_kalender_screenshot(image_bytes, calib=None):
     """
-    OCR v15 — Kalibrasi mode.
+    OCR v15 — Auto-detect + kalibrasi.
     
     Args:
         image_bytes: bytes gambar
-        calib: dict {x_start, x_end, y_start, y_end} atau None
+        calib: dict {x_start, x_end, y_start, y_end} atau None (auto-detect)
     """
     if not TESSERACT_AVAILABLE:
         return {
@@ -358,8 +346,15 @@ def ocr_kalender_screenshot(image_bytes, calib=None):
         _all_items = _ocr_with_coords(_img)
         print(f"[OCR v15] Total items: {len(_all_items)}")
         
-        # Filter berdasarkan kalibrasi
-        _kalender_items = filter_items_by_calib(_all_items, calib) if calib else _all_items
+        # AUTO-DETECT kalau gak ada kalibrasi
+        _auto_applied = False
+        if calib is None:
+            calib = _auto_detect_calibration(_all_items, _w, _h)
+            _auto_applied = True
+            print(f"[OCR v15] Auto-calib: {calib}")
+        
+        # Filter
+        _kalender_items = filter_items_by_calib(_all_items, calib)
         print(f"[OCR v15] After filter: {len(_kalender_items)}")
         
         # Pisahkan
@@ -392,6 +387,7 @@ def ocr_kalender_screenshot(image_bytes, calib=None):
             "all_items": _all_items,
             "image_size": (_w, _h),
             "calib_used": calib,
+            "auto_applied": _auto_applied,
             "raw_text": _raw_text,
             "error": "",
         }
@@ -405,6 +401,70 @@ def ocr_kalender_screenshot(image_bytes, calib=None):
             "raw_text": "",
             "error": str(e)[:200],
         }
+
+
+# =========================================================
+# 🎨 ANNOTATED IMAGE (VISUAL KALIBRASI)
+# =========================================================
+def ocr_debug_visual(image_bytes, calib=None):
+    """
+    Gambar annotated dengan kotak warna + info X,Y.
+    
+    Returns: (PIL.Image, list_items)
+    """
+    if not TESSERACT_AVAILABLE:
+        return None, []
+    
+    try:
+        _img = Image.open(io.BytesIO(image_bytes))
+        if _img.mode != "RGB":
+            _img = _img.convert("RGB")
+        
+        _w, _h = _img.size
+        _items = _ocr_with_coords(_img)
+        _draw = ImageDraw.Draw(_img)
+        
+        # Highlight area kalibrasi (kalau ada)
+        if calib:
+            _x1 = calib.get("x_start", 0)
+            _x2 = calib.get("x_end", _w)
+            _y1 = calib.get("y_start", 0)
+            _y2 = calib.get("y_end", _h)
+            
+            # Border hijau area terpilih
+            _draw.rectangle([_x1, _y1, _x2, _y2], outline=(0, 255, 0), width=4)
+        
+        # Draw tiap item
+        for _item in _items:
+            _x1 = _item["x"]
+            _y1 = _item["y"]
+            _x2 = _item["x_end"]
+            _y2 = _item["y_end"]
+            
+            # Warna per jenis
+            if _item["jenis"] == "TANGGAL":
+                _color = (0, 255, 0)
+            elif _item["jenis"] == "KODE":
+                _color = (0, 150, 255)
+            else:
+                _color = (255, 100, 100)
+            
+            _draw.rectangle([_x1, _y1, _x2, _y2], outline=_color, width=2)
+            
+            # Label dengan X,Y (try-except)
+            _label = f"{_item['text'][:8]}({_x1},{_y1})"
+            try:
+                _draw.text((_x1, max(0, _y1 - 12)), _label, fill=_color)
+            except Exception:
+                pass
+        
+        return _img, _items
+    
+    except Exception as e:
+        print(f"[DEBUG VISUAL ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
+        return None, []
 
 
 # =========================================================
@@ -519,7 +579,7 @@ def log_ocr_upload(nama, bulan, tahun, file_name, ocr_result, uploaded_by=""):
 # 🎨 HELPER
 # =========================================================
 def get_palette_info():
-    """Return fuzzy mapping info."""
+    """Return info fuzzy mapping."""
     _info = []
     for _kode, _val in HURUF_FUZZY_MAP.items():
         _info.append({"OCR Char": _kode, "Kode": _val})

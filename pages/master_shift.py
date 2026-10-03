@@ -15,9 +15,10 @@ Kode shift:
 import streamlit as st
 import pandas as pd
 import time
-import io
+import io                                       
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+from PIL import Image as PILImage                
 
 # =========================================================================
 # KONFIGURASI HALAMAN
@@ -1127,25 +1128,48 @@ elif st.session_state["shift_sub_tab"] == "screenshot":
                 )
             
             st.session_state[_calib_key] = _calib
+            st.session_state[_calib_key] = _calib
+
+            # Tombol AUTO-DETECT + PREVIEW
+            col_a1, col_a2 = st.columns(2)
             
-            # Tombol preview kalibrasi
-            if st.button("👁️ PREVIEW KALIBRASI", use_container_width=True, key="btn_calib_preview"):
-                with st.spinner("⏳ Generate annotated image..."):
-                    from modules.ocr_handler import ocr_debug_visual
-                    _annotated, _items = ocr_debug_visual(
-                        _uploaded_file.getvalue(),
-                        calib=_calib,
-                    )
-                    
-                    if _annotated:
-                        st.image(
-                            _annotated,
-                            caption="🟢 Tanggal | 🔵 Kode | 🔴 Noise | ⬜ Area Luar (abu-abu)",
-                            use_container_width=True,
+            with col_a1:
+                if st.button("🤖 AUTO-DETECT", use_container_width=True, key="btn_auto_calib"):
+                    with st.spinner("⏳ Auto-detect area kalender..."):
+                        from modules.ocr_handler import (
+                            _ocr_with_coords,
+                            _auto_detect_calibration,
                         )
-                        st.success(f"✅ {len(_items)} items terdeteksi")
-                    else:
-                        st.error("❌ Gagal generate annotated image")
+                        _img_temp = PILImage.open(io.BytesIO(_uploaded_file.getvalue()))
+                        _items_temp = _ocr_with_coords(_img_temp)
+                        _auto_calib = _auto_detect_calibration(_items_temp, _img_w, _img_h)
+                        
+                        st.session_state[_calib_key] = _auto_calib
+                        st.success(
+                            f"✅ Auto: Y={_auto_calib['y_start']}-{_auto_calib['y_end']}, "
+                            f"X={_auto_calib['x_start']}-{_auto_calib['x_end']}"
+                        )
+                        time.sleep(0.8)
+                        st.rerun()
+            
+            with col_a2:
+                if st.button("👁️ PREVIEW KALIBRASI", use_container_width=True, key="btn_calib_preview"):
+                    with st.spinner("⏳ Generate annotated image..."):
+                        from modules.ocr_handler import ocr_debug_visual
+                        _annotated, _items_prev = ocr_debug_visual(
+                            _uploaded_file.getvalue(),
+                            calib=st.session_state[_calib_key],
+                        )
+                        
+                        if _annotated:
+                            st.image(
+                                _annotated,
+                                caption="🟢 Tanggal | 🔵 Kode | 🔴 Noise | 🟩 Area Terpilih",
+                                use_container_width=True,
+                            )
+                            st.success(f"✅ {len(_items_prev)} items terdeteksi")
+                        else:
+                            st.error("❌ Gagal generate annotated image")
             
             st.markdown("---")
             
