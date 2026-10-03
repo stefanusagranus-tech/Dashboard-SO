@@ -211,16 +211,53 @@ def parse_chat_update(chat_text, tanggal_hari_ini=None):
                     _shift_map[_nama] = _kode
                 break
 
-    # Strategi 2: Kalau gak ada match, coba simple pattern
+    # ============================================
+    # STRATEGI 2: Format "NAMA + KODE SHIFT"
+    # Contoh: "Kusdewi siang", "Tika libur", "Zaki pagi"
+    # ============================================
     if not _shift_map:
-        # Cari "X libur", "X cuti", "X off"
-        for _kw, _kode in [("libur", "O"), ("off", "O"), ("cuti", "C"), ("ao", "AO")]:
-            _pattern_simple = rf'(\w+(?:\s+\w+)?)\s+(?:{_kw})'
-            for _match in re.finditer(_pattern_simple, _text_lower):
+        # Bersihkan tanggal di depan text
+        _text_clean = re.sub(
+            r'^\s*\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\s*[:\-]?\s*',
+            '', _text_lower
+        ).strip()
+    
+        # Cari pattern: NAMA (kata) + KODE (keyword)
+        for _kw, _kode in KEYWORD_TO_KODE.items():
+            # Pattern: nama_spasi_keyword
+            _pattern = rf'\b([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+(?:{re.escape(_kw)})\b'
+            for _match in re.finditer(_pattern, _text_clean):
                 _nama = _match.group(1).strip().upper()
-                if _nama and len(_nama) >= 2 and _nama not in KEYWORD_TO_KODE:
-                    _shift_map[_nama] = _kode
+                
+                # Skip kalau nama mengandung keyword
+                if any(_k in _nama.lower() for _k in KEYWORD_TO_KODE.keys()):
+                    continue
+                if _nama in KEYWORD_TO_KODE:
+                    continue
+                if len(_nama) < 2:
+                    continue
+                
+                _shift_map[_nama] = _kode
+                break  # Stop setelah match pertama
 
+    # ============================================
+    # STRATEGI 3: Format "NAMA, NAMA2, ... = KODE"
+    # Contoh: "Kusdewi, Tika = siang"
+    # ============================================
+    if not _shift_map:
+        for _kw, _kode in KEYWORD_TO_KODE.items():
+            _pattern = rf'([A-Za-z,\s]+?)\s*[=]\s*{re.escape(_kw)}'
+            for _match in re.finditer(_pattern, _text_lower):
+                _nama_str = _match.group(1)
+                _nama_list = [
+                    n.strip().upper() 
+                    for n in re.split(r'[,&]+', _nama_str)
+                    if n.strip() and len(n.strip()) >= 2
+                ]
+                for _nama in _nama_list:
+                    if _nama not in KEYWORD_TO_KODE:
+                        _shift_map[_nama] = _kode
+                        
     # ============================================
     # 3. VALIDASI
     # ============================================
