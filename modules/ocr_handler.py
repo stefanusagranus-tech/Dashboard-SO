@@ -178,189 +178,109 @@ def _huruf_to_kode(text):
 # =========================================================
 def ocr_kalender_screenshot(image_bytes):
     """
-    OCR screenshot kalender shift v3.
+    OCR screenshot v4 — Deteksi via TEXT CELL.
     
-    Metode:
-    1. 🎨 Warna — sample dari tengah cell
-    2. 🔤 Huruf — OCR text per cell
-    
-    Voting System:
-    - 2 vote (warna + huruf): HIGH confidence
-    - 1 vote: MEDIUM confidence
-    - 0 vote: skip
+    Karena web desktop punya text jelas:
+    - "S15-SIANG" → S15
+    - "M22-MALAM" → M22
+    - "O-OFF" → O
+    - "P7-F" → P7
     """
     if not TESSERACT_AVAILABLE:
         return {
             "success": False,
             "tanggal_list": [],
             "raw_text": "",
-            "error": "Tesseract library tidak tersedia",
+            "error": "Tesseract tidak tersedia",
         }
     
     try:
-        # Load image
         _img = Image.open(io.BytesIO(image_bytes))
         if _img.mode != "RGB":
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
-        print(f"[OCR v3] Image size: {_w}x{_h}")
+        print(f"[OCR v4] Image: {_w}x{_h}")
         
         # ============================================
-        # 1. OCR TEXT FULL (untuk tanggal & huruf)
+        # OCR TEXT FULL
         # ============================================
-        _text_full = pytesseract.image_to_string(
-            _img,
-            config="--psm 6",
-        )
+        _text_full = pytesseract.image_to_string(_img, config="--psm 6")
         
         # ============================================
-        # 2. GRID ANALYSIS
+        # DETEKSI KODE DARI TEXT
         # ============================================
-        _np_img = np.array(_img)
+        # Pattern shift text
+        _pattern_shift = r'(S15|M22|P7|O|C|AO)[\-~]?(?:SIANG|MALAM|PAGI|OFF|CUTI)?'
         
-        # Area kalender (kasar)
-        _kalender_top = int(_h * 0.20)
-        _kalender_bottom = int(_h * 0.85)
-        _kalender_height = _kalender_bottom - _kalender_top
+        # Deteksi angka tanggal pattern
+        _pattern_tanggal = r'\b([1-9]|[12][0-9]|3[01])\b'
         
-        # Grid 7 kolom × 6 baris (max)
-        _grid_cols = 7
-        _grid_rows = 6
+        # Split per line
+        _lines = _text_full.split("\n")
         
-        _cell_h = _kalender_height // _grid_rows
-        _cell_w = _w // _grid_cols
-        
-        print(f"[OCR v3] Grid: {_grid_cols}x{_grid_rows}, cell: {_cell_w}x{_cell_h}")
-        
-        # ============================================
-        # 3. ANALISIS PER CELL
-        # ============================================
+        # Tracking
         _tanggal_list = []
-        _debug_cells = []
+        _tanggal_found = []
+        _shift_per_baris = []
         
-        for _row in range(_grid_rows):
-            for _col in range(_grid_cols):
-                # Posisi cell
-                _y1 = _kalender_top + _row * _cell_h
-                _y2 = _y1 + _cell_h
-                _x1 = _col * _cell_w
-                _x2 = _x1 + _cell_w
-                
-                # Crop cell (tengah aja)
-                _cx1 = max(0, _x1 + int(_cell_w * 0.10))
-                _cx2 = min(_w, _x2 - int(_cell_w * 0.10))
-                _cy1 = max(0, _y1 + int(_cell_h * 0.25))
-                _cy2 = min(_h, _y2 - int(_cell_h * 0.10))
-                
-                if _cx2 <= _cx1 or _cy2 <= _cy1:
-                    continue
-                
-                _cell_img = _img.crop((_cx1, _cy1, _cx2, _cy2))
-                _cell_np = np.array(_cell_img)
-                
-                if _cell_np.size == 0:
-                    continue
-                
-                # ============================================
-                # METODE 1: WARNA
-                # ============================================
-                # Sample warna median
-                _median_r = int(np.median(_cell_np[:, :, 0]))
-                _median_g = int(np.median(_cell_np[:, :, 1]))
-                _median_b = int(np.median(_cell_np[:, :, 2]))
-                
-                _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(
-                    _median_r, _median_g, _median_b
-                )
-                
-                # ============================================
-                # METODE 2: HURUF (OCR cell)
-                # ============================================
-                _kode_huruf = None
-                _conf_huruf = 0
-                
-                try:
-                    _cell_text = pytesseract.image_to_string(
-                        _cell_img,
-                        config="--psm 7 -c tessedit_char_whitelist=PSMOCA0123456789-~fF",
-                    ).strip()
-                    
-                    if _cell_text:
-                        _kode_huruf, _conf_huruf = _huruf_to_kode(_cell_text)
-                except Exception:
-                    pass
-                
-                # ============================================
-                # VOTING SYSTEM
-                # ============================================
-                _kode_final = None
-                _confidence = "LOW"
-                _sumber = ""
-                
-                if _kode_warna and _kode_huruf:
-                    if _kode_warna == _kode_huruf:
-                        # ✅ 2 vote SAMA — HIGH confidence
-                        _kode_final = _kode_warna
-                        _confidence = "HIGH"
-                        _sumber = "warna+huruf"
-                    else:
-                        # ⚠️ 2 vote BEDA — pilih warna (biasanya lebih akurat)
-                        _kode_final = _kode_warna
-                        _confidence = "MEDIUM"
-                        _sumber = f"warna ({_kode_warna}) vs huruf ({_kode_huruf})"
-                elif _kode_warna:
-                    # 1 vote — warna aja
-                    _kode_final = _kode_warna
-                    _confidence = "MEDIUM"
-                    _sumber = "warna"
-                elif _kode_huruf:
-                    # 1 vote — huruf aja
-                    _kode_final = _kode_huruf
-                    _confidence = "MEDIUM"
-                    _sumber = "huruf"
-                
-                # Debug info
-                _debug_info = {
-                    "row": _row,
-                    "col": _col,
-                    "rgb": (_median_r, _median_g, _median_b),
-                    "warna_detect": _kode_warna,
-                    "huruf_detect": _kode_huruf,
-                    "final": _kode_final,
-                    "confidence": _confidence,
-                    "sumber": _sumber,
-                }
-                _debug_cells.append(_debug_info)
-                
-                # Add ke result kalau ada kode
-                if _kode_final:
-                    _tanggal_list.append({
-                        "row": _row,
-                        "col": _col,
-                        "kode": _kode_final,
-                        "confidence": _confidence,
-                        "sumber": _sumber,
-                        "rgb": (_median_r, _median_g, _median_b),
-                    })
+        for _line in _lines:
+            _line_clean = _line.strip()
+            if not _line_clean:
+                continue
+            
+            # Cari shift di baris ini
+            _shift_matches = re.findall(
+                r'(S15|M22|P7|O|C|AO)',
+                _line_clean,
+                re.IGNORECASE
+            )
+            
+            # Cari tanggal di baris ini
+            _tgl_matches = re.findall(_pattern_tanggal, _line_clean)
+            
+            if _shift_matches:
+                _shift_per_baris.append(_shift_matches)
+            
+            if _tgl_matches:
+                for _t in _tgl_matches:
+                    _t_int = int(_t)
+                    if 1 <= _t_int <= 31:
+                        _tanggal_found.append(_t_int)
         
-        print(f"[OCR v3] Cells analyzed: {len(_debug_cells)}")
-        print(f"[OCR v3] Cells with kode: {len(_tanggal_list)}")
+        # Deduplicate & sort tanggal
+        _tanggal_found = sorted(set(_tanggal_found))
+        print(f"[OCR v4] Tanggal: {_tanggal_found}")
+        print(f"[OCR v4] Shift per baris: {_shift_per_baris}")
         
         # ============================================
-        # 4. POST-PROCESSING: AUTO-FILL TANGGAL
+        # MATCHING TANGGAL + SHIFT
         # ============================================
-        # Sekarang kita perlu mapping row/col → tanggal
+        # Asumsi: shift_per_baris dalam urutan
+        # Baris 1: tgl 1-7, Baris 2: 8-14, dst.
         
-        # Untuk sementara, kasih "tanggal" sequential berdasarkan urutan
-        # Nanti user bisa koreksi manual
-        for _idx, _item in enumerate(_tanggal_list):
-            _item["tanggal_int"] = _idx + 1
+        # Flatten semua shift
+        _all_shift = []
+        for _shifts in _shift_per_baris:
+            _all_shift.extend([s.upper() for s in _shifts])
+        
+        # Map tiap shift ke tanggal
+        for _idx, _kode in enumerate(_all_shift):
+            if _idx < len(_tanggal_found):
+                _tanggal_list.append({
+                    "tanggal_int": _tanggal_found[_idx],
+                    "kode": _kode,
+                    "confidence": "MEDIUM",
+                    "sumber": "text",
+                })
+        
+        print(f"[OCR v4] Result: {len(_tanggal_list)} shifts")
         
         return {
             "success": True,
             "tanggal_list": _tanggal_list,
-            "debug_cells": _debug_cells,
+            "tanggal_detected": _tanggal_found,
+            "all_shift": _all_shift,
             "raw_text": _text_full,
             "error": "",
         }
@@ -374,7 +294,6 @@ def ocr_kalender_screenshot(image_bytes):
             "raw_text": "",
             "error": str(e)[:200],
         }
-
 
 # =========================================================
 # 🧠 PARSER: KALENDER → SHIFT MAP
