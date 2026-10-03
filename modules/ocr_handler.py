@@ -264,23 +264,32 @@ def _group_by_row(items, tolerance=25):
 # 🔍 PAIR TANGGAL & KODE
 # =========================================================
 def _pair_tanggal_kode(tanggal_items, kode_items):
-    """Pair tanggal & kode via grid logic."""
+    """
+    Pair tanggal & kode berdasarkan POSISI X (kolom).
+    
+    Asumsi:
+    - Tanggal & kode ada di BARIS yang berbeda (tanggal di atas, kode di bawah)
+    - Pasangan tanggal-kode ada di X yang sama (kolom yang sama)
+    """
     _pairs = []
     
     if not tanggal_items or not kode_items:
         return _pairs
     
-    _tgl_rows = _group_by_row(tanggal_items)
-    _kode_rows = _group_by_row(kode_items)
+    # Group per baris Y
+    _tgl_rows = _group_by_row(tanggal_items, tolerance=25)
+    _kode_rows = _group_by_row(kode_items, tolerance=25)
     
-    print(f"[PAIR] Tgl rows: {len(_tgl_rows)}, Kode rows: {len(_kode_rows)}")
+    print(f"[PAIR v16] Tgl rows: {len(_tgl_rows)}, Kode rows: {len(_kode_rows)}")
     
+    # Untuk setiap baris tanggal, cari baris kode di bawahnya
     for _tgl_row in _tgl_rows:
         if not _tgl_row:
             continue
         
         _tgl_y = _tgl_row[0]["y_center"]
         
+        # Cari kode row paling dekat di bawah (dy 5-150)
         _best_kode_row = None
         _best_dy = 999999
         
@@ -297,11 +306,27 @@ def _pair_tanggal_kode(tanggal_items, kode_items):
         if _best_kode_row is None:
             continue
         
-        for _i, _tgl_item in enumerate(_tgl_row):
-            if _i < len(_best_kode_row):
+        # ✅ FIX: Pair by X-POSITION (kolom), bukan index!
+        # Untuk setiap tanggal, cari kode yang paling dekat X-nya
+        for _tgl_item in _tgl_row:
+            _tgl_x = _tgl_item["x_center"]
+            
+            _best_kode = None
+            _best_dx = 999999
+            
+            for _kode_item in _best_kode_row:
+                _kode_x = _kode_item["x_center"]
+                _dx = abs(_kode_x - _tgl_x)
+                
+                # Kode harus di X yang dekat (tolerance 40px)
+                if _dx < 40 and _dx < _best_dx:
+                    _best_dx = _dx
+                    _best_kode = _kode_item["kode"]
+            
+            if _best_kode:
                 _pairs.append({
                     "tanggal": _tgl_item["tanggal"],
-                    "kode": _best_kode_row[_i]["kode"],
+                    "kode": _best_kode,
                 })
     
     # Deduplicate
