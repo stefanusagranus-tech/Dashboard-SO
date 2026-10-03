@@ -1083,46 +1083,105 @@ elif st.session_state["shift_sub_tab"] == "screenshot":
         )
 
         if _uploaded_file:
-            # Preview gambar
+            st.markdown("---")
+            st.markdown("#### 🔧 Kalibrasi Area Kalender")
+            st.caption("💡 Atur slider sampai kotak hijau pas dengan area kalender")
+            
+            # Init calib di session
+            _calib_key = f"calib_{_uploaded_file.name}"
+            if _calib_key not in st.session_state:
+                st.session_state[_calib_key] = {
+                    "x_start": 0, "x_end": 1000,
+                    "y_start": 0, "y_end": 1500,
+                }
+            
+            _calib = st.session_state[_calib_key]
+            
+            # Ambil size image (via PIL)
+            from PIL import Image as PILImage
+            _img_preview = PILImage.open(io.BytesIO(_uploaded_file.getvalue()))
+            _img_w, _img_h = _img_preview.size
+            
+            # Slider kalibrasi
+            col_c1, col_c2 = st.columns(2)
+            
+            with col_c1:
+                _calib["x_start"] = st.slider(
+                    "⬅️ X Start", 0, _img_w, _calib.get("x_start", 0),
+                    key=f"xs_{_uploaded_file.name}"
+                )
+                _calib["x_end"] = st.slider(
+                    "➡️ X End", 0, _img_w, _calib.get("x_end", _img_w),
+                    key=f"xe_{_uploaded_file.name}"
+                )
+            
+            with col_c2:
+                _calib["y_start"] = st.slider(
+                    "⬆️ Y Start", 0, _img_h, _calib.get("y_start", 0),
+                    key=f"ys_{_uploaded_file.name}"
+                )
+                _calib["y_end"] = st.slider(
+                    "⬇️ Y End", 0, _img_h, _calib.get("y_end", _img_h),
+                    key=f"ye_{_uploaded_file.name}"
+                )
+            
+            st.session_state[_calib_key] = _calib
+            
+            # Tombol preview kalibrasi
+            if st.button("👁️ PREVIEW KALIBRASI", use_container_width=True, key="btn_calib_preview"):
+                with st.spinner("⏳ Generate annotated image..."):
+                    from modules.ocr_handler import ocr_debug_visual
+                    _annotated, _items = ocr_debug_visual(
+                        _uploaded_file.getvalue(),
+                        calib=_calib,
+                    )
+                    
+                    if _annotated:
+                        st.image(
+                            _annotated,
+                            caption="🟢 Tanggal | 🔵 Kode | 🔴 Noise | ⬜ Area Luar (abu-abu)",
+                            use_container_width=True,
+                        )
+                        st.success(f"✅ {len(_items)} items terdeteksi")
+                    else:
+                        st.error("❌ Gagal generate annotated image")
+            
+            st.markdown("---")
+            
+            # Preview gambar asli
             st.image(
                 _uploaded_file,
                 caption=f"Preview: {_uploaded_file.name}",
                 use_container_width=True,
             )
-
-            # Tombol proses OCR
+            
+            # Tombol proses
             col_p1, col_p2 = st.columns([2, 1])
             with col_p1:
                 _btn_proses_ocr = st.button(
-                    "🔍 PROSES OCR",
+                    "🔍 PROSES OCR (dengan kalibrasi)",
                     use_container_width=True,
                     type="primary",
                     key="btn_ocr_proses",
                 )
             with col_p2:
-                if st.button(
-                    "🗑️ Clear",
-                    use_container_width=True,
-                    key="btn_ocr_clear",
-                ):
+                if st.button("🗑️ Clear", use_container_width=True, key="btn_ocr_clear"):
                     st.session_state["ocr_result"] = None
                     st.rerun()
-
+            
             if _btn_proses_ocr:
-                with st.spinner("⏳ Membaca screenshot..."):
-                    # Read image bytes
-                    _img_bytes = _uploaded_file.getvalue()
-
-                    # OCR
-                    _ocr_result = ocr_kalender_screenshot(_img_bytes)
-
-                    # Parse
+                with st.spinner("⏳ OCR..."):
+                    from modules.ocr_handler import ocr_kalender_screenshot
+                    _ocr_result = ocr_kalender_screenshot(
+                        _uploaded_file.getvalue(),
+                        calib=_calib,
+                    )
+                    
                     if _ocr_result["success"]:
+                        from modules.ocr_handler import parse_kalender_ke_shift
                         _parsed_ocr = parse_kalender_ke_shift(
                             _ocr_result["tanggal_list"],
-                            _bulan_ocr,
-                            _tahun_ocr,
-                            _nama_pilih,
+                            _bulan_ocr, _tahun_ocr, _nama_pilih,
                         )
                         st.session_state["ocr_result"] = {
                             "ocr": _ocr_result,
@@ -1138,7 +1197,6 @@ elif st.session_state["shift_sub_tab"] == "screenshot":
                             "error": _ocr_result.get("error", "Gagal OCR"),
                         }
                     st.rerun()
-
         # ============================================================
         # LANGKAH 3: PREVIEW HASIL OCR
         # ============================================================
