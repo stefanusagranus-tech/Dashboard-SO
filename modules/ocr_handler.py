@@ -1,21 +1,23 @@
 """
-OCR Handler v14
+OCR Handler v15
 ==============
-- Fuzzy matching kode (fix OCR errors)
-- Fix mapping tanggal (og→09, l1→11)
-- Grid-based pairing (kelompok per baris)
-- Tanpa filter Y
+KALIBRASI MODE:
+- Tampil semua text + koordinat X,Y
+- Annotated image
+- Slider kalibrasi X/Y
+- Save/load preset kalibrasi
 """
 
 import io
 import re
+import json
 import pandas as pd
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
 try:
     import pytesseract
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont
     import numpy as np
     TESSERACT_AVAILABLE = True
 except ImportError as e:
@@ -24,121 +26,56 @@ except ImportError as e:
 
 
 # =========================================================
-# 🎨 FUZZY MAPPING KODE (OCR sering salah baca)
+# 🎨 FUZZY MAPPING
 # =========================================================
 HURUF_FUZZY_MAP = {
-    "P": "P",   # Pagi
-    "S": "S",   # Siang
-    "M": "M",   # Malam
-    "D": "D",   # Dini Hari
-    "H": "HP",  # Hari Pendek
-    "O": "O",   # Off
-    "0": "O",   # OCR salah baca O jadi 0
-    "Q": "O",   # OCR salah baca O jadi Q
-    "C": "C",   # Cuti
-    "L": "L",   # Libur / Long
-    "I": "I",   # Izin
-    "1": "I",   # OCR salah baca I jadi 1
-    "A": "AO",  # Additional
-    "R": "RO",  # Replace
-    "E": "EO",  # Extra
-    "K": "SK",  # Sakit
+    "P": "P", "S": "S", "M": "M", "D": "D",
+    "H": "HP", "O": "O", "0": "O", "Q": "O",
+    "C": "C", "L": "L", "I": "I", "1": "I",
+    "A": "AO", "R": "RO", "E": "EO", "K": "SK",
 }
-
 VALID_2_HURUF = ["HP", "AO", "RO", "EO", "LO", "SK"]
 
-
-# =========================================================
-# 🎨 FIX MAPPING TANGGAL (OCR errors)
-# =========================================================
 TANGGAL_FIX_MAP = {
-    "og": "09",
-    "o9": "09",
-    "o0": "10",
-    "l0": "10",
-    "l1": "11",
-    "ll": "11",
-    "il": "11",
-    "l2": "12",
-    "l3": "13",
-    "l4": "14",
-    "l5": "15",
-    "l6": "16",
-    "l7": "17",
-    "l8": "18",
-    "l9": "19",
-    "2o": "20",
-    "2l": "21",
-    "2z": "22",
-    "2s": "25",
-    "2b": "26",
-    "2t": "27",
-    "2g": "29",
-    "3o": "30",
-    "3l": "31",
-    "3i": "31",
-    "l": "1",
-    "i": "1",
-    "z": "2",
-    "s": "5",
-    "b": "6",
-    "g": "9",
-    "o": "0",
+    "og": "09", "o9": "09", "o0": "10", "l0": "10",
+    "l1": "11", "ll": "11", "il": "11", "l2": "12",
+    "l3": "13", "l4": "14", "l5": "15", "l6": "16",
+    "l7": "17", "l8": "18", "l9": "19", "2o": "20",
+    "2l": "21", "2z": "22", "2s": "25", "2b": "26",
+    "2t": "27", "2g": "29", "3o": "30", "3l": "31",
+    "l": "1", "i": "1", "z": "2", "s": "5",
+    "b": "6", "g": "9", "o": "0",
 }
 
 
 # =========================================================
-# 🔤 EKSTRAK KODE DARI TEXT (FUZZY)
+# 🔤 EKSTRAK KODE (FUZZY)
 # =========================================================
 def _extract_kode_from_text(text):
-    """
-    Ekstrak kode dari text dengan FUZZY matching.
-    """
     if not text:
         return None
-    
-    _text = str(text).upper().strip()
-    _text_clean = re.sub(r'[^A-Z0-9]', '', _text)
-    
+    _text_clean = re.sub(r'[^A-Z0-9]', '', str(text).upper())
     if not _text_clean:
         return None
-    
-    # Cek 2 huruf dulu
     _first_2 = _text_clean[:2]
     if _first_2 in VALID_2_HURUF:
         return _first_2
-    
-    # Fuzzy: cek huruf pertama
     _first_1 = _text_clean[:1]
     if _first_1 in HURUF_FUZZY_MAP:
         return HURUF_FUZZY_MAP[_first_1]
-    
     return None
 
 
-# =========================================================
-# 🔤 FIX TEXT TANGGAL
-# =========================================================
 def _fix_tanggal_text(text):
-    """
-    Fix OCR error di text tanggal.
-    """
     if not text:
         return None
-    
-    _text = str(text).lower().strip()
-    _text_clean = re.sub(r'[^a-z0-9]', '', _text)
-    
+    _text_clean = re.sub(r'[^a-z0-9]', '', str(text).lower())
     if not _text_clean:
         return None
-    
-    # Kalau udah angka valid
     if re.match(r'^\d{1,2}$', _text_clean):
         _tgl = int(_text_clean)
         if 1 <= _tgl <= 31:
             return _tgl
-    
-    # Cek fix map
     if _text_clean in TANGGAL_FIX_MAP:
         try:
             _tgl = int(TANGGAL_FIX_MAP[_text_clean])
@@ -146,7 +83,6 @@ def _fix_tanggal_text(text):
                 return _tgl
         except:
             pass
-    
     return None
 
 
@@ -154,7 +90,7 @@ def _fix_tanggal_text(text):
 # 🔍 OCR WITH COORDINATES
 # =========================================================
 def _ocr_with_coords(image):
-    """OCR gambar, return list of {text, x, y, w, h, conf}."""
+    """OCR gambar, return list of {text, x, y, w, h, conf, jenis}."""
     try:
         _data = pytesseract.image_to_data(
             image,
@@ -168,69 +104,146 @@ def _ocr_with_coords(image):
     _items = []
     for _i in range(len(_data["text"])):
         _text = _data["text"][_i].strip()
-        _conf = _data["conf"][_i]
-        
-        if not _text:
-            continue
         try:
-            _conf_int = int(float(_conf))
+            _conf = int(float(_data["conf"][_i]))
         except:
-            _conf_int = 0
+            _conf = 0
         
-        if _conf_int < 20:
+        if not _text or _conf < 20:
             continue
+        
+        _x = int(_data["left"][_i])
+        _y = int(_data["top"][_i])
+        _w = int(_data["width"][_i])
+        _h = int(_data["height"][_i])
+        
+        # Deteksi jenis
+        _tgl = _fix_tanggal_text(_text)
+        _kode = _extract_kode_from_text(_text)
+        
+        if _tgl:
+            _jenis = "TANGGAL"
+        elif _kode:
+            _jenis = "KODE"
+        else:
+            _jenis = "NOISE"
         
         _items.append({
             "text": _text,
-            "x": int(_data["left"][_i]),
-            "y": int(_data["top"][_i]),
-            "w": int(_data["width"][_i]),
-            "h": int(_data["height"][_i]),
-            "conf": _conf_int,
-            "x_center": int(_data["left"][_i]) + int(_data["width"][_i]) // 2,
-            "y_center": int(_data["top"][_i]) + int(_data["height"][_i]) // 2,
+            "x": _x,
+            "y": _y,
+            "w": _w,
+            "h": _h,
+            "conf": _conf,
+            "x_center": _x + _w // 2,
+            "y_center": _y + _h // 2,
+            "x_end": _x + _w,
+            "y_end": _y + _h,
+            "jenis": _jenis,
+            "tanggal": _tgl,
+            "kode": _kode,
         })
     
     return _items
 
 
 # =========================================================
-# 🔍 PISAHKAN TANGGAL & KODE
+# 🎨 ANNOTATED IMAGE (VISUAL KALIBRASI)
 # =========================================================
-def _separate_tanggal_kode(ocr_items):
-    """Pisahkan tanggal & kode dengan fuzzy fix."""
-    _tanggal_items = []
-    _kode_items = []
+def ocr_debug_visual(image_bytes, calib=None):
+    """
+    Gambar annotated dengan kotak warna + info X,Y.
     
-    for _item in ocr_items:
-        _text = _item["text"].strip()
+    Args:
+        image_bytes: bytes gambar
+        calib: dict {x_start, x_end, y_start, y_end} untuk highlight area
+    """
+    if not TESSERACT_AVAILABLE:
+        return None
+    
+    try:
+        _img = Image.open(io.BytesIO(image_bytes))
+        if _img.mode != "RGB":
+            _img = _img.convert("RGB")
         
-        # Cek tanggal (fuzzy)
-        _tgl = _fix_tanggal_text(_text)
-        if _tgl:
-            _tanggal_items.append({
-                **_item,
-                "tanggal": _tgl,
-            })
-            continue
+        _w, _h = _img.size
+        _items = _ocr_with_coords(_img)
+        _draw = ImageDraw.Draw(_img)
         
-        # Cek kode shift (fuzzy)
-        _kode = _extract_kode_from_text(_text)
-        if _kode:
-            _kode_items.append({
-                **_item,
-                "kode": _kode,
-            })
+        # Highlight area kalibrasi
+        if calib:
+            _x1 = calib.get("x_start", 0)
+            _x2 = calib.get("x_end", _w)
+            _y1 = calib.get("y_start", 0)
+            _y2 = calib.get("y_end", _h)
+            
+            # Area terpilih = hijau
+            _draw.rectangle([_x1, _y1, _x2, _y2], outline=(0, 255, 0), width=4)
+            
+            # Area di luar = abu-abu transparan (draw garis tepi doang)
+            _draw.rectangle([0, 0, _w, _y1], fill=(100, 100, 100))
+            _draw.rectangle([0, _y2, _w, _h], fill=(100, 100, 100))
+            _draw.rectangle([0, _y1, _x1, _y2], fill=(100, 100, 100))
+            _draw.rectangle([_x2, _y1, _w, _y2], fill=(100, 100, 100))
+        
+        # Draw tiap item
+        for _item in _items:
+            _x1 = _item["x"]
+            _y1 = _item["y"]
+            _x2 = _item["x_end"]
+            _y2 = _item["y_end"]
+            
+            # Warna per jenis
+            if _item["jenis"] == "TANGGAL":
+                _color = (0, 255, 0)      # hijau
+            elif _item["jenis"] == "KODE":
+                _color = (0, 150, 255)    # biru
+            else:
+                _color = (255, 100, 100)  # merah
+            
+            _draw.rectangle([_x1, _y1, _x2, _y2], outline=_color, width=2)
+            
+            # Label dengan X,Y
+            _label = f"{_item['text'][:8]} ({_x1},{_y1})"
+            _draw.text((_x1, max(0, _y1 - 12)), _label, fill=_color)
+        
+        return _img, _items
     
-    # Sort by y, lalu x
-    _tanggal_items = sorted(_tanggal_items, key=lambda x: (x["y_center"], x["x_center"]))
-    _kode_items = sorted(_kode_items, key=lambda x: (x["y_center"], x["x_center"]))
-    
-    return _tanggal_items, _kode_items
+    except Exception as e:
+        print(f"[DEBUG VISUAL ERROR] {e}")
+        return None, []
 
 
 # =========================================================
-# 🔍 KELOMPOKKAN PER BARIS (ROW)
+# 🎯 FILTER BERDASARKAN KALIBRASI
+# =========================================================
+def filter_items_by_calib(items, calib):
+    """
+    Filter items berdasarkan kalibrasi X/Y.
+    """
+    if not calib:
+        return items
+    
+    _x_start = calib.get("x_start", 0)
+    _x_end = calib.get("x_end", 99999)
+    _y_start = calib.get("y_start", 0)
+    _y_end = calib.get("y_end", 99999)
+    
+    _filtered = []
+    for _item in items:
+        _xc = _item["x_center"]
+        _yc = _item["y_center"]
+        
+        if _x_start <= _xc <= _x_end and _y_start <= _yc <= _y_end:
+            _filtered.append(_item)
+    
+    return _filtered
+
+
+# === BAGIAN 2 MULAI ===
+
+# =========================================================
+# 🔍 KELOMPOKKAN PER BARIS
 # =========================================================
 def _group_by_row(items, tolerance=25):
     """Kelompokkan item berdasarkan Y (baris)."""
@@ -238,24 +251,17 @@ def _group_by_row(items, tolerance=25):
     
     for _item in items:
         _y = _item["y_center"]
-        
-        # Cari existing row
         _match_y = None
         for _existing_y in _groups.keys():
             if abs(_existing_y - _y) < tolerance:
                 _match_y = _existing_y
                 break
-        
         if _match_y is None:
             _match_y = _y
             _groups[_match_y] = []
-        
         _groups[_match_y].append(_item)
     
-    # Sort by Y
     _sorted_y = sorted(_groups.keys())
-    
-    # Sort item dalam tiap row by X
     _rows = []
     for _y in _sorted_y:
         _row = sorted(_groups[_y], key=lambda x: x["x_center"])
@@ -267,34 +273,27 @@ def _group_by_row(items, tolerance=25):
 # =========================================================
 # 🔍 PAIR TANGGAL & KODE (GRID-BASED)
 # =========================================================
-def _pair_tanggal_kode(tanggal_items, kode_items, mode="hp"):
+def _pair_tanggal_kode(tanggal_items, kode_items):
     """
-    Pair dengan grid logic:
-    - Kelompokkan tanggal per baris (row)
-    - Kelompokkan kode per baris (row)
-    - Untuk tiap baris tanggal, cari baris kode di bawah
-    - Pair by index (urutan X)
+    Pair tanggal & kode via grid logic.
     """
     _pairs = []
     
     if not tanggal_items or not kode_items:
         return _pairs
     
-    # Kelompokkan per baris
     _tgl_rows = _group_by_row(tanggal_items)
     _kode_rows = _group_by_row(kode_items)
     
-    print(f"[PAIR] Tanggal rows: {len(_tgl_rows)}")
-    print(f"[PAIR] Kode rows: {len(_kode_rows)}")
+    print(f"[PAIR] Tgl rows: {len(_tgl_rows)}, Kode rows: {len(_kode_rows)}")
     
-    # Untuk setiap baris tanggal, cari baris kode terdekat di bawahnya
     for _tgl_row in _tgl_rows:
         if not _tgl_row:
             continue
         
         _tgl_y = _tgl_row[0]["y_center"]
         
-        # Cari kode row yang Y-nya > tgl_y (di bawah)
+        # Cari kode row di bawah (dy > 5, tapi < 150)
         _best_kode_row = None
         _best_dy = 999999
         
@@ -304,7 +303,7 @@ def _pair_tanggal_kode(tanggal_items, kode_items, mode="hp"):
             _kode_y = _kode_row[0]["y_center"]
             _dy = _kode_y - _tgl_y
             
-            if _dy > 5 and _dy < _best_dy:
+            if 5 < _dy < 150 and _dy < _best_dy:
                 _best_dy = _dy
                 _best_kode_row = _kode_row
         
@@ -328,33 +327,16 @@ def _pair_tanggal_kode(tanggal_items, kode_items, mode="hp"):
     return list(_unique.values())
 
 
-# === BAGIAN 2 MULAI ===
-
 # =========================================================
-# 🔍 DETEKSI MODE
+# 🔍 OCR UTAMA v15 — KALIBRASI MODE
 # =========================================================
-def _detect_mode(ocr_items):
-    """Deteksi mode: desktop atau hp."""
-    _full_text = " ".join([item["text"] for item in ocr_items]).upper()
-    
-    # Desktop: ada pattern "S15-SIANG", "M22-MALAM", dll
-    if re.search(r'[A-Z]\d{1,2}[\-~][A-Z]{3,}', _full_text):
-        return "desktop"
-    
-    # Desktop: ada keyword "SIANG"/"MALAM"/"PAGI"/"OFF"
-    if any(kw in _full_text for kw in ["SIANG", "MALAM", "PAGI", "OFF", "CUTI"]):
-        return "desktop"
-    
-    # Default: HP
-    return "hp"
-
-
-# =========================================================
-# 🔍 OCR UTAMA v14
-# =========================================================
-def ocr_kalender_screenshot(image_bytes):
+def ocr_kalender_screenshot(image_bytes, calib=None):
     """
-    OCR v14 — Fuzzy matching + grid-based pairing.
+    OCR v15 — Kalibrasi mode.
+    
+    Args:
+        image_bytes: bytes gambar
+        calib: dict {x_start, x_end, y_start, y_end} atau None
     """
     if not TESSERACT_AVAILABLE:
         return {
@@ -370,64 +352,46 @@ def ocr_kalender_screenshot(image_bytes):
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
-        print(f"[OCR v14] Image: {_w}x{_h}")
+        print(f"[OCR v15] Image: {_w}x{_h}")
         
-        # OCR dengan koordinat
-        _items = _ocr_with_coords(_img)
-        print(f"[OCR v14] Items detected: {len(_items)}")
+        # OCR
+        _all_items = _ocr_with_coords(_img)
+        print(f"[OCR v15] Total items: {len(_all_items)}")
         
-        # TANPA FILTER Y — ambil semua
-        _kalender_items = _items
+        # Filter berdasarkan kalibrasi
+        _kalender_items = filter_items_by_calib(_all_items, calib) if calib else _all_items
+        print(f"[OCR v15] After filter: {len(_kalender_items)}")
         
-        # Deteksi mode
-        _mode = _detect_mode(_kalender_items)
-        print(f"[OCR v14] Mode: {_mode}")
+        # Pisahkan
+        _tanggal_items = [i for i in _kalender_items if i["jenis"] == "TANGGAL"]
+        _kode_items = [i for i in _kalender_items if i["jenis"] == "KODE"]
         
-        # Pisahkan tanggal & kode
-        _tanggal_items, _kode_items = _separate_tanggal_kode(_kalender_items)
-        print(f"[OCR v14] Tanggal items: {len(_tanggal_items)}")
-        print(f"[OCR v14] Kode items: {len(_kode_items)}")
+        print(f"[OCR v15] Tanggal: {len(_tanggal_items)}, Kode: {len(_kode_items)}")
         
         # Pair
-        _pairs = _pair_tanggal_kode(_tanggal_items, _kode_items, mode=_mode)
-        print(f"[OCR v14] Pairs: {len(_pairs)}")
+        _pairs = _pair_tanggal_kode(_tanggal_items, _kode_items)
+        print(f"[OCR v15] Pairs: {len(_pairs)}")
         
         # Build tanggal_list
         _tanggal_list = []
-        _debug_items = []
-        
         for _pair in _pairs:
             _tanggal_list.append({
                 "tanggal_int": _pair["tanggal"],
                 "kode": _pair["kode"],
                 "confidence": "MEDIUM",
-                "sumber": f"koordinat_{_mode}",
-            })
-        
-        # Debug: semua item
-        for _item in _kalender_items:
-            _is_tgl = bool(re.match(r'^\d{1,2}$', _item["text"].strip()))
-            _is_kode = _extract_kode_from_text(_item["text"]) is not None
-            
-            _debug_items.append({
-                "text": _item["text"],
-                "x": _item["x"],
-                "y": _item["y"],
-                "conf": _item["conf"],
-                "jenis": "TANGGAL" if _is_tgl else ("KODE" if _is_kode else "NOISE"),
+                "sumber": "koordinat",
             })
         
         # Raw text
-        _raw_text = "\n".join([item["text"] for item in _kalender_items])
+        _raw_text = "\n".join([i["text"] for i in _kalender_items])
         
         return {
             "success": True,
             "tanggal_list": _tanggal_list,
-            "debug_cells": _debug_items,
-            "mode": _mode,
-            "kolom_detected": 0,
-            "baris_detected": 0,
-            "kalender_area": (0, _h),
+            "debug_cells": _kalender_items,
+            "all_items": _all_items,
+            "image_size": (_w, _h),
+            "calib_used": calib,
             "raw_text": _raw_text,
             "error": "",
         }
@@ -441,52 +405,6 @@ def ocr_kalender_screenshot(image_bytes):
             "raw_text": "",
             "error": str(e)[:200],
         }
-
-
-# =========================================================
-# 🎨 OCR DEBUG VISUAL (ANNOTATED IMAGE)
-# =========================================================
-def ocr_debug_visual(image_bytes):
-    """
-    OCR + gambar annotated (kotak di tiap text).
-    """
-    if not TESSERACT_AVAILABLE:
-        return None
-    
-    try:
-        _img = Image.open(io.BytesIO(image_bytes))
-        if _img.mode != "RGB":
-            _img = _img.convert("RGB")
-        
-        _items = _ocr_with_coords(_img)
-        _draw = ImageDraw.Draw(_img)
-        
-        for _item in _items:
-            _x1 = _item["x"]
-            _y1 = _item["y"]
-            _x2 = _x1 + _item["w"]
-            _y2 = _y1 + _item["h"]
-            _text = _item["text"]
-            
-            # Deteksi jenis
-            _is_tgl = bool(re.match(r'^\d{1,2}$', _text.strip()))
-            _kode = _extract_kode_from_text(_text)
-            
-            if _is_tgl:
-                _color = (0, 255, 0)      # hijau: tanggal
-            elif _kode:
-                _color = (0, 150, 255)    # biru: kode
-            else:
-                _color = (255, 100, 100)  # merah: noise
-            
-            _draw.rectangle([_x1, _y1, _x2, _y2], outline=_color, width=2)
-            _draw.text((_x1, max(0, _y1 - 12)), _text[:15], fill=_color)
-        
-        return _img
-    
-    except Exception as e:
-        print(f"[DEBUG VISUAL ERROR] {e}")
-        return None
 
 
 # =========================================================
@@ -506,9 +424,6 @@ def parse_kalender_ke_shift(tanggal_list, bulan, tahun, nama):
     
     for _item in tanggal_list:
         try:
-            if not isinstance(_item, dict):
-                continue
-            
             _kode = _item.get("kode")
             _tgl_num = _item.get("tanggal_int")
             
@@ -525,7 +440,6 @@ def parse_kalender_ke_shift(tanggal_list, bulan, tahun, nama):
                 continue
             
             _shift_map[_tgl.isoformat()] = _kode
-        
         except Exception as _e:
             print(f"[PARSE ERROR] {_e}")
             continue
@@ -605,11 +519,8 @@ def log_ocr_upload(nama, bulan, tahun, file_name, ocr_result, uploaded_by=""):
 # 🎨 HELPER
 # =========================================================
 def get_palette_info():
-    """Return info fuzzy mapping."""
+    """Return fuzzy mapping info."""
     _info = []
     for _kode, _val in HURUF_FUZZY_MAP.items():
-        _info.append({
-            "Karakter OCR": _kode,
-            "Kode Hasil": _val,
-        })
+        _info.append({"OCR Char": _kode, "Kode": _val})
     return pd.DataFrame(_info)
