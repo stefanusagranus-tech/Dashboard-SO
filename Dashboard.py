@@ -568,6 +568,128 @@ def render_dashboard():
         return
     
     # ============================================================
+    # 👥 SHIFT HARI INI (dari Master Shift)
+    # ============================================================
+    _shift_today_ada = False
+    try:
+        from modules.master_shift_handler import get_shift_hari_ini, KODE_SHIFT
+        
+        _shift_today = get_shift_hari_ini()
+        
+        if _shift_today:
+            _shift_today_ada = True
+            st.markdown("### 👥 Personil Shift Hari Ini")
+            
+            # Group by kode shift
+            _grouped = {}
+            for _nama, _kode in _shift_today.items():
+                if _kode not in _grouped:
+                    _grouped[_kode] = []
+                _grouped[_kode].append(_nama)
+            
+            # Urutan kode
+            _urutan_kode = ["P7", "S15", "M22", "O", "C", "AO"]
+            _cols_shift = st.columns(4)
+            
+            _col_idx = 0
+            for _kode in _urutan_kode:
+                if _kode not in _grouped:
+                    continue
+                
+                _info = KODE_SHIFT.get(_kode, {
+                    "label": _kode, "warna": "#CCCCCC", "icon": "❓"
+                })
+                _nama_list = _grouped[_kode]
+                _nama_str = ", ".join(sorted(_nama_list))
+                
+                with _cols_shift[_col_idx % 4]:
+                    st.markdown(
+                        f"<div style='"
+                        f"background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));"
+                        f"border: 2px solid {_info['warna']};"
+                        f"border-left: 5px solid {_info['warna']};"
+                        f"border-radius: 12px;"
+                        f"padding: 14px 16px;"
+                        f"margin-bottom: 10px;"
+                        f"box-shadow: 0 4px 12px rgba(0,0,0,0.4);"
+                        f"'>"
+                        f"<div style='"
+                        f"font-family: JetBrains Mono, monospace;"
+                        f"font-size: 11px;"
+                        f"color: {_info['warna']};"
+                        f"letter-spacing: 1.5px;"
+                        f"font-weight: 900;"
+                        f"margin-bottom: 8px;"
+                        f"'>"
+                        f"{_info['icon']} {_info['label'].upper()}"
+                        f"</div>"
+                        f"<div style='"
+                        f"font-family: Quicksand, sans-serif;"
+                        f"font-size: 12px;"
+                        f"color: #e8f3ee;"
+                        f"font-weight: 700;"
+                        f"line-height: 1.5;"
+                        f"'>"
+                        f"{_nama_str}"
+                        f"</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                
+                _col_idx += 1
+            
+            st.markdown("---")
+    
+    except ImportError:
+        pass
+    except Exception as _e_shift:
+        print(f"[SHIFT TODAY ERROR] {_e_shift}")
+    
+    # ============================================================
+    # ✅ REMINDER kalau belum ada shift hari ini
+    # ============================================================
+    if not _shift_today_ada:
+        st.markdown(
+            "<div style='"
+            "background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.20));"
+            "border: 2px solid #fbbf24;"
+            "border-left: 5px solid #fbbf24;"
+            "border-radius: 12px;"
+            "padding: 14px 18px;"
+            "margin-bottom: 16px;"
+            "box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);"
+            "'>"
+            "<div style='"
+            "font-family: JetBrains Mono, monospace;"
+            "font-size: 12px;"
+            "font-weight: 900;"
+            "color: #fcd34d;"
+            "letter-spacing: 1px;"
+            "'>"
+            "⚠️ BELUM ADA SHIFT HARI INI"
+            "</div>"
+            "<div style='"
+            "font-family: Quicksand, sans-serif;"
+            "font-size: 11px;"
+            "color: #fde68a;"
+            "margin-top: 6px;"
+            "line-height: 1.5;"
+            "'>"
+            "Jadwal shift belum di-set. "
+            "Buka halaman <b>📅 Master Shift</b> untuk update jadwal, "
+            "atau ketik langsung via Chat AI."
+            "</div>"
+            "</div>",
+            unsafe_allow_html=True
+        )
+
+# ============================================================
+# METRIC HARI INI
+# ============================================================
+st.markdown("### 📊 Ringkasan Hari Ini")
+...
+    
+    # ============================================================
     # METRIC HARI INI
     # ============================================================
     st.markdown("### 📊 Ringkasan Hari Ini")
@@ -1209,6 +1331,58 @@ def render_dashboard():
         if st.button("📥 Download", key="btn_menu_download", use_container_width=True):
             go_to_page("download")
     
+    # ✅ Menu BARU: MASTER SHIFT
+    st.markdown("---")
+    st.markdown("### 📅 Menu Master Shift")
+    
+    col_menu5, col_menu6 = st.columns(2)
+    
+    with col_menu5:
+        st.markdown("""
+        <div style='
+            background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
+            border: 2px solid #a855f7;
+            border-radius: 12px;
+            padding: 20px 16px;
+            text-align: center;
+            margin-bottom: 8px;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+        '>
+            <div style='font-size: 42px; margin-bottom: 10px; 
+                        filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.7));'>📅</div>
+            <div style='
+                font-family: "Cinzel", serif;
+                font-size: 14px;
+                font-weight: 900;
+                color: #a855f7;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                margin-bottom: 6px;
+            '>Master Shift</div>
+            <div style='
+                font-family: "Quicksand", sans-serif;
+                font-size: 10px;
+                color: #7a9b8e;
+                line-height: 1.5;
+            '>Kelola jadwal shift<br>dengan Chat AI</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button(
+            "📅 Buka Master Shift",
+            key="btn_menu_master_shift",
+            use_container_width=True,
+            type="primary",
+        ):
+            try:
+                st.switch_page("pages/master_shift.py")
+            except Exception as e:
+                st.error(f"⚠️ Gagal pindah: {e}")
+    
+    with col_menu6:
+        # Placeholder kosong atau menu lain di masa depan
+        st.markdown("<br>", unsafe_allow_html=True)
+        
     render_copyright()
 
 
@@ -1219,13 +1393,20 @@ def render_input_harian():
     """Render halaman input harian: SPD + SO rak (multiple)."""
     render_royal_header(show_clock=True)
     
-    # Back button
-    col_back, _ = st.columns([1, 4])
+    # Back button + Master Shift shortcut
+    col_back, col_shift_shortcut, _ = st.columns([1, 1, 3])
     with col_back:
         if st.button("← Dashboard", key="btn_back_from_input"):
             st.session_state["selected_rak_list"] = []
             st.session_state["last_loaded_date"] = None
             go_to_page("dashboard")
+    
+    with col_shift_shortcut:
+        if st.button("📅 Master Shift", key="btn_shortcut_master_shift"):
+            try:
+                st.switch_page("pages/master_shift.py")
+            except Exception as e:
+                st.error(f"⚠️ {e}")
     
     st.markdown("### 📝 Input Harian")
     st.caption("Input SPD & SO rak dalam 1 form — bisa edit data yang sudah ada")
@@ -1444,11 +1625,31 @@ def render_input_harian():
             placeholder="Contoh: Barang rusak, dll",
             key="input_keterangan"
         )
+    
     with col_k2:
+        # ✅ AUTO-FILL PIC dari shift hari ini
+        _default_pic = st.session_state.get("input_pic", "")
+        
+        try:
+            from modules.master_shift_handler import get_shift_hari_ini, KODE_SHIFT
+            _shift_today_pic = get_shift_hari_ini(_tanggal)
+            
+            # Ambil nama yang shift P7/S15/M22 (bukan O/C/AO)
+            _personil_aktif = [
+                nama for nama, kode in _shift_today_pic.items()
+                if kode in ["P7", "S15", "M22"]
+            ]
+            
+            if _personil_aktif:
+                _default_pic = ", ".join(_personil_aktif[:3])  # Max 3 nama
+        except Exception:
+            pass
+        
         _pic = st.text_input(
-            "👤 PIC (Nama)",
+            "👤 PIC (Nama) — auto dari shift",
+            value=_default_pic,
             placeholder="Nama penanggung jawab",
-            key="input_pic"
+            key="input_pic_autofill"
         )
     
     st.markdown("---")
