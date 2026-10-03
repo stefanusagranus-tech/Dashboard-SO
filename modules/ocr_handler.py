@@ -223,7 +223,7 @@ def _huruf_to_kode(text):
 # =========================================================
 def ocr_kalender_screenshot(image_bytes):
     """
-    OCR screenshot v10 — Deteksi kalender dari area BERWARNA solid.
+    OCR screenshot v11 — Skip header, cari kalender dari warna solid.
     """
     if not TESSERACT_AVAILABLE:
         return {"success": False, "tanggal_list": [], "raw_text": "", "error": "Tesseract tidak tersedia"}
@@ -234,7 +234,7 @@ def ocr_kalender_screenshot(image_bytes):
             _img = _img.convert("RGB")
         
         _w, _h = _img.size
-        print(f"[OCR v10] Image: {_w}x{_h}")
+        print(f"[OCR v11] Image: {_w}x{_h}")
         
         _text_full = pytesseract.image_to_string(_img, config="--psm 6")
         
@@ -242,45 +242,86 @@ def ocr_kalender_screenshot(image_bytes):
         _grayscale = np.mean(_np_img, axis=2)
         
         # ============================================
-        # 1. CARI BARIS DENGAN WARNA SOLID
+        # 1. CARI AREA KALENDER: ABAIKAN HEADER PUTIH
         # ============================================
-        # Baris dianggap "berwarna" kalau ada banyak pixel warna (bukan putih/abu)
+        # Baris dianggap "warna kalender" kalau:
+        # - Ada warna SOLID (bukan putih) di 30-80% area (khas kalender grid)
+        # - BUKAN baris full warna (khas header merah)
+        
         _is_white = _grayscale > 240
-        _is_colored = ~_is_white
+        _colored_pct = 1 - np.mean(_is_white, axis=1)
         
-        # Hitung pixel berwarna per baris
-        _colored_pct = np.mean(_is_colored, axis=1)
+        # Kalender: colored_pct antara 0.3-0.85 (warna sedang)
+        # Header: colored_pct > 0.85 (warna full)
+        # Info: colored_pct < 0.3 (putih semua)
         
-        # Cari baris yang colored_pct > 0.3 (30% pixel berwarna)
-        _color_rows = np.where(_colored_pct > 0.3)[0]
+        _kalender_mask = (_colored_pct > 0.25) & (_colored_pct < 0.80)
         
-        print(f"[OCR v10] Baris berwarna: {len(_color_rows)}")
+        print(f"[OCR v11] Baris berwarna sedang: {np.sum(_kalender_mask)}")
         
-        if len(_color_rows) < 10:
-            print(f"[OCR v10] ERROR: gak cukup baris berwarna")
+        # Cari KELOMPOK baris berwarna sedang (minimal 100 baris berturut-turut)
+        _kalender_rows = np.where(_kalender_mask)[0]
+        
+        if len(_kalender_rows) < 20:
+            print(f"[OCR v11] ERROR: gak cukup baris kalender")
             return {"success": False, "tanggal_list": [], "raw_text": _text_full, "error": "Kalender gak ke-detect"}
         
-        # Kalender area = range dari baris warna pertama sampai terakhir
-        _kalender_start = int(_color_rows.min())
-        _kalender_end = int(_color_rows.max())
+        # Cari cluster terbesar
+        _clusters = []
+        _cluster_start = _kalender_rows[0]
+        _prev = _kalender_rows[0]
         
-        print(f"[OCR v10] Kalender area: y={_kalender_start}-{_kalender_end}")
+        for _r in _kalender_rows[1:]:
+            if _r - _prev > 15:  # gap 15px → cluster baru
+                _clusters.append((_cluster_start, _prev))
+                _cluster_start = _r
+            _prev = _r
+        _clusters.append((_cluster_start, _prev))
+        
+        # Ambil cluster terbesar
+        _clusters = sorted(_clusters, key=lambda x: x[1]-x[0], reverse=True)
+        _kalender_start, _kalender_end = _clusters[0]
+        
+        print(f"[OCR v11] Kalender area: y={_kalender_start}-{_kalender_end} (h={_kalender_end - _kalender_start})")
         
         # ============================================
-        # 2. BAGI GRID 7 KOLOM × N BARIS
+        # 2. AUTO-DETECT JUMLAH BARIS KALENDER
         # ============================================
+        # Cari "dip" (jarak antar baris kalender) untuk deteksi jumlah baris
+        _row_density_region = _colored_pct[_kalender_start:_kalender_end]
+        
+        # Smooth
+        _kernel = np.ones(10) / 10
+        _row_density_smooth = np.convolve(_row_density_region, _kernel, mode='same')
+        
+        # Cari gap (density < 0.2) → pemisah antar baris
+        _gap_rows = np.where(_row_density_smooth < 0.15)[0]
+        
+        # Hitung jumlah baris kalender
+        if len(_gap_rows) > 0:
+            _gaps_grouped = []
+            _gap_start = _gap_rows[0]
+            _prev_gap = _gap_rows[0]
+            for _g in _gap_rows[1:]:
+                if _g - _prev_gap > 10:
+                    _gaps_grouped.append((_gap_start, _prev_gap))
+                    _gap_start = _g
+                _prev_gap = _g
+            _gaps_grouped.append((_gap_start, _prev_gap))
+            
+            _grid_rows = min(len(_gaps_grouped) + 1, 6)
+        else:
+            _grid_rows = 5
+        
+        # Kalau kurang dari 4, fallback
+        if _grid_rows < 4:
+            _grid_rows = 5
+        
         _grid_cols = 7
+        
+        print(f"[OCR v11] Grid: {_grid_cols}×{_grid_rows}")
+        
         _kalender_h = _kalender_end - _kalender_start
-        
-        # Estimasi jumlah baris: dari tinggi & lebar cell
-        _cell_w_est = _w // _grid_cols
-        _cell_h_est = _cell_w_est  # Asumsi cell kotak
-        
-        _grid_rows_est = max(4, _kalender_h // _cell_h_est)
-        _grid_rows = min(6, _grid_rows_est)
-        
-        print(f"[OCR v10] Grid estimasi: {_grid_cols}×{_grid_rows}")
-        
         _cell_w = _w // _grid_cols
         _cell_h = _kalender_h // _grid_rows
         
@@ -303,16 +344,9 @@ def ocr_kalender_screenshot(image_bytes):
                 if _cell_np.size == 0:
                     continue
                 
-                # Cek apakah cell punya warna
-                _cell_gray = np.mean(_cell_np, axis=2)
-                _cell_colored_pct = np.mean(_cell_gray < 240)
-                
-                if _cell_colored_pct < 0.3:
-                    continue
-                
-                # Sample warna MEDIAN (bukan mean) — biar gak ketarik putih
+                # Cek warna dominant
                 _flat = _cell_np.reshape(-1, 3)
-                # Filter: skip pixel putih
+                # Skip pixel putih
                 _non_white = _flat[~((_flat[:, 0] > 240) & (_flat[:, 1] > 240) & (_flat[:, 2] > 240))]
                 
                 if len(_non_white) == 0:
@@ -324,7 +358,7 @@ def ocr_kalender_screenshot(image_bytes):
                 
                 _kode_warna, _conf_warna, _dist = _rgb_to_kode_v2(_r_val, _g_val, _b_val)
                 
-                # Text OCR
+                # OCR text
                 _kode_huruf = None
                 _text_cell = ""
                 try:
@@ -343,13 +377,13 @@ def ocr_kalender_screenshot(image_bytes):
                     _kode_final = _kode_warna
                     _confidence = "HIGH" if _conf_warna > 70 else "MEDIUM"
                     _sumber = "warna"
-                if _kode_huruf and not _kode_final:
+                    if _kode_huruf and _kode_huruf == _kode_warna:
+                        _confidence = "HIGH"
+                        _sumber = "huruf+warna"
+                elif _kode_huruf:
                     _kode_final = _kode_huruf
                     _confidence = "MEDIUM"
                     _sumber = "huruf"
-                elif _kode_huruf and _kode_warna and _kode_huruf == _kode_warna:
-                    _confidence = "HIGH"
-                    _sumber = "huruf+warna"
                 
                 _debug_info.append({
                     "row": _r_idx,
@@ -372,8 +406,8 @@ def ocr_kalender_screenshot(image_bytes):
                         "sumber": _sumber,
                     })
         
-        print(f"[OCR v10] Cells analyzed: {len(_debug_info)}")
-        print(f"[OCR v10] Detected: {len(_tanggal_list)} cells")
+        print(f"[OCR v11] Cells analyzed: {len(_debug_info)}")
+        print(f"[OCR v11] Detected: {len(_tanggal_list)} cells")
         
         return {
             "success": True,
