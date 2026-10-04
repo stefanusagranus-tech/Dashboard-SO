@@ -19,6 +19,12 @@ import pandas as pd
 import time
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+from themes.theme_loader import (
+    render_theme,
+    render_theme_auto,
+    render_theme_animations,
+    get_theme_by_month,
+)
 
 # =========================================================================
 # KONFIGURASI HALAMAN
@@ -33,390 +39,11 @@ st.set_page_config(
 # =========================================================================
 # CUSTOM CSS — EMERALD & COPPER
 # =========================================================================
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Quicksand:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700;900&display=swap');
-
-    [data-testid="stSidebar"],
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stHeader"],
-    [data-testid="stToolbar"],
-    [data-testid="stDecoration"],
-    .stDeployButton,
-    #MainMenu,
-    footer {
-        display: none !important;
-    }
-
-    :root {
-        --emerald-deep: #004D3B;
-        --emerald: #0F8A72;
-        --emerald-light: #7FB99B;
-        --copper: #B87333;
-        --copper-light: #E8B189;
-        --bg-dark: #0a1612;
-        --bg-dark-2: #0d1f1a;
-        --text-light: #e8f3ee;
-        --text-muted: #7a9b8e;
-    }
-
-    .stApp {
-        background: 
-            radial-gradient(circle at 20% 0%, #0F8A72 0%, transparent 50%),
-            radial-gradient(circle at 80% 100%, #B87333 0%, transparent 50%),
-            linear-gradient(180deg, #050d0a 0%, #0a1612 50%, #050d0a 100%);
-        background-attachment: fixed;
-        color: var(--text-light);
-        font-family: 'Quicksand', sans-serif;
-    }
-
-    .main .block-container {
-        padding: 1rem 1.5rem 6rem 1.5rem !important;
-        max-width: 1400px !important;
-    }
-
-    ::-webkit-scrollbar { width: 10px; height: 10px; }
-    ::-webkit-scrollbar-track { background: #050d0a; }
-    ::-webkit-scrollbar-thumb {
-        background: linear-gradient(180deg, var(--emerald), var(--copper));
-        border-radius: 5px;
-        border: 2px solid #050d0a;
-    }
-
-    h1, h2, h3, h4 {
-        font-family: 'Cinzel', serif !important;
-        color: var(--copper-light) !important;
-        letter-spacing: 1.5px;
-        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
-    }
-    p, span, div { color: var(--text-light); }
-
-    .royal-header {
-        position: relative;
-        background: linear-gradient(135deg, #050d0a 0%, #0F8A72 50%, #050d0a 100%);
-        border: 3px double var(--copper);
-        border-radius: 18px;
-        padding: 24px 32px;
-        margin-bottom: 24px;
-        box-shadow: 0 0 40px rgba(184, 115, 51, 0.35), inset 0 0 30px rgba(0, 0, 0, 0.7);
-        overflow: hidden;
-    }
-    .royal-header::before {
-        content: "";
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, transparent, var(--copper) 20%, var(--copper-light) 50%, var(--copper) 80%, transparent);
-        box-shadow: 0 0 15px rgba(232, 177, 137, 0.9);
-    }
-    .royal-title {
-        font-family: 'Cinzel', serif;
-        font-size: 28px;
-        font-weight: 900;
-        color: var(--copper-light);
-        text-align: center;
-        margin: 0;
-        letter-spacing: 3px;
-        text-shadow: 0 0 20px rgba(232, 177, 137, 0.7), 0 2px 8px rgba(0, 0, 0, 0.8);
-    }
-    .royal-subtitle {
-        font-family: 'Quicksand', sans-serif;
-        font-size: 12px;
-        color: var(--emerald-light);
-        text-align: center;
-        margin-top: 6px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-    }
-    .royal-ornament {
-        position: absolute;
-        color: var(--copper);
-        font-size: 16px;
-        opacity: 0.85;
-        filter: drop-shadow(0 0 5px rgba(184, 115, 51, 0.9));
-    }
-    .royal-orn-tl { top: 8px; left: 12px; }
-    .royal-orn-tr { top: 8px; right: 12px; }
-    .royal-orn-bl { bottom: 8px; left: 12px; }
-    .royal-orn-br { bottom: 8px; right: 12px; }
-
-    .header-clock {
-        text-align: center;
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px dashed rgba(232, 177, 137, 0.3);
-    }
-    .clock-time {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 20px;
-        font-weight: 900;
-        color: var(--copper-light);
-        letter-spacing: 3px;
-        text-shadow: 0 0 12px rgba(232, 177, 137, 0.6);
-    }
-    .clock-date {
-        font-family: 'Quicksand', sans-serif;
-        font-size: 10px;
-        color: var(--emerald-light);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        margin-top: 4px;
-    }
-
-    .metric-card-v2 {
-        position: relative;
-        background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
-        border: 2px solid var(--copper);
-        border-radius: 14px;
-        padding: 18px 20px;
-        margin-bottom: 12px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
-        overflow: hidden;
-        transition: all 0.3s ease;
-    }
-    .metric-card-v2::before {
-        content: "";
-        position: absolute;
-        top: 0; left: 0;
-        width: 5px; height: 100%;
-        background: var(--accent-color, var(--copper));
-        box-shadow: 0 0 15px var(--accent-color, var(--copper));
-    }
-    .metric-card-v2:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 25px var(--accent-color, rgba(184, 115, 51, 0.4));
-    }
-    .metric-label-v2 {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 10px;
-        font-weight: 700;
-        color: var(--text-muted);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-    }
-    .metric-value-v2 {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 28px;
-        font-weight: 900;
-        color: var(--copper-light);
-        text-shadow: 0 0 15px rgba(232, 177, 137, 0.5);
-        line-height: 1.1;
-        word-wrap: break-word;
-    }
-    .metric-sub-v2 {
-        font-family: 'Quicksand', sans-serif;
-        font-size: 10px;
-        color: var(--text-muted);
-        margin-top: 6px;
-        font-weight: 600;
-    }
-
-    .menu-card-v2 {
-        position: relative;
-        background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
-        border: 2px solid var(--copper);
-        border-radius: 16px;
-        padding: 24px 18px;
-        text-align: center;
-        transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
-        cursor: pointer;
-        min-height: 180px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        overflow: hidden;
-        margin-bottom: 10px;
-    }
-    .menu-card-v2:hover {
-        border-color: var(--accent-color, var(--copper));
-        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7), 0 0 30px var(--accent-glow, rgba(184, 115, 51, 0.5));
-        transform: translateY(-6px) scale(1.02);
-    }
-    .menu-icon-v2 {
-        font-size: 48px;
-        margin-bottom: 12px;
-        filter: drop-shadow(0 0 15px var(--accent-glow, rgba(184, 115, 51, 0.7)));
-    }
-    .menu-title-v2 {
-        font-family: 'Cinzel', serif;
-        font-size: 14px;
-        font-weight: 900;
-        color: var(--copper-light);
-        letter-spacing: 2px;
-        margin-bottom: 6px;
-        text-transform: uppercase;
-    }
-    .menu-desc-v2 {
-        font-family: 'Quicksand', sans-serif;
-        font-size: 10px;
-        color: var(--text-muted);
-        line-height: 1.5;
-    }
-
-    div.stButton > button {
-        background: linear-gradient(135deg, #0a1612 0%, #0d1f1a 100%) !important;
-        color: var(--copper-light) !important;
-        border: 2px solid var(--copper) !important;
-        border-radius: 10px !important;
-        font-family: 'Cinzel', serif !important;
-        font-weight: 700 !important;
-        font-size: 12px !important;
-        padding: 10px 16px !important;
-        letter-spacing: 1px !important;
-        text-transform: uppercase !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
-        width: 100% !important;
-        min-height: 44px !important;
-    }
-    div.stButton > button:hover {
-        background: linear-gradient(135deg, var(--emerald) 0%, var(--copper) 100%) !important;
-        color: #ffffff !important;
-        border-color: var(--copper-light) !important;
-        box-shadow: 0 0 20px rgba(232, 177, 137, 0.7) !important;
-        transform: translateY(-2px) !important;
-    }
-
-    div.stFormSubmitButton > button {
-        background: linear-gradient(135deg, var(--emerald) 0%, var(--copper) 100%) !important;
-        color: #ffffff !important;
-        border: 2px solid var(--copper-light) !important;
-        border-radius: 12px !important;
-        font-family: 'Cinzel', serif !important;
-        font-weight: 900 !important;
-        font-size: 14px !important;
-        padding: 14px 20px !important;
-        letter-spacing: 2px !important;
-        text-transform: uppercase !important;
-        min-height: 54px !important;
-    }
-
-    div[data-testid="stDataFrame"] {
-        border: 2px solid var(--copper) !important;
-        border-radius: 12px !important;
-        overflow: hidden !important;
-    }
-
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="select"] > div {
-        background-color: rgba(10, 22, 18, 0.95) !important;
-        border: 2px solid var(--copper) !important;
-        border-radius: 10px !important;
-        min-height: 44px !important;
-    }
-    div[data-baseweb="input"] input,
-    div[data-baseweb="select"] span {
-        color: var(--copper-light) !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        font-weight: 700 !important;
-    }
-    label, div[data-testid="stWidgetLabel"] label {
-        color: var(--text-muted) !important;
-        font-family: 'Quicksand', sans-serif !important;
-        font-weight: 700 !important;
-        font-size: 11px !important;
-        letter-spacing: 1px !important;
-        text-transform: uppercase !important;
-    }
-
-    hr {
-        border: none !important;
-        height: 2px !important;
-        background: linear-gradient(90deg, transparent, var(--copper) 50%, transparent) !important;
-        margin: 20px 0 !important;
-    }
-
-    .rak-result-card {
-        background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
-        border: 2px solid var(--emerald);
-        border-radius: 10px;
-        padding: 10px 14px;
-        margin-bottom: 6px;
-        transition: all 0.25s ease;
-    }
-    .rak-result-card:hover {
-        border-color: var(--copper-light);
-        background: linear-gradient(135deg, rgba(15, 31, 26, 0.98), rgba(15, 138, 114, 0.3));
-    }
-    .rak-result-id {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-        font-weight: 900;
-        color: var(--copper-light);
-        letter-spacing: 1px;
-    }
-    .rak-result-name {
-        font-family: 'Quicksand', sans-serif;
-        font-size: 10px;
-        color: var(--text-muted);
-        margin-top: 2px;
-    }
-
-    .copyright-footer {
-        text-align: center;
-        margin-top: 60px;
-        padding-top: 20px;
-        border-top: 1px dashed rgba(232, 177, 137, 0.3);
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 10px;
-        color: var(--text-muted);
-        letter-spacing: 1.5px;
-    }
-
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
-
-    @media (max-width: 768px) {
-        .royal-title { font-size: 18px; letter-spacing: 1.5px; }
-        .royal-subtitle { font-size: 9px; }
-        .royal-header { padding: 16px 20px; }
-        .clock-time { font-size: 16px; }
-        .clock-date { font-size: 9px; }
-        .metric-value-v2 { font-size: 22px; }
-        .menu-card-v2 { min-height: 150px; padding: 16px 12px; }
-        .menu-icon-v2 { font-size: 38px; }
-        .menu-title-v2 { font-size: 12px; }
-        .main .block-container { padding: 0.5rem 1rem 5rem 1rem !important; }
-    }
-    /* Expander Custom Style */
-    div[data-testid="stExpander"] {
-        background: linear-gradient(135deg, rgba(10, 22, 18, 0.95), rgba(15, 31, 26, 0.92)) !important;
-        border: 2px solid #B87333 !important;
-        border-radius: 12px !important;
-        overflow: hidden !important;
-        margin-bottom: 12px !important;
-    }
-    div[data-testid="stExpander"] summary {
-        background: linear-gradient(90deg, rgba(15, 138, 114, 0.2) 0%, rgba(184, 115, 51, 0.2) 100%) !important;
-        color: #E8B189 !important;
-        font-family: 'Cinzel', serif !important;
-        font-weight: 900 !important;
-        font-size: 13px !important;
-        letter-spacing: 1.5px !important;
-        padding: 14px 18px !important;
-        border-bottom: 1px dashed rgba(232, 177, 137, 0.3) !important;
-        cursor: pointer !important;
-        transition: all 0.3s ease !important;
-    }
-    div[data-testid="stExpander"] summary:hover {
-        background: linear-gradient(90deg, rgba(15, 138, 114, 0.4) 0%, rgba(184, 115, 51, 0.4) 100%) !important;
-        box-shadow: 0 0 15px rgba(232, 177, 137, 0.4) !important;
-    }
-    div[data-testid="stExpander"] summary svg {
-        color: #E8B189 !important;
-        fill: #E8B189 !important;
-    }
-    div[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
-        padding: 16px !important;
-        background: rgba(5, 13, 10, 0.5) !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+# 🎃 Load theme (auto by month)
+CURRENT_THEME = get_theme_by_month()
+render_theme(CURRENT_THEME)
+# 🎨 Render animasi sesuai tema
+render_theme_animations(CURRENT_THEME)
 
 # =========================================================================
 # SESSION STATE
@@ -472,20 +99,16 @@ modules/
 # HELPER FUNCTIONS
 # =========================================================================
 def render_royal_header(show_clock=True):
-    """Render header banner royal dengan jam & tanggal (tanpa detik)."""
+    """Render header banner dengan emoji Halloween."""
     _now = datetime.now(ZoneInfo("Asia/Jakarta"))
     _time_str = _now.strftime("%H:%M")
     
-    _day_map = {
-        "Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
-        "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu"
-    }
-    _month_map = {
-        "January": "Januari", "February": "Februari", "March": "Maret",
-        "April": "April", "May": "Mei", "June": "Juni", "July": "Juli",
-        "August": "Agustus", "September": "September", "October": "Oktober",
-        "November": "November", "December": "Desember"
-    }
+    _day_map = {"Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
+                "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu"}
+    _month_map = {"January": "Januari", "February": "Februari", "March": "Maret",
+                  "April": "April", "May": "Mei", "June": "Juni", "July": "Juli",
+                  "August": "Agustus", "September": "September", "October": "Oktober",
+                  "November": "November", "December": "Desember"}
     _day_id = _day_map.get(_now.strftime("%A"), _now.strftime("%A"))
     _month_id = _month_map.get(_now.strftime("%B"), _now.strftime("%B"))
     _date_id = f"{_day_id}, {_now.day} {_month_id} {_now.year}"
@@ -495,17 +118,17 @@ def render_royal_header(show_clock=True):
         _clock_html = (
             "<div class='header-clock'>"
             "<div class='clock-time'>🕐 " + _time_str + " WIB</div>"
-            "<div class='clock-date'>📅 " + _date_id + "</div>"
+            "<div class='clock-date'>🎃 " + _date_id + " 👻</div>"
             "</div>"
         )
     
     _header_html = (
         "<div class='royal-header fade-in-up'>"
-        "<div class='royal-ornament royal-orn-tl'>⚜</div>"
-        "<div class='royal-ornament royal-orn-tr'>⚜</div>"
-        "<div class='royal-ornament royal-orn-bl'>⚜</div>"
-        "<div class='royal-ornament royal-orn-br'>⚜</div>"
-        "<div class='royal-title'>DASHBOARD STOCK OPNAME</div>"
+        "<div class='royal-ornament royal-orn-tl'>🎃</div>"
+        "<div class='royal-ornament royal-orn-tr'>👻</div>"
+        "<div class='royal-ornament royal-orn-bl'>🦇</div>"
+        "<div class='royal-ornament royal-orn-br'>🕷️</div>"
+        "<div class='royal-title'>🎃 DASHBOARD STOCK OPNAME 🎃</div>"
         "<div class='royal-subtitle'>⚜ Toko C383 - Karang Satria ⚜</div>"
         + _clock_html +
         "</div>"
@@ -513,12 +136,10 @@ def render_royal_header(show_clock=True):
     
     st.markdown(_header_html, unsafe_allow_html=True)
 
-
 def render_copyright():
-    """Render footer copyright."""
     st.markdown("""
     <div class='copyright-footer'>
-        ⚜ Dashboard SO KGS V.1 ⚜
+        🎃 Dashboard SO KGS V.2 — Halloween Edition 👻
     </div>
     """, unsafe_allow_html=True)
 
