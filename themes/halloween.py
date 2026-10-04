@@ -607,3 +607,4 @@ def get_css():
         overscroll-behavior-y: contain;
     }
 </style>
+"""
