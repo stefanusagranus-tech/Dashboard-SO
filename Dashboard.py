@@ -21,9 +21,10 @@ from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from themes.theme_loader import (
     render_theme,
-    render_theme_auto,
     render_theme_animations,
+    render_greeting,
     get_theme_by_month,
+    debug_theme,
 )
 
 # =========================================================================
@@ -40,10 +41,11 @@ st.set_page_config(
 # CUSTOM CSS — EMERALD & COPPER
 # =========================================================================
 # 🎃 Load theme (auto by month)
+# 🎃 Load theme (auto by month + time variant)
 CURRENT_THEME = get_theme_by_month()
 render_theme(CURRENT_THEME)
-# 🎨 Render animasi sesuai tema
 render_theme_animations(CURRENT_THEME)
+render_greeting()
 
 # =========================================================================
 # SESSION STATE
