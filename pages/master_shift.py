@@ -21,8 +21,8 @@ from zoneinfo import ZoneInfo
 from PIL import Image as PILImage   
 from themes.theme_loader import (
     render_theme,
-    render_theme_auto,
     render_theme_animations,
+    render_greeting,
     get_theme_by_month,
 )
 
@@ -39,10 +39,10 @@ st.set_page_config(
 # =========================================================================
 # CUSTOM CSS — SAMA DENGAN DASHBOARD UTAMA
 # =========================================================================
-# 🎃 Load theme (auto by month)
 CURRENT_THEME = get_theme_by_month()
 render_theme(CURRENT_THEME)
 render_theme_animations(CURRENT_THEME)
+render_greeting()
 
 # =========================================================================
 # IMPORT MODULE
