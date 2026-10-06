@@ -428,13 +428,20 @@ def render_usage_dashboard():
             plot_bgcolor="rgba(10, 22, 18, 0.4)",
             paper_bgcolor="rgba(0,0,0,0)",
             font=dict(color="#E8B189", family="JetBrains Mono", size=10),
-            xaxis=dict(gridcolor="rgba(232, 177, 137, 0.15)"),
-            yaxis=dict(gridcolor="rgba(232, 177, 137, 0.15)"),
+            xaxis=dict(
+                gridcolor="rgba(232, 177, 137, 0.15)",
+                type="category",       # ✅ Paksa kategori (biar gak auto-scale)
+                tickmode="array",
+                tickvals=_dates,
+                ticktext=_dates,
+            ),
+            yaxis=dict(
+                gridcolor="rgba(232, 177, 137, 0.15)",
+                rangemode="tozero",     # ✅ Mulai dari 0
+                dtick=1,                # ✅ Step 1 (biar integer)
+            ),
             legend=dict(font=dict(color="#E8B189")),
         )
-        st.plotly_chart(_fig, use_container_width=True, key="chart_usage_trend")
-    except Exception as _e:
-        st.warning(f"⚠️ Chart gagal render: {_e}")
 
     st.markdown("---")
 
