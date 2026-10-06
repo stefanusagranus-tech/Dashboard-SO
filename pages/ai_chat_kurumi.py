@@ -2,15 +2,7 @@
 AI Chat Kurumi — Chief of Staff (AI-0)
 ========================================
 Halaman chat fullscreen untuk Kurumi.
-
-Karakter: Tokisaki Kurumi (Date A Live) — versi ramah kerja.
-- "Ara, ara~" — verbal tic
-- "Kihihihi~" — tawa khas
-- "Watashi" — first person
-- Panggil user "Tuan"
-- Elegan, misterius, manis
-
-Tugas: sapaan, rangkum laporan, kirim laporan.
+Persona: Tokisaki Kurumi (versi ramah kerja).
 """
 
 import streamlit as st
@@ -55,7 +47,7 @@ except ImportError as e:
 
 
 # =========================================================================
-# CSS — ROOM CHAT
+# CSS — ROOM CHAT (FIX WARNA TEXT)
 # =========================================================================
 def inject_chat_css():
     st.markdown("""
@@ -68,7 +60,7 @@ def inject_chat_css():
             display: none !important;
         }
 
-        /* Full width */
+        /* Full width container */
         .main .block-container {
             max-width: 100% !important;
             padding-left: 2rem !important;
@@ -76,32 +68,66 @@ def inject_chat_css():
             padding-top: 1rem !important;
         }
 
-        /* Chat bubble custom */
+        /* === CHAT BUBBLE === */
         [data-testid="stChatMessage"] {
-            padding: 0.75rem 1rem !important;
-            margin-bottom: 0.5rem !important;
+            padding: 0.85rem 1.2rem !important;
+            margin-bottom: 0.6rem !important;
             border-radius: 16px !important;
             backdrop-filter: blur(8px) !important;
         }
 
-        /* User bubble — kanan */
+        /* Paksa warna text di dalam chat message */
+        [data-testid="stChatMessage"] p,
+        [data-testid="stChatMessage"] span,
+        [data-testid="stChatMessage"] div,
+        [data-testid="stChatMessage"] li,
+        [data-testid="stChatMessage"] strong,
+        [data-testid="stChatMessage"] em,
+        [data-testid="stChatMessage"] h1,
+        [data-testid="stChatMessage"] h2,
+        [data-testid="stChatMessage"] h3,
+        [data-testid="stChatMessage"] h4 {
+            color: #F5E6D3 !important;
+        }
+
+        /* Text markdown biasa */
+        [data-testid="stChatMessage"] .stMarkdown,
+        [data-testid="stChatMessage"] .stMarkdown * {
+            color: #F5E6D3 !important;
+        }
+
+        /* === USER BUBBLE (KANAN) === */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
-            background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(232, 177, 137, 0.15)) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.4) !important;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(232, 177, 137, 0.20)) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
             margin-left: 20% !important;
         }
 
-        /* Assistant bubble — kiri */
+        /* === ASSISTANT BUBBLE (KIRI) === */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.6), rgba(76, 29, 149, 0.4)) !important;
-            border: 1.5px solid rgba(168, 85, 247, 0.5) !important;
+            background: linear-gradient(135deg, rgba(30, 20, 60, 0.85), rgba(76, 29, 149, 0.65)) !important;
+            border: 1.5px solid rgba(168, 85, 247, 0.6) !important;
             margin-right: 20% !important;
+        }
+
+        /* Avatar border */
+        [data-testid="chatAvatarIcon-assistant"] {
+            background: linear-gradient(135deg, #a855f7, #E8B189) !important;
         }
 
         /* Tombol action */
         div[data-testid="stHorizontalBlock"] button {
             border-radius: 12px !important;
             font-weight: 700 !important;
+        }
+
+        /* Chat input */
+        [data-testid="stChatInputContainer"] textarea {
+            color: #F5E6D3 !important;
+            background: rgba(30, 20, 60, 0.6) !important;
+        }
+        [data-testid="stChatInputContainer"] textarea::placeholder {
+            color: rgba(245, 230, 211, 0.5) !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -111,7 +137,7 @@ inject_chat_css()
 
 
 # =========================================================================
-# HEADER KURUMI
+# HEADER
 # =========================================================================
 def render_kurumi_header():
     _now = datetime.now(ZoneInfo("Asia/Jakarta"))
@@ -181,6 +207,11 @@ if not st.session_state["kurumi_history"]:
         "Fufufu~ Ada yang bisa aku bantu hari ini, Tuan? "
         "Tuan bisa langsung ngobrol santai, atau pilih tombol di bawah~ 🎀"
     )
+    st.session_state["kurumi_history"].append({
+        "role": "assistant",
+        "content": _welcome,
+    })
+
 
 # =========================================================================
 # TOOLBAR — 2 TOMBOL ACTION
@@ -204,13 +235,13 @@ st.markdown("---")
 
 
 # =========================================================================
-# MODE RANGKUM — Pilih Periode
+# MODE RANGKUM
 # =========================================================================
 if st.session_state["kurumi_mode"] == "rangkum":
     st.markdown("#### 🎀 Kurumi Bertanya...")
 
     _q_msg = (
-        "Ara, ara~ Tuan mau Watashi rangkum yang mana nih? 🎀\n\n"
+        "Ara, ara~ Tuan mau aku rangkum yang mana nih? 🎀\n\n"
         "Pilih salah satu di bawah ya~"
     )
     st.info(_q_msg)
@@ -240,7 +271,7 @@ if st.session_state["kurumi_mode"] == "rangkum":
             "content": f"Rangkum {_label} dong~",
         })
 
-        with st.spinner(f"🎀 Watashi rangkum {_label}..."):
+        with st.spinner(f"🎀 Aku rangkum {_label}..."):
             _summary = kurumi_summarize(period=_choice)
 
         st.session_state["kurumi_history"].append({
@@ -256,7 +287,7 @@ if st.session_state["kurumi_mode"] == "rangkum":
 
 
 # =========================================================================
-# MODE REPORT — Pilih Format
+# MODE REPORT
 # =========================================================================
 if st.session_state["kurumi_mode"] == "report":
     st.markdown("#### 🎀 Kurumi Bertanya...")
@@ -286,7 +317,7 @@ if st.session_state["kurumi_mode"] == "report":
         _fmt = st.session_state["kurumi_report_choice"]
         _fmt_label = {"text": "TEXT", "pdf": "PDF", "excel": "EXCEL"}[_fmt]
 
-        with st.spinner(f"🎀 Watashi buat laporan {_fmt_label}..."):
+        with st.spinner(f"🎀 Aku buat laporan {_fmt_label}..."):
             _report = kurumi_generate_report(period="hari", format=_fmt)
 
         if _report["success"]:
@@ -309,6 +340,8 @@ if st.session_state["kurumi_mode"] == "report":
             st.rerun()
 
     st.markdown("---")
+
+
 # =========================================================================
 # RENDER CHAT HISTORY
 # =========================================================================
@@ -333,7 +366,7 @@ if _user_msg:
         st.markdown(_user_msg)
 
     with st.chat_message("assistant", avatar="🎀"):
-        with st.spinner("🎀 Watashi lagi mikir..."):
+        with st.spinner("🎀 Aku lagi mikir..."):
             _resp = kurumi_chat_response(_user_msg, st.session_state["kurumi_history"])
 
         st.markdown(_resp)
