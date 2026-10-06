@@ -1061,8 +1061,9 @@ def kurumi_generate_report_custom(tanggal, format="text"):
 # =========================================================
 def _generate_report_worker(label, start_date, end_date, format, filename_suffix, ctx):
     """Generate report + convert ke format. Pakai REPORT CONTEXT (hemat)."""
-    _tgl = _now_jkt().date()
-
+    _now = _now_jkt()          # ✅ full datetime
+    _tgl = _now.date()         # ✅ tanggal aja (buat kompatibilitas)
+    
     # ✅ PAKE PROMPT FORMAL (bukan Kurumi persona)
     _prompt = f"""{_build_report_system_prompt()}
 
