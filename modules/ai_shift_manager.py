@@ -445,4 +445,411 @@ Output HANYA JSON.
             "engine": f"groq ({_model})",
             "ai_reasoning": _data.get("reasoning", ""),
         },
+    } 
+# =========================================================
+# 🔧 ENHANCED RULE-BASED PARSER
+# =========================================================
+_STOPWORDS = {
+    "hari", "ini", "besok", "bsk", "lusa", "tanggal", "tgl",
+    "dan", "serta", "atau", "yang", "akan", "mau", "ganti", "jadi",
+    "shift", "ada", "untuk", "dengan", "di", "ke", "dari", "sama",
+    "semua", "pada", "juga", "aja", "saja", "dong", "ya", "nih",
+    "adalah", "itu", "the", "a", "an",
+}
+
+_HARI_NAMES = set(_HARI_MAP.keys())
+
+
+def _is_valid_nama(w):
+    _w = w.strip().upper()
+    if len(_w) < 2:
+        return False
+    if _w.lower() in _STOPWORDS:
+        return False
+    if _w.lower() in _HARI_NAMES:
+        return False
+    if _w in KEYWORD_TO_KODE:
+        return False
+    return True
+
+
+def _parse_enhanced(text, tanggal_hari_ini):
+    """
+    Enhanced parser: multi-nama + multi-hari.
+    Handle: "Hari ini kusdewi dan zaki libur"
+    """
+    _t = text.lower()
+
+    # === DETEKSI MODE ===
+    _mode = "update"
+    _delete_targets = []
+    _delete_all_dates = False
+
+    _kw_hapus = ["hapus", "delete", "hilangkan", "buang", "remove"]
+    _kw_semua = ["semua", "seluruh", "all"]
+
+    if any(_kw in _t for _kw in _kw_hapus):
+        _mode = "delete"
+        if any(_kw in _t for _kw in _kw_semua):
+            _delete_all_dates = True
+
+    # === DETEKSI TANGGAL LIST ===
+    _tgl_list = _parse_tanggal_list(text, tanggal_hari_ini)
+
+    # === DETEKSI KODE SHIFT ===
+    _kode_ditemukan = None
+    for _kw, _kode in KEYWORD_TO_KODE.items():
+        if re.search(rf'\b{re.escape(_kw)}\b', _t):
+            _kode_ditemukan = _kode
+            break
+
+    # === LOAD PERSONIL AKTIF ===
+    _valid_names = []
+    try:
+        _df_p = load_personil_master(only_active=True)
+        if not _df_p.empty:
+            _valid_names = _df_p["nama"].str.upper().tolist()
+    except Exception:
+        pass
+
+    # === EKSTRAK NAMA: MATCHING LANGSUNG KE PERSONIL ===
+    _text_upper = text.upper()
+    _kandidat = []
+    for _nama in _valid_names:
+        if re.search(rf'\b{re.escape(_nama)}\b', _text_upper):
+            _kandidat.append(_nama)
+
+    # Fallback kalau gak ada yang match
+    if not _kandidat:
+        _text_clean = text
+        for _kw in KEYWORD_TO_KODE.keys():
+            _text_clean = re.sub(rf'\b{re.escape(_kw)}\b', ' ', _text_clean, flags=re.IGNORECASE)
+        for _sw in _STOPWORDS:
+            _text_clean = re.sub(rf'\b{re.escape(_sw)}\b', ' ', _text_clean, flags=re.IGNORECASE)
+        _text_clean = re.sub(r'[0-9:/,\-\.\!\?\&]', ' ', _text_clean)
+
+        _kandidat_raw = [
+            w.strip().upper()
+            for w in re.findall(r'\b[A-Za-z]{2,}\b', _text_clean)
+        ]
+        _kandidat = [n for n in _kandidat_raw if n in _valid_names]
+
+    _kandidat = list(dict.fromkeys(_kandidat))
+
+    # === BUILD RESULT ===
+    if _mode == "delete":
+        return {
+            "tanggal": _tgl_list[0],
+            "tanggal_list": _tgl_list,
+            "tanggal_detect": _parse_tanggal_detect_label(text),
+            "shift_map": {},
+            "mode": "delete",
+            "delete_targets": _kandidat,
+            "delete_all_dates": _delete_all_dates,
+            "raw_text": text,
+            "warning": None if _kandidat else "⚠️ Tidak ada nama terdeteksi",
+        }
+
+    if not _kode_ditemukan:
+        return {
+            "tanggal": _tgl_list[0],
+            "tanggal_list": _tgl_list,
+            "tanggal_detect": _parse_tanggal_detect_label(text),
+            "shift_map": {},
+            "mode": "update",
+            "delete_targets": [],
+            "delete_all_dates": False,
+            "raw_text": text,
+            "warning": "⚠️ Tidak ada kode shift yang dikenali",
+        }
+
+    _shift_map = {n: _kode_ditemukan for n in _kandidat}
+
+    _warning = None
+    if not _shift_map:
+        _warning = f"⚠️ Tidak ada nama personil aktif yang terdeteksi."
+
+    return {
+        "tanggal": _tgl_list[0],
+        "tanggal_list": _tgl_list,
+        "tanggal_detect": _parse_tanggal_detect_label(text),
+        "shift_map": _shift_map,
+        "mode": "update",
+        "delete_targets": [],
+        "delete_all_dates": False,
+        "raw_text": text,
+        "warning": _warning,
     }
+
+
+# =========================================================
+# 💡 2. SUGGEST PENGGANTI
+# =========================================================
+def suggest_pengganti(nama_libur, tanggal=None, jumlah_saran=3):
+    if tanggal is None:
+        tanggal = _now_jkt().date()
+
+    try:
+        _df_personil = load_personil_master(only_active=True)
+        if _df_personil.empty:
+            return []
+
+        _all_nama = _df_personil.sort_values("urutan")["nama"].tolist()
+        _nama_libur_clean = str(nama_libur).strip().upper()
+
+        _matrix = load_master_shift_matrix(tanggal.month, tanggal.year)
+
+        if _matrix.empty:
+            return [
+                {"nama": n, "alasan": "Belum ada data shift bulan ini", "skor": 50}
+                for n in _all_nama
+                if n != _nama_libur_clean
+            ][:jumlah_saran]
+
+        _beban = {}
+        _kolom_hari = [str(c) for c in range(1, 32) if str(c) in _matrix.columns]
+
+        for _, _row in _matrix.iterrows():
+            _nama = str(_row["NAMA"]).strip().upper()
+            if _nama == _nama_libur_clean:
+                continue
+            _count = 0
+            for _d in _kolom_hari:
+                _kode = str(_row[_d]).strip().upper()
+                if _kode in ("P7", "S15", "M22"):
+                    _count += 1
+            _beban[_nama] = _count
+
+        _sorted = sorted(_beban.items(), key=lambda x: x[1])
+
+        _saran = []
+        for _nama, _beban_val in _sorted[:jumlah_saran]:
+            _saran.append({
+                "nama": _nama,
+                "alasan": f"Baru {_beban_val} shift bulan ini",
+                "skor": max(0, 100 - _beban_val * 5),
+            })
+
+        return _saran
+    except Exception as e:
+        print(f"[SUGGEST ERROR] {e}")
+        return []
+
+
+def ai_suggest_pengganti_text(nama_libur, tanggal=None):
+    _rule_saran = suggest_pengganti(nama_libur, tanggal)
+
+    if not _setup_genai() or not _rule_saran:
+        return _format_saran_text(nama_libur, _rule_saran, "rule")
+
+    _personil_ctx = _build_personil_context()
+    _tgl = tanggal or _now_jkt().date()
+
+    _saran_rule_str = "\n".join([
+        f"- {s['nama']} ({s['alasan']}, skor {s['skor']})"
+        for s in _rule_saran
+    ])
+
+    _prompt = f"""Kamu asisten HR. Ada personil libur: {nama_libur}
+Tanggal: {_tgl.isoformat()}
+
+{_personil_ctx}
+
+Kandidat pengganti:
+{_saran_rule_str}
+
+Pilih 1-3 pengganti TERBAIK, jelaskan singkat.
+
+FORMAT OUTPUT (JSON ONLY):
+{{
+  "rekomendasi": [
+    {{"nama": "REZA", "alasan": "..."}},
+    {{"nama": "PANDU", "alasan": "..."}}
+  ],
+  "catatan": "Ringkasan singkat"
+}}
+"""
+
+    _ok, _resp_text, _model, _err = _call_groq(_prompt)
+    if not _ok:
+        return _format_saran_text(nama_libur, _rule_saran, "rule")
+
+    _data = _extract_json(_resp_text)
+    if not _data or "rekomendasi" not in _data:
+        return _format_saran_text(nama_libur, _rule_saran, "rule")
+
+    _lines = [f"💡 **Saran pengganti untuk {nama_libur}** ({_tgl.strftime('%d/%m/%Y')}):"]
+    for _i, _r in enumerate(_data["rekomendasi"], 1):
+        _lines.append(f"{_i}. **{_r.get('nama', '?')}** — {_r.get('alasan', '-')}")
+    if _data.get("catatan"):
+        _lines.append(f"\n📝 _{_data['catatan']}_")
+    _lines.append(f"\n_Engine: groq ({_model})_")
+
+    return "\n".join(_lines)
+
+
+def _format_saran_text(nama_libur, saran_list, engine):
+    _lines = [f"💡 **Saran pengganti untuk {nama_libur}**:"]
+    for _i, _s in enumerate(saran_list, 1):
+        _lines.append(f"{_i}. **{_s['nama']}** — {_s['alasan']}")
+    _lines.append(f"\n_Engine: {engine}_")
+    return "\n".join(_lines)
+
+
+# =========================================================
+# ⚠️ 3. CHECK CONFLICT
+# =========================================================
+def check_conflict(tanggal, shift_map):
+    _issues = []
+    if not shift_map:
+        return _issues
+
+    try:
+        _df_personil = load_personil_master(only_active=True)
+        if not _df_personil.empty:
+            _valid = set(_df_personil["nama"].str.upper().tolist())
+            for _nama, _kode in shift_map.items():
+                if _nama not in _valid:
+                    _issues.append({
+                        "level": "warning",
+                        "pesan": f"⚠️ **{_nama}** bukan personil aktif",
+                    })
+    except Exception:
+        pass
+
+    _shift_utama = {"P7", "S15", "M22"}
+    _kode_di_map = set(shift_map.values())
+    _kurang = _shift_utama - _kode_di_map
+
+    if _kurang:
+        _label = ", ".join(
+            f"{KODE_SHIFT[k]['icon']} {KODE_SHIFT[k]['label']}"
+            for k in sorted(_kurang)
+        )
+        _issues.append({
+            "level": "warning",
+            "pesan": f"⚠️ Shift berikut belum ada yang jaga: **{_label}**",
+        })
+
+    try:
+        _existing = get_shift_hari_ini(tanggal)
+        if _existing:
+            _overlap = set(_existing.keys()) & set(shift_map.keys())
+            if _overlap:
+                _issues.append({
+                    "level": "info",
+                    "pesan": (
+                        f"ℹ️ **{len(_overlap)}** personil akan di-update shiftnya: "
+                        f"{', '.join(sorted(_overlap))}"
+                    ),
+                })
+    except Exception:
+        pass
+
+    return _issues
+
+
+def ai_check_conflict_text(tanggal, shift_map):
+    _issues = check_conflict(tanggal, shift_map)
+    if not _issues:
+        return "✅ **Tidak ada konflik** — jadwal aman!"
+    return "\n".join([f"- {i['pesan']}" for i in _issues])
+
+
+# =========================================================
+# 💬 4. CHAT RESPONSE
+# =========================================================
+def chat_response(user_message, conversation_history=None):
+    if not user_message:
+        return ""
+
+    if _setup_genai():
+        _history_str = ""
+        if conversation_history:
+            for _msg in conversation_history[-5:]:
+                _role = _msg.get("role", "user")
+                _content = _msg.get("content", "")
+                _history_str += f"{_role}: {_content}\n"
+
+        _personil_ctx = _build_personil_context()
+        _tgl = _now_jkt().date()
+        _shift_today = _build_shift_today_context(_tgl)
+        _shift_besok = _build_shift_today_context(_tgl + timedelta(days=1))
+
+        _prompt = f"""Kamu asisten HR untuk Toko C383 (retail).
+Jawab pertanyaan user tentang jadwal shift dengan ramah & singkat.
+
+KONTEKS:
+- Hari ini: {_tgl.isoformat()} ({_tgl.strftime('%A')})
+- {_personil_ctx}
+
+{_shift_today}
+
+{_shift_besok}
+
+KODE SHIFT:
+P7=Pagi(07:00), S15=Siang(15:00), M22=Malam(22:00), O=Libur, C=Cuti, AO=Additional Off
+
+RIWAYAT:
+{_history_str}
+
+PERTANYAAN USER:
+{user_message}
+
+Jawab bahasa Indonesia santai, singkat (max 3 kalimat), pakai emoji kalau perlu.
+"""
+
+        _ok, _resp_text, _model, _err = _call_groq(_prompt)
+        if _ok and _resp_text:
+            return _resp_text.strip()
+        print(f"[AI-1] Groq gagal, fallback rule. Err: {_err}")
+
+    return _fallback_chat(user_message)
+
+
+def _fallback_chat(user_message):
+    _msg = user_message.lower()
+
+    if "shift" in _msg and any(k in _msg for k in ["pagi", "siang", "malam"]):
+        _tgl = _now_jkt().date()
+        _shift = get_shift_hari_ini(_tgl)
+        if not _shift:
+            return "📭 Belum ada data shift hari ini."
+
+        _kode_target = None
+        if "pagi" in _msg:
+            _kode_target = "P7"
+        elif "siang" in _msg:
+            _kode_target = "S15"
+        elif "malam" in _msg:
+            _kode_target = "M22"
+
+        _nama_list = [n for n, k in _shift.items() if k == _kode_target]
+        if _nama_list:
+            _label = KODE_SHIFT[_kode_target]["label"]
+            return f"👥 **{_label}** hari ini: {', '.join(_nama_list)}"
+        else:
+            return f"📭 Tidak ada yang shift {_kode_target} hari ini."
+
+    if "personil" in _msg or "orang" in _msg:
+        try:
+            _df = load_personil_master(only_active=True)
+            return f"👥 Ada **{len(_df)} personil aktif** saat ini."
+        except Exception:
+            return "❌ Gagal load data personil."
+
+    return (
+        "🤖 Maaf, aku belum bisa jawab itu. Coba tanya:\n"
+        "- \"Siapa shift pagi hari ini?\"\n"
+        "- \"Ada berapa personil aktif?\""
+    )
+
+
+__all__ = [
+    "parse_shift_update",
+    "suggest_pengganti",
+    "ai_suggest_pengganti_text",
+    "check_conflict",
+    "ai_check_conflict_text",
+    "chat_response",
+]
