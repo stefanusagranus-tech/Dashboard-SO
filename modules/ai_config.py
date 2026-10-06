@@ -1,3 +1,20 @@
+"""
+AI Config — Centralized Configuration
+======================================
+Config terpusat semua AI (Kurumi, Hana, Yui, Rei, Takumi, Rin).
+
+Karakter:
+- AI-0: Kurumi (Chief of Staff) 🎀
+- AI-1: Hana (Master Shift) 🌸
+- AI-2: Yui (SO Input) 📦
+- AI-3: Rei (SO Analisis) 📊
+- AI-4: Takumi (IKT Input) 🛠️
+- AI-5: Rin (IKT Analisis) ⚔️
+"""
+
+# =========================================================
+# 🎯 KONFIGURASI SETIAP AI
+# =========================================================
 AI_CONFIG = {
     # ============================================
     # AI-0: Kurumi — Chief of Staff
@@ -6,6 +23,7 @@ AI_CONFIG = {
         "name": "Kurumi",
         "emoji": "🎀",
         "description": "Chief of Staff — sapaan, rangkum & kirim laporan",
+        "persona": "tokisaki_kurumi",
         "model_priority": [
             "openai/gpt-oss-120b",
             "openai/gpt-oss-20b",
@@ -102,3 +120,71 @@ AI_CONFIG = {
         "enabled": False,
     },
 }
+
+
+# =========================================================
+# 🎯 LIMIT MODEL GROQ (FREE TIER)
+# =========================================================
+GROQ_LIMITS = {
+    "allam-2-7b": {
+        "rpm": 30, "rpd": 7000, "tpm": 6000,
+    },
+    "meta-llama/llama-prompt-guard-2-22m": {
+        "rpm": 30, "rpd": 14400, "tpm": 15000,
+    },
+    "meta-llama/llama-prompt-guard-2-86m": {
+        "rpm": 30, "rpd": 14400, "tpm": 15000,
+    },
+    "openai/gpt-oss-120b": {
+        "rpm": 30, "rpd": 1000, "tpm": 8000,
+    },
+    "openai/gpt-oss-20b": {
+        "rpm": 30, "rpd": 1000, "tpm": 8000,
+    },
+    "openai/gpt-oss-safeguard-20b": {
+        "rpm": 3, "rpd": 1000, "tpm": 2000,
+    },
+    "qwen/qwen3.8-27b": {
+        "rpm": 30, "rpd": 1000, "tpm": 8000,
+    },
+    # Fallback default kalau model gak ada di list
+    "_default": {
+        "rpm": 30, "rpd": 1000, "tpm": 8000,
+    },
+}
+
+
+# =========================================================
+# 🎯 THRESHOLD WARNING
+# =========================================================
+QUOTA_WARNING_THRESHOLD = 80   # Warning kalau >80%
+QUOTA_PAUSE_THRESHOLD = 90     # Auto-pause kalau >90%
+
+
+# =========================================================
+# 🔧 HELPER FUNCTIONS
+# =========================================================
+def get_ai_config(ai_name):
+    """Ambil config AI berdasarkan nama."""
+    return AI_CONFIG.get(ai_name, {})
+
+
+def get_model_limit(model_name):
+    """Ambil limit model dari Groq."""
+    return GROQ_LIMITS.get(model_name, GROQ_LIMITS["_default"])
+
+
+def get_all_ai_names():
+    """List semua AI yang terdaftar."""
+    return list(AI_CONFIG.keys())
+
+
+def get_enabled_ai_names():
+    """List AI yang aktif (enabled=True)."""
+    return [k for k, v in AI_CONFIG.items() if v.get("enabled")]
+
+
+def get_ai_name_display(ai_name):
+    """Ambil display name + emoji buat UI."""
+    _cfg = AI_CONFIG.get(ai_name, {})
+    return f"{_cfg.get('emoji', '🤖')} {_cfg.get('name', ai_name)}"
