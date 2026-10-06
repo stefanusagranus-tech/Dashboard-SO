@@ -30,6 +30,7 @@ from modules.master_shift_handler import (
     KODE_SHIFT,
 )
 from modules.supabase_client import get_supabase
+from modules.pdf_report import generate_pdf
 
 
 # =========================================================
@@ -97,7 +98,7 @@ def _call_kurumi_groq_raw(prompt):
     return False, "", None, _last_error or "All models failed", {}
 
 
-def _call_kurumi(prompt, hard_timeout=90, function="chat"):
+def _call_kurumi(prompt, hard_timeout=90, function="chat", temperature=0.85):
     from modules.token_monitor import record_usage_v2, check_auto_pause
 
     if check_auto_pause("ai-0"):
@@ -191,12 +192,11 @@ def _detect_scope_dari_text(text):
         return "custom"
     return "hari"
 
+
 # =========================================================
 # 📊 AMBIL DATA DARI SEMUA TABEL
 # =========================================================
-
 def _get_shift_data(tanggal):
-    """Ambil shift dari master_shift untuk tanggal tertentu."""
     try:
         _shift = get_shift_hari_ini(tanggal)
         if not _shift:
@@ -216,7 +216,6 @@ def _get_shift_data(tanggal):
 
 
 def _get_spd_data(start_date, end_date):
-    """Ambil SPD dari spd_harian."""
     try:
         _sb = get_supabase()
         _res = _sb.table("spd_harian") \
@@ -250,7 +249,6 @@ def _get_spd_data(start_date, end_date):
 
 
 def _get_so_data(start_date, end_date):
-    """Ambil SO dari so_rak_harian."""
     try:
         _sb = get_supabase()
         _res = _sb.table("so_rak_harian") \
@@ -286,21 +284,29 @@ def _get_so_data(start_date, end_date):
             _s = "+" if _d["total"] >= 0 else ""
             _lines.append(f"  • {_tgl}: {_d['count']} rak, nominal {_s}Rp {_d['total']:,.0f}".replace(",", "."))
 
-        _top_rak = sorted(_rows, key=lambda x: abs(float(x.get("nominal_adjust", 0))), reverse=True)[:10]
-        _lines.append("- Top 10 rak (nominal terbesar):")
-        for _r in _top_rak:
-            _nom = float(_r.get("nominal_adjust", 0))
-            _s = "+" if _nom >= 0 else ""
-            _lines.append(f"  • {_r.get('rak_id', '-')} ({_r.get('so_date', '-')}): {_s}Rp {_nom:,.0f}".replace(",", "."))
-
         return "\n".join(_lines)
     except Exception as _e:
         print(f"[SO ERROR] {_e}")
         return f"Error load SO: {str(_e)[:100]}"
 
 
+def _get_so_raw_data(start_date, end_date):
+    """Ambil RAW data SO dari DB (bukan string) — buat render tabel PDF."""
+    try:
+        _sb = get_supabase()
+        _res = _sb.table("so_rak_harian") \
+            .select("so_date, rak_id, nominal_adjust, keterangan, pic") \
+            .gte("so_date", start_date.isoformat()) \
+            .lte("so_date", end_date.isoformat()) \
+            .order("so_date") \
+            .execute()
+        return _res.data or []
+    except Exception as _e:
+        print(f"[SO RAW ERROR] {_e}")
+        return []
+
+
 def _get_net_sales_data():
-    """Ambil net sales BULANAN."""
     try:
         _sb = get_supabase()
         _res = _sb.table("net_sales") \
@@ -331,7 +337,6 @@ def _get_net_sales_data():
 
 
 def _get_btsb_analysis(start_date, end_date):
-    """Hitung BTSB & NSB% dari SPD + SO."""
     try:
         _sb = get_supabase()
 
@@ -354,17 +359,17 @@ def _get_btsb_analysis(start_date, end_date):
         _penggunaan_pct = (abs(_total_nominal) / _btsb * 100) if _btsb > 0 else 0
 
         if _penggunaan_pct <= 80:
-            _status = "✅ AMAN"
+            _status = "AMAN"
         elif _penggunaan_pct <= 100:
-            _status = "⚠️ WASPADA"
+            _status = "WASPADA"
         else:
-            _status = "🚫 OVER BUDGET"
+            _status = "OVER BUDGET"
 
         _lines = [
             f"- Total SPD: Rp {_total_spd:,.0f}".replace(",", "."),
-            f"- BTSB (0.15% × SPD): Rp {_btsb:,.0f}".replace(",", "."),
+            f"- BTSB (0.15% x SPD): Rp {_btsb:,.0f}".replace(",", "."),
             f"- Total Nominal SO: {'+' if _total_nominal >= 0 else ''}Rp {_total_nominal:,.0f}".replace(",", "."),
-            f"- %NSB dari Sales: {_nsb_pct:.3f}% (target ≤0.15%)",
+            f"- %NSB dari Sales: {_nsb_pct:.3f}% (target maks 0.15%)",
             f"- %BTSB terpakai: {_penggunaan_pct:.2f}%",
             f"- Status: {_status}",
         ]
@@ -375,7 +380,6 @@ def _get_btsb_analysis(start_date, end_date):
 
 
 def _get_rak_status():
-    """Ambil status rak."""
     try:
         _sb = get_supabase()
         _res = _sb.table("rak_master") \
@@ -397,11 +401,6 @@ def _get_rak_status():
             f"- Belum SO: {len(_belum)}",
         ]
 
-        if _belum:
-            _lines.append("- Contoh 10 rak belum SO:")
-            for _r in _belum[:10]:
-                _lines.append(f"  • {_r.get('rak_id', '-')} ({_r.get('rak_name', '-')[:30]})")
-
         return "\n".join(_lines)
     except Exception as _e:
         print(f"[RAK ERROR] {_e}")
@@ -409,20 +408,21 @@ def _get_rak_status():
 
 
 def _get_personil_list():
-    """Ambil daftar personil aktif."""
     try:
         _df = load_personil_master(only_active=True)
         if _df.empty:
             return "Belum ada personil aktif."
         _nama = _df.sort_values("urutan")["nama"].tolist()
-        return f"- Total personil aktif: {len(_nama)}\n- Nama: {', '.join(_nama)}"
+        _list_str = ", ".join(_nama[:10])
+        if len(_nama) > 10:
+            _list_str += f", +{len(_nama)-10} lainnya"
+        return f"- Total: {len(_nama)} personil aktif\n- Nama: {_list_str}"
     except Exception as _e:
         print(f"[PERSONIL ERROR] {_e}")
         return f"Error load personil: {str(_e)[:100]}"
 
 
-def _get_last_shift_log(limit=5):
-    """Ambil log update shift terakhir."""
+def _get_last_shift_log(limit=3):
     try:
         _sb = get_supabase()
         _res = _sb.table("master_shift_log") \
@@ -440,7 +440,7 @@ def _get_last_shift_log(limit=5):
             _sumber = _r.get("sumber", "-")
             _by = _r.get("updated_by", "-")
             _created = _r.get("created_at", "")[:16]
-            _lines.append(f"  • {_created} | {_tgl} | {_sumber} | by {_by}")
+            _lines.append(f"  - {_created} | {_tgl} | {_sumber} | by {_by}")
 
         return "\n".join(_lines)
     except Exception as _e:
@@ -452,7 +452,6 @@ def _get_last_shift_log(limit=5):
 # 🎯 SMART CONTEXT BUILDER
 # =========================================================
 def _build_smart_context(user_message, start_date=None, end_date=None, force_full=False):
-    """Build context HANYA sesuai yang dibutuhin."""
     _tgl = _now_jkt().date()
     if not start_date:
         start_date = _tgl
@@ -486,10 +485,9 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
         _ctx["btsb"] = _get_btsb_analysis(start_date, end_date)
         _ctx["rak_status"] = _get_rak_status()
         _ctx["personil"] = _get_personil_list()
-        _ctx["last_log"] = _get_last_shift_log(5)
+        _ctx["last_log"] = _get_last_shift_log(3)
         return _ctx
 
-    # === DETEKSI INTENT (SMART) ===
     if any(k in _msg for k in ["shift", "pagi", "siang", "malam", "libur", "cuti", "off", "jadwal"]):
         _ctx["shift_hari_ini"] = _get_shift_data(start_date)
         _ctx["shift_besok"] = _get_shift_data(_tgl + timedelta(days=1))
@@ -513,19 +511,15 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
         _ctx["personil"] = _get_personil_list()
 
     if any(k in _msg for k in ["log", "update terakhir", "history", "riwayat shift"]):
-        _ctx["last_log"] = _get_last_shift_log(5)
+        _ctx["last_log"] = _get_last_shift_log(3)
 
     return _ctx
 
+
 # =========================================================
-# 📄 REPORT CONTEXT — HEMAT TOKEN (SPD, SO, BTSB, RAK)
+# 📄 REPORT CONTEXT — HEMAT TOKEN
 # =========================================================
 def _get_report_context(start_date, end_date):
-    """
-    Context khusus untuk REPORT.
-    Cuma narik 4 data: SPD, SO, BTSB, Status Rak.
-    Hemat ~60% token dibanding force_full.
-    """
     _tgl = _now_jkt().date()
     return {
         "tanggal_hari_ini": _tgl,
@@ -536,6 +530,7 @@ def _get_report_context(start_date, end_date):
         "btsb": _get_btsb_analysis(start_date, end_date),
         "rak_status": _get_rak_status(),
     }
+
 
 # =========================================================
 # 📊 QUOTA INFO
@@ -551,21 +546,18 @@ def _get_kurumi_quota_info():
         _pct = (_used / _limit * 100) if _limit > 0 else 0
         _warning = check_quota_warning("ai-0")
 
-        _lines = [
-            f"- Requests hari ini: {_used} / {_limit} ({_pct:.1f}%)",
-            f"- Sisa quota: {_sisa} requests",
-            f"- Total input tokens: {_usage.get('in_tok', 0):,}".replace(",", "."),
-            f"- Total output tokens: {_usage.get('out_tok', 0):,}".replace(",", "."),
-            f"- Errors: {_usage.get('errors', 0)}",
-            f"- Status: {_warning['level'].upper()}",
-        ]
-        return "\n".join(_lines)
+        return (
+            f"Requests: {_used}/{_limit} ({_pct:.1f}%) | "
+            f"Sisa: {_sisa} | "
+            f"Token in/out: {_usage.get('in_tok', 0)}/{_usage.get('out_tok', 0)} | "
+            f"Errors: {_usage.get('errors', 0)}"
+        )
     except Exception as _e:
         print(f"[QUOTA INFO ERROR] {_e}")
-        return "Data quota belum tersedia."
+        return "Quota info tidak tersedia."
 
 # =========================================================
-# 🎀 PERSONA KURUMI
+# 🎀 PERSONA KURUMI (CHAT)
 # =========================================================
 def _build_kurumi_system_prompt():
     return """Kamu adalah **Kurumi Tokisaki** — "Spirit of Time" dari Date A Live.
@@ -618,8 +610,58 @@ Panggil user dengan "Tuan".
 - Kalau ada data/angka, JANGAN ngarang. Kalau gak ada data, bilang jujur."""
 
 
+# =========================================================
+# 📄 PERSONA REPORT (FORMAL)
+# =========================================================
+def _build_report_system_prompt():
+    """
+    System prompt KHUSUS REPORT — formal & profesional.
+    TANPA "Ara ara", TANPA emoji berlebihan, TANPA "Aku".
+    """
+    return """Kamu adalah asisten laporan profesional untuk Toko C383 (retail).
+
+═══════════════════════════════════════
+🎯 TUGAS:
+═══════════════════════════════════════
+Buat laporan formal, profesional, dan akurat berdasarkan data yang diberikan.
+
+═══════════════════════════════════════
+📋 ATURAN FORMAT (WAJIB):
+═══════════════════════════════════════
+- Gunakan bahasa Indonesia FORMAL (bukan santai)
+- JANGAN pakai "Ara ara", "Kihihihi", "Fufufu"
+- JANGAN pakai emoji di dalam laporan
+- JANGAN pakai "Aku" — pakai "kami" atau netral
+- Gunakan format markdown STANDAR:
+  * Heading: ## untuk heading utama, ### untuk sub
+  * List: - untuk bullet, 1. 2. 3. untuk numbered
+  * Bold: **text** untuk emphasize
+- Setiap angka harus RAPI (Rp 1.234.567, bukan 1234567)
+- Setiap section harus JELAS dan INFORMATIF
+- JANGAN bertele-tele — langsung ke poin
+
+═══════════════════════════════════════
+📊 STRUKTUR LAPORAN:
+═══════════════════════════════════════
+1. RINGKASAN EKSEKUTIF (3-4 baris, highlight angka penting)
+2. ANALISIS SPD & SALES (1-2 paragraf)
+3. ANALISIS BTSB & NSB (1-2 paragraf)
+4. INSIGHT & TEMUAN (3-4 bullet)
+5. REKOMENDASI (3-4 bullet)
+
+═══════════════════════════════════════
+⚠️ PENTING:
+═══════════════════════════════════════
+- JANGAN ngarang data. Kalau data gak ada, bilang "data belum tersedia"
+- JANGAN bikin tabel SO (itu di-render terpisah dari DB)
+- JANGAN bahas shift (itu tugas Hana)
+- FOKUS ke analysis & insight."""
+
+
+# =========================================================
+# 💬 BUILD PROMPT — CHAT KURUMI
+# =========================================================
 def _build_kurumi_chat_prompt(user_message, conversation_history):
-    """Build prompt untuk chat Kurumi dengan SMART context."""
     _ctx = _build_smart_context(user_message)
 
     _history_str = ""
@@ -663,7 +705,12 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
         _sections.append(f"LOG UPDATE:\n{_ctx['last_log']}")
 
     _context_str = "\n\n".join(_sections) if _sections else "(Tidak ada data toko — ini chat basa-basi)"
-    _quota_str = _get_kurumi_quota_info()
+
+    # ✅ Quota cuma diambil kalau user tanya
+    if any(k in _msg_lower for k in ["quota", "kuota", "limit", "token"]):
+        _quota_str = _get_kurumi_quota_info()
+    else:
+        _quota_str = "(Quota tidak dicek — hemat token)"
 
     return f"""{_build_kurumi_system_prompt()}
 
@@ -856,7 +903,6 @@ def kurumi_summarize(period="hari", custom_date=None):
         _end = _tgl
         _label = "hari ini"
 
-    # ✅ Pake report context (cuma SPD, SO, BTSB, Rak)
     _ctx = _get_report_context(_start, _end)
 
     _prompt = f"""{_build_kurumi_system_prompt()}
@@ -888,12 +934,12 @@ Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
 - Pake "Aku", sering "Ara ara~" / "Kihihihi~"
 - Struktur:
   * Pembuka singkat (1-2 baris, gaya Kurumi)
-  * 💰 SPD & Sales
-  * 📦 Stock Opname
-  * 🎯 BTSB & NSB Status
-  * 📊 Status Rak
-  * 💡 Insight
-  * 🎯 Rekomendasi
+  * SPD & Sales
+  * Stock Opname
+  * BTSB & NSB Status
+  * Status Rak
+  * Insight
+  * Rekomendasi
 
 ⚠️ ATURAN:
 - KALAU ADA DATA di atas, PAKE datanya. JANGAN bilang "belum ada data"!
@@ -905,6 +951,7 @@ Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
     if _ok and _text:
         return _text.strip()
     return "🎀 **Ara, ara~** Maaf Tuan, aku gagal akses data.\n\nKihihihi~ Coba lagi nanti ya~ 🎀"
+
 
 # =========================================================
 # 🎀 PUBLIC API — GREETING
@@ -992,14 +1039,14 @@ def kurumi_generate_report_custom(tanggal, format="text"):
 
 
 # =========================================================
-# 🔧 WORKER — REPORT GENERATOR (SHARED)
+# 🔧 WORKER — REPORT GENERATOR
 # =========================================================
 def _generate_report_worker(label, start_date, end_date, format, filename_suffix, ctx):
     """Generate report + convert ke format. Pakai REPORT CONTEXT (hemat)."""
     _tgl = _now_jkt().date()
 
-    # ✅ Cuma data yang relevan
-    _prompt = f"""{_build_kurumi_system_prompt()}
+    # ✅ PAKE PROMPT FORMAL (bukan Kurumi persona)
+    _prompt = f"""{_build_report_system_prompt()}
 
 ═══════════════════════════════════════
 🎯 TASK: BUAT LAPORAN FORMAL
@@ -1023,25 +1070,19 @@ STATUS RAK:
 📝 INSTRUKSI:
 ═══════════════════════════════════════
 Buat laporan dengan struktur:
-1. HEADER (judul, periode, tanggal)
-2. RINGKASAN EKSEKUTIF (2-3 baris)
-3. 💰 DATA SPD & SALES
-4. 📦 STOCK OPNAME (per tanggal + top rak)
-5. 🎯 ANALISIS BTSB & NSB
-6. 🏪 STATUS RAK
-7. 💡 INSIGHT & ANALISIS
-8. 🎯 REKOMENDASI
-9. PENUTUP (dari Kurumi)
+1. RINGKASAN EKSEKUTIF (3-4 baris, highlight angka penting)
+2. ANALISIS SPD & SALES (1-2 paragraf)
+3. ANALISIS BTSB & NSB (1-2 paragraf)
+4. INSIGHT & TEMUAN (3-4 bullet)
+5. REKOMENDASI (3-4 bullet)
 
-⚠️ PENTING:
-- KALAU ADA DATA di atas, PAKE datanya! JANGAN bilang "belum ada data"!
-- Sebut angka & rak spesifik.
-- JANGAN bahas shift (itu tugas Hana).
-
-Gaya: profesional + sentuhan Kurumi ("Aku", "Ara ara", "Kihihihi").
+⚠️ JANGAN bikin tabel SO (itu udah di-render terpisah dari DB).
+⚠️ JANGAN bikin daftar rak (udah ada di tabel bawah).
+⚠️ FOKUS ke ANALYSIS & INSIGHT aja.
 """
 
-    _ok, _text, _model, _err = _call_kurumi(_prompt, function="report")
+    # ✅ Temperature lebih rendah biar output lebih konsisten & formal
+    _ok, _text, _model, _err = _call_kurumi(_prompt, function="report", temperature=0.4)
 
     if not _ok or not _text:
         return {"success": False, "content": f"Gagal generate: {_err}", "filename": "", "mime": ""}
@@ -1060,38 +1101,26 @@ Gaya: profesional + sentuhan Kurumi ("Aku", "Ara ara", "Kihihihi").
     # === PDF ===
     elif format == "pdf":
         try:
-            from fpdf import FPDF
-            _pdf = FPDF(orientation="P", unit="mm", format="A4")
-            _pdf.set_margins(left=10, top=10, right=10)
-            _pdf.set_auto_page_break(auto=True, margin=10)
-            _pdf.add_page()
-            _pdf.set_font("Helvetica", "", 10)
+            _so_raw = _get_so_raw_data(start_date, end_date)
 
-            for _line in _content_text.split("\n"):
-                _line_clean = _line.encode("latin-1", "replace").decode("latin-1")
-                if not _line_clean.strip():
-                    _pdf.ln(3)
-                    continue
-                if len(_line_clean) > 95:
-                    _line_clean = _line_clean[:95]
-                try:
-                    _pdf.multi_cell(190, 5, _line_clean)
-                except Exception:
-                    try:
-                        _pdf.multi_cell(180, 5, _line_clean[:80])
-                    except Exception:
-                        pass
+            if "Mingguan" in label:
+                _period_type = "minggu"
+            elif "Bulanan" in label:
+                _period_type = "bulan"
+            else:
+                _period_type = "hari"
 
-            _out = _pdf.output(dest="S")
-            _pdf_bytes = _out.encode("latin-1") if isinstance(_out, str) else bytes(_out)
-            return {
-                "success": True,
-                "content": _pdf_bytes,
-                "filename": f"laporan_{filename_suffix}.pdf",
-                "mime": "application/pdf",
-            }
+            return generate_pdf(
+                ai_content=_content_text,
+                so_data=_so_raw,
+                period_label=label,
+                period_type=_period_type,
+                filename=f"laporan_{filename_suffix}.pdf",
+            )
         except Exception as _e_pdf:
+            import traceback
             print(f"[PDF ERROR] {_e_pdf}")
+            print(traceback.format_exc())
             return {"success": False, "content": f"PDF error: {_e_pdf}", "filename": "", "mime": ""}
 
     # === EXCEL ===
@@ -1123,6 +1152,7 @@ Gaya: profesional + sentuhan Kurumi ("Aku", "Ara ara", "Kihihihi").
             return {"success": False, "content": f"Excel error: {_e_xl}", "filename": "", "mime": ""}
 
     return {"success": False, "content": "Format tidak dikenal", "filename": "", "mime": ""}
+
 
 # =========================================================
 # 🎯 EXPORT
