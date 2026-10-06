@@ -61,13 +61,20 @@ def _get_api_key():
 def _setup_genai():
     """Setup Groq client. Return: client atau None."""
     _key = _get_api_key()
-    if not _key or not GROQ_AVAILABLE:
+    if not _key:
+        print("[AI-1] Groq setup: API key kosong")
+        return None
+    if not GROQ_AVAILABLE:
+        print("[AI-1] Groq setup: GROQ_AVAILABLE = False (import gagal?)")
         return None
     try:
         _client = Groq(api_key=_key)
+        print("[AI-1] Groq client BERHASIL dibuat")
         return _client
     except Exception as _e:
+        import traceback
         print(f"[AI-1] Groq setup error: {_e}")
+        print(traceback.format_exc())
         return None
 
 

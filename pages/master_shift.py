@@ -574,13 +574,22 @@ elif st.session_state["shift_sub_tab"] == "ai_chat":
             
             if _key:
                 st.code(f"Prefix: {_key[:15]}...")
-                _client = _setup_genai()
-                st.code(f"_setup_genai() → {type(_client).__name__ if _client else 'None'}")
                 
-                if _client:
-                    st.success("✅ Groq Client siap!")
-                else:
-                    st.error("❌ Client GAGAL init")
+                # ✅ DEBUG: cek import groq
+                try:
+                    from groq import Groq as _GroqTest
+                    st.success("✅ `from groq import Groq` BERHASIL")
+                    
+                    try:
+                        _test_client = _GroqTest(api_key=_key)
+                        st.success(f"✅ Groq() init BERHASIL: {type(_test_client).__name__}")
+                    except Exception as _e_init:
+                        st.error(f"❌ Groq() init GAGAL: {_e_init}")
+                        import traceback
+                        st.code(traceback.format_exc())
+                except Exception as _e_imp:
+                    st.error(f"❌ Import groq GAGAL: {_e_imp}")
+                    st.info("💡 Kemungkinan: `groq` belum ada di requirements.txt atau belum ke-install")
             else:
                 st.error("❌ GROQ_API_KEY kosong di secrets!")
             
