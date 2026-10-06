@@ -33,6 +33,7 @@ from modules.master_shift_handler import (
     parse_chat_update,
 )
 from modules.supabase_client import get_supabase
+from modules.ai_config import get_ai_api_key
 from modules.token_monitor import record_usage_v2, check_auto_pause
 
 
@@ -53,39 +54,26 @@ def _now_jkt():
     return datetime.now(ZoneInfo("Asia/Jakarta"))
 
 
-def _get_api_key():
-    try:
-        return st.secrets.get("GROQ_API_KEY", "")
-    except Exception:
-        return ""
+def _get_api_key(ai_name="ai-1"):
+    """Ambil API key sesuai AI. Default: ai-1 (Hana)."""
+    return get_ai_api_key(ai_name)
 
 
-def _setup_genai():
+def _setup_genai(ai_name="ai-1"):
     """Setup Groq client. Return: client atau None."""
-    _key = _get_api_key()
-    if not _key:
-        print("[AI-1] Groq setup: API key kosong")
-        return None
-    if not GROQ_AVAILABLE:
-        print("[AI-1] Groq setup: GROQ_AVAILABLE = False (import gagal?)")
+    _key = _get_api_key(ai_name)
+    if not _key or not GROQ_AVAILABLE:
         return None
     try:
         _client = Groq(api_key=_key)
-        print("[AI-1] Groq client BERHASIL dibuat")
         return _client
     except Exception as _e:
-        import traceback
-        print(f"[AI-1] Groq setup error: {_e}")
-        print(traceback.format_exc())
+        print(f"[{ai_name}] Groq setup error: {_e}")
         return None
 
 
-def _call_groq_raw(prompt):
-    """
-    Call Groq dengan auto-fallback model.
-    Return: (ok, text, model, err, usage_dict)
-    """
-    _client = _setup_genai()
+def _call_groq_raw(prompt, ai_name="ai-1"):
+    _client = _setup_genai(ai_name)
     if not _client:
         return False, "", None, "Groq client gagal init / API key missing", {}
 
@@ -150,7 +138,7 @@ def _call_groq(prompt, hard_timeout=60, ai_name="ai-1", function="parse"):
 
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _exec:
-            _fut = _exec.submit(_call_groq_raw, prompt)
+            _fut = _exec.submit(_call_groq_raw, prompt, ai_name)
             _ok, _text, _model, _err, _usage = _fut.result(timeout=hard_timeout)
 
         # Record usage di main thread
@@ -359,8 +347,8 @@ def _parse_with_groq(text, tanggal_hari_ini):
     _personil_ctx = _build_personil_context()
     _shift_today = _build_shift_today_context(tanggal_hari_ini)
 
-    _prompt = f"""Kamu asisten HR cerdas untuk Toko C383.
-Tugas: parse pesan user jadi struktur JSON.
+    _prompt = f"""Kamu Hana 🌸, asisten HR cerdas untuk Toko C383.
+Tugasmu SAAT INI: parse pesan user jadi struktur JSON (bukan ngobrol).
 
 KONTEKS HARI INI:
 - Tanggal: {tanggal_hari_ini.isoformat()} ({tanggal_hari_ini.strftime('%A')})
@@ -676,7 +664,8 @@ def ai_suggest_pengganti_text(nama_libur, tanggal=None):
         for s in _rule_saran
     ])
 
-    _prompt = f"""Kamu asisten HR. Ada personil libur: {nama_libur}
+    _prompt = f"""Kamu Hana 🌸, asisten HR. Ada personil libur: {nama_libur}
+Berikan saran pengganti dengan gaya ceria & profesional.
 Tanggal: {_tgl.isoformat()}
 
 {_personil_ctx}
@@ -786,10 +775,11 @@ def ai_check_conflict_text(tanggal, shift_map):
 # 💬 4. CHAT RESPONSE
 # =========================================================
 def chat_response(user_message, conversation_history=None):
+    """Chat response dengan persona Hana 🌸"""
     if not user_message:
         return ""
 
-    if _setup_genai():
+    if _setup_genai("ai-1"):
         _history_str = ""
         if conversation_history:
             for _msg in conversation_history[-5:]:
@@ -802,45 +792,83 @@ def chat_response(user_message, conversation_history=None):
         _shift_today = _build_shift_today_context(_tgl)
         _shift_besok = _build_shift_today_context(_tgl + timedelta(days=1))
 
-        _prompt = f"""Kamu asisten HR untuk Toko C383 (retail).
-Jawab pertanyaan user tentang jadwal shift dengan ramah & singkat.
+        # ✅ PROMPT PERSONA HANA
+        _prompt = f"""Kamu adalah **Hana** 🌸, asisten HR digital untuk Toko C383 (retail).
+Tugasmu: bantu user ngurusin jadwal shift.
 
-KONTEKS:
-- Hari ini: {_tgl.isoformat()} ({_tgl.strftime('%A')})
-- {_personil_ctx}
+═══════════════════════════════════════
+KEPRIBADIAN HANA:
+═══════════════════════════════════════
+- Ceria, ramah, hangat — kayak temen kerja yang asik
+- Profesional saat kerja, tapi gak kaku
+- Kadang iseng, suka nanya balik dengan playful
+- Proaktif: kasih insight & saran tanpa diminta
+- Fokus ke topik shift — gak ngelantur
+
+GAYA BICARA:
+- Bahasa Indonesia santai tapi sopan (panggil user dengan baik)
+- Pake emoji secukupnya (1-2 per pesan, jangan lebay)
+- Kadang pake "eh", "wah", "hmm", "nih" biar natural
+- JANGAN pake bahasa formal kaku ("Baik, akan saya proses...")
+- Max 4-5 baris — jangan bertele-tele
+- Kalau kasih data, rapi & jelas
+
+CONTOH RESPONSE:
+- Sapaan: "Halo! 👋 Ada yang bisa Hana bantu?"
+- Info libur: "Wah, hari ini ZAKI & KUSDEWI libur 🌸 BTW siang cuma TIKA yang jaga, mau Hana saranin pengganti?"
+- Update: "Oke, siap! 🌸 Udah Hana catat ya."
+
+═══════════════════════════════════════
+KONTEKS TOKO:
+═══════════════════════════════════════
+Tanggal: {_tgl.isoformat()} ({_tgl.strftime('%A')})
+{_personil_ctx}
 
 {_shift_today}
 
 {_shift_besok}
 
 KODE SHIFT:
-P7=Pagi(07:00), S15=Siang(15:00), M22=Malam(22:00), O=Libur, C=Cuti, AO=Additional Off
+P7 = Pagi (07:00)
+S15 = Siang (15:00)
+M22 = Malam (22:00)
+O = Libur
+C = Cuti
+AO = Additional Off
 
-RIWAYAT:
+═══════════════════════════════════════
+RIWAYAT PERCAKAPAN:
+═══════════════════════════════════════
 {_history_str}
 
-PERTANYAAN USER:
+═══════════════════════════════════════
+PESAN USER:
+═══════════════════════════════════════
 {user_message}
 
-Jawab bahasa Indonesia santai, singkat (max 3 kalimat), pakai emoji kalau perlu.
+Jawab sebagai Hana 🌸. Ingat: ceria, ramah, profesional, dan proaktif!
 """
 
-        _ok, _resp_text, _model, _err = _call_groq(_prompt, ai_name="ai-1", function="chat")
+        _ok, _resp_text, _model, _err = _call_groq(
+            _prompt, ai_name="ai-1", function="chat"
+        )
         if _ok and _resp_text:
             return _resp_text.strip()
-        print(f"[AI-1] Groq gagal, fallback rule. Err: {_err}")
+        print(f"[Hana] Groq gagal, fallback rule. Err: {_err}")
 
     return _fallback_chat(user_message)
 
 
 def _fallback_chat(user_message):
+    """Fallback chat dengan persona Hana (rule-based)."""
     _msg = user_message.lower()
 
+    # === SHIFT QUERY ===
     if "shift" in _msg and any(k in _msg for k in ["pagi", "siang", "malam"]):
         _tgl = _now_jkt().date()
         _shift = get_shift_hari_ini(_tgl)
         if not _shift:
-            return "📭 Belum ada data shift hari ini."
+            return "📭 Belum ada data shift hari ini. Coba input dulu ya! 🌸"
 
         _kode_target = None
         if "pagi" in _msg:
@@ -853,29 +881,29 @@ def _fallback_chat(user_message):
         _nama_list = [n for n, k in _shift.items() if k == _kode_target]
         if _nama_list:
             _label = KODE_SHIFT[_kode_target]["label"]
-            return f"👥 **{_label}** hari ini: {', '.join(_nama_list)}"
+            return f"🌸 **{_label} hari ini:** {', '.join(_nama_list)}"
         else:
-            return f"📭 Tidak ada yang shift {_kode_target} hari ini."
+            return f"📭 Wah, gak ada yang shift {_kode_target} hari ini 🌸"
 
+    # === PERSONIL COUNT ===
     if "personil" in _msg or "orang" in _msg:
         try:
             _df = load_personil_master(only_active=True)
-            return f"👥 Ada **{len(_df)} personil aktif** saat ini."
+            return f"🌸 Ada **{len(_df)} personil aktif** saat ini!"
         except Exception:
-            return "❌ Gagal load data personil."
+            return "❌ Duuh, Hana gagal load data personil 🌸"
 
+    # === SAPAAN ===
+    if any(k in _msg for k in ["halo", "hai", "hi", "pagi", "siang", "malam"]):
+        return "Halo! 👋 Ada yang bisa Hana bantu hari ini? 🌸"
+
+    if any(k in _msg for k in ["makasih", "thanks", "terima kasih"]):
+        return "Sama-sama! 🌸 Senang bisa bantu~"
+
+    # === DEFAULT ===
     return (
-        "🤖 Maaf, aku belum bisa jawab itu. Coba tanya:\n"
-        "- \"Siapa shift pagi hari ini?\"\n"
-        "- \"Ada berapa personil aktif?\""
+        "Hmm, Hana belum ngerti nih 🤔\n"
+        "Coba tanya:\n"
+        "• \"Siapa shift pagi hari ini?\"\n"
+        "• \"Ada berapa personil aktif?\""
     )
-
-
-__all__ = [
-    "parse_shift_update",
-    "suggest_pengganti",
-    "ai_suggest_pengganti_text",
-    "check_conflict",
-    "ai_check_conflict_text",
-    "chat_response",
-]
