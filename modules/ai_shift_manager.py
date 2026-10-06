@@ -31,6 +31,7 @@ from modules.master_shift_handler import (
     load_master_shift_matrix,
     get_shift_hari_ini,
     parse_chat_update,
+    save_master_shift,       # ✅ Tambahin kalau belum ada
 )
 from modules.supabase_client import get_supabase
 from modules.ai_config import get_ai_api_key
@@ -664,8 +665,7 @@ def ai_suggest_pengganti_text(nama_libur, tanggal=None):
         for s in _rule_saran
     ])
 
-    _prompt = f"""Kamu Hana 🌸, asisten HR. Ada personil libur: {nama_libur}
-Berikan saran pengganti dengan gaya ceria & profesional.
+    _prompt = f"""Kamu asisten HR. Ada personil libur: {nama_libur}
 Tanggal: {_tgl.isoformat()}
 
 {_personil_ctx}
@@ -775,10 +775,36 @@ def ai_check_conflict_text(tanggal, shift_map):
 # 💬 4. CHAT RESPONSE
 # =========================================================
 def chat_response(user_message, conversation_history=None):
-    """Chat response dengan persona Hana 🌸"""
+    """
+    Chat response dengan persona Hana 🌸.
+    
+    Return: dict {
+        "text": str (jawaban Hana),
+        "intent": "query" | "update",
+        "parsed": dict | None (kalau intent update),
+        "engine": str,
+    }
+    """
     if not user_message:
-        return ""
+        return {"text": "", "intent": "query", "parsed": None, "engine": "none"}
 
+    # ✅ Deteksi intent UPDATE
+    _msg_lower = user_message.lower()
+    _update_keywords = [
+        "atur", "pindah", "pindahkan", "ganti", "ubah", "set",
+        "libur", "cuti", "off", "masuk", "shift",
+    ]
+    _is_update = any(k in _msg_lower for k in _update_keywords)
+
+    # ✅ Kalau update intent, coba parse
+    _parsed = None
+    if _is_update:
+        try:
+            _parsed = parse_shift_update(user_message)
+        except Exception as _e_parse:
+            print(f"[Hana] Parse error: {_e_parse}")
+
+    # ✅ Panggil Groq
     if _setup_genai("ai-1"):
         _history_str = ""
         if conversation_history:
@@ -792,7 +818,6 @@ def chat_response(user_message, conversation_history=None):
         _shift_today = _build_shift_today_context(_tgl)
         _shift_besok = _build_shift_today_context(_tgl + timedelta(days=1))
 
-        # ✅ PROMPT PERSONA HANA
         _prompt = f"""Kamu adalah **Hana** 🌸, asisten HR digital untuk Toko C383 (retail).
 Tugasmu: bantu user ngurusin jadwal shift.
 
@@ -806,17 +831,12 @@ KEPRIBADIAN HANA:
 - Fokus ke topik shift — gak ngelantur
 
 GAYA BICARA:
-- Bahasa Indonesia santai tapi sopan (panggil user dengan baik)
+- Bahasa Indonesia santai tapi sopan
 - Pake emoji secukupnya (1-2 per pesan, jangan lebay)
 - Kadang pake "eh", "wah", "hmm", "nih" biar natural
-- JANGAN pake bahasa formal kaku ("Baik, akan saya proses...")
+- JANGAN pake bahasa formal kaku
 - Max 4-5 baris — jangan bertele-tele
 - Kalau kasih data, rapi & jelas
-
-CONTOH RESPONSE:
-- Sapaan: "Halo! 👋 Ada yang bisa Hana bantu?"
-- Info libur: "Wah, hari ini ZAKI & KUSDEWI libur 🌸 BTW siang cuma TIKA yang jaga, mau Hana saranin pengganti?"
-- Update: "Oke, siap! 🌸 Udah Hana catat ya."
 
 ═══════════════════════════════════════
 KONTEKS TOKO:
@@ -829,12 +849,8 @@ Tanggal: {_tgl.isoformat()} ({_tgl.strftime('%A')})
 {_shift_besok}
 
 KODE SHIFT:
-P7 = Pagi (07:00)
-S15 = Siang (15:00)
-M22 = Malam (22:00)
-O = Libur
-C = Cuti
-AO = Additional Off
+P7 = Pagi (07:00) | S15 = Siang (15:00) | M22 = Malam (22:00)
+O = Libur | C = Cuti | AO = Additional Off
 
 ═══════════════════════════════════════
 RIWAYAT PERCAKAPAN:
@@ -853,15 +869,51 @@ Jawab sebagai Hana 🌸. Ingat: ceria, ramah, profesional, dan proaktif!
             _prompt, ai_name="ai-1", function="chat"
         )
         if _ok and _resp_text:
-            return _resp_text.strip()
+            return {
+                "text": _resp_text.strip(),
+                "intent": "update" if (_parsed and _parsed.get("shift_map")) else "query",
+                "parsed": _parsed,
+                "engine": f"groq ({_model})",
+            }
+
         print(f"[Hana] Groq gagal, fallback rule. Err: {_err}")
 
-    return _fallback_chat(user_message)
+    # ✅ Fallback rule-based (kalau Groq offline)
+    return {
+        "text": _fallback_chat(user_message),
+        "intent": "update" if (_parsed and _parsed.get("shift_map")) else "query",
+        "parsed": _parsed,
+        "engine": "rule (offline)",
+    }
 
 
 def _fallback_chat(user_message):
-    """Fallback chat dengan persona Hana (rule-based)."""
+    """Fallback chat dengan persona Hana (rule-based, offline)."""
     _msg = user_message.lower()
+
+    # === DETEKSI UPDATE INTENT ===
+    _update_keywords = [
+        "atur", "pindah", "pindahkan", "ganti", "ubah", "set",
+        "libur", "cuti", "off", "masuk",
+    ]
+    _is_update = any(k in _msg for k in _update_keywords)
+
+    if _is_update:
+        # Coba parse
+        try:
+            _parsed = parse_shift_update(user_message)
+            if _parsed.get("shift_map"):
+                _nama_list = ", ".join(_parsed["shift_map"].keys())
+                _tgl = _parsed.get("tanggal_detect", "hari ini")
+                return (
+                    f"🌸 Oke! Hana catat ya: **{_nama_list}** → "
+                    f"update jadwal **{_tgl}**.\n\n"
+                    f"💡 *Note: Hana mode offline, tapi data bakal tetep "
+                    f"ke-save kalau kamu konfirmasi.*"
+                )
+        except Exception:
+            pass
+        return "🌸 Hana catat ya. Cek preview di bawah buat konfirmasi!"
 
     # === SHIFT QUERY ===
     if "shift" in _msg and any(k in _msg for k in ["pagi", "siang", "malam"]):
@@ -905,5 +957,6 @@ def _fallback_chat(user_message):
         "Hmm, Hana belum ngerti nih 🤔\n"
         "Coba tanya:\n"
         "• \"Siapa shift pagi hari ini?\"\n"
+        "• \"Atur Reza ke shift siang\"\n"
         "• \"Ada berapa personil aktif?\""
     )
