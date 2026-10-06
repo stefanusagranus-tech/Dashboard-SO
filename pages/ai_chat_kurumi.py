@@ -135,7 +135,7 @@ def render_kurumi_header():
             "🎀 KURUMI 🎀</div>"
             "<div style='font-family: Quicksand, sans-serif; font-size: 10px; "
             "color: #E8B189; letter-spacing: 1.5px; margin-top: 2px;'>"
-            "Chief of Staff — Toko C383</div>"
+            "Spirit of Time — Chief of Staff Toko C383</div>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -176,16 +176,11 @@ if "kurumi_report_choice" not in st.session_state:
 if not st.session_state["kurumi_history"]:
     _welcome = (
         "🎀 **Ara, ara~** Selamat datang, Tuan~ ✨\n\n"
-        "Watashi adalah **Kurumi**, Chief of Staff Toko C383. "
+        "Aku adalah **Kurumi**, Chief of Staff Toko C383. "
         "Kihihihi~ Senang akhirnya bisa bertemu Tuan di sini.\n\n"
-        "Ada yang bisa Watashi bantu hari ini? "
+        "Fufufu~ Ada yang bisa aku bantu hari ini, Tuan? "
         "Tuan bisa langsung ngobrol santai, atau pilih tombol di bawah~ 🎀"
     )
-    st.session_state["kurumi_history"].append({
-        "role": "assistant",
-        "content": _welcome,
-    })
-
 
 # =========================================================================
 # TOOLBAR — 2 TOMBOL ACTION
@@ -369,7 +364,7 @@ st.markdown(
     "<div style='text-align: center; padding: 20px 0; "
     "font-family: Quicksand, sans-serif; font-size: 10px; "
     "color: #7a9b8e; letter-spacing: 1px;'>"
-    "🎀 Kurumi — Chief of Staff | Toko C383 🎀"
+    "🎀 Kurumi — Spirit of Time | Chief of Staff Toko C383 🎀"
     "</div>",
     unsafe_allow_html=True,
 )
