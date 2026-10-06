@@ -48,9 +48,24 @@ def _fmt_rp(value):
     except Exception:
         return "Rp 0"
 
+def _sanitize_text(text):
+    """Ganti karakter unicode gak didukung Helvetica jadi ASCII."""
+    _replacements = {
+        "—": "-", "–": "-", "−": "-", "…": "...",
+        "“": '"', "”": '"', "‘": "'", "’": "'",
+        "•": "-", "·": "-", "→": "->", "←": "<-",
+        "≥": ">=", "≤": "<=", "×": "x", "÷": "/",
+        "≈": "~=", "≠": "!=",
+        "\u00a0": " ", "\u200b": "",
+    }
+    _result = text
+    for _k, _v in _replacements.items():
+        _result = _result.replace(_k, _v)
+    _result = "".join(c if ord(c) < 256 else "" for c in _result)
+    return _result
 
 def _strip_emoji(text):
-    """Hapus emoji & karakter unicode aneh."""
+    """Hapus emoji & sanitize unicode."""
     _result = []
     for _ch in text:
         _cat = unicodedata.category(_ch)
@@ -59,8 +74,7 @@ def _strip_emoji(text):
         if ord(_ch) > 0x2600:
             continue
         _result.append(_ch)
-    return "".join(_result)
-
+    return _sanitize_text("".join(_result))
 
 # =========================================================
 # 📄 MAIN: GENERATE PDF
