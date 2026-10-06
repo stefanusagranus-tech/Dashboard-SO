@@ -23,7 +23,8 @@ from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
     from PIL import Image
     GEMINI_AVAILABLE = True
 except ImportError:
@@ -65,24 +66,26 @@ def _get_api_key():
 
 
 def _setup_genai():
+    """Setup genai client (SDK baru). Return: client atau None."""
     _key = _get_api_key()
     if not _key or not GEMINI_AVAILABLE:
-        return False
+        return None
     try:
-        genai.configure(api_key=_key)
-        return True
-    except Exception:
-        return False
+        _client = genai.Client(api_key=_key)
+        return _client
+    except Exception as _e:
+        print(f"[AI-1] Setup error: {_e}")
+        return None
 
 
 def _call_gemini_raw(prompt, image_bytes=None):
     """
-    Internal: call Gemini dengan timeout per model.
-    ⚠️ JANGAN tulis ke st.session_state dari sini — dipanggil dari thread.
+    Internal: call Gemini dengan SDK baru (google-genai).
     Return: (ok, text, model, err, usage_dict)
     """
-    if not _setup_genai():
-        return False, "", None, "Gemini not available / API key missing", {}
+    _client = _setup_genai()
+    if not _client:
+        return False, "", None, "Gemini client gagal init / API key missing", {}
 
     _contents = [prompt]
     if image_bytes:
@@ -96,17 +99,18 @@ def _call_gemini_raw(prompt, image_bytes=None):
     for _model_name in MODEL_PRIORITY:
         try:
             print(f"[AI-1] Trying {_model_name}...")
-            _m = genai.GenerativeModel(_model_name)
 
-            _resp = _m.generate_content(
-                _contents,
-                request_options={"timeout": 15},
+            _resp = _client.models.generate_content(
+                model=_model_name,
+                contents=_contents,
+                config=genai_types.GenerateContentConfig(
+                    temperature=0.3,
+                    max_output_tokens=2048,
+                ),
             )
 
             if _resp and hasattr(_resp, "text") and _resp.text:
                 print(f"[AI-1] ✅ OK: {_model_name}")
-
-                # Ambil usage metadata (return ke caller)
                 _usage_dict = {"model": _model_name, "success": True}
                 try:
                     _usage = getattr(_resp, "usage_metadata", None)
@@ -115,7 +119,6 @@ def _call_gemini_raw(prompt, image_bytes=None):
                         _usage_dict["output_tokens"] = getattr(_usage, "candidates_token_count", 0)
                 except Exception:
                     pass
-
                 return True, _resp.text, _model_name, None, _usage_dict
             else:
                 _last_error = f"Empty response dari {_model_name}"
@@ -127,18 +130,17 @@ def _call_gemini_raw(prompt, image_bytes=None):
 
     return False, "", None, _last_error or "All models failed", {}
 
-
 def _call_gemini(prompt, image_bytes=None, hard_timeout=60):
     """
     Call Gemini dengan hard timeout (thread-based).
-    Record usage di MAIN THREAD (bukan thread worker).
+    Record usage di MAIN THREAD.
     """
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _exec:
             _fut = _exec.submit(_call_gemini_raw, prompt, image_bytes)
             _ok, _text, _model, _err, _usage = _fut.result(timeout=hard_timeout)
 
-        # ✅ Record usage di main thread (session_state aman di sini)
+        # Record usage di main thread (session_state aman)
         if _usage and _usage.get("success"):
             try:
                 from modules.ocr_ai_handler import record_api_usage

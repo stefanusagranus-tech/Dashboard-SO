@@ -1,8 +1,9 @@
 """
-OCR AI Handler v22
-==============
+OCR AI Handler v23
+==================
+- Migrate ke google-genai (SDK baru)
 - Fix bug: _model is not defined
-- Auto-fallback 5 model (3.8-flash → 2.0-flash → 1.5-flash)
+- Auto-fallback 5 model
 - API usage tracking
 - Debug panel support
 """
@@ -15,7 +16,8 @@ from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
     from PIL import Image
     GEMINI_AVAILABLE = True
 except ImportError:
@@ -26,12 +28,9 @@ except ImportError:
 # 📋 MODEL PRIORITY (urut dari paling baru)
 # =========================================================
 MODEL_PRIORITY = [
-    "gemini-3.8-flash",
-    "gemini-3-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-exp",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-flash-latest",
 ]
 
 
@@ -41,12 +40,12 @@ MODEL_PRIORITY = [
 def get_api_usage_summary():
     """Return ringkasan usage dari session state."""
     _today = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
-    
+
     if "api_usage_tracker" not in st.session_state:
         st.session_state["api_usage_tracker"] = {}
-    
+
     _tracker = st.session_state["api_usage_tracker"]
-    
+
     if _today not in _tracker:
         _tracker[_today] = {
             "requests": 0,
@@ -56,17 +55,17 @@ def get_api_usage_summary():
             "model_used": [],
             "errors": 0,
         }
-    
+
     return _tracker[_today]
 
 
 def record_api_usage(prompt_tokens=0, output_tokens=0, model_name="", success=True):
     """Catat usage ke session state."""
     _today = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
-    
+
     if "api_usage_tracker" not in st.session_state:
         st.session_state["api_usage_tracker"] = {}
-    
+
     if _today not in st.session_state["api_usage_tracker"]:
         st.session_state["api_usage_tracker"][_today] = {
             "requests": 0,
@@ -76,9 +75,9 @@ def record_api_usage(prompt_tokens=0, output_tokens=0, model_name="", success=Tr
             "model_used": [],
             "errors": 0,
         }
-    
+
     _t = st.session_state["api_usage_tracker"][_today]
-    
+
     if success:
         _t["requests"] += 1
         _t["input_tokens"] += prompt_tokens
@@ -88,7 +87,7 @@ def record_api_usage(prompt_tokens=0, output_tokens=0, model_name="", success=Tr
             _t["model_used"].append(model_name)
     else:
         _t["errors"] += 1
-    
+
     return _t
 
 
@@ -99,19 +98,20 @@ def list_available_models(api_key=None):
     """Ambil daftar model yang tersedia untuk API key ini."""
     if not GEMINI_AVAILABLE:
         return []
-    
+
     try:
         _api_key = api_key or st.secrets.get("GEMINI_API_KEY", "")
         if not _api_key:
             return []
-        
-        genai.configure(api_key=_api_key)
-        
+
+        _client = genai.Client(api_key=_api_key)
+
         _models = []
-        for _m in genai.list_models():
-            if "generateContent" in _m.supported_generation_methods:
-                _models.append(_m.name.replace("models/", ""))
-        
+        for _m in _client.models.list():
+            _name = _m.name.replace("models/", "") if hasattr(_m, "name") else ""
+            if _name:
+                _models.append(_name)
+
         return _models
     except Exception as e:
         print(f"[LIST MODEL ERROR] {e}")
@@ -119,41 +119,44 @@ def list_available_models(api_key=None):
 
 
 # =========================================================
-# 🤖 OCR VIA GEMINI (v22 — FIXED)
+# 🤖 OCR VIA GEMINI (v23 — SDK BARU)
 # =========================================================
 def ocr_via_gemini(image_bytes, nama_personil="", bulan=1, tahun=2026):
     """
     OCR via Gemini dengan auto-fallback.
+    Pake SDK baru: google-genai.
     """
     if not GEMINI_AVAILABLE:
-        return {"success": False, "shift_map": {}, "error": "Library google-generativeai belum install"}
-    
+        return {"success": False, "shift_map": {}, "error": "Library google-genai belum install"}
+
     try:
         # ============================================
         # 1. GET API KEY
         # ============================================
         _api_key = st.secrets.get("GEMINI_API_KEY", "")
-        print(f"[GEMINI v22] API key length: {len(_api_key)}")
-        print(f"[GEMINI v22] API key prefix: {_api_key[:15]}...")
-        
+        print(f"[GEMINI v23] API key length: {len(_api_key)}")
+        print(f"[GEMINI v23] API key prefix: {_api_key[:15]}...")
+
         if not _api_key:
             return {"success": False, "shift_map": {}, "error": "GEMINI_API_KEY belum diset di secrets"}
-        
-        genai.configure(api_key=_api_key)
-        print(f"[GEMINI v22] Configured OK")
-        
+
+        _client = genai.Client(api_key=_api_key)
+        print(f"[GEMINI v23] Client configured OK")
+
         # ============================================
         # 2. OPEN IMAGE
         # ============================================
         _img = Image.open(io.BytesIO(image_bytes))
-        print(f"[GEMINI v22] Image size: {_img.size}")
-        
+        print(f"[GEMINI v23] Image size: {_img.size}")
+
         # ============================================
         # 3. BUILD PROMPT
         # ============================================
-        _nama_bulan = ["Januari","Februari","Maret","April","Mei","Juni",
-                       "Juli","Agustus","September","Oktober","November","Desember"][bulan-1]
-        
+        _nama_bulan = [
+            "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+            "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+        ][bulan - 1]
+
         _prompt = f"""Baca kalender shift ini dengan SANGAT TELITI.
 
 Konteks:
@@ -193,36 +196,42 @@ FORMAT OUTPUT (JSON valid, TANPA markdown backtick):
 
 Output HANYA JSON, tidak ada teks lain di luar JSON.
 """
-        
+
         # ============================================
         # 4. LOOP MODEL DENGAN AUTO-FALLBACK
         # ============================================
         _last_error = None
         _response = None
         _model_used = None
-        
+
         for _model_name in MODEL_PRIORITY:
             try:
-                print(f"[GEMINI v22] Trying model: {_model_name}")
-                _m = genai.GenerativeModel(_model_name)
-                
-                _resp = _m.generate_content([_prompt, _img])
-                
+                print(f"[GEMINI v23] Trying model: {_model_name}")
+
+                _resp = _client.models.generate_content(
+                    model=_model_name,
+                    contents=[_prompt, _img],
+                    config=genai_types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=2048,
+                    ),
+                )
+
                 if _resp and hasattr(_resp, "text") and _resp.text:
                     _response = _resp
                     _model_used = _model_name
-                    print(f"[GEMINI v22] ✅ Success with: {_model_name}")
+                    print(f"[GEMINI v23] ✅ Success with: {_model_name}")
                     break
                 else:
                     _last_error = f"Response kosong dari {_model_name}"
-                    print(f"[GEMINI v22] ⚠️ {_model_name}: empty response")
+                    print(f"[GEMINI v23] ⚠️ {_model_name}: empty response")
                     continue
-            
+
             except Exception as _e:
                 _last_error = str(_e)
-                print(f"[GEMINI v22] ❌ {_model_name} gagal: {_last_error[:150]}")
+                print(f"[GEMINI v23] ❌ {_model_name} gagal: {_last_error[:150]}")
                 continue
-        
+
         if _response is None:
             return {
                 "success": False,
@@ -230,7 +239,7 @@ Output HANYA JSON, tidak ada teks lain di luar JSON.
                 "error": f"Semua model gagal. Last: {_last_error[:200]}",
                 "raw_response": _last_error or "",
             }
-        
+
         # ============================================
         # 5. RECORD API USAGE
         # ============================================
@@ -247,14 +256,14 @@ Output HANYA JSON, tidak ada teks lain di luar JSON.
                 record_api_usage(model_name=_model_used, success=True)
         except Exception as _e_usage:
             print(f"[USAGE TRACK ERROR] {_e_usage}")
-        
+
         # ============================================
         # 6. PARSE RESPONSE
         # ============================================
         _text = _response.text.strip()
-        print(f"[GEMINI v22] Response length: {len(_text)}")
-        print(f"[GEMINI v22] First 300: {_text[:300]}")
-        
+        print(f"[GEMINI v23] Response length: {len(_text)}")
+        print(f"[GEMINI v23] First 300: {_text[:300]}")
+
         # Clean JSON
         _json_match = re.search(r'\{[\s\S]*\}', _text)
         if not _json_match:
@@ -264,10 +273,10 @@ Output HANYA JSON, tidak ada teks lain di luar JSON.
                 "error": "Response gak ada JSON",
                 "raw_response": _text,
             }
-        
+
         _json_str = _json_match.group(0)
         _data = json.loads(_json_str)
-        
+
         # ============================================
         # 7. BUILD SHIFT MAP
         # ============================================
@@ -280,7 +289,7 @@ Output HANYA JSON, tidak ada teks lain di luar JSON.
                     _shift_map[_tgl.isoformat()] = str(_kode).strip().upper()
             except Exception:
                 continue
-        
+
         return {
             "success": True,
             "shift_map": _shift_map,
@@ -288,28 +297,28 @@ Output HANYA JSON, tidak ada teks lain di luar JSON.
             "model_used": _model_used,
             "error": "",
         }
-    
+
     except Exception as e:
         import traceback
         print(traceback.format_exc())
         try:
             record_api_usage(success=False)
-        except:
+        except Exception:
             pass
         return {"success": False, "shift_map": {}, "error": str(e)[:300], "raw_response": ""}
 
 
 # =========================================================
-# 🎯 WRAPPER v22
+# 🎯 WRAPPER v23
 # =========================================================
 def ocr_ai_smart(image_bytes, nama_personil="", bulan=1, tahun=2026):
     """Wrapper utama."""
     _result = ocr_via_gemini(image_bytes, nama_personil, bulan, tahun)
-    
+
     if _result["success"] and _result["shift_map"]:
         _result["provider"] = f"gemini ({_result.get('model_used', '?')})"
         return _result
-    
+
     return {
         "success": False,
         "shift_map": {},
@@ -318,8 +327,6 @@ def ocr_ai_smart(image_bytes, nama_personil="", bulan=1, tahun=2026):
         "provider": None,
     }
 
-
-# === BAGIAN 2 MULAI ===
 
 # =========================================================
 # 🔍 DEBUG INFO
@@ -337,20 +344,20 @@ def get_debug_info():
         "priority_models": MODEL_PRIORITY,
         "error": "",
     }
-    
+
     try:
         _api_key = st.secrets.get("GEMINI_API_KEY", "")
         _info["api_key_set"] = bool(_api_key)
         _info["api_key_length"] = len(_api_key)
-        
+
         if _api_key and GEMINI_AVAILABLE:
             _models = list_available_models(_api_key)
             _info["available_models"] = _models
             _info["available_priority"] = [m for m in MODEL_PRIORITY if m in _models]
-    
+
     except Exception as e:
         _info["error"] = str(e)[:200]
-    
+
     return _info
 
 
@@ -363,31 +370,34 @@ def quick_test_gemini():
     Return: (success, message, model_used)
     """
     if not GEMINI_AVAILABLE:
-        return False, "Library google-generativeai belum install", None
-    
+        return False, "Library google-genai belum install", None
+
     try:
         _api_key = st.secrets.get("GEMINI_API_KEY", "")
         if not _api_key:
             return False, "GEMINI_API_KEY belum diset", None
-        
-        genai.configure(api_key=_api_key)
-        
+
+        _client = genai.Client(api_key=_api_key)
+
         _last_error = None
         for _model_name in MODEL_PRIORITY:
             try:
                 print(f"[QUICK TEST] Trying: {_model_name}")
-                _model = genai.GenerativeModel(_model_name)
-                _response = _model.generate_content("Jawab hanya: OK")
-                
+
+                _response = _client.models.generate_content(
+                    model=_model_name,
+                    contents="Jawab hanya: OK",
+                )
+
                 if _response and hasattr(_response, "text") and _response.text:
                     return True, f"✅ Model {_model_name} works!", _model_name
             except Exception as _e:
                 _last_error = str(_e)
                 print(f"[QUICK TEST] {_model_name} error: {_e}")
                 continue
-        
+
         return False, f"Semua model gagal. Last: {_last_error[:150]}", None
-    
+
     except Exception as e:
         return False, f"Error: {str(e)[:200]}", None
 
@@ -400,10 +410,10 @@ def get_model_info_df():
     Return DataFrame info model untuk display.
     """
     import pandas as pd
-    
+
     _debug = get_debug_info()
     _rows = []
-    
+
     for _i, _model in enumerate(MODEL_PRIORITY):
         _available = _model in _debug.get("available_models", [])
         _rows.append({
@@ -412,25 +422,25 @@ def get_model_info_df():
             "Available": "✅" if _available else "❌",
             "Note": "Paling baru" if _i == 0 else "-",
         })
-    
+
     return pd.DataFrame(_rows)
 
 
 # =========================================================
-# 📊 GET USAGE DATAFRAME (untuk display)
+# 📊 GET USAGE DATAFRAME
 # =========================================================
 def get_usage_df():
     """Return DataFrame usage history."""
     import pandas as pd
-    
+
     if "api_usage_tracker" not in st.session_state:
         return pd.DataFrame()
-    
+
     _tracker = st.session_state["api_usage_tracker"]
-    
+
     if not _tracker:
         return pd.DataFrame()
-    
+
     _rows = []
     for _tgl, _data in sorted(_tracker.items(), reverse=True):
         _rows.append({
@@ -441,7 +451,7 @@ def get_usage_df():
             "Total Tokens": _data.get("total_tokens", 0),
             "Errors": _data.get("errors", 0),
         })
-    
+
     return pd.DataFrame(_rows)
 
 
@@ -452,5 +462,5 @@ def fmt_num(n):
     """Format number dengan koma."""
     try:
         return f"{int(n):,}".replace(",", ".")
-    except:
+    except Exception:
         return str(n)
