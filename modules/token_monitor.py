@@ -386,64 +386,34 @@ def render_usage_dashboard():
     # TREND 7 HARI (CHART)
     # ============================================
     st.markdown("#### 📈 Trend 7 Hari Terakhir")
-
+    
     _history = get_usage_history(days=7)
     _dates = []
     _reqs = []
     _errors = []
-
+    
     for _h in _history:
         _tgl = _h["tanggal"]
         _dt = _h["data"]
-        _dates.append(_tgl[5:])  # MM-DD
+        _dates.append(_tgl[5:])
         if _dt:
             _reqs.append(_dt["total"]["requests"])
             _errors.append(_dt["total"]["errors"])
         else:
             _reqs.append(0)
             _errors.append(0)
-
+    
     try:
         import plotly.graph_objects as go
-
         _fig = go.Figure()
-        _fig.add_trace(go.Bar(
-            x=_dates, y=_reqs,
-            name="Requests",
-            marker_color="#7FB99B",
-            text=_reqs,
-            textposition="outside",
-        ))
-        _fig.add_trace(go.Bar(
-            x=_dates, y=_errors,
-            name="Errors",
-            marker_color="#E88B8B",
-            text=_errors,
-            textposition="outside",
-        ))
-        _fig.update_layout(
-            barmode="group",
-            height=300,
-            margin=dict(l=10, r=10, t=30, b=30),
-            plot_bgcolor="rgba(10, 22, 18, 0.4)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#E8B189", family="JetBrains Mono", size=10),
-            xaxis=dict(
-                gridcolor="rgba(232, 177, 137, 0.15)",
-                type="category",       # ✅ Paksa kategori (biar gak auto-scale)
-                tickmode="array",
-                tickvals=_dates,
-                ticktext=_dates,
-            ),
-            yaxis=dict(
-                gridcolor="rgba(232, 177, 137, 0.15)",
-                rangemode="tozero",     # ✅ Mulai dari 0
-                dtick=1,                # ✅ Step 1 (biar integer)
-            ),
-            legend=dict(font=dict(color="#E8B189")),
-        )
-
-    st.markdown("---")
+        _fig.add_trace(go.Bar(...))
+        _fig.add_trace(go.Bar(...))
+        _fig.update_layout(...)
+        st.plotly_chart(_fig, use_container_width=True, key="chart_usage_trend")
+    except Exception as _e:
+        st.warning(f"⚠️ Chart gagal render: {_e}")
+    
+    st.markdown("---")  # ✅ Ini sekarang aman
 
     # ============================================
     # RESET INFO
