@@ -1,12 +1,9 @@
 """
-PDF Report Generator v3.0 — Professional Layout
-================================================
-Layout upgrade:
-- Header banner + strip "Disusun Oleh"
-- Card metric
-- Bullet dengan kotak
-- Layout 2 kolom (kiri-kanan)
-- Section header dengan garis
+PDF Report Generator v3.1 — Professional Layout (Reorder)
+==========================================================
+Layout:
+- Halaman 1: Header + Card + Ringkasan + Analisis SPD + Grafik
+- Halaman 2: Analisis BTSB + Tabel SO + Insight + Rekomendasi
 """
 
 import io
@@ -23,8 +20,8 @@ except ImportError:
 
 
 # === WARNA ===
-_C_PRIMARY = (46, 30, 120)       # ungu tua
-_C_ACCENT = (120, 80, 220)       # ungu terang
+_C_PRIMARY = (46, 30, 120)
+_C_ACCENT = (120, 80, 220)
 _C_DARK = (30, 30, 50)
 _C_GRAY = (100, 100, 100)
 _C_LIGHT = (245, 243, 255)
@@ -173,6 +170,67 @@ def _make_bar_chart(adjust_so, btsb):
 
 
 # =========================================================
+# 🔧 PARSE AI CONTENT — SPLIT PER SECTION
+# =========================================================
+def _parse_sections(content_text):
+    """
+    Parse AI content jadi dict per section.
+    Return: {
+        "ringkasan": "...",
+        "analisis_spd": "...",
+        "analisis_btsb": "...",
+        "insight": "...",
+        "rekomendasi": "...",
+    }
+    """
+    _sections = {
+        "ringkasan": "",
+        "analisis_spd": "",
+        "analisis_btsb": "",
+        "insight": "",
+        "rekomendasi": "",
+        "other": "",
+    }
+
+    _current = "other"
+    _buffer = []
+
+    for _line in content_text.split("\n"):
+        _line_strip = _line.strip()
+        _line_lower = _line_strip.lower()
+
+        # Deteksi heading
+        if _line_strip.startswith("#"):
+            # Simpan buffer sebelumnya
+            if _buffer:
+                _sections[_current] += "\n".join(_buffer) + "\n"
+                _buffer = []
+
+            # Tentukan section baru
+            if "ringkasan" in _line_lower or "eksekutif" in _line_lower:
+                _current = "ringkasan"
+            elif "spd" in _line_lower or "sales" in _line_lower:
+                _current = "analisis_spd"
+            elif "btsb" in _line_lower or "nsb" in _line_lower:
+                _current = "analisis_btsb"
+            elif "insight" in _line_lower or "temuan" in _line_lower:
+                _current = "insight"
+            elif "rekomendasi" in _line_lower:
+                _current = "rekomendasi"
+            else:
+                _current = "other"
+            continue
+
+        _buffer.append(_line)
+
+    # Simpan buffer terakhir
+    if _buffer:
+        _sections[_current] += "\n".join(_buffer) + "\n"
+
+    return _sections
+
+
+# =========================================================
 # 📄 MAIN: GENERATE PDF
 # =========================================================
 def generate_pdf(
@@ -189,29 +247,53 @@ def generate_pdf(
     try:
         _pdf = FPDF(orientation="P", unit="mm", format="A4")
         _pdf.set_margins(left=_MARGIN_L, top=15, right=_MARGIN_R)
-        _pdf.set_auto_page_break(auto=True, margin=15)
+        _pdf.set_auto_page_break(auto=True, margin=10)
         _pdf.add_page()
 
-        # ✅ 1. HEADER BANNER
-        _render_header_banner(_pdf, period_label)
+        # Parse AI content
+        _sections = _parse_sections(ai_content)
 
-        # ✅ 2. STRIP "DISUSUN OLEH"
+        # ============================================
+        # HALAMAN 1: Header + Card + Ringkasan + Analisis SPD + Grafik
+        # ============================================
+        _render_header_banner(_pdf, period_label)
         _render_strip(_pdf)
 
-        # ✅ 3. CARD METRIC (jika ada)
         if extra_stats:
             _render_metric_cards(_pdf, extra_stats)
 
-        # ✅ 4. KONTEN AI (dengan bullet kotak)
-        _render_ai_content(_pdf, ai_content)
+        # Ringkasan Eksekutif
+        if _sections["ringkasan"]:
+            _render_section(_pdf, "Ringkasan Eksekutif", _sections["ringkasan"])
 
-        # ✅ 5. GRAFIK 2 KOLOM
+        # Analisis SPD & Sales
+        if _sections["analisis_spd"]:
+            _render_section(_pdf, "Analisis SPD & Sales", _sections["analisis_spd"])
+
+        # Grafik
         if extra_stats:
             _render_charts_2col(_pdf, extra_stats)
 
-        # ✅ 6. TABEL SO
+        # ============================================
+        # HALAMAN 2: Analisis BTSB + Tabel + Insight + Rekomendasi
+        # ============================================
+        _pdf.add_page()
+
+        # Analisis BTSB & NSB
+        if _sections["analisis_btsb"]:
+            _render_section(_pdf, "Analisis BTSB & NSB", _sections["analisis_btsb"])
+
+        # Tabel SO
         if so_data:
-            _render_so_table(_pdf, so_data, period_type)
+            _render_so_table(_pdf, so_data, period_type, new_page=False)
+
+        # Insight & Temuan
+        if _sections["insight"]:
+            _render_section(_pdf, "Insight & Temuan", _sections["insight"])
+
+        # Rekomendasi
+        if _sections["rekomendasi"]:
+            _render_section(_pdf, "Rekomendasi", _sections["rekomendasi"])
 
         _out = _pdf.output(dest="S")
         _pdf_bytes = _out.encode("latin-1") if isinstance(_out, str) else bytes(_out)
@@ -236,43 +318,37 @@ def _reset_x(pdf):
     pdf.set_x(_MARGIN_L)
 
 
-# === 1. HEADER BANNER ===
 def _render_header_banner(pdf, period_label):
     """Banner ungu besar di atas."""
-    # Background banner
     pdf.set_fill_color(*_C_PRIMARY)
     pdf.rect(0, 0, _PAGE_W, 42, "F")
 
-    # Garis oranye di kiri (aksen)
+    # Garis oranye di kiri
     pdf.set_fill_color(*_C_ORANGE)
     pdf.rect(0, 0, 6, 42, "F")
 
-    # Judul utama
+    # Judul
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 26)
     pdf.set_y(10)
     pdf.set_x(_MARGIN_L + 6)
     pdf.cell(_CONTENT_W - 6, 12, "Laporan Stock Opname", align="L")
 
-    # Subjudul
     pdf.set_font("Helvetica", "", 11)
     pdf.set_y(23)
     pdf.set_x(_MARGIN_L + 6)
     pdf.cell(_CONTENT_W - 6, 6, f"Periode: {period_label}", align="L")
 
-    # Sub-sub
     pdf.set_font("Helvetica", "", 10)
     pdf.set_y(30)
     pdf.set_x(_MARGIN_L + 6)
     pdf.cell(_CONTENT_W - 6, 5, "Toko C383 - Karang Satria", align="L")
 
-    # Reset
     pdf.set_text_color(*_C_DARK)
     pdf.set_y(50)
     _reset_x(pdf)
 
 
-# === 2. STRIP "DISUSUN OLEH" ===
 def _render_strip(pdf):
     """Strip ungu tipis di bawah header."""
     _y = pdf.get_y()
@@ -287,47 +363,58 @@ def _render_strip(pdf):
     pdf.cell(_CONTENT_W / 2, 4, "Disusun Oleh", align="L")
 
     pdf.set_x(_MARGIN_L + _CONTENT_W / 2)
-    pdf.cell(_CONTENT_W / 2, 4, "Staff Karang Satria", align="R")  # ✅ GANTI INI
+    pdf.cell(_CONTENT_W / 2, 4, "Staff Karang Satria", align="R")
 
     pdf.set_text_color(*_C_DARK)
     pdf.set_y(_y + 14)
     _reset_x(pdf)
 
 
-# === 3. CARD METRIC ===
 def _render_metric_cards(pdf, stats):
-    """4 card metric di atas body."""
+    """4 card metric — Rak di-SO, Belum SO, Adjust SO, Status."""
     _sudah = stats.get("sudah_so", 0)
     _belum = stats.get("belum_so", 0)
-    _total_rak = _sudah + _belum
     _adjust = stats.get("adjust_so", 0)
     _btsb = stats.get("btsb", 0)
+
+    # ✅ Hitung status
+    if _btsb > 0:
+        _penggunaan = (abs(_adjust) / _btsb * 100)
+    else:
+        _penggunaan = 0
+
+    if _penggunaan <= 80:
+        _status_text = "AMAN"
+        _status_color = _C_GREEN
+    elif _penggunaan <= 100:
+        _status_text = "WASPADA"
+        _status_color = _C_ORANGE
+    else:
+        _status_text = "BAHAYA"
+        _status_color = _C_RED
 
     _cards = [
         {"label": "Rak di-SO", "value": f"{_sudah}", "color": _C_GREEN},
         {"label": "Belum SO", "value": f"{_belum}", "color": _C_RED},
         {"label": "Adjust SO", "value": _fmt_rp(_adjust)[:15], "color": _C_ORANGE},
-        {"label": "BTSB", "value": _fmt_rp(_btsb)[:15], "color": _C_PRIMARY},
+        {"label": "Status", "value": _status_text, "color": _status_color},
     ]
 
-    _card_w = (_CONTENT_W - 6) / 4  # 4 cards + 3 gaps of 2mm
+    _card_w = (_CONTENT_W - 6) / 4
     _card_h = 22
     _y_start = pdf.get_y()
 
     for _i, _card in enumerate(_cards):
         _x = _MARGIN_L + _i * (_card_w + 2)
 
-        # Card background
         pdf.set_fill_color(*_card["color"])
         pdf.rect(_x, _y_start, _card_w, _card_h, "F")
 
-        # Label
         pdf.set_text_color(255, 255, 255)
         pdf.set_font("Helvetica", "", 8)
         pdf.set_xy(_x, _y_start + 3)
         pdf.cell(_card_w, 4, _card["label"], align="C")
 
-        # Value
         pdf.set_font("Helvetica", "B", 13)
         pdf.set_xy(_x, _y_start + 10)
         pdf.cell(_card_w, 8, _card["value"], align="C")
@@ -337,63 +424,50 @@ def _render_metric_cards(pdf, stats):
     _reset_x(pdf)
 
 
-# === 4. KONTEN AI ===
-def _render_ai_content(pdf, content_text):
-    """Render markdown dengan bullet kotak."""
-    for _line in content_text.split("\n"):
+def _render_section(pdf, title, content):
+    """Render section dengan heading + content."""
+    _reset_x(pdf)
+    pdf.ln(3)
+
+    # Heading dengan kotak
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_text_color(*_C_PRIMARY)
+    pdf.set_fill_color(*_C_ACCENT)
+    pdf.rect(_MARGIN_L, pdf.get_y() + 1.5, 3, 4, "F")
+    pdf.set_x(_MARGIN_L + 5)
+    pdf.cell(_CONTENT_W - 5, 7, title, align="L")
+    pdf.ln(8)
+
+    # Garis
+    pdf.set_draw_color(*_C_ACCENT)
+    pdf.set_line_width(0.3)
+    pdf.line(_MARGIN_L, pdf.get_y(), _PAGE_W - _MARGIN_R, pdf.get_y())
+    pdf.ln(3)
+    _reset_x(pdf)
+
+    # Content
+    _render_content_text(pdf, content)
+    _reset_x(pdf)
+
+
+def _render_content_text(pdf, content):
+    """Render text content dengan bullet kotak."""
+    for _line in content.split("\n"):
         _line_clean = _strip_emoji(_line).strip()
 
         if not _line_clean:
-            pdf.ln(2)
+            pdf.ln(1)
             _reset_x(pdf)
             continue
 
-        # HEADING
-        if _line_clean.startswith("#"):
-            _level = len(_line_clean) - len(_line_clean.lstrip("#"))
-            _text = _line_clean.lstrip("#").strip().replace("**", "").replace("*", "")
-
-            pdf.ln(4)
-            _reset_x(pdf)
-
-            if _level <= 1:
-                pdf.set_font("Helvetica", "B", 13)
-                pdf.set_text_color(*_C_PRIMARY)
-                # Kotak kecil di depan heading
-                pdf.set_fill_color(*_C_ACCENT)
-                pdf.rect(_MARGIN_L, pdf.get_y() + 1.5, 3, 4, "F")
-                pdf.set_x(_MARGIN_L + 5)
-                pdf.cell(_CONTENT_W - 5, 7, _text, align="L")
-                pdf.ln(8)
-                # Garis tipis
-                pdf.set_draw_color(*_C_ACCENT)
-                pdf.set_line_width(0.3)
-                pdf.line(_MARGIN_L, pdf.get_y(), _PAGE_W - _MARGIN_R, pdf.get_y())
-                pdf.ln(3)
-            elif _level == 2:
-                pdf.set_font("Helvetica", "B", 11)
-                pdf.set_text_color(*_C_PRIMARY)
-                pdf.cell(_CONTENT_W, 6, _text, ln=True)
-                pdf.ln(1)
-            else:
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.set_text_color(*_C_DARK)
-                pdf.cell(_CONTENT_W, 5, _text, ln=True)
-
-            pdf.set_text_color(*_C_DARK)
-            _reset_x(pdf)
-            continue
-
-        # BULLET (kotak kecil)
-        if _line_clean.startswith(("- ", "* ", "• ")):
+        # BULLET
+        if _line_clean.startswith(("- ", "* ", "• ", "■ ")):
             _text = _line_clean[2:].strip().replace("**", "").replace("*", "")
             _y = pdf.get_y()
 
-            # Kotak kecil
             pdf.set_fill_color(*_C_ACCENT)
             pdf.rect(_MARGIN_L + 2, _y + 1.5, 2, 2, "F")
 
-            # Text
             pdf.set_font("Helvetica", "", 10)
             pdf.set_text_color(*_C_DARK)
             pdf.set_x(_MARGIN_L + 7)
@@ -402,7 +476,7 @@ def _render_ai_content(pdf, content_text):
             _reset_x(pdf)
             continue
 
-        # NUMBERED (arrow)
+        # NUMBERED
         _match_num = re.match(r'^(\d+)\.\s+(.+)', _line_clean)
         if _match_num:
             _num = _match_num.group(1)
@@ -425,7 +499,6 @@ def _render_ai_content(pdf, content_text):
         _reset_x(pdf)
 
 
-# === 5. GRAFIK 2 KOLOM ===
 def _render_charts_2col(pdf, stats):
     """Render 2 grafik side-by-side."""
     _sudah = stats.get("sudah_so", 0)
@@ -436,11 +509,7 @@ def _render_charts_2col(pdf, stats):
     if _sudah + _belum == 0 and _adjust == 0 and _btsb == 0:
         return
 
-    # Cek page break
-    if pdf.get_y() > 150:
-        pdf.add_page()
-
-    pdf.ln(5)
+    pdf.ln(3)
     _reset_x(pdf)
 
     # Section header
@@ -455,7 +524,7 @@ def _render_charts_2col(pdf, stats):
     pdf.set_draw_color(*_C_ACCENT)
     pdf.set_line_width(0.3)
     pdf.line(_MARGIN_L, pdf.get_y(), _PAGE_W - _MARGIN_R, pdf.get_y())
-    pdf.ln(5)
+    pdf.ln(4)
     _reset_x(pdf)
 
     _y_start = pdf.get_y()
@@ -487,17 +556,16 @@ def _render_charts_2col(pdf, stats):
         except Exception as _e:
             print(f"[PDF IMG BAR ERROR] {_e}")
 
-    # Reset Y setelah chart
     pdf.set_y(_y_start + 75)
     _reset_x(pdf)
 
 
-# === 6. TABEL SO ===
-def _render_so_table(pdf, so_data, period_type):
-    if pdf.get_y() > 180:
+def _render_so_table(pdf, so_data, period_type, new_page=False):
+    """Render tabel SO."""
+    if new_page:
         pdf.add_page()
 
-    pdf.ln(5)
+    pdf.ln(3)
     _reset_x(pdf)
 
     # Section header
@@ -580,7 +648,7 @@ def _render_so_table(pdf, so_data, period_type):
         pdf.cell(_col_w[3], 7, _pic[:20], border=0, fill=_fill, align="C")
         pdf.ln(7)
 
-    # Garis bawah
+    # Garis
     pdf.set_draw_color(*_C_ACCENT)
     pdf.set_line_width(0.3)
     pdf.line(_MARGIN_L, pdf.get_y(), _PAGE_W - _MARGIN_R, pdf.get_y())
