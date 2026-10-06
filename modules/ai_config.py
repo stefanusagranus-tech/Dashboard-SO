@@ -3,6 +3,12 @@ AI Config — Centralized Configuration
 ======================================
 Config terpusat semua AI (Kurumi, Hana, Yui, Rei, Takumi, Rin).
 
+Fitur:
+- Multi-API-key support (tiap AI punya key sendiri)
+- Persona per AI
+- Model priority per AI
+- Daily limit tracking
+
 Karakter:
 - AI-0: Kurumi (Chief of Staff) 🎀
 - AI-1: Hana (Master Shift) 🌸
@@ -31,7 +37,8 @@ AI_CONFIG = {
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["greeting", "summary", "send_report"],
-        "enabled": False,  # Aktifkan setelah API key siap
+        "api_key_secret": "GROQ_API_KEY_KURUMI",  # ✅ Key dari akun 2
+        "enabled": True,
     },
 
     # ============================================
@@ -49,6 +56,7 @@ AI_CONFIG = {
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["parse", "chat", "suggest", "conflict"],
+        "api_key_secret": "GROQ_API_KEY",  # ✅ Key utama
         "enabled": True,
     },
 
@@ -66,6 +74,7 @@ AI_CONFIG = {
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["input", "validate", "anomaly"],
+        "api_key_secret": "GROQ_API_KEY",  # Nanti bisa dipisah
         "enabled": False,
     },
 
@@ -83,6 +92,7 @@ AI_CONFIG = {
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["analysis", "report", "trend"],
+        "api_key_secret": "GROQ_API_KEY",
         "enabled": False,
     },
 
@@ -100,6 +110,7 @@ AI_CONFIG = {
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["input", "tracking"],
+        "api_key_secret": "GROQ_API_KEY",
         "enabled": False,
     },
 
@@ -117,6 +128,7 @@ AI_CONFIG = {
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["analysis", "estimation", "report"],
+        "api_key_secret": "GROQ_API_KEY",
         "enabled": False,
     },
 }
@@ -126,31 +138,14 @@ AI_CONFIG = {
 # 🎯 LIMIT MODEL GROQ (FREE TIER)
 # =========================================================
 GROQ_LIMITS = {
-    "allam-2-7b": {
-        "rpm": 30, "rpd": 7000, "tpm": 6000,
-    },
-    "meta-llama/llama-prompt-guard-2-22m": {
-        "rpm": 30, "rpd": 14400, "tpm": 15000,
-    },
-    "meta-llama/llama-prompt-guard-2-86m": {
-        "rpm": 30, "rpd": 14400, "tpm": 15000,
-    },
-    "openai/gpt-oss-120b": {
-        "rpm": 30, "rpd": 1000, "tpm": 8000,
-    },
-    "openai/gpt-oss-20b": {
-        "rpm": 30, "rpd": 1000, "tpm": 8000,
-    },
-    "openai/gpt-oss-safeguard-20b": {
-        "rpm": 3, "rpd": 1000, "tpm": 2000,
-    },
-    "qwen/qwen3.8-27b": {
-        "rpm": 30, "rpd": 1000, "tpm": 8000,
-    },
-    # Fallback default kalau model gak ada di list
-    "_default": {
-        "rpm": 30, "rpd": 1000, "tpm": 8000,
-    },
+    "allam-2-7b": {"rpm": 30, "rpd": 7000, "tpm": 6000},
+    "meta-llama/llama-prompt-guard-2-22m": {"rpm": 30, "rpd": 14400, "tpm": 15000},
+    "meta-llama/llama-prompt-guard-2-86m": {"rpm": 30, "rpd": 14400, "tpm": 15000},
+    "openai/gpt-oss-120b": {"rpm": 30, "rpd": 1000, "tpm": 8000},
+    "openai/gpt-oss-20b": {"rpm": 30, "rpd": 1000, "tpm": 8000},
+    "openai/gpt-oss-safeguard-20b": {"rpm": 3, "rpd": 1000, "tpm": 2000},
+    "qwen/qwen3.8-27b": {"rpm": 30, "rpd": 1000, "tpm": 8000},
+    "_default": {"rpm": 30, "rpd": 1000, "tpm": 8000},
 }
 
 
@@ -188,3 +183,27 @@ def get_ai_name_display(ai_name):
     """Ambil display name + emoji buat UI."""
     _cfg = AI_CONFIG.get(ai_name, {})
     return f"{_cfg.get('emoji', '🤖')} {_cfg.get('name', ai_name)}"
+
+
+def get_ai_api_key(ai_name):
+    """
+    ✅ Ambil API key dari Streamlit secrets berdasarkan ai_name.
+    Kalau key spesifik gak ada, fallback ke GROQ_API_KEY.
+    """
+    import streamlit as st
+
+    _cfg = get_ai_config(ai_name)
+    _secret_name = _cfg.get("api_key_secret", "GROQ_API_KEY")
+
+    try:
+        _key = st.secrets.get(_secret_name, "")
+        if _key:
+            return _key
+    except Exception:
+        pass
+
+    # Fallback ke key utama
+    try:
+        return st.secrets.get("GROQ_API_KEY", "")
+    except Exception:
+        return ""
