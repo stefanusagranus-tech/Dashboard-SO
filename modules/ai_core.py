@@ -856,6 +856,7 @@ def kurumi_summarize(period="hari", custom_date=None):
         _end = _tgl
         _label = "hari ini"
 
+    # ✅ Pake report context (cuma SPD, SO, BTSB, Rak)
     _ctx = _get_report_context(_start, _end)
 
     _prompt = f"""{_build_kurumi_system_prompt()}
@@ -868,20 +869,11 @@ Periode: {_label}
 📅 KONTEKS:
 - Tanggal hari ini: {_ctx['tanggal_hari_ini'].isoformat()}
 
-SHIFT HARI INI:
-{_ctx['shift_hari_ini']}
-
-SHIFT BESOK:
-{_ctx['shift_besok']}
-
 SPD (periode ini):
 {_ctx['spd_data']}
 
 STOCK OPNAME (periode ini):
 {_ctx['so_data']}
-
-NET SALES:
-{_ctx['net_sales']}
 
 ANALISIS BTSB & NSB:
 {_ctx['btsb']}
@@ -889,16 +881,13 @@ ANALISIS BTSB & NSB:
 STATUS RAK:
 {_ctx['rak_status']}
 
-PERSONIL:
-{_ctx['personil']}
-
 ═══════════════════════════════════════
 📝 INSTRUKSI:
 ═══════════════════════════════════════
 Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
 - Pake "Aku", sering "Ara ara~" / "Kihihihi~"
 - Struktur:
-  * Pembuka singkat
+  * Pembuka singkat (1-2 baris, gaya Kurumi)
   * 💰 SPD & Sales
   * 📦 Stock Opname
   * 🎯 BTSB & NSB Status
@@ -909,13 +898,13 @@ Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
 ⚠️ ATURAN:
 - KALAU ADA DATA di atas, PAKE datanya. JANGAN bilang "belum ada data"!
 - Sebut angka & rak spesifik kalau ada.
+- JANGAN bahas shift (itu tugas Hana).
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="summary")
     if _ok and _text:
         return _text.strip()
     return "🎀 **Ara, ara~** Maaf Tuan, aku gagal akses data.\n\nKihihihi~ Coba lagi nanti ya~ 🎀"
-
 
 # =========================================================
 # 🎀 PUBLIC API — GREETING
