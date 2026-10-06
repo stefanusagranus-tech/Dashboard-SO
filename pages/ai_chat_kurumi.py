@@ -373,11 +373,28 @@ if st.session_state["kurumi_mode"] == "report":
 # =========================================================================
 st.markdown("#### 💬 Percakapan")
 
-for _msg in st.session_state["kurumi_history"]:
+for _idx, _msg in enumerate(st.session_state["kurumi_history"]):
     _role = _msg.get("role", "user")
     _content = _msg.get("content", "")
+    _file_data = _msg.get("file")   # ← ambil file dari history
+    
     with st.chat_message(_role, avatar="👤" if _role == "user" else "🎀"):
         st.markdown(_content)
+        
+        # ✅ Re-render tombol download kalau ada file di history
+        if _file_data:
+            st.markdown("---")
+            _col_dl, _ = st.columns([2, 3])
+            with _col_dl:
+                st.download_button(
+                    label=f"📥 Download {_file_data.get('format', 'file').upper()}",
+                    data=_file_data["content"],
+                    file_name=_file_data["filename"],
+                    mime=_file_data["mime"],
+                    use_container_width=True,
+                    type="primary",
+                    key=f"dl_hist_{_idx}",
+                )
 
 
 # =========================================================================
@@ -416,11 +433,17 @@ if _user_msg:
                     key=f"dl_chat_{time.time()}",
                 )
 
-    # Simpan history
-    _saved_text = _resp.get("text", "") if isinstance(_resp, dict) else _resp
-    st.session_state["kurumi_history"].append({"role": "assistant", "content": _saved_text})
+    # ✅ Simpan history — TERMASUK FILE
+    _entry = {
+        "role": "assistant",
+        "content": _text,
+    }
+    if _file:
+        _entry["file"] = _file   # ← INI KUNCINYA
+    
+    st.session_state["kurumi_history"].append(_entry)
     st.rerun()
-
+    
 # =========================================================================
 # CLEAR CHAT
 # =========================================================================
