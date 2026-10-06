@@ -1,10 +1,10 @@
 """
-PDF Report Generator v2.2 — Formal & Profesional
+PDF Report Generator v2.3 — Formal & Profesional
 ==================================================
 Fix:
-- Footer pake absolute page (gak bikin halaman kosong)
-- Header bersih (gak ada karakter bocor)
-- Auto-page-break margin=22
+- HAPUS footer (bandel di fpdf2)
+- Fix double header
+- Gak ada halaman kosong
 - Format tanggal + jam
 """
 
@@ -60,23 +60,13 @@ def _fmt_rp(value):
         return "Rp 0"
 
 
-def _fmt_tgl(tgl_str):
-    try:
-        _dt = datetime.strptime(tgl_str, "%Y-%m-%d")
-        return f"{_dt.day} {_NAMA_BULAN[_dt.month]} {_dt.year}"
-    except Exception:
-        return tgl_str
-
-
 def _fmt_tgl_short(tgl_str):
     """Format tanggal pendek: '2026-10-04' → '04/10/2026'"""
     try:
         _dt = datetime.strptime(tgl_str, "%Y-%m-%d")
         return _dt.strftime("%d/%m/%Y")
     except Exception:
-        # Fallback kalau format aneh
         try:
-            # Coba format lain
             _dt = datetime.strptime(tgl_str[:10], "%Y-%m-%d")
             return _dt.strftime("%d/%m/%Y")
         except Exception:
@@ -202,20 +192,28 @@ def generate_pdf(
     try:
         _pdf = FPDF(orientation="P", unit="mm", format="A4")
         _pdf.set_margins(left=_MARGIN_L, top=18, right=_MARGIN_R)
-        _pdf.set_auto_page_break(auto=True, margin=22)
+        _pdf.set_auto_page_break(auto=True, margin=15)
         _pdf.add_page()
 
-        _render_header(_pdf, period_label)
+        # ✅ Header (period label)
+        _render_header(_pdf)
+
+        # ✅ Info periode + tanggal generate
+        _render_period_info(_pdf, period_label)
+
+        # ✅ Konten AI
         _render_ai_content(_pdf, ai_content)
 
+        # ✅ Grafik
         if extra_stats:
             _render_charts_section(_pdf, extra_stats)
 
+        # ✅ Tabel SO
         if so_data:
             _render_so_table(_pdf, so_data, period_type)
 
-        # ✅ Footer pake page iteration (gak bikin halaman baru)
-        _render_all_footers(_pdf)
+        # ❌ FOOTER DIHAPUS — biar gak ada halaman kosong
+        # Footer bikin page break aneh di fpdf2
 
         _out = _pdf.output(dest="S")
         _pdf_bytes = _out.encode("latin-1") if isinstance(_out, str) else bytes(_out)
@@ -240,33 +238,54 @@ def _reset_x(pdf):
     pdf.set_x(_MARGIN_L)
 
 
-def _render_header(pdf, period_label):
-    """Header formal — gak ada karakter bocor."""
+def _render_header(pdf):
+    """Header formal dengan banner ungu — CUMA SEKALI."""
     # Banner
     pdf.set_fill_color(*_C_PRIMARY)
-    pdf.rect(0, 0, _PAGE_W, 32, "F")
+    pdf.rect(0, 0, _PAGE_W, 28, "F")
 
-    # Teks header
+    # Judul
     pdf.set_text_color(255, 255, 255)
-
     pdf.set_font("Helvetica", "B", 18)
-    pdf.set_y(8)
+    pdf.set_y(9)
     pdf.set_x(_MARGIN_L)
     pdf.cell(_CONTENT_W, 9, "LAPORAN STOCK OPNAME", align="L")
 
+    # Subjudul
     pdf.set_font("Helvetica", "", 10)
     pdf.set_y(19)
     pdf.set_x(_MARGIN_L)
     pdf.cell(_CONTENT_W, 5, "Toko C383 - Karang Satria", align="L")
 
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.set_y(25)
-    pdf.set_x(_MARGIN_L)
-    pdf.cell(_CONTENT_W, 5, f"Periode: {period_label}", align="L")
-
-    # Reset ke body
+    # Reset
     pdf.set_text_color(*_C_DARK)
-    pdf.set_y(38)
+    pdf.set_y(33)
+    _reset_x(pdf)
+
+
+def _render_period_info(pdf, period_label):
+    """Info periode + tanggal generate."""
+    _now = _now_jkt()
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(*_C_PRIMARY)
+    _reset_x(pdf)
+    pdf.cell(_CONTENT_W, 6, f"Periode: {period_label}", ln=True)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*_C_GRAY)
+    _reset_x(pdf)
+    pdf.cell(_CONTENT_W, 5, f"Tanggal Generate: {_now.strftime('%d/%m/%Y %H:%M')} WIB", ln=True)
+
+    pdf.ln(3)
+
+    # Garis
+    pdf.set_draw_color(*_C_ACCENT)
+    pdf.set_line_width(0.4)
+    pdf.line(_MARGIN_L, pdf.get_y(), _PAGE_W - _MARGIN_R, pdf.get_y())
+    pdf.ln(5)
+
+    pdf.set_text_color(*_C_DARK)
     _reset_x(pdf)
 
 
@@ -440,7 +459,7 @@ def _render_so_table(pdf, so_data, period_type):
     else:
         _rows = so_data
 
-    # Kolom: total = 174
+    # Kolom
     _col_w = [35, 30, 65, 44]
     _headers = ["Tanggal", "Rak", "Nominal", "PIC"]
 
@@ -498,36 +517,3 @@ def _render_so_table(pdf, so_data, period_type):
     pdf.cell(_col_w[2], 8, _fmt_rp(_total_nom), border=1, align="R")
     pdf.cell(_col_w[3], 8, "", border=1)
     pdf.ln(8)
-
-
-def _render_all_footers(pdf):
-    """
-    Render footer di SEMUA halaman.
-    Pake absolute page iteration biar GAK bikin halaman kosong.
-    """
-    _total_pages = pdf.page_no()
-    _last_page = _total_pages
-
-    # Iterasi tiap halaman
-    for _page_num in range(1, _total_pages + 1):
-        pdf.page = _page_num
-
-        # Footer text
-        pdf.set_y(282)
-        pdf.set_x(_MARGIN_L)
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(*_C_GRAY)
-
-        _footer_text = (
-            f"Toko C383 - Karang Satria | "
-            f"Dicetak: {_now_jkt().strftime('%d/%m/%Y %H:%M')} WIB"
-        )
-        pdf.cell(_CONTENT_W, 4, _footer_text, align="C")
-
-        # Page number
-        pdf.set_y(287)
-        pdf.set_x(_MARGIN_L)
-        pdf.cell(_CONTENT_W, 4, f"Halaman {_page_num} dari {_last_page}", align="C")
-
-    # Balik ke halaman terakhir
-    pdf.page = _last_page
