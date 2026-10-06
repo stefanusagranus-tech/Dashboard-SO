@@ -650,13 +650,31 @@ Buat laporan formal, profesional, dan akurat berdasarkan data yang diberikan.
 5. REKOMENDASI (3-4 bullet)
 
 ═══════════════════════════════════════
+📅 FORMAT TANGGAL (WAJIB):
+═══════════════════════════════════════
+- Tanggal HARUS ada spasi: "3 Oktober 2026" (BUKAN "3Oktober2026")
+- Format lengkap: "3 Oktober 2026"
+- Format pendek: "03/10/2026"
+- JANGAN pake format "03102026" atau "3Oktober2026"
+
+═══════════════════════════════════════
+📝 GAYA PENULISAN (WAJIB):
+═══════════════════════════════════════
+- Profesional & formal (kayak laporan kantor)
+- JANGAN pake kata "menandakan", "menunjukkan" berlebihan
+- Pake kalimat pendek & jelas
+- Hindari gaya AI ("berpotensi menimbulkan", "dapat disimpulkan")
+- Langsung ke poin, jangan bertele-tele
+- Contoh bagus: "Selisih negatif Rp -24.316 perlu audit rak CT1 & OA2."
+- Contoh jelek: "Hal ini menandakan potensi kesalahan pencatatan yang berpotensi menimbulkan ketidaksesuaian data."
+
+═══════════════════════════════════════
 ⚠️ PENTING:
 ═══════════════════════════════════════
 - JANGAN ngarang data. Kalau data gak ada, bilang "data belum tersedia"
 - JANGAN bikin tabel SO (itu di-render terpisah dari DB)
 - JANGAN bahas shift (itu tugas Hana)
 - FOKUS ke analysis & insight."""
-
 
 # =========================================================
 # 💬 BUILD PROMPT — CHAT KURUMI
@@ -1110,12 +1128,40 @@ Buat laporan dengan struktur:
             else:
                 _period_type = "hari"
 
+                        # ✅ Ambil stats buat grafik
+            from modules.supabase_client import get_supabase as _get_sb
+            _sb = _get_sb()
+
+            # Status rak
+            _rak_res = _sb.table("rak_master").select("status_so").execute()
+            _rak_rows = _rak_res.data or []
+            _sudah_so = len([r for r in _rak_rows if r.get("status_so") == "SELESAI"])
+            _belum_so = len([r for r in _rak_rows if r.get("status_so") == "BELUM"])
+
+            # Adjust SO & BTSB
+            _adjust_so = sum(float(r.get("nominal_adjust", 0)) for r in _so_raw)
+            _spd_res = _sb.table("spd_harian") \
+                .select("spd") \
+                .gte("tanggal", start_date.isoformat()) \
+                .lte("tanggal", end_date.isoformat()) \
+                .execute()
+            _total_spd = sum(float(r.get("spd", 0)) for r in (_spd_res.data or []))
+            _btsb = _total_spd * 0.0015
+
+            _extra_stats = {
+                "sudah_so": _sudah_so,
+                "belum_so": _belum_so,
+                "adjust_so": _adjust_so,
+                "btsb": _btsb,
+            }
+
             return generate_pdf(
                 ai_content=_content_text,
                 so_data=_so_raw,
                 period_label=label,
                 period_type=_period_type,
                 filename=f"laporan_{filename_suffix}.pdf",
+                extra_stats=_extra_stats,
             )
         except Exception as _e_pdf:
             import traceback
