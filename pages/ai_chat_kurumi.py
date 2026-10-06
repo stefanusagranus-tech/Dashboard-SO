@@ -395,9 +395,29 @@ if _user_msg:
         with st.spinner("🎀 Aku lagi mikir..."):
             _resp = kurumi_chat_response(_user_msg, st.session_state["kurumi_history"])
 
-        st.markdown(_resp)
+        # ✅ Handle response dict
+        _text = _resp.get("text", "") if isinstance(_resp, dict) else _resp
+        _file = _resp.get("file") if isinstance(_resp, dict) else None
 
-    st.session_state["kurumi_history"].append({"role": "assistant", "content": _resp})
+        st.markdown(_text)
+
+        # ✅ Tampilkan tombol download kalau ada file
+        if _file:
+            st.markdown("---")
+            _col_dl, _ = st.columns([2, 3])
+            with _col_dl:
+                st.download_button(
+                    label=f"📥 Download {_file.get('format', 'file').upper()}",
+                    data=_file["content"],
+                    file_name=_file["filename"],
+                    mime=_file["mime"],
+                    use_container_width=True,
+                    type="primary",
+                    key=f"dl_chat_{time.time()}",
+                )
+
+    # Simpan history — pake text aja
+    st.session_state["kurumi_history"].append({"role": "assistant", "content": _text})
     st.rerun()
 
 
