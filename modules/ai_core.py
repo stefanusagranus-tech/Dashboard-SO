@@ -859,8 +859,8 @@ def kurumi_summarize(period="hari", custom_date=None):
         _end = _tgl
         _label = "hari ini"
 
-    # ✅ force_full=True karena report BUTUH semua data
-    _ctx_range = _build_smart_context("", start_date=_start, end_date=_end, force_full=True)
+    # ✅ FIX: force_full=True karena rangkum butuh semua data
+    _ctx = _build_smart_context("", start_date=_start, end_date=_end, force_full=True)
 
     _prompt = f"""{_build_kurumi_system_prompt()}
 
@@ -871,10 +871,13 @@ Periode: {_label}
 
 📅 KONTEKS:
 - Tanggal hari ini: {_ctx['tanggal_hari_ini'].isoformat()}
-- Total personil aktif: {len(_ctx['personil'])} personil
+- Total personil aktif: (lihat data di bawah)
 
 SHIFT HARI INI:
 {_ctx['shift_hari_ini']}
+
+SHIFT BESOK:
+{_ctx['shift_besok']}
 
 SPD (periode ini):
 {_ctx['spd_data']}
@@ -921,8 +924,7 @@ Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
         return _text.strip()
 
     return "🎀 **Ara, ara~** Maaf Tuan, aku gagal akses data.\n\nKihihihi~ Coba lagi nanti ya~ 🎀"
-
-
+    
 # =========================================================
 # 🎀 PUBLIC API — GREETING
 # =========================================================
