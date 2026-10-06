@@ -76,9 +76,13 @@ def _setup_genai():
 
 
 def _call_gemini_raw(prompt, image_bytes=None):
-    """Internal: call Gemini dengan timeout per model."""
+    """
+    Internal: call Gemini dengan timeout per model.
+    ⚠️ JANGAN tulis ke st.session_state dari sini — dipanggil dari thread.
+    Return: (ok, text, model, err, usage_dict)
+    """
     if not _setup_genai():
-        return False, "", None, "Gemini not available / API key missing"
+        return False, "", None, "Gemini not available / API key missing", {}
 
     _contents = [prompt]
     if image_bytes:
@@ -86,7 +90,7 @@ def _call_gemini_raw(prompt, image_bytes=None):
             _img = Image.open(io.BytesIO(image_bytes))
             _contents.append(_img)
         except Exception as e:
-            return False, "", None, f"Image error: {e}"
+            return False, "", None, f"Image error: {e}", {}
 
     _last_error = None
     for _model_name in MODEL_PRIORITY:
@@ -101,21 +105,18 @@ def _call_gemini_raw(prompt, image_bytes=None):
 
             if _resp and hasattr(_resp, "text") and _resp.text:
                 print(f"[AI-1] ✅ OK: {_model_name}")
+
+                # Ambil usage metadata (return ke caller)
+                _usage_dict = {"model": _model_name, "success": True}
                 try:
-                    from modules.ocr_ai_handler import record_api_usage
                     _usage = getattr(_resp, "usage_metadata", None)
                     if _usage:
-                        record_api_usage(
-                            prompt_tokens=getattr(_usage, "prompt_token_count", 0),
-                            output_tokens=getattr(_usage, "candidates_token_count", 0),
-                            model_name=_model_name,
-                            success=True,
-                        )
-                    else:
-                        record_api_usage(model_name=_model_name, success=True)
+                        _usage_dict["prompt_tokens"] = getattr(_usage, "prompt_token_count", 0)
+                        _usage_dict["output_tokens"] = getattr(_usage, "candidates_token_count", 0)
                 except Exception:
                     pass
-                return True, _resp.text, _model_name, None
+
+                return True, _resp.text, _model_name, None, _usage_dict
             else:
                 _last_error = f"Empty response dari {_model_name}"
                 print(f"[AI-1] ⚠️ Empty: {_model_name}")
@@ -124,21 +125,40 @@ def _call_gemini_raw(prompt, image_bytes=None):
             print(f"[AI-1] ❌ {_model_name}: {_last_error[:150]}")
             continue
 
-    try:
-        from modules.ocr_ai_handler import record_api_usage
-        record_api_usage(success=False)
-    except Exception:
-        pass
-
-    return False, "", None, _last_error or "All models failed"
+    return False, "", None, _last_error or "All models failed", {}
 
 
 def _call_gemini(prompt, image_bytes=None, hard_timeout=60):
-    """Call Gemini dengan hard timeout (thread-based)."""
+    """
+    Call Gemini dengan hard timeout (thread-based).
+    Record usage di MAIN THREAD (bukan thread worker).
+    """
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _exec:
             _fut = _exec.submit(_call_gemini_raw, prompt, image_bytes)
-            return _fut.result(timeout=hard_timeout)
+            _ok, _text, _model, _err, _usage = _fut.result(timeout=hard_timeout)
+
+        # ✅ Record usage di main thread (session_state aman di sini)
+        if _usage and _usage.get("success"):
+            try:
+                from modules.ocr_ai_handler import record_api_usage
+                record_api_usage(
+                    prompt_tokens=_usage.get("prompt_tokens", 0),
+                    output_tokens=_usage.get("output_tokens", 0),
+                    model_name=_usage.get("model", ""),
+                    success=True,
+                )
+            except Exception as _e_rec:
+                print(f"[AI-1] record usage error: {_e_rec}")
+        elif not _ok:
+            try:
+                from modules.ocr_ai_handler import record_api_usage
+                record_api_usage(success=False)
+            except Exception:
+                pass
+
+        return _ok, _text, _model, _err
+
     except concurrent.futures.TimeoutError:
         print(f"[AI-1] HARD TIMEOUT {hard_timeout}s")
         try:
