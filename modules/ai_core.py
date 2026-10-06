@@ -766,13 +766,19 @@ def _get_kurumi_quota_info():
 # 🎀 PUBLIC API — CHAT
 # =========================================================
 def kurumi_chat_response(user_message, conversation_history=None):
-    """Chat response dari Kurumi — auto-detect intent."""
+    """
+    Chat response dari Kurumi — auto-detect intent.
+    Return: dict {
+        "text": str,
+        "file": dict | None (kalau ada file buat download),
+    }
+    """
     if not user_message:
-        return ""
+        return {"text": "", "file": None}
 
     _msg_lower = user_message.lower()
 
-    # === QUOTA CHECK (khusus) ===
+    # === QUOTA CHECK ===
     if any(k in _msg_lower for k in ["quota", "kuota", "limit", "sisa token", "berapa token"]):
         _quota_info = _get_kurumi_quota_info()
         _prompt = f"""{_build_kurumi_system_prompt()}
@@ -786,27 +792,93 @@ Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi (Ara ara, Kihihihi,
 """
         _ok, _text, _model, _err = _call_kurumi(_prompt, function="quota")
         if _ok and _text:
-            return _text.strip()
+            return {"text": _text.strip(), "file": None}
 
-    # === RANGKUM INTENT ===
-    _is_summary = any(k in _msg_lower for k in ["rangkum", "ringkas", "summary", "rekap"])
-    if _is_summary:
+    # === DETEKSI INTENT: REPORT ===
+    _is_report_intent = any(k in _msg_lower for k in [
+        "buat laporan", "bikin laporan", "generate laporan",
+        "buat pdf", "bikin pdf", "buat excel", "bikin excel",
+        "laporan pdf", "laporan excel", "laporan tanggal", "laporan hari",
+        "report pdf", "report excel",
+    ])
+
+    # === DETEKSI INTENT: RANGKUM ===
+    _is_summary_intent = any(k in _msg_lower for k in [
+        "rangkum", "ringkas", "summary", "rekap",
+    ])
+
+    # === REPORT INTENT → generate file + download ===
+    if _is_report_intent:
+        # Deteksi tanggal
+        _scope = _detect_scope_dari_text(user_message)
+        _custom_date = None
+        if _scope == "custom":
+            _custom_date = _detect_tanggal_dari_text(user_message)
+
+        # Deteksi format
+        _wanted_format = "pdf"  # default
+        if any(k in _msg_lower for k in ["excel", "xls", "xlsx"]):
+            _wanted_format = "excel"
+        elif any(k in _msg_lower for k in ["text", "txt"]):
+            _wanted_format = "text"
+        elif "pdf" in _msg_lower:
+            _wanted_format = "pdf"
+
+        # Period
+        _period = "hari"
+        if _scope == "minggu":
+            _period = "minggu"
+        elif _scope == "bulan":
+            _period = "bulan"
+
+        # Generate file
+        if _custom_date:
+            _report = kurumi_generate_report_custom(_custom_date, format=_wanted_format)
+        else:
+            _report = kurumi_generate_report(period=_period, format=_wanted_format)
+
+        if _report["success"]:
+            _tgl_label = _custom_date.strftime('%d/%m/%Y') if _custom_date else _period
+            _text = (
+                f"🎀 **Ara, ara~** Udah jadi, Tuan~ ✨\n\n"
+                f"Kihihihi~ Aku siapin laporan **{_wanted_format.upper()}** "
+                f"untuk **{_tgl_label}**.\n\n"
+                f"Tinggal klik tombol **📥 Download** di bawah ya~ 🎀"
+            )
+            return {
+                "text": _text,
+                "file": {
+                    "content": _report["content"],
+                    "filename": _report["filename"],
+                    "mime": _report["mime"],
+                    "format": _wanted_format,
+                },
+            }
+        else:
+            return {
+                "text": f"🎀 **Ara, ara~** Maaf Tuan, aku gagal buat laporan nih.\n\nError: `{_report['content'][:150]}`\n\nCoba lagi ya~ 🎀",
+                "file": None,
+            }
+
+    # === SUMMARY INTENT → rangkum teks doang ===
+    if _is_summary_intent:
         _scope = _detect_scope_dari_text(user_message)
         if _scope == "custom":
             _custom_date = _detect_tanggal_dari_text(user_message)
-            return kurumi_summarize(period="custom", custom_date=_custom_date)
-        return kurumi_summarize(period=_scope)
+            _text = kurumi_summarize(period="custom", custom_date=_custom_date)
+        else:
+            _text = kurumi_summarize(period=_scope)
+        return {"text": _text, "file": None}
 
     # === CHAT BIASA ===
     _prompt = _build_kurumi_chat_prompt(user_message, conversation_history or [])
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="chat")
 
     if _ok and _text:
-        return _text.strip()
+        return {"text": _text.strip(), "file": None}
 
     print(f"[Kurumi] Groq gagal, fallback. Err: {_err}")
-    return _kurumi_fallback_chat(user_message)
-
+    return {"text": _kurumi_fallback_chat(user_message), "file": None}
 
 def _kurumi_fallback_chat(user_message):
     """Fallback chat kalau Groq offline."""
@@ -924,7 +996,7 @@ Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
         return _text.strip()
 
     return "🎀 **Ara, ara~** Maaf Tuan, aku gagal akses data.\n\nKihihihi~ Coba lagi nanti ya~ 🎀"
-    
+
 # =========================================================
 # 🎀 PUBLIC API — GREETING
 # =========================================================
