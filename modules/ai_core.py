@@ -452,7 +452,7 @@ def _get_last_shift_log(limit=3):
 # 🎯 SMART CONTEXT BUILDER
 # =========================================================
 def _build_smart_context(user_message, start_date=None, end_date=None, force_full=False):
-    _tgl = _now_jkt().date()
+    _tgl = _now_jkt()
     if not start_date:
         start_date = _tgl
     if not end_date:
@@ -1070,7 +1070,7 @@ def _generate_report_worker(label, start_date, end_date, format, filename_suffix
 🎯 TASK: BUAT LAPORAN FORMAL
 ═══════════════════════════════════════
 Periode: {label}
-Tanggal generate: {_tgl.strftime('%d/%m/%Y %H:%M')} WIB
+Tanggal generate: {_now.strftime('%d/%m/%Y %H:%M')} WIB
 
 SPD:
 {ctx['spd_data']}
