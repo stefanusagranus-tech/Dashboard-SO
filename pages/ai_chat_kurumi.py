@@ -68,6 +68,30 @@ def inject_chat_css():
             padding-top: 1rem !important;
         }
 
+        /* === GLOBAL FORCE TEXT COLOR === */
+        .stApp, .stApp * {
+            color: #F5E6D3 !important;
+        }
+
+        /* Tombol tetep punya warna sendiri */
+        .stApp button {
+            color: inherit !important;
+        }
+
+        /* Text input & chat input */
+        .stApp textarea,
+        .stApp input,
+        .stApp [contenteditable="true"] {
+            color: #F5E6D3 !important;
+            background: rgba(30, 20, 60, 0.6) !important;
+            caret-color: #a855f7 !important;
+        }
+
+        .stApp textarea::placeholder,
+        .stApp input::placeholder {
+            color: rgba(245, 230, 211, 0.5) !important;
+        }
+
         /* === CHAT BUBBLE === */
         [data-testid="stChatMessage"] {
             padding: 0.85rem 1.2rem !important;
@@ -76,43 +100,58 @@ def inject_chat_css():
             backdrop-filter: blur(8px) !important;
         }
 
-        /* Paksa warna text di dalam chat message */
         [data-testid="stChatMessage"] p,
         [data-testid="stChatMessage"] span,
         [data-testid="stChatMessage"] div,
         [data-testid="stChatMessage"] li,
         [data-testid="stChatMessage"] strong,
-        [data-testid="stChatMessage"] em,
-        [data-testid="stChatMessage"] h1,
-        [data-testid="stChatMessage"] h2,
-        [data-testid="stChatMessage"] h3,
-        [data-testid="stChatMessage"] h4 {
+        [data-testid="stChatMessage"] em {
             color: #F5E6D3 !important;
         }
 
-        /* Text markdown biasa */
-        [data-testid="stChatMessage"] .stMarkdown,
-        [data-testid="stChatMessage"] .stMarkdown * {
-            color: #F5E6D3 !important;
-        }
-
-        /* === USER BUBBLE (KANAN) === */
+        /* USER BUBBLE (KANAN) */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
             background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(232, 177, 137, 0.20)) !important;
             border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
             margin-left: 20% !important;
         }
 
-        /* === ASSISTANT BUBBLE (KIRI) === */
+        /* ASSISTANT BUBBLE (KIRI) */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
             background: linear-gradient(135deg, rgba(30, 20, 60, 0.85), rgba(76, 29, 149, 0.65)) !important;
             border: 1.5px solid rgba(168, 85, 247, 0.6) !important;
             margin-right: 20% !important;
         }
 
-        /* Avatar border */
+        /* Avatar */
         [data-testid="chatAvatarIcon-assistant"] {
             background: linear-gradient(135deg, #a855f7, #E8B189) !important;
+        }
+
+        /* === CHAT INPUT CONTAINER === */
+        [data-testid="stChatInputContainer"] {
+            background: rgba(30, 20, 60, 0.6) !important;
+            border-radius: 16px !important;
+            border: 1.5px solid rgba(168, 85, 247, 0.6) !important;
+        }
+
+        [data-testid="stChatInputContainer"] textarea,
+        [data-testid="stChatInputContainer"] input {
+            color: #F5E6D3 !important;
+            background: transparent !important;
+            caret-color: #a855f7 !important;
+        }
+
+        [data-testid="stChatInputContainer"] textarea::placeholder,
+        [data-testid="stChatInputContainer"] input::placeholder {
+            color: rgba(245, 230, 211, 0.5) !important;
+        }
+
+        /* Tombol kirim chat */
+        [data-testid="stChatInputContainer"] button {
+            background: linear-gradient(135deg, #a855f7, #E8B189) !important;
+            border: none !important;
+            color: #fff !important;
         }
 
         /* Tombol action */
@@ -120,21 +159,8 @@ def inject_chat_css():
             border-radius: 12px !important;
             font-weight: 700 !important;
         }
-
-        /* Chat input */
-        [data-testid="stChatInputContainer"] textarea {
-            color: #F5E6D3 !important;
-            background: rgba(30, 20, 60, 0.6) !important;
-        }
-        [data-testid="stChatInputContainer"] textarea::placeholder {
-            color: rgba(245, 230, 211, 0.5) !important;
-        }
     </style>
     """, unsafe_allow_html=True)
-
-
-inject_chat_css()
-
 
 # =========================================================================
 # HEADER
