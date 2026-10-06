@@ -33,6 +33,7 @@ from modules.master_shift_handler import (
     parse_chat_update,
 )
 from modules.supabase_client import get_supabase
+from modules.token_monitor import record_usage_v2, check_auto_pause
 
 
 # =========================================================
@@ -133,38 +134,55 @@ def _call_groq_raw(prompt):
     return False, "", None, _last_error or "All models failed", {}
 
 
-def _call_groq(prompt, hard_timeout=60):
-    """Call Groq dengan hard timeout (thread-based). Record usage di main thread."""
+def _call_groq(prompt, hard_timeout=60, ai_name="ai-1", function="parse"):
+    """
+    Call Groq dengan hard timeout (thread-based).
+    Record usage di main thread.
+    
+    Args:
+        ai_name: "ai-1", "ai-2", dst
+        function: "parse", "chat", "suggest", dst
+    """
+    # ✅ Cek auto-pause dulu
+    if check_auto_pause(ai_name):
+        print(f"[{ai_name}] Auto-pause aktif (quota >90%)")
+        return False, "", None, "Auto-pause: quota hampir habis"
+
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _exec:
             _fut = _exec.submit(_call_groq_raw, prompt)
             _ok, _text, _model, _err, _usage = _fut.result(timeout=hard_timeout)
 
+        # Record usage di main thread
         if _usage and _usage.get("success"):
             try:
-                from modules.ocr_ai_handler import record_api_usage
-                record_api_usage(
+                record_usage_v2(
+                    ai_name=ai_name,
+                    function=function,
+                    model=_usage.get("model", ""),
                     prompt_tokens=_usage.get("prompt_tokens", 0),
                     output_tokens=_usage.get("output_tokens", 0),
-                    model_name=_usage.get("model", ""),
                     success=True,
                 )
             except Exception as _e_rec:
-                print(f"[AI-1] record usage error: {_e_rec}")
+                print(f"[{ai_name}] record usage error: {_e_rec}")
         elif not _ok:
             try:
-                from modules.ocr_ai_handler import record_api_usage
-                record_api_usage(success=False)
+                record_usage_v2(
+                    ai_name=ai_name,
+                    function=function,
+                    model="",
+                    success=False,
+                )
             except Exception:
                 pass
 
         return _ok, _text, _model, _err
 
     except concurrent.futures.TimeoutError:
-        print(f"[AI-1] HARD TIMEOUT {hard_timeout}s")
+        print(f"[{ai_name}] HARD TIMEOUT {hard_timeout}s")
         try:
-            from modules.ocr_ai_handler import record_api_usage
-            record_api_usage(success=False)
+            record_usage_v2(ai_name=ai_name, function=function, model="", success=False)
         except Exception:
             pass
         return False, "", None, f"Hard timeout {hard_timeout}s"
@@ -388,7 +406,7 @@ Kalau mode=delete, isi "delete_targets" (list nama) & "shift_map" kosong.
 Output HANYA JSON.
 """
 
-    _ok, _resp_text, _model, _err = _call_groq(_prompt)
+    _ok, _resp_text, _model, _err = _call_groq(_prompt, ai_name="ai-1", function="parse")
 
     if not _ok:
         return {"success": False, "error": _err}
@@ -678,7 +696,7 @@ FORMAT OUTPUT (JSON ONLY):
 }}
 """
 
-    _ok, _resp_text, _model, _err = _call_groq(_prompt)
+    _ok, _resp_text, _model, _err = _call_groq(_prompt, ai_name="ai-1", function="suggest")
     if not _ok:
         return _format_saran_text(nama_libur, _rule_saran, "rule")
 
@@ -807,7 +825,7 @@ PERTANYAAN USER:
 Jawab bahasa Indonesia santai, singkat (max 3 kalimat), pakai emoji kalau perlu.
 """
 
-        _ok, _resp_text, _model, _err = _call_groq(_prompt)
+        _ok, _resp_text, _model, _err = _call_groq(_prompt, ai_name="ai-1", function="chat")
         if _ok and _resp_text:
             return _resp_text.strip()
         print(f"[AI-1] Groq gagal, fallback rule. Err: {_err}")

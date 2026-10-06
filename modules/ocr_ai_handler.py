@@ -233,6 +233,21 @@ Output HANYA JSON, tidak ada teks lain di luar JSON.
                 continue
 
         if _response is None:
+            # ✅ Deteksi quota habis
+            _err_lower = (_last_error or "").lower()
+            if "429" in _err_lower or "resource_exhausted" in _err_lower or "quota" in _err_lower:
+                return {
+                    "success": False,
+                    "shift_map": {},
+                    "error": (
+                        "🚫 QUOTA GEMINI HABIS\n\n"
+                        "Free tier Gemini cuma 20 request/hari.\n"
+                        "Quota reset jam 14:00-15:00 WIB besok.\n\n"
+                        "Alternatif: input manual via Chat Update."
+                    ),
+                    "raw_response": _last_error or "",
+                }
+        
             return {
                 "success": False,
                 "shift_map": {},
