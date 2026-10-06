@@ -1,10 +1,11 @@
 """
-PDF Report Generator v2.1 — Formal & Profesional
+PDF Report Generator v2.2 — Formal & Profesional
 ==================================================
-Fix: Not enough horizontal space error
-- Reset X position di setiap section
-- Margin aman
-- Layout lebih lega
+Fix:
+- Footer pake absolute page (gak bikin halaman kosong)
+- Header bersih (gak ada karakter bocor)
+- Auto-page-break margin=22
+- Format tanggal + jam
 """
 
 import io
@@ -32,6 +33,7 @@ _C_BLUE = (50, 100, 200)
 
 # === LAYOUT ===
 _PAGE_W = 210
+_PAGE_H = 297
 _MARGIN_L = 18
 _MARGIN_R = 18
 _CONTENT_W = _PAGE_W - _MARGIN_L - _MARGIN_R  # = 174
@@ -67,11 +69,18 @@ def _fmt_tgl(tgl_str):
 
 
 def _fmt_tgl_short(tgl_str):
+    """Format tanggal pendek: '2026-10-04' → '04/10/2026'"""
     try:
         _dt = datetime.strptime(tgl_str, "%Y-%m-%d")
         return _dt.strftime("%d/%m/%Y")
     except Exception:
-        return tgl_str
+        # Fallback kalau format aneh
+        try:
+            # Coba format lain
+            _dt = datetime.strptime(tgl_str[:10], "%Y-%m-%d")
+            return _dt.strftime("%d/%m/%Y")
+        except Exception:
+            return tgl_str
 
 
 def _sanitize_text(text):
@@ -92,6 +101,7 @@ def _sanitize_text(text):
 
 
 def _strip_emoji(text):
+    """Hapus emoji & sanitize unicode."""
     _result = []
     for _ch in text:
         _cat = unicodedata.category(_ch)
@@ -176,7 +186,7 @@ def _make_bar_chart(adjust_so, btsb):
 
 
 # =========================================================
-# 📄 MAIN
+# 📄 MAIN: GENERATE PDF
 # =========================================================
 def generate_pdf(
     ai_content: str,
@@ -192,7 +202,7 @@ def generate_pdf(
     try:
         _pdf = FPDF(orientation="P", unit="mm", format="A4")
         _pdf.set_margins(left=_MARGIN_L, top=18, right=_MARGIN_R)
-        _pdf.set_auto_page_break(auto=True, margin=25)
+        _pdf.set_auto_page_break(auto=True, margin=22)
         _pdf.add_page()
 
         _render_header(_pdf, period_label)
@@ -204,6 +214,7 @@ def generate_pdf(
         if so_data:
             _render_so_table(_pdf, so_data, period_type)
 
+        # ✅ Footer pake page iteration (gak bikin halaman baru)
         _render_all_footers(_pdf)
 
         _out = _pdf.output(dest="S")
@@ -223,32 +234,39 @@ def generate_pdf(
 
 
 # =========================================================
-# 🎨 RENDER — SEMUA SECTION RESET X POSITION
+# 🎨 RENDER SECTIONS
 # =========================================================
 def _reset_x(pdf):
-    """Reset X ke margin kiri — kunci biar gak error."""
     pdf.set_x(_MARGIN_L)
 
 
 def _render_header(pdf, period_label):
+    """Header formal — gak ada karakter bocor."""
+    # Banner
     pdf.set_fill_color(*_C_PRIMARY)
     pdf.rect(0, 0, _PAGE_W, 32, "F")
 
-    pdf.set_font("Helvetica", "B", 20)
+    # Teks header
     pdf.set_text_color(255, 255, 255)
-    pdf.set_xy(_MARGIN_L, 8)
-    pdf.cell(_CONTENT_W, 10, "LAPORAN STOCK OPNAME", ln=True)
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_y(8)
+    pdf.set_x(_MARGIN_L)
+    pdf.cell(_CONTENT_W, 9, "LAPORAN STOCK OPNAME", align="L")
 
     pdf.set_font("Helvetica", "", 10)
+    pdf.set_y(19)
     pdf.set_x(_MARGIN_L)
-    pdf.cell(_CONTENT_W, 5, "Toko C383 - Karang Satria", ln=True)
+    pdf.cell(_CONTENT_W, 5, "Toko C383 - Karang Satria", align="L")
 
     pdf.set_font("Helvetica", "B", 9)
+    pdf.set_y(25)
     pdf.set_x(_MARGIN_L)
-    pdf.cell(_CONTENT_W, 5, f"Periode: {period_label}", ln=True)
+    pdf.cell(_CONTENT_W, 5, f"Periode: {period_label}", align="L")
 
+    # Reset ke body
     pdf.set_text_color(*_C_DARK)
-    pdf.ln(18)
+    pdf.set_y(38)
     _reset_x(pdf)
 
 
@@ -483,30 +501,33 @@ def _render_so_table(pdf, so_data, period_type):
 
 
 def _render_all_footers(pdf):
-    """Render footer di SETIAP halaman."""
-    try:
-        _total_pages = pdf.pages_count() if callable(getattr(pdf, "pages_count", None)) else pdf.pages_count if hasattr(pdf, "pages_count") else 1
-    except Exception:
-        _total_pages = 1
+    """
+    Render footer di SEMUA halaman.
+    Pake absolute page iteration biar GAK bikin halaman kosong.
+    """
+    _total_pages = pdf.page_no()
+    _last_page = _total_pages
 
-    _current_page = pdf.page_no()
-    _y_backup = pdf.get_y()
+    # Iterasi tiap halaman
+    for _page_num in range(1, _total_pages + 1):
+        pdf.page = _page_num
 
-    # Footer utama
-    pdf.set_y(-18)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_text_color(*_C_GRAY)
-    pdf.set_x(_MARGIN_L)
+        # Footer text
+        pdf.set_y(282)
+        pdf.set_x(_MARGIN_L)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(*_C_GRAY)
 
-    _footer_text = (
-        f"Toko C383 - Karang Satria | "
-        f"Dicetak: {_now_jkt().strftime('%d/%m/%Y %H:%M')} WIB"
-    )
-    pdf.cell(_CONTENT_W, 5, _footer_text, align="C")
+        _footer_text = (
+            f"Toko C383 - Karang Satria | "
+            f"Dicetak: {_now_jkt().strftime('%d/%m/%Y %H:%M')} WIB"
+        )
+        pdf.cell(_CONTENT_W, 4, _footer_text, align="C")
 
-    # Page number
-    pdf.set_y(-13)
-    pdf.set_x(_MARGIN_L)
-    pdf.cell(_CONTENT_W, 5, f"Halaman {_current_page}", align="C")
+        # Page number
+        pdf.set_y(287)
+        pdf.set_x(_MARGIN_L)
+        pdf.cell(_CONTENT_W, 4, f"Halaman {_page_num} dari {_last_page}", align="C")
 
-    pdf.set_y(_y_backup)
+    # Balik ke halaman terakhir
+    pdf.page = _last_page
