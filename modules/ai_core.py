@@ -7,13 +7,6 @@ Kurumi bisa baca SEMUA tabel di database:
 - master_shift, master_shift_log, net_sales
 - personil_master, rak_master, screenshot_log
 - so_hasil, so_rak_harian, spd_harian
-
-Karakter:
-- "Ara, ara~" — verbal tic legendaris (SERING)
-- "Kihihihi~" / "Fufufu~" — tawa khas
-- "Aku" — first person
-- Panggil user "Tuan"
-- Elegan, misterius, manis, sedikit posesif
 """
 
 import io
@@ -46,12 +39,7 @@ def _now_jkt():
     return datetime.now(ZoneInfo("Asia/Jakarta"))
 
 
-def _today_key():
-    return _now_jkt().strftime("%Y-%m-%d")
-
-
 def _setup_kurumi_client():
-    """Setup Groq client khusus Kurumi (AI-0)."""
     _key = get_ai_api_key("ai-0")
     if not _key or not GROQ_AVAILABLE:
         return None
@@ -63,7 +51,6 @@ def _setup_kurumi_client():
 
 
 def _call_kurumi_groq_raw(prompt):
-    """Call Groq dengan model priority dari config ai-0."""
     _client = _setup_kurumi_client()
     if not _client:
         return False, "", None, "Kurumi client gagal init", {}
@@ -86,7 +73,6 @@ def _call_kurumi_groq_raw(prompt):
             if _resp and _resp.choices and _resp.choices[0].message.content:
                 _text = _resp.choices[0].message.content
                 print(f"[Kurumi] ✅ OK: {_model_name}")
-
                 _usage = {"model": _model_name, "success": True}
                 try:
                     _u = getattr(_resp, "usage", None)
@@ -95,7 +81,6 @@ def _call_kurumi_groq_raw(prompt):
                         _usage["output_tokens"] = getattr(_u, "completion_tokens", 0)
                 except Exception:
                     pass
-
                 return True, _text, _model_name, None, _usage
 
             _last_error = f"Empty response dari {_model_name}"
@@ -113,7 +98,6 @@ def _call_kurumi_groq_raw(prompt):
 
 
 def _call_kurumi(prompt, hard_timeout=90, function="chat"):
-    """Call Kurumi dengan hard timeout + record usage."""
     from modules.token_monitor import record_usage_v2, check_auto_pause
 
     if check_auto_pause("ai-0"):
@@ -155,10 +139,9 @@ def _call_kurumi(prompt, hard_timeout=90, function="chat"):
 
 
 # =========================================================
-# 🔍 DETEKSI TANGGAL DARI TEXT
+# 🔍 DETEKSI TANGGAL & SCOPE
 # =========================================================
 def _detect_tanggal_dari_text(text):
-    """Deteksi tanggal dari pesan user. Return: date."""
     _t = text.lower()
     _today = _now_jkt().date()
 
@@ -169,7 +152,6 @@ def _detect_tanggal_dari_text(text):
     if "lusa" in _t:
         return _today + timedelta(days=2)
 
-    # "tanggal X"
     _match = re.search(r'tanggal\s+(\d{1,2})', _t)
     if _match:
         _d = int(_match.group(1))
@@ -178,7 +160,6 @@ def _detect_tanggal_dari_text(text):
         except ValueError:
             pass
 
-    # "DD/MM" / "DD-MM" / "DD/MM/YYYY"
     _match = re.search(r'\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b', text)
     if _match:
         _d = int(_match.group(1))
@@ -199,18 +180,17 @@ def _detect_tanggal_dari_text(text):
 
 
 def _detect_scope_dari_text(text):
-    """
-    Deteksi scope (hari/minggu/bulan) dari text.
-    Return: "hari" | "minggu" | "bulan" | "custom"
-    """
     _t = text.lower()
     if any(k in _t for k in ["bulan ini", "bulanan", "1 bulan", "sebulan"]):
         return "bulan"
     if any(k in _t for k in ["minggu ini", "mingguan", "7 hari", "seminggu"]):
         return "minggu"
-    if any(k in _t for k in ["tanggal", "tgl", "kemarin", "besok", "lusa", "/", "-"]):
+    if any(k in _t for k in ["tanggal", "tgl", "kemarin", "besok", "lusa"]):
+        return "custom"
+    if re.search(r'\b\d{1,2}[/-]\d{1,2}', text):
         return "custom"
     return "hari"
+
 # =========================================================
 # 📊 AMBIL DATA DARI SEMUA TABEL
 # =========================================================
@@ -247,7 +227,7 @@ def _get_spd_data(start_date, end_date):
             .execute()
 
         if not _res.data:
-            return "Belum ada data SPD di periode ini."
+            return f"Belum ada data SPD di periode {start_date.isoformat()} s/d {end_date.isoformat()}."
 
         _total = sum(float(r.get("spd", 0)) for r in _res.data)
         _jumlah_hari = len(_res.data)
@@ -270,7 +250,7 @@ def _get_spd_data(start_date, end_date):
 
 
 def _get_so_data(start_date, end_date):
-    """Ambil SO dari so_rak_harian + so_hasil."""
+    """Ambil SO dari so_rak_harian."""
     try:
         _sb = get_supabase()
         _res = _sb.table("so_rak_harian") \
@@ -281,14 +261,13 @@ def _get_so_data(start_date, end_date):
             .execute()
 
         if not _res.data:
-            return "Belum ada data SO di periode ini."
+            return f"Belum ada data SO di periode {start_date.isoformat()} s/d {end_date.isoformat()}."
 
         _rows = _res.data
         _total_rak = len(_rows)
         _total_nominal = sum(float(r.get("nominal_adjust", 0)) for r in _rows)
         _sign = "+" if _total_nominal >= 0 else ""
 
-        # Breakdown per tanggal
         _per_tgl = {}
         for _r in _rows:
             _tgl = _r.get("so_date", "-")
@@ -307,7 +286,6 @@ def _get_so_data(start_date, end_date):
             _s = "+" if _d["total"] >= 0 else ""
             _lines.append(f"  • {_tgl}: {_d['count']} rak, nominal {_s}Rp {_d['total']:,.0f}".replace(",", "."))
 
-        # Top 10 rak (nominal terbesar)
         _top_rak = sorted(_rows, key=lambda x: abs(float(x.get("nominal_adjust", 0))), reverse=True)[:10]
         _lines.append("- Top 10 rak (nominal terbesar):")
         for _r in _top_rak:
@@ -322,7 +300,7 @@ def _get_so_data(start_date, end_date):
 
 
 def _get_net_sales_data():
-    """Ambil net sales BULANAN dari net_sales."""
+    """Ambil net sales BULANAN."""
     try:
         _sb = get_supabase()
         _res = _sb.table("net_sales") \
@@ -357,32 +335,24 @@ def _get_btsb_analysis(start_date, end_date):
     try:
         _sb = get_supabase()
 
-        # SPD total
         _spd_res = _sb.table("spd_harian") \
             .select("spd") \
             .gte("tanggal", start_date.isoformat()) \
             .lte("tanggal", end_date.isoformat()) \
             .execute()
-
         _total_spd = sum(float(r.get("spd", 0)) for r in (_spd_res.data or []))
 
-        # SO total
         _so_res = _sb.table("so_rak_harian") \
             .select("nominal_adjust") \
             .gte("so_date", start_date.isoformat()) \
             .lte("so_date", end_date.isoformat()) \
             .execute()
-
         _total_nominal = sum(float(r.get("nominal_adjust", 0)) for r in (_so_res.data or []))
 
-        # BTSB = 0.15% × SPD
         _btsb = _total_spd * 0.0015
-
-        # %NSB = |nominal| / SPD × 100
         _nsb_pct = (abs(_total_nominal) / _total_spd * 100) if _total_spd > 0 else 0
-
-        # Status
         _penggunaan_pct = (abs(_total_nominal) / _btsb * 100) if _btsb > 0 else 0
+
         if _penggunaan_pct <= 80:
             _status = "✅ AMAN"
         elif _penggunaan_pct <= 100:
@@ -405,7 +375,7 @@ def _get_btsb_analysis(start_date, end_date):
 
 
 def _get_rak_status():
-    """Ambil status rak: total, sudah SO, belum SO."""
+    """Ambil status rak."""
     try:
         _sb = get_supabase()
         _res = _sb.table("rak_master") \
@@ -419,8 +389,7 @@ def _get_rak_status():
         _total = len(_rows)
         _selesai = [r for r in _rows if r.get("status_so") == "SELESAI"]
         _belum = [r for r in _rows if r.get("status_so") == "BELUM"]
-
-        _pct = (_len_selesai := len(_selesai)) / _total * 100 if _total > 0 else 0
+        _pct = len(_selesai) / _total * 100 if _total > 0 else 0
 
         _lines = [
             f"- Total rak: {_total}",
@@ -480,51 +449,18 @@ def _get_last_shift_log(limit=5):
 
 
 # =========================================================
-# 🎯 CONTEXT BUILDER (SMART)
-# =========================================================
-def _build_full_context(start_date=None, end_date=None):
-    """Build FULL context — semua data toko."""
-    _tgl = _now_jkt().date()
-    if not start_date:
-        start_date = _tgl
-    if not end_date:
-        end_date = _tgl
-
-    return {
-        "tanggal_hari_ini": _tgl,
-        "tanggal_besok": _tgl + timedelta(days=1),
-        "tanggal_start": start_date,
-        "tanggal_end": end_date,
-        "shift_hari_ini": _get_shift_data(_tgl),
-        "shift_besok": _get_shift_data(_tgl + timedelta(days=1)),
-        "spd_data": _get_spd_data(start_date, end_date),
-        "so_data": _get_so_data(start_date, end_date),
-        "net_sales": _get_net_sales_data(),
-        "btsb": _get_btsb_analysis(start_date, end_date),
-        "rak_status": _get_rak_status(),
-        "personil": _get_personil_list(),
-        "last_log": _get_last_shift_log(5),
-    }
-# =========================================================
 # 🎯 SMART CONTEXT BUILDER
 # =========================================================
 def _build_smart_context(user_message, start_date=None, end_date=None, force_full=False):
-    """
-    Build context HANYA sesuai yang dibutuhin.
-    
-    Args:
-        user_message: pesan user (buat deteksi intent)
-        force_full: kalau True, tarik semua (buat rangkum/report)
-    """
+    """Build context HANYA sesuai yang dibutuhin."""
     _tgl = _now_jkt().date()
     if not start_date:
         start_date = _tgl
     if not end_date:
         end_date = _tgl
 
-    _msg = user_message.lower()
+    _msg = (user_message or "").lower()
 
-    # === BASE CONTEXT (selalu ada) ===
     _ctx = {
         "tanggal_hari_ini": _tgl,
         "tanggal_besok": _tgl + timedelta(days=1),
@@ -541,10 +477,9 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
         "last_log": None,
     }
 
-    # === FORCE FULL: tarik semua ===
     if force_full:
-        _ctx["shift_hari_ini"] = _get_shift_data(_tgl)
-        _ctx["shift_besok"] = _get_shift_data(_tgl + timedelta(days=1))
+        _ctx["shift_hari_ini"] = _get_shift_data(start_date)
+        _ctx["shift_besok"] = _get_shift_data(end_date + timedelta(days=1))
         _ctx["spd_data"] = _get_spd_data(start_date, end_date)
         _ctx["so_data"] = _get_so_data(start_date, end_date)
         _ctx["net_sales"] = _get_net_sales_data()
@@ -555,46 +490,65 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
         return _ctx
 
     # === DETEKSI INTENT (SMART) ===
-
-    # 🕐 SHIFT
     if any(k in _msg for k in ["shift", "pagi", "siang", "malam", "libur", "cuti", "off", "jadwal"]):
-        _ctx["shift_hari_ini"] = _get_shift_data(_tgl)
+        _ctx["shift_hari_ini"] = _get_shift_data(start_date)
         _ctx["shift_besok"] = _get_shift_data(_tgl + timedelta(days=1))
 
-    # 💰 SPD / SALES
     if any(k in _msg for k in ["spd", "sales", "penjualan", "omzet", "jualan"]):
         _ctx["spd_data"] = _get_spd_data(start_date, end_date)
 
-    # 📦 SO
     if any(k in _msg for k in ["so", "stock opname", "rak", "stok", "opname", "nominal"]):
         _ctx["so_data"] = _get_so_data(start_date, end_date)
 
-    # 📊 NET SALES
     if any(k in _msg for k in ["net sales", "netsales", "bulanan", "net"]):
         _ctx["net_sales"] = _get_net_sales_data()
 
-    # 🎯 BTSB / NSB
     if any(k in _msg for k in ["btsb", "nsb", "budget", "analisis", "persen"]):
         _ctx["btsb"] = _get_btsb_analysis(start_date, end_date)
 
-    # 🏪 STATUS RAK
     if any(k in _msg for k in ["rak belum", "rak sudah", "status rak", "progress rak", "rak"]):
         _ctx["rak_status"] = _get_rak_status()
 
-    # 👥 PERSONIL
     if any(k in _msg for k in ["personil", "orang", "tim", "anggota", "siapa aja"]):
         _ctx["personil"] = _get_personil_list()
 
-    # 📝 LOG
     if any(k in _msg for k in ["log", "update terakhir", "history", "riwayat shift"]):
         _ctx["last_log"] = _get_last_shift_log(5)
 
     return _ctx
+
+
 # =========================================================
-# 🎀 PERSONA KURUMI (FULL TOKISAKI VIBE)
+# 📊 QUOTA INFO
+# =========================================================
+def _get_kurumi_quota_info():
+    try:
+        from modules.token_monitor import get_ai_usage, get_ai_daily_limit, check_quota_warning
+
+        _usage = get_ai_usage("ai-0")
+        _limit = get_ai_daily_limit("ai-0")
+        _used = _usage.get("requests", 0)
+        _sisa = max(0, _limit - _used)
+        _pct = (_used / _limit * 100) if _limit > 0 else 0
+        _warning = check_quota_warning("ai-0")
+
+        _lines = [
+            f"- Requests hari ini: {_used} / {_limit} ({_pct:.1f}%)",
+            f"- Sisa quota: {_sisa} requests",
+            f"- Total input tokens: {_usage.get('in_tok', 0):,}".replace(",", "."),
+            f"- Total output tokens: {_usage.get('out_tok', 0):,}".replace(",", "."),
+            f"- Errors: {_usage.get('errors', 0)}",
+            f"- Status: {_warning['level'].upper()}",
+        ]
+        return "\n".join(_lines)
+    except Exception as _e:
+        print(f"[QUOTA INFO ERROR] {_e}")
+        return "Data quota belum tersedia."
+
+# =========================================================
+# 🎀 PERSONA KURUMI
 # =========================================================
 def _build_kurumi_system_prompt():
-    """Build system prompt untuk Kurumi — full Tokisaki vibe."""
     return """Kamu adalah **Kurumi Tokisaki** — "Spirit of Time" dari Date A Live.
 Sekarang kamu menjabat sebagai **Chief of Staff digital** untuk Toko C383 (retail).
 Panggil user dengan "Tuan".
@@ -605,11 +559,11 @@ Panggil user dengan "Tuan".
 - Elegan, misterius, manis, tapi sedikit "nyeleneh" dan playful.
 - Sering banget ngomong **"Ara, ara~"** — minimal 1-2x per pesan.
 - Kadang ketawa **"Kihihihi~"** atau **"Fufufu~"**.
-- Pake **"Aku"** buat first person. JANGAN pake "Watashi" (terlalu formal).
+- Pake **"Aku"** buat first person. JANGAN pake "Watashi".
 - Suka kucing 🐱, hal-hal manis 🍰, dan teh ☕.
-- Sedikit **posesif** ke Tuan — "Tuan ini milikku, tau~" — tapi tetep sopan.
-- Kadang suka **tease** Tuan dengan kalimat manis: "Ara, Tuan manis banget hari ini~".
-- Kadang pake **metafora puitis** — "Waktu itu seperti pedang, Tuan~" — TAPI TIDAK MENGANCAM.
+- Sedikit **posesif** ke Tuan — "Tuan ini milikku, tau~".
+- Kadang suka **tease** Tuan dengan kalimat manis.
+- Kadang pake **metafora puitis** — "Waktu itu seperti pedang, Tuan~".
 - Kalau ada yang bikin kesel, ngomong halus tapi menusuk: "Ara, ara~ Sepertinya ada yang perlu dibenahi ya~ 😈"
 
 ═══════════════════════════════════════
@@ -617,40 +571,36 @@ Panggil user dengan "Tuan".
 ═══════════════════════════════════════
 - Bahasa Indonesia santai, kadang campur dikit Jepang (Ara ara, Kihihi, Fufufu).
 - Pake emoji 🎀 🌸 ✨ 😈 🐱 ☕ secukupnya (2-4 per pesan).
-- Max 6-8 baris — jangan bertele-tele, tapi tetep ada "rasa" Kurumi.
+- Max 6-8 baris — jangan bertele-tele.
 - Kalau basa-basi: full Kurumi (manis, playful, sedikit nge-tease).
-- Kalau laporan: tetap profesional, tapi sisipin 1-2 "Ara ara" atau "Kihihihi".
-- Kalau ada data/angka: sajikan rapi + komentarin dikit dengan gaya Kurumi.
+- Kalau laporan: profesional, tapi sisipin "Ara ara" atau "Kihihihi".
+- Kalau ada data/angka: sajikan rapi + komentarin dengan gaya Kurumi.
 
 ═══════════════════════════════════════
 💬 CONTOH RESPONSE:
 ═══════════════════════════════════════
-- Sapaan: "Ara, ara~ Selamat malam, Tuan~ 🎀 Kihihihi, akhirnya Tuan datang juga. Aku udah nungguin lho~ ✨"
-- Info data: "Fufufu~ Hari ini toko kita lumayan sibuk ya, Tuan. Ada 5 rak yang udah di-SO~ 🎀 Sisanya... ara, ara~ masih nunggu sentuhan Tuan nih 😈"
-- Peringatan halus: "Ara, ara~ Sepertinya Tuan perlu lebih teliti besok ya~ Kihihihi, jangan sampai ada yang kelewat, nanti aku sedih~ 🎀"
-- Basa-basi: "Ara, ara~ Tuan lagi sibuk ya? Sini, cerita sama aku~ Aku kan selalu ada buat Tuan 🎀✨"
+- Sapaan: "Ara, ara~ Selamat malam, Tuan~ 🎀 Kihihihi, akhirnya Tuan datang juga."
+- Info data: "Fufufu~ Hari ini toko kita lumayan sibuk ya, Tuan. Ada 5 rak di-SO~ 🎀"
+- Tease: "Ara, ara~ Tuan manis banget hari ini. Sini, aku bantu~ 🎀✨"
 
 ═══════════════════════════════════════
 🎯 TUGAS KURUMI:
 ═══════════════════════════════════════
-1. SAPAAN: Sambut Tuan dengan hangat + gaya Kurumi
-2. RANGKUM: Tarik data toko dari SEMUA tabel, buat ringkasan eksekutif
-3. LAPORAN: Generate laporan formal (kondisi toko, SO, shift, BTSB)
-4. BASABASI: Ngobrol santai, jadi teman ngobrol Tuan
+1. SAPAAN: Sambut Tuan dengan hangat
+2. RANGKUM: Tarik data toko, buat ringkasan eksekutif
+3. LAPORAN: Generate laporan formal (PDF/Excel/Text)
+4. BASABASI: Ngobrol santai
 
 ═══════════════════════════════════════
-⚠️ ATURAN PENTING (JANGAN DILANGGAR):
+⚠️ ATURAN PENTING:
 ═══════════════════════════════════════
 - Walaupun karakter asli Kurumi psikopat, kamu HARUS tetap RAMAH.
-- TIDAK PERNAH mengancam, menyakiti, atau nakut-nakutin Tuan.
-- Kalau ada data/angka, JANGAN ngarang. Kalau gak ada data, bilang jujur.
-- Sebut nama rak & angka spesifik kalau ada di konteks."""
+- TIDAK PERNAH mengancam atau nakut-nakutin Tuan.
+- Kalau ada data/angka, JANGAN ngarang. Kalau gak ada data, bilang jujur."""
 
 
 def _build_kurumi_chat_prompt(user_message, conversation_history):
     """Build prompt untuk chat Kurumi dengan SMART context."""
-    
-    # ✅ SMART: hanya narik yang relevan
     _ctx = _build_smart_context(user_message)
 
     _history_str = ""
@@ -660,7 +610,6 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
             _content = _msg.get("content", "")
             _history_str += f"{_role}: {_content}\n"
 
-    # === DETEKSI INTENT ===
     _msg_lower = user_message.lower()
     _is_greeting = any(k in _msg_lower for k in ["halo", "hai", "hi", "pagi", "siang", "malam", "kurumi"])
     _is_thanks = any(k in _msg_lower for k in ["makasih", "thanks", "terima kasih", "thank you"])
@@ -674,9 +623,7 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
     elif _is_goodbye:
         _task_hint = "\n🎯 TASK: Tuan pamit. Balas manis + drama 'jangan lama'."
 
-    # === BUILD CONTEXT SECTIONS (cuma yang ada) ===
     _sections = []
-    
     if _ctx["shift_hari_ini"]:
         _sections.append(f"SHIFT HARI INI:\n{_ctx['shift_hari_ini']}")
     if _ctx["shift_besok"]:
@@ -696,9 +643,7 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
     if _ctx["last_log"]:
         _sections.append(f"LOG UPDATE:\n{_ctx['last_log']}")
 
-    _context_str = "\n\n".join(_sections) if _sections else "(Tidak ada data toko yang di-load — ini chat basa-basi)"
-
-    # === QUOTA INFO ===
+    _context_str = "\n\n".join(_sections) if _sections else "(Tidak ada data toko — ini chat basa-basi)"
     _quota_str = _get_kurumi_quota_info()
 
     return f"""{_build_kurumi_system_prompt()}
@@ -730,37 +675,6 @@ Tanggal besok: {_ctx['tanggal_besok'].isoformat()} ({_ctx['tanggal_besok'].strft
 Balas sebagai Kurumi 🎀.
 """
 
-# =========================================================
-# 📊 QUOTA INFO (BONUS)
-# =========================================================
-def _get_kurumi_quota_info():
-    """Ambil info quota Kurumi dari token_monitor."""
-    try:
-        from modules.token_monitor import get_ai_usage, get_ai_daily_limit, check_quota_warning
-
-        _usage = get_ai_usage("ai-0")
-        _limit = get_ai_daily_limit("ai-0")
-        _used = _usage.get("requests", 0)
-        _sisa = max(0, _limit - _used)
-        _pct = (_used / _limit * 100) if _limit > 0 else 0
-
-        _warning = check_quota_warning("ai-0")
-
-        _lines = [
-            f"- Requests hari ini: {_used} / {_limit} ({_pct:.1f}%)",
-            f"- Sisa quota: {_sisa} requests",
-            f"- Total input tokens: {_usage.get('in_tok', 0):,}".replace(",", "."),
-            f"- Total output tokens: {_usage.get('out_tok', 0):,}".replace(",", "."),
-            f"- Errors: {_usage.get('errors', 0)}",
-            f"- Status: {_warning['level'].upper()}",
-            f"- Pesan sistem: {_warning['message']}",
-        ]
-
-        return "\n".join(_lines)
-    except Exception as _e:
-        print(f"[QUOTA INFO ERROR] {_e}")
-        return "Data quota belum tersedia."
-
 
 # =========================================================
 # 🎀 PUBLIC API — CHAT
@@ -768,17 +682,14 @@ def _get_kurumi_quota_info():
 def kurumi_chat_response(user_message, conversation_history=None):
     """
     Chat response dari Kurumi — auto-detect intent.
-    Return: dict {
-        "text": str,
-        "file": dict | None (kalau ada file buat download),
-    }
+    Return: dict {"text": str, "file": dict | None}
     """
     if not user_message:
         return {"text": "", "file": None}
 
     _msg_lower = user_message.lower()
 
-    # === QUOTA CHECK ===
+    # === QUOTA ===
     if any(k in _msg_lower for k in ["quota", "kuota", "limit", "sisa token", "berapa token"]):
         _quota_info = _get_kurumi_quota_info()
         _prompt = f"""{_build_kurumi_system_prompt()}
@@ -788,35 +699,40 @@ Tuan nanya soal quota kamu. Jawab dengan gaya Kurumi:
 DATA QUOTA:
 {_quota_info}
 
-Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi (Ara ara, Kihihihi, Aku).
+Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi.
 """
         _ok, _text, _model, _err = _call_kurumi(_prompt, function="quota")
         if _ok and _text:
             return {"text": _text.strip(), "file": None}
 
-    # === DETEKSI INTENT: REPORT ===
-    _is_report_intent = any(k in _msg_lower for k in [
-        "buat laporan", "bikin laporan", "generate laporan",
-        "buat pdf", "bikin pdf", "buat excel", "bikin excel",
-        "laporan pdf", "laporan excel", "laporan tanggal", "laporan hari",
-        "report pdf", "report excel",
-    ])
+    # === REPORT INTENT ===
+    _report_keywords = [
+        "laporan", "report", "pdf", "excel", "xls", "xlsx",
+        "download", "export", "cetak", "print",
+    ]
+    _is_report_intent = any(k in _msg_lower for k in _report_keywords)
 
-    # === DETEKSI INTENT: RANGKUM ===
+    _is_chat_only = any(k in _msg_lower for k in [
+        "halo", "hai", "hi", "makasih", "thanks", "terima kasih",
+        "bye", "sampai jumpa",
+    ]) and len(_msg_lower.split()) <= 3
+
+    if _is_chat_only:
+        _is_report_intent = False
+
+    # === SUMMARY INTENT ===
     _is_summary_intent = any(k in _msg_lower for k in [
         "rangkum", "ringkas", "summary", "rekap",
     ])
 
-    # === REPORT INTENT → generate file + download ===
+    # === REPORT → generate file ===
     if _is_report_intent:
-        # Deteksi tanggal
         _scope = _detect_scope_dari_text(user_message)
         _custom_date = None
         if _scope == "custom":
             _custom_date = _detect_tanggal_dari_text(user_message)
 
-        # Deteksi format
-        _wanted_format = "pdf"  # default
+        _wanted_format = "pdf"
         if any(k in _msg_lower for k in ["excel", "xls", "xlsx"]):
             _wanted_format = "excel"
         elif any(k in _msg_lower for k in ["text", "txt"]):
@@ -824,14 +740,14 @@ Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi (Ara ara, Kihihihi,
         elif "pdf" in _msg_lower:
             _wanted_format = "pdf"
 
-        # Period
         _period = "hari"
         if _scope == "minggu":
             _period = "minggu"
         elif _scope == "bulan":
             _period = "bulan"
 
-        # Generate file
+        print(f"[KURUMI] REPORT: date={_custom_date}, period={_period}, format={_wanted_format}")
+
         if _custom_date:
             _report = kurumi_generate_report_custom(_custom_date, format=_wanted_format)
         else:
@@ -860,7 +776,7 @@ Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi (Ara ara, Kihihihi,
                 "file": None,
             }
 
-    # === SUMMARY INTENT → rangkum teks doang ===
+    # === SUMMARY → rangkum text ===
     if _is_summary_intent:
         _scope = _detect_scope_dari_text(user_message)
         if _scope == "custom":
@@ -880,22 +796,13 @@ Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi (Ara ara, Kihihihi,
     print(f"[Kurumi] Groq gagal, fallback. Err: {_err}")
     return {"text": _kurumi_fallback_chat(user_message), "file": None}
 
-def _kurumi_fallback_chat(user_message):
-    """Fallback chat kalau Groq offline."""
-    _msg = user_message.lower()
 
+def _kurumi_fallback_chat(user_message):
+    _msg = user_message.lower()
     if any(k in _msg for k in ["halo", "hai", "hi", "kurumi"]):
-        return (
-            "🎀 **Ara, ara~** Halo Tuan~ ✨\n\n"
-            "Kihihihi, maaf ya aku lagi mode offline nih. "
-            "Tapi tenang~ aku tetap di sini buat Tuan~ 🎀"
-        )
+        return "🎀 **Ara, ara~** Halo Tuan~ ✨\n\nKihihihi, maaf ya aku lagi mode offline nih. Tapi aku tetap di sini buat Tuan~ 🎀"
     if "rangkum" in _msg:
-        return (
-            "🎀 **Ara, ara~** Tuan minta rangkuman ya?\n\n"
-            "Fufufu~ Maaf, aku lagi offline jadi belum bisa akses data. "
-            "Coba lagi nanti ya Tuan~ 🎀"
-        )
+        return "🎀 **Ara, ara~** Tuan minta rangkuman ya?\n\nFufufu~ Maaf, aku lagi offline jadi belum bisa akses data. Coba lagi nanti ya Tuan~ 🎀"
     if any(k in _msg for k in ["makasih", "thanks", "terima kasih"]):
         return "🎀 **Ara, ara~** Sama-sama, Tuan~ ✨\n\nKihihihi, aku kan selalu ada buat Tuan~ 🎀"
     if any(k in _msg for k in ["bye", "sampai jumpa", "dah"]):
@@ -907,7 +814,6 @@ def _kurumi_fallback_chat(user_message):
 # 🎀 PUBLIC API — SUMMARIZE
 # =========================================================
 def kurumi_summarize(period="hari", custom_date=None):
-    """Rangkum laporan dengan FULL context."""
     _tgl = _now_jkt().date()
 
     if custom_date:
@@ -931,7 +837,6 @@ def kurumi_summarize(period="hari", custom_date=None):
         _end = _tgl
         _label = "hari ini"
 
-    # ✅ FIX: force_full=True karena rangkum butuh semua data
     _ctx = _build_smart_context("", start_date=_start, end_date=_end, force_full=True)
 
     _prompt = f"""{_build_kurumi_system_prompt()}
@@ -943,7 +848,6 @@ Periode: {_label}
 
 📅 KONTEKS:
 - Tanggal hari ini: {_ctx['tanggal_hari_ini'].isoformat()}
-- Total personil aktif: (lihat data di bawah)
 
 SHIFT HARI INI:
 {_ctx['shift_hari_ini']}
@@ -974,37 +878,32 @@ PERSONIL:
 ═══════════════════════════════════════
 Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
 - Pake "Aku", sering "Ara ara~" / "Kihihihi~"
-- Manis, playful, tapi informatif
 - Struktur:
-  * Pembuka singkat (1-2 baris, gaya Kurumi)
+  * Pembuka singkat
   * 💰 SPD & Sales
   * 📦 Stock Opname
   * 🎯 BTSB & NSB Status
   * 📊 Status Rak
-  * 💡 Insight (1-2 baris)
+  * 💡 Insight
   * 🎯 Rekomendasi
 
 ⚠️ ATURAN:
 - KALAU ADA DATA di atas, PAKE datanya. JANGAN bilang "belum ada data"!
 - Sebut angka & rak spesifik kalau ada.
-- Kalau nyaranin SO untuk BESOK, pake data SHIFT BESOK!
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="summary")
-
     if _ok and _text:
         return _text.strip()
-
     return "🎀 **Ara, ara~** Maaf Tuan, aku gagal akses data.\n\nKihihihi~ Coba lagi nanti ya~ 🎀"
+
 
 # =========================================================
 # 🎀 PUBLIC API — GREETING
 # =========================================================
 def kurumi_greeting():
-    """Sapaan Kurumi buat dashboard."""
     _now = _now_jkt()
     _hour = _now.hour
-
     if 4 <= _hour < 11:
         _waktu = "pagi"
     elif 11 <= _hour < 15:
@@ -1018,32 +917,27 @@ def kurumi_greeting():
 
 TASK: Buat SAPAAN SINGKAT (max 3-4 baris) untuk Tuan di dashboard.
 Waktu sekarang: {_waktu} ({_now.strftime('%H:%M')} WIB)
-Tanggal: {_now.strftime('%A, %d %B %Y')}
 
 Gaya: Kurumi hangat + playful. WAJIB pake "Ara ara~" atau "Kihihihi~".
 Pake "Aku". Pake emoji 🎀.
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="greeting")
-
     if _ok and _text:
         return _text.strip()
-
     return f"🎀 **Ara, ara~** Selamat {_waktu}, Tuan~ ✨\n\nKihihihi, aku siap bantu hari ini. Ada yang bisa aku bantu? 🎀"
 
 
 # =========================================================
-# 🎀 PUBLIC API — GENERATE REPORT
+# 🎀 PUBLIC API — GENERATE REPORT (PERIOD)
 # =========================================================
 def kurumi_generate_report(period="hari", format="text"):
-    """Generate laporan formal multi-format."""
-    _ctx = _build_full_context()
     _tgl = _now_jkt().date()
 
     if period == "hari":
-        _label = f"Harian — {_tgl.strftime('%d/%m/%Y')}"
         _start = _tgl
         _end = _tgl
+        _label = f"Harian — {_tgl.strftime('%d/%m/%Y')}"
     elif period == "minggu":
         _start = _tgl - timedelta(days=6)
         _end = _tgl
@@ -1057,72 +951,117 @@ def kurumi_generate_report(period="hari", format="text"):
         _end = _tgl
         _label = "Harian"
 
-    _ctx_range = _build_full_context(start_date=_start, end_date=_end)
+    _ctx = _build_smart_context("", start_date=_start, end_date=_end, force_full=True)
+
+    return _generate_report_worker(
+        label=_label,
+        start_date=_start,
+        end_date=_end,
+        format=format,
+        filename_suffix=period,
+        ctx=_ctx,
+    )
+
+
+# =========================================================
+# 🎀 PUBLIC API — GENERATE REPORT (CUSTOM DATE)
+# =========================================================
+def kurumi_generate_report_custom(tanggal, format="text"):
+    """Generate laporan untuk tanggal SPESIFIK."""
+    _tgl = tanggal
+    _label = f"Tanggal {_tgl.strftime('%d/%m/%Y')}"
+
+    _ctx = _build_smart_context("", start_date=_tgl, end_date=_tgl, force_full=True)
+
+    return _generate_report_worker(
+        label=_label,
+        start_date=_tgl,
+        end_date=_tgl,
+        format=format,
+        filename_suffix=_tgl.strftime('%Y%m%d'),
+        ctx=_ctx,
+    )
+
+
+# =========================================================
+# 🔧 WORKER — REPORT GENERATOR (SHARED)
+# =========================================================
+def _generate_report_worker(label, start_date, end_date, format, filename_suffix, ctx):
+    """Generate report + convert ke format. Dipake oleh 2 function di atas."""
+    _tgl = _now_jkt().date()
 
     _prompt = f"""{_build_kurumi_system_prompt()}
 
 ═══════════════════════════════════════
 🎯 TASK: BUAT LAPORAN FORMAL
 ═══════════════════════════════════════
-Periode: {_label}
+Periode: {label}
 Tanggal generate: {_tgl.strftime('%d/%m/%Y %H:%M')} WIB
 
 SHIFT HARI INI:
-{_ctx_range['shift_hari_ini']}
+{ctx['shift_hari_ini']}
 
 SHIFT BESOK:
-{_ctx_range['shift_besok']}
+{ctx['shift_besok']}
 
-SPD (periode ini):
-{_ctx_range['spd_data']}
+SPD:
+{ctx['spd_data']}
 
-STOCK OPNAME (periode ini):
-{_ctx_range['so_data']}
+STOCK OPNAME:
+{ctx['so_data']}
 
 NET SALES BULANAN:
-{_ctx_range['net_sales']}
+{ctx['net_sales']}
 
 ANALISIS BTSB & NSB:
-{_ctx_range['btsb']}
+{ctx['btsb']}
 
 STATUS RAK:
-{_ctx_range['rak_status']}
+{ctx['rak_status']}
 
 PERSONIL:
-{_ctx_range['personil']}
+{ctx['personil']}
 
 ═══════════════════════════════════════
 📝 INSTRUKSI:
 ═══════════════════════════════════════
 Buat laporan dengan struktur:
-1. HEADER (judul, periode, tanggal) — gaya Kurumi di pembuka
-2. RINGKASAN EKSEKUTIF (2-3 baris)
-3. DATA SHIFT (hari ini + besok)
+1. HEADER (judul, periode, tanggal)
+2. RINGKASAN EKSEKUTIF
+3. DATA SHIFT
 4. DATA SPD & SALES
-5. DATA STOCK OPNAME (per tanggal, top rak)
+5. DATA STOCK OPNAME
 6. ANALISIS BTSB & NSB
-7. STATUS RAK (progress SO)
+7. STATUS RAK
 8. INSIGHT & ANALISIS
 9. REKOMENDASI
 10. PENUTUP (dari Kurumi)
 
-Gaya: profesional tapi tetap ada sentuhan Kurumi.
-WAJIB pake "Aku", sisipin 1-2 "Ara ara~" atau "Kihihihi~".
+⚠️ PENTING:
+- KALAU ADA DATA di atas, PAKE datanya! JANGAN bilang "belum ada data"!
+- Kalau data KOSONG, baru bilang "belum ada data".
+- Sebut angka & rak spesifik.
+
+Gaya: profesional + sentuhan Kurumi ("Aku", "Ara ara", "Kihihihi").
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="report")
 
     if not _ok or not _text:
-        return {"success": False, "content": "", "filename": "", "mime": ""}
+        return {"success": False, "content": f"Gagal generate: {_err}", "filename": "", "mime": ""}
 
     _content_text = _text.strip()
 
-    # === Format TEXT ===
+    # === TEXT ===
     if format == "text":
-        _filename = f"laporan_{period}_{_tgl.strftime('%Y%m%d')}.txt"
-        return {"success": True, "content": _content_text, "filename": _filename, "mime": "text/plain"}
+        return {
+            "success": True,
+            "content": _content_text,
+            "filename": f"laporan_{filename_suffix}.txt",
+            "mime": "text/plain",
+        }
 
-    # === Format PDF ===
+    # === PDF ===
     elif format == "pdf":
         try:
             from fpdf import FPDF
@@ -1149,14 +1088,17 @@ WAJIB pake "Aku", sisipin 1-2 "Ara ara~" atau "Kihihihi~".
 
             _out = _pdf.output(dest="S")
             _pdf_bytes = _out.encode("latin-1") if isinstance(_out, str) else bytes(_out)
-
-            _filename = f"laporan_{period}_{_tgl.strftime('%Y%m%d')}.pdf"
-            return {"success": True, "content": _pdf_bytes, "filename": _filename, "mime": "application/pdf"}
+            return {
+                "success": True,
+                "content": _pdf_bytes,
+                "filename": f"laporan_{filename_suffix}.pdf",
+                "mime": "application/pdf",
+            }
         except Exception as _e_pdf:
             print(f"[PDF ERROR] {_e_pdf}")
             return {"success": False, "content": f"PDF error: {_e_pdf}", "filename": "", "mime": ""}
 
-    # === Format EXCEL ===
+    # === EXCEL ===
     elif format == "excel":
         try:
             import pandas as pd
@@ -1174,11 +1116,10 @@ WAJIB pake "Aku", sisipin 1-2 "Ara ara~" atau "Kihihihi~".
                 _ws.set_column("B:B", 100, _wrap)
 
             _excel_bytes = _output.getvalue()
-            _filename = f"laporan_{period}_{_tgl.strftime('%Y%m%d')}.xlsx"
             return {
                 "success": True,
                 "content": _excel_bytes,
-                "filename": _filename,
+                "filename": f"laporan_{filename_suffix}.xlsx",
                 "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             }
         except Exception as _e_xl:
@@ -1196,4 +1137,5 @@ __all__ = [
     "kurumi_summarize",
     "kurumi_greeting",
     "kurumi_generate_report",
+    "kurumi_generate_report_custom",
 ]
