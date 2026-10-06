@@ -517,6 +517,25 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
 
     return _ctx
 
+# =========================================================
+# 📄 REPORT CONTEXT — HEMAT TOKEN (SPD, SO, BTSB, RAK)
+# =========================================================
+def _get_report_context(start_date, end_date):
+    """
+    Context khusus untuk REPORT.
+    Cuma narik 4 data: SPD, SO, BTSB, Status Rak.
+    Hemat ~60% token dibanding force_full.
+    """
+    _tgl = _now_jkt().date()
+    return {
+        "tanggal_hari_ini": _tgl,
+        "tanggal_start": start_date,
+        "tanggal_end": end_date,
+        "spd_data": _get_spd_data(start_date, end_date),
+        "so_data": _get_so_data(start_date, end_date),
+        "btsb": _get_btsb_analysis(start_date, end_date),
+        "rak_status": _get_rak_status(),
+    }
 
 # =========================================================
 # 📊 QUOTA INFO
@@ -837,7 +856,7 @@ def kurumi_summarize(period="hari", custom_date=None):
         _end = _tgl
         _label = "hari ini"
 
-    _ctx = _build_smart_context("", start_date=_start, end_date=_end, force_full=True)
+    _ctx = _get_report_context(_start, _end)
 
     _prompt = f"""{_build_kurumi_system_prompt()}
 
@@ -951,7 +970,7 @@ def kurumi_generate_report(period="hari", format="text"):
         _end = _tgl
         _label = "Harian"
 
-    _ctx = _build_smart_context("", start_date=_start, end_date=_end, force_full=True)
+    _ctx = _get_report_context(_start, _end)
 
     return _generate_report_worker(
         label=_label,
@@ -971,7 +990,7 @@ def kurumi_generate_report_custom(tanggal, format="text"):
     _tgl = tanggal
     _label = f"Tanggal {_tgl.strftime('%d/%m/%Y')}"
 
-    _ctx = _build_smart_context("", start_date=_tgl, end_date=_tgl, force_full=True)
+    _ctx = _get_report_context(_tgl, _tgl)
 
     return _generate_report_worker(
         label=_label,
@@ -987,9 +1006,10 @@ def kurumi_generate_report_custom(tanggal, format="text"):
 # 🔧 WORKER — REPORT GENERATOR (SHARED)
 # =========================================================
 def _generate_report_worker(label, start_date, end_date, format, filename_suffix, ctx):
-    """Generate report + convert ke format. Dipake oleh 2 function di atas."""
+    """Generate report + convert ke format. Pakai REPORT CONTEXT (hemat)."""
     _tgl = _now_jkt().date()
 
+    # ✅ Cuma data yang relevan
     _prompt = f"""{_build_kurumi_system_prompt()}
 
 ═══════════════════════════════════════
@@ -998,20 +1018,11 @@ def _generate_report_worker(label, start_date, end_date, format, filename_suffix
 Periode: {label}
 Tanggal generate: {_tgl.strftime('%d/%m/%Y %H:%M')} WIB
 
-SHIFT HARI INI:
-{ctx['shift_hari_ini']}
-
-SHIFT BESOK:
-{ctx['shift_besok']}
-
 SPD:
 {ctx['spd_data']}
 
 STOCK OPNAME:
 {ctx['so_data']}
-
-NET SALES BULANAN:
-{ctx['net_sales']}
 
 ANALISIS BTSB & NSB:
 {ctx['btsb']}
@@ -1019,28 +1030,24 @@ ANALISIS BTSB & NSB:
 STATUS RAK:
 {ctx['rak_status']}
 
-PERSONIL:
-{ctx['personil']}
-
 ═══════════════════════════════════════
 📝 INSTRUKSI:
 ═══════════════════════════════════════
 Buat laporan dengan struktur:
 1. HEADER (judul, periode, tanggal)
-2. RINGKASAN EKSEKUTIF
-3. DATA SHIFT
-4. DATA SPD & SALES
-5. DATA STOCK OPNAME
-6. ANALISIS BTSB & NSB
-7. STATUS RAK
-8. INSIGHT & ANALISIS
-9. REKOMENDASI
-10. PENUTUP (dari Kurumi)
+2. RINGKASAN EKSEKUTIF (2-3 baris)
+3. 💰 DATA SPD & SALES
+4. 📦 STOCK OPNAME (per tanggal + top rak)
+5. 🎯 ANALISIS BTSB & NSB
+6. 🏪 STATUS RAK
+7. 💡 INSIGHT & ANALISIS
+8. 🎯 REKOMENDASI
+9. PENUTUP (dari Kurumi)
 
 ⚠️ PENTING:
 - KALAU ADA DATA di atas, PAKE datanya! JANGAN bilang "belum ada data"!
-- Kalau data KOSONG, baru bilang "belum ada data".
 - Sebut angka & rak spesifik.
+- JANGAN bahas shift (itu tugas Hana).
 
 Gaya: profesional + sentuhan Kurumi ("Aku", "Ara ara", "Kihihihi").
 """
@@ -1127,7 +1134,6 @@ Gaya: profesional + sentuhan Kurumi ("Aku", "Ara ara", "Kihihihi").
             return {"success": False, "content": f"Excel error: {_e_xl}", "filename": "", "mime": ""}
 
     return {"success": False, "content": "Format tidak dikenal", "filename": "", "mime": ""}
-
 
 # =========================================================
 # 🎯 EXPORT
