@@ -58,9 +58,21 @@ try:
         get_shift_hari_ini,
         generate_master_shift_excel,
         delete_master_shift_by_date,
+        delete_shift_by_name,
+        delete_shift_all_dates,
         KODE_SHIFT,
         NAMA_BULAN_ID,
     )
+    from modules.ai_shift_manager import (
+        parse_shift_update,
+        ai_suggest_pengganti_text,
+        ai_check_conflict_text,
+        chat_response,
+    )
+except ImportError as e:
+    st.error(f"❌ Gagal import module: {e}")
+    st.info("💡 Pastikan `modules/master_shift_handler.py` & `modules/ai_shift_manager.py` udah di-upload.")
+    st.stop()
 except ImportError as e:
     st.error(f"❌ Gagal import `master_shift_handler`: {e}")
     st.info("💡 Pastikan file `modules/master_shift_handler.py` udah di-upload.")
@@ -149,7 +161,7 @@ st.markdown("---")
 if "shift_sub_tab" not in st.session_state:
     st.session_state["shift_sub_tab"] = "chat"
 
-col_t1, col_t2, col_t3, col_t4, col_t5, col_t6 = st.columns(6)
+col_t1, col_t2, col_t3, col_t4, col_t5, col_t6, col_t7 = st.columns(7)
 
 with col_t1:
     if st.button(
@@ -163,6 +175,16 @@ with col_t1:
 
 with col_t2:
     if st.button(
+        "🤖 Tanya AI",
+        use_container_width=True,
+        key="btn_shift_tab_ai_chat",
+        type="primary" if st.session_state["shift_sub_tab"] == "ai_chat" else "secondary",
+    ):
+        st.session_state["shift_sub_tab"] = "ai_chat"
+        st.rerun()
+
+with col_t3:
+    if st.button(
         "📊 Matrix View",
         use_container_width=True,
         key="btn_shift_tab_matrix",
@@ -171,7 +193,7 @@ with col_t2:
         st.session_state["shift_sub_tab"] = "matrix"
         st.rerun()
 
-with col_t3:
+with col_t4:
     if st.button(
         "👥 Personil",
         use_container_width=True,
@@ -181,7 +203,7 @@ with col_t3:
         st.session_state["shift_sub_tab"] = "personil"
         st.rerun()
 
-with col_t4:
+with col_t5:
     if st.button(
         "📥 Download",
         use_container_width=True,
@@ -190,7 +212,8 @@ with col_t4:
     ):
         st.session_state["shift_sub_tab"] = "download"
         st.rerun()
-with col_t5:
+
+with col_t6:
     if st.button(
         "📸 Screenshot",
         use_container_width=True,
@@ -199,7 +222,8 @@ with col_t5:
     ):
         st.session_state["shift_sub_tab"] = "screenshot"
         st.rerun()
-with col_t6:
+
+with col_t7:
     if st.button(
         "📊 Usage",
         use_container_width=True,
@@ -208,16 +232,16 @@ with col_t6:
     ):
         st.session_state["shift_sub_tab"] = "usage"
         st.rerun()
-        
+
 st.markdown("---")
 
 
 # ============================================================
-# TAB 1: CHAT UPDATE
+# TAB 1: CHAT UPDATE (AI-1 POWERED)
 # ============================================================
 if st.session_state["shift_sub_tab"] == "chat":
     st.markdown("### 💬 Chat Update Master Shift")
-    st.caption("💡 Ketik update dalam bahasa natural. AI akan parse otomatis.")
+    st.caption("💡 Ketik update dalam bahasa natural — AI-1 yang parse otomatis.")
 
     _placeholder = (
         "Besok Tika libur, ganti jadi:\n"
@@ -237,7 +261,7 @@ if st.session_state["shift_sub_tab"] == "chat":
     col_btn1, col_btn2 = st.columns([2, 1])
     with col_btn1:
         _btn_proses = st.button(
-            "🤖 PROSES CHAT",
+            "🤖 PROSES CHAT (AI-1)",
             use_container_width=True,
             type="primary",
             key="btn_chat_proses",
@@ -245,46 +269,77 @@ if st.session_state["shift_sub_tab"] == "chat":
     with col_btn2:
         if st.button("🗑️ Clear", use_container_width=True, key="btn_chat_clear"):
             st.session_state["chat_shift_parsed"] = None
+            st.session_state["chat_ai_extra"] = None
             st.rerun()
 
     if _btn_proses and _chat_input.strip():
-        with st.spinner("⏳ Parsing chat..."):
-            _parsed = parse_chat_update(
+        with st.spinner("⏳ AI-1 parsing chat..."):
+            _parsed = parse_shift_update(
                 _chat_input,
-                datetime.now(ZoneInfo("Asia/Jakarta")).date()
+                datetime.now(ZoneInfo("Asia/Jakarta")).date(),
             )
         st.session_state["chat_shift_parsed"] = _parsed
+        st.session_state["chat_ai_extra"] = None
         st.rerun()
     elif _btn_proses and not _chat_input.strip():
         st.warning("⚠️ Chat kosong. Ketik dulu update-nya.")
 
-    # Tampilkan hasil parse
+    # ============================================
+    # TAMPILKAN HASIL PARSE
+    # ============================================
     if st.session_state.get("chat_shift_parsed"):
         _parsed = st.session_state["chat_shift_parsed"]
-        _mode = _parsed.get("mode", "update")   # ✅ DETEKSI MODE
-    
-        # Warning (kalau ada)
+        _mode = _parsed.get("mode", "update")
+        _engine = _parsed.get("engine", "rule")
+        _reasoning = _parsed.get("ai_reasoning", "")
+
+        # Badge engine
+        _engine_icon = "🤖" if _engine.startswith("gemini") else "⚙️"
+        _engine_color = "#a855f7" if _engine.startswith("gemini") else "#94a3b8"
+        st.markdown(
+            f"<div style='"
+            f"display: inline-block;"
+            f"background: {_engine_color}20;"
+            f"border: 1.5px solid {_engine_color};"
+            f"border-radius: 20px;"
+            f"padding: 4px 14px;"
+            f"font-family: JetBrains Mono, monospace;"
+            f"font-size: 10px;"
+            f"color: {_engine_color};"
+            f"font-weight: 900;"
+            f"letter-spacing: 1px;"
+            f"margin-bottom: 10px;"
+            f"'>{_engine_icon} ENGINE: {_engine.upper()}</div>",
+            unsafe_allow_html=True,
+        )
+
+        # AI reasoning (kalau ada)
+        if _reasoning:
+            with st.expander("🧠 AI Reasoning", expanded=False):
+                st.caption(_reasoning)
+
+        # Warning
         if _parsed.get("warning"):
             st.markdown(
                 f"<div class='warning-box'>⚠️ {_parsed['warning']}</div>",
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
-    
+
         # ============================================
-        # 🗑️ MODE DELETE — HAPUS SHIFT
+        # MODE DELETE
         # ============================================
         if _mode == "delete":
             _targets = _parsed.get("delete_targets", [])
             _all_dates = _parsed.get("delete_all_dates", False)
-    
+
             st.markdown("#### 🗑️ Preview Hapus Shift")
-    
+
             if not _targets:
                 st.warning("⚠️ Tidak ada nama yang terdeteksi untuk dihapus.")
                 st.caption("Contoh: `Hapus shift TIA hari ini`")
             else:
                 st.info(f"👤 **Nama target:** {', '.join(_targets)}")
-    
+
                 if _all_dates:
                     st.warning("📅 **Mode:** Hapus **SEMUA tanggal** untuk nama ini!")
                 else:
@@ -292,8 +347,7 @@ if st.session_state["shift_sub_tab"] == "chat":
                         f"📅 **Mode:** Hapus hanya tanggal "
                         f"**{_parsed['tanggal'].strftime('%d/%m/%Y')}**"
                     )
-    
-                # Pilihan tanggal (kalau bukan all_dates)
+
                 if not _all_dates:
                     _tanggal_hapus = st.date_input(
                         "📅 Tanggal yang dihapus:",
@@ -302,26 +356,23 @@ if st.session_state["shift_sub_tab"] == "chat":
                     )
                 else:
                     _tanggal_hapus = None
-    
-                # Preview tabel
+
                 _preview_data = []
                 for _t in _targets:
                     _preview_data.append({
                         "👤 Nama": _t,
                         "📅 Mode": (
-                            "Semua Tanggal" if _all_dates 
+                            "Semua Tanggal" if _all_dates
                             else _parsed["tanggal"].strftime("%d/%m/%Y")
                         ),
                     })
                 st.dataframe(
                     pd.DataFrame(_preview_data),
                     use_container_width=True,
-                    hide_index=True
+                    hide_index=True,
                 )
-    
-                # Tombol konfirmasi
+
                 col_del1, col_del2 = st.columns([2, 1])
-    
                 with col_del1:
                     if st.button(
                         "🗑️ KONFIRMASI HAPUS",
@@ -329,14 +380,7 @@ if st.session_state["shift_sub_tab"] == "chat":
                         type="primary",
                         key="btn_delete_confirm",
                     ):
-                        # Import fungsi delete
-                        from modules.master_shift_handler import (
-                            delete_shift_by_name,
-                            delete_shift_all_dates,
-                        )
-    
                         _total_deleted = 0
-    
                         with st.spinner("⏳ Menghapus..."):
                             if _all_dates:
                                 for _t in _targets:
@@ -348,7 +392,7 @@ if st.session_state["shift_sub_tab"] == "chat":
                                     _tanggal_hapus, _targets
                                 )
                                 _total_deleted = _detail.get("deleted", 0)
-    
+
                         if _total_deleted > 0:
                             st.success(f"🗑️ {_total_deleted} shift berhasil dihapus!")
                             st.balloons()
@@ -357,7 +401,7 @@ if st.session_state["shift_sub_tab"] == "chat":
                             st.rerun()
                         else:
                             st.warning("⚠️ Tidak ada yang dihapus.")
-    
+
                 with col_del2:
                     if st.button(
                         "❌ BATAL",
@@ -366,19 +410,40 @@ if st.session_state["shift_sub_tab"] == "chat":
                     ):
                         st.session_state["chat_shift_parsed"] = None
                         st.rerun()
-    
+
         # ============================================
-        # ✅ MODE UPDATE — SIMPAN SHIFT (yang sudah ada)
+        # MODE UPDATE
         # ============================================
         else:
             st.success(
                 f"✅ Tanggal terdeteksi: **{_parsed['tanggal'].strftime('%d/%m/%Y')}** "
                 f"({_parsed.get('tanggal_detect', '-')})"
             )
-    
+
             if _parsed["shift_map"]:
+                # ✅ AI-1: Cek konflik otomatis
+                _konflik_text = ai_check_conflict_text(
+                    _parsed["tanggal"], _parsed["shift_map"]
+                )
+                st.markdown("##### ⚠️ Cek Konflik (AI-1)")
+                st.markdown(_konflik_text)
+
+                # ✅ AI-1: Suggest pengganti kalau ada yang libur
+                _libur_list = [
+                    n for n, k in _parsed["shift_map"].items() if k == "O"
+                ]
+                if _libur_list:
+                    st.markdown("##### 💡 Saran Pengganti (AI-1)")
+                    for _nama_libur in _libur_list[:3]:
+                        with st.expander(f"🔄 Pengganti untuk **{_nama_libur}**", expanded=False):
+                            with st.spinner("⏳ AI-1 nyari pengganti..."):
+                                _saran = ai_suggest_pengganti_text(
+                                    _nama_libur, _parsed["tanggal"]
+                                )
+                            st.markdown(_saran)
+
                 st.markdown("#### 📊 Preview Perubahan:")
-    
+
                 _preview_rows = []
                 for _nama, _kode in _parsed["shift_map"].items():
                     _info = KODE_SHIFT.get(
@@ -390,25 +455,24 @@ if st.session_state["shift_sub_tab"] == "chat":
                         "📋 Keterangan": _info["label"],
                         "🎨 Icon": _info["icon"],
                     })
-    
+
                 _preview_df = pd.DataFrame(_preview_rows)
                 st.dataframe(_preview_df, use_container_width=True, hide_index=True)
-    
+
                 st.markdown("##### 📅 Konfirmasi Tanggal:")
                 _tanggal_final = st.date_input(
                     "Tanggal yang akan disimpan:",
                     value=_parsed["tanggal"],
                     key="chat_shift_tanggal_final",
                 )
-    
+
                 _catatan = st.text_input(
                     "📝 Catatan (opsional):",
                     placeholder="Contoh: Ganti shift dadakan",
                     key="chat_shift_catatan",
                 )
-    
+
                 col_save1, col_save2 = st.columns([2, 1])
-    
                 with col_save1:
                     if st.button(
                         "💾 KONFIRMASI SIMPAN",
@@ -416,14 +480,19 @@ if st.session_state["shift_sub_tab"] == "chat":
                         type="primary",
                         key="btn_chat_save",
                     ):
+                        _catatan_final = (
+                            f"{_catatan} | "
+                            f"AI-1 Engine: {_engine} | "
+                            f"Raw: {_parsed['raw_text'][:150]}"
+                        )
                         with st.spinner("⏳ Menyimpan..."):
                             _ok, _msg = save_master_shift(
                                 tanggal=_tanggal_final,
                                 shift_map=_parsed["shift_map"],
-                                sumber="chat",
-                                catatan=f"{_catatan} | Raw: {_parsed['raw_text'][:200]}",
+                                sumber="chat_ai",
+                                catatan=_catatan_final,
                             )
-    
+
                         if _ok:
                             st.success(_msg)
                             st.balloons()
@@ -432,7 +501,7 @@ if st.session_state["shift_sub_tab"] == "chat":
                             st.rerun()
                         else:
                             st.error(_msg)
-    
+
                 with col_save2:
                     if st.button(
                         "❌ BATAL",
@@ -445,7 +514,7 @@ if st.session_state["shift_sub_tab"] == "chat":
                 st.warning(
                     "⚠️ Tidak ada data shift yang ke-parse. Cek format chat."
                 )
-    
+
         with st.expander("📖 Format Chat yang Didukung"):
             st.markdown("""
             **1. Format Multi-Shift (Utama):**
@@ -456,28 +525,111 @@ if st.session_state["shift_sub_tab"] == "chat":
             - Malam: Kusdewi
             - Libur: Tika, Adel
             ```
-    
+
             **2. Format Simple (1 Shift):**
             ```
             Tika libur besok
             Zaki sakit hari ini
             ```
-    
+
             **3. Format Tanggal Eksplisit:**
             ```
             05/10: Tika libur
             05-10-2026: Rotasi shift pagi
             ```
-    
-            **4. Keyword yang Didukung:**
-            - `pagi` → P7
-            - `siang` → S15
-            - `malam` → M22
-            - `libur` / `off` → O
-            - `cuti` → C
-            - `ao` / `additional off` → AO
+
+            **4. Format Hapus:**
+            ```
+            Hapus shift TIA hari ini
+            Delete semua shift ADEL
+            ```
+
+            **5. Keyword yang Didukung:**
+            - `pagi` → P7 | `siang` → S15 | `malam` → M22
+            - `libur`/`off` → O | `cuti` → C | `ao` → AO
             """)
 
+# ============================================================
+# TAB BARU: TANYA AI (AI-1 CHAT)
+# ============================================================
+elif st.session_state["shift_sub_tab"] == "ai_chat":
+    st.markdown("### 🤖 Tanya AI-1 (Shift Manager)")
+    st.caption("💡 Tanya apa aja tentang jadwal shift. AI-1 jawab pakai konteks.")
+
+    # Init history
+    if "ai_chat_history" not in st.session_state:
+        st.session_state["ai_chat_history"] = []
+
+    # Contoh pertanyaan
+    st.markdown("**💡 Contoh pertanyaan:**")
+    _col_c1, _col_c2, _col_c3 = st.columns(3)
+    with _col_c1:
+        if st.button("Siapa shift pagi hari ini?", use_container_width=True, key="btn_q1"):
+            st.session_state["ai_chat_input_preset"] = "Siapa shift pagi hari ini?"
+    with _col_c2:
+        if st.button("Ada berapa personil aktif?", use_container_width=True, key="btn_q2"):
+            st.session_state["ai_chat_input_preset"] = "Ada berapa personil aktif?"
+    with _col_c3:
+        if st.button("Besok siapa yang libur?", use_container_width=True, key="btn_q3"):
+            st.session_state["ai_chat_input_preset"] = "Besok siapa yang libur?"
+
+    # Render history
+    if st.session_state["ai_chat_history"]:
+        st.markdown("---")
+        st.markdown("#### 💬 Percakapan")
+        for _msg in st.session_state["ai_chat_history"]:
+            _role = _msg.get("role", "user")
+            _content = _msg.get("content", "")
+            with st.chat_message(_role, avatar="👤" if _role == "user" else "🤖"):
+                st.markdown(_content)
+
+    # Input
+    _default_input = st.session_state.pop("ai_chat_input_preset", "")
+
+    _user_msg = st.chat_input(
+        "Tanya AI-1...",
+        key="ai_chat_input",
+    )
+
+    # Kalau preset button diklik
+    if _default_input and not _user_msg:
+        _user_msg = _default_input
+
+    if _user_msg:
+        # Simpan user message
+        st.session_state["ai_chat_history"].append({
+            "role": "user",
+            "content": _user_msg,
+        })
+
+        # Render user message
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(_user_msg)
+
+        # Get AI response
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("🤖 AI-1 lagi mikir..."):
+                _resp = chat_response(
+                    _user_msg,
+                    conversation_history=st.session_state["ai_chat_history"],
+                )
+            st.markdown(_resp)
+
+        # Simpan AI response
+        st.session_state["ai_chat_history"].append({
+            "role": "assistant",
+            "content": _resp,
+        })
+
+        st.rerun()
+
+    # Clear button
+    if st.session_state["ai_chat_history"]:
+        st.markdown("---")
+        if st.button("🗑️ Clear Percakapan", key="btn_clear_ai_chat"):
+            st.session_state["ai_chat_history"] = []
+            st.rerun()
+            
 # ============================================================
 # TAB 2: MATRIX VIEW (2 TABEL — TGL 1-15 & 16-31)
 # ============================================================
