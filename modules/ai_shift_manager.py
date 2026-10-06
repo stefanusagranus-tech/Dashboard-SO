@@ -39,8 +39,9 @@ from modules.supabase_client import get_supabase
 # 🔧 MODEL PRIORITY — GROQ
 # =========================================================
 MODEL_PRIORITY = [
-    "llama-3.1-8b-instant",        # 14.400 req/hari — paling banyak
-    "llama-3.3-70b-versatile",     # 1.000 req/hari — lebih pinter
+    "llama-3.1-8b-instant",      # 14.400 req/hari — prioritas utama
+    "openai/gpt-oss-20b",        # 1.000 req/hari — fallback cepet
+    "openai/gpt-oss-120b",       # 1.000 req/hari — fallback pinter
 ]
 
 
