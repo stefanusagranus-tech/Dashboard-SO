@@ -556,6 +556,60 @@ elif st.session_state["shift_sub_tab"] == "ai_chat":
     st.markdown("### 🤖 Tanya AI-1 (Shift Manager)")
     st.caption("💡 Tanya apa aja tentang jadwal shift. AI-1 jawab pakai konteks.")
 
+# ============ DEBUG PANEL AI-1 ============
+with st.expander("🔍 DEBUG AI-1 (klik buka)", expanded=True):
+    try:
+        from modules.ai_shift_manager import (
+            _setup_genai, _get_api_key, GEMINI_AVAILABLE, MODEL_PRIORITY
+        )
+        
+        _key = _get_api_key()
+        _col_d1, _col_d2, _col_d3 = st.columns(3)
+        with _col_d1:
+            st.metric("GEMINI_AVAILABLE", "✅" if GEMINI_AVAILABLE else "❌")
+        with _col_d2:
+            st.metric("API Key", "✅ Set" if _key else "❌ Kosong")
+        with _col_d3:
+            st.metric("Key Length", len(_key))
+        
+        if _key:
+            st.code(f"Prefix: {_key[:15]}...")
+            _client = _setup_genai()
+            st.code(f"_setup_genai() → {type(_client).__name__ if _client else 'None'}")
+            
+            if _client:
+                st.success("✅ Client siap!")
+            else:
+                st.error("❌ Client GAGAL init")
+        else:
+            st.error("❌ GEMINI_API_KEY kosong di secrets!")
+        
+        st.write("**MODEL_PRIORITY:**")
+        for _m in MODEL_PRIORITY:
+            st.code(_m)
+        
+        # Tombol test
+        if st.button("🧪 TEST GEMINI (TANPA THREAD)", key="btn_test_gemini_direct"):
+            with st.spinner("Testing directly..."):
+                try:
+                    from modules.ai_shift_manager import _call_gemini_raw
+                    _ok, _txt, _model, _err, _usage = _call_gemini_raw("Jawab hanya: OK")
+                    if _ok:
+                        st.success(f"✅ BERHASIL! Model: {_model}")
+                        st.code(_txt[:300])
+                        st.json(_usage)
+                    else:
+                        st.error(f"❌ GAGAL: {_err}")
+                except Exception as _e:
+                    st.error(f"❌ EXCEPTION: {_e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+    except Exception as _e:
+        st.error(f"Debug panel error: {_e}")
+        import traceback
+        st.code(traceback.format_exc())
+# ============ END DEBUG ============
+
     # Init history
     if "ai_chat_history" not in st.session_state:
         st.session_state["ai_chat_history"] = []
