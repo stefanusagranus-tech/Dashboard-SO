@@ -59,31 +59,56 @@ def _fmt_rp(value):
 
 
 def _fmt_tgl_short(tgl_str):
+    """
+    Fix: pastikan tahun valid (2024-2100).
+    Kalau tahun aneh (2016, 2013), paksa ke tahun sekarang.
+    """
+    if not tgl_str:
+        return "-"
+    
     try:
-        _dt = datetime.strptime(tgl_str, "%Y-%m-%d")
+        _tgl_clean = str(tgl_str).strip()[:10]
+        _dt = datetime.strptime(_tgl_clean, "%Y-%m-%d")
+        
+        # ✅ Validasi tahun
+        _now = _now_jkt()
+        if _dt.year < 2024 or _dt.year > 2100:
+            print(f"[PDF DATE FIX] Tahun aneh: {_dt.year} → {_now.year}")
+            _dt = _dt.replace(year=_now.year)
+        
         return _dt.strftime("%d/%m/%Y")
-    except Exception:
-        try:
-            _dt = datetime.strptime(tgl_str[:10], "%Y-%m-%d")
-            return _dt.strftime("%d/%m/%Y")
-        except Exception:
-            return tgl_str
-
-
+    except Exception as _e:
+        print(f"[PDF DATE ERROR] {_e} | input: {tgl_str}")
+        return str(tgl_str)[:10]
+    
 def _sanitize_text(text):
+    """
+    Ganti karakter unicode gak didukung Helvetica jadi ASCII.
+    Pake whitelist — cuma keep char printable ASCII.
+    """
+    if not text:
+        return ""
+    
     _replacements = {
         "—": "-", "–": "-", "−": "-", "…": "...",
         "“": '"', "”": '"', "‘": "'", "’": "'",
         "•": "-", "·": "-", "→": "->", "←": "<-",
         "≥": ">=", "≤": "<=", "×": "x", "÷": "/",
-        "≈": "~=", "≠": "!=", "\u00a0": " ", "\u200b": "",
+        "≈": "~=", "≠": "!=",
+        "\u00a0": " ", "\u200b": "", "\u200c": "", "\u200d": "",
+        "\ufeff": "",  # BOM
     }
     _result = text
     for _k, _v in _replacements.items():
         _result = _result.replace(_k, _v)
-    _result = "".join(c if ord(c) < 256 else "" for c in _result)
+    
+    # ✅ Whitelist: cuma keep char 32-126 (printable ASCII)
+    _result = "".join(
+        c for c in _result 
+        if 32 <= ord(c) <= 126 or c in "\n\t"
+    )
+    
     return _result
-
 
 def _strip_emoji(text):
     _result = []
