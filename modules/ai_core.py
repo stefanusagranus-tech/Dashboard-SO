@@ -805,6 +805,7 @@ def _get_analytics_summary_text(start_date, end_date):
         _lines.append(f"- Status: {_a['status']}")
     
     return "\n".join(_lines)
+
 # =========================================================
 # 🧠 SMART CONTEXT BUILDER v2
 # =========================================================
@@ -1129,6 +1130,7 @@ ATURAN JAWAB:
 
 Balas sebagai Kurumi 🎀:
 """
+
 # =========================================================
 # 🎀 PUBLIC API — CHAT (v3)
 # =========================================================
