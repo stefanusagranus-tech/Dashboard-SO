@@ -1526,13 +1526,42 @@ JANGAN NGARANG DATA!
     elif format == "pdf":
         try:
             _so_raw = _get_so_raw_data(start_date, end_date)
-
+    
+            # ✅ AMBIL EXTRA STATS BUAT GRAFIK + CARD
+            from modules.supabase_client import get_supabase as _get_sb
+            _sb = _get_sb()
+    
+            # Status rak
+            _rak_res = _sb.table("rak_master").select("status_so").execute()
+            _rak_rows = _rak_res.data or []
+            _sudah_so = len([r for r in _rak_rows if r.get("status_so") == "SELESAI"])
+            _belum_so = len([r for r in _rak_rows if r.get("status_so") == "BELUM"])
+    
+            # Adjust SO & BTSB
+            _adjust_so = sum(float(r.get("nominal_adjust", 0)) for r in _so_raw)
+    
+            _spd_res = _sb.table("spd_harian") \
+                .select("spd") \
+                .gte("tanggal", start_date.isoformat()) \
+                .lte("tanggal", end_date.isoformat()) \
+                .execute()
+            _total_spd = sum(float(r.get("spd", 0)) for r in (_spd_res.data or []))
+            _btsb = _total_spd * 0.0015
+    
+            _extra_stats = {
+                "sudah_so": _sudah_so,
+                "belum_so": _belum_so,
+                "adjust_so": _adjust_so,
+                "btsb": _btsb,
+            }
+    
             return generate_pdf(
                 ai_content=_content_text,
                 so_data=_so_raw,
                 period_label=label,
                 period_type=period_type,
                 filename=f"laporan_{filename_suffix}.pdf",
+                extra_stats=_extra_stats,   # ← INI KUNCINYA
             )
         except Exception as _e_pdf:
             import traceback
