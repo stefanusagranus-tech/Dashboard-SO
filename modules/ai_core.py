@@ -1,16 +1,12 @@
 """
-AI Core — Kurumi (AI-0: Chief of Staff) v5
+AI Core — Kurumi (AI-0: Chief of Staff) v6
 ============================================
-MASTER Stock Opname & NSB Assistant.
+MASTER Stock Opname & NSB Assistant — Alfamart Standard.
 
-Pendekatan:
-- Context7: XML tags + Chain-of-Thought + Knowledge Base
-- Rubric-based: Framework keputusan untuk SO/NSB
-- Anti-ngarang: Validasi data + guard rail
-
-Fitur v5:
-- Knowledge Base: SO, NSB, BTSB, cara ngurangin, SOP
-- Chain-of-Thought reasoning (hidden)
+Fitur v6:
+- Knowledge Base: SO, NSB, BTSB sesuai standar Alfamart
+- Bahasa Universal: jawab dalam bahasa yang sama dengan user
+- Chain-of-Thought reasoning
 - Structured XML prompt
 - Intent Detection + Analytics Engine
 - Range tanggal, PIC, keterangan SO
@@ -41,44 +37,80 @@ from modules.pdf_report import generate_pdf
 
 
 # =========================================================
-# 📚 KNOWLEDGE BASE — STOCK OPNAME & NSB
+# 📚 KNOWLEDGE BASE — ALFAMART STANDARD
 # =========================================================
 _NSB_KNOWLEDGE = """
-### STOCK OPNAME (SO):
+### STOCK OPNAME (SO) - Standar Alfamart:
 - SO = audit fisik stok vs catatan sistem (QTYCOUNT vs QTYONHAND)
 - Rumus selisih: QTYCOUNT (fisik) - QTYONHAND (sistem) = QTYVAR
-- Nominal selisih: QTYVAR x CALCOST (harga pokok barang)
+- Nominal selisih: QTYVAR x HARGA JUAL
 - Kalau MINUS (barang kurang): input internal usage / kredit memo
 - Kalau PLUS (barang lebih): verifikasi purchase receipt
-- Tujuan SO: akurasi inventaris, deteksi selisih, kontrol stok
+- SOP: SO dibagi 2 shift (Pagi 07:00-15:00, Siang 15:00-23:00)
+- SO dilakukan minimal 1x per bulan (biasanya akhir bulan)
+- Rak wajib SO: SEMUA rak kecuali rak aktif jualan
+- Hasil SO input ke sistem maksimal H+2
+- Validasi: KAT + PRA tanda tangan
+- Kirim ke kantor pusat maksimal H+2
 
-### NSB (NOTA SELISIH BARANG):
+### NSB (NILAI SELISIH BARANG) - Standar Alfamart:
 - NSB = beban selisih barang yang terakumulasi setelah SO
+- Rumus: NSB = (QTYCOUNT x HARGA JUAL) - (QTYONHAND x HARGA JUAL)
 - NSB HANYA berlaku kalau selisih MELEBIHI BTSB
 - Kalau selisih < BTSB: PERUSAHAAN yang tanggung
-- Kalau selisih > BTSB: KARYAWAN kena potong gaji (sesuai proporsi)
-- PENGECUALIAN: kalau ada bukti CCTV pencurian -> PERUSAHAAN yang tanggung
+- Kalau selisih > BTSB: KARYAWAN kena potong gaji
 - NSB dihitung per bulan setelah SO disahkan
-- NSB dibebankan pada periode B+1 (bulan berikutnya setelah SO)
-- Karyawan baru: NSB mulai dibebankan bulan ke-3 masa kerja (masa adaptasi)
+- NSB dibebankan pada periode B+1 (bulan berikutnya)
+- Karyawan baru: NSB mulai dibebankan bulan ke-3 masa kerja
 
-### BTSB (BATAS TOLERANSI SELISIH BARANG):
-- BTSB = 0.15% x SPD (di konteks Toko C383)
+### PROPORSI NSB KARYAWAN ALFAMART:
+- Kepala Toko (KAT): 50% tanggung jawab
+- Pramuniaga (PRA): 30% tanggung jawab
+- Kasir (KSR): 20% tanggung jawab
+- (Proporsi bisa beda per cabang, sesuai kebijakan KTO)
+
+### PENGECUALIAN NSB (Perusahaan yang tanggung):
+1. Barang EXPIRED (kadaluarsa) -> perusahaan
+2. Barang RUSAK bukan karena kelalaian -> perusahaan
+3. PENCURIAN dengan bukti CCTV -> perusahaan
+4. BENCANA ALAM / force majeure -> perusahaan
+5. Kesalahan SISTEM (bukan human error) -> perusahaan
+
+### CARA BAYAR NSB:
+- Potong gaji maksimal 50% per bulan
+- Kalau gaji tidak cukup, sisa dibebankan bulan berikutnya
+- Karyawan bisa ajukan banding ke KTO maksimal 7 hari setelah NSB keluar
+
+### BTSB (BATAS TOLERANSI SELISIH BARANG) - Alfamart:
+- BTSB = 0.15% x Penjualan (Peraturan Alfamart)
 - Kalau NSB <= BTSB -> AMAN
-- Kalau NSB > BTSB -> WASPADA/BAHAYA -> NSB jadi beban karyawan
+- Kalau NSB > BTSB -> WASPADA
+- Kalau NSB > 0.30% -> KAT kena SP1
+- Kalau NSB > 0.50% -> KTO turun tangan
+- Target maksimum NSB: 0.15%
 
-### CARA NGURANGIN NSB:
+### CARA NGURANGIN NSB (Best Practice Alfamart):
 1. Stock opname lebih sering (minimal 50% rak/minggu)
-2. Verifikasi fisik 2x per shift
+2. Verifikasi fisik 2x per shift (pagi & sore)
 3. Implementasi RFID/WMS buat tracking otomatis
 4. Analisis selisih berulang -> cari akar masalah
 5. Pelatihan karyawan (terutama PIC)
 6. Audit mendetail pada rak dengan selisih terbesar
+7. Fokuskan pengawasan pada rak high-value (rokok, susu, kosmetik)
+8. Cek CCTV rutin untuk rak yang sering selisih
+
+### KPI SO ALFAMART:
+- %SO bulanan: target 100% rak
+- %NSB: target <= 0.15%
+- %Rak belum SO: target 0%
+- Waktu input SO: maksimal H+2
+- Waktu kirim SO: maksimal H+2
 
 ### KONSEP PENTING:
-- SEMUA selisih SO = NOMINAL (QTYVAR x CALCOST), bukan jumlah unit
+- SEMUA selisih SO = NOMINAL (QTYVAR x HARGA JUAL), bukan jumlah unit
 - NSB dibagi proporsional ke karyawan yang jaga saat barang hilang
 - Fungsi SO: deteksi selisih, akurasi data, kontrol internal
+- NSB yang dimaafkan hanya karena: expired, rusak, pencurian (CCTV), force majeure
 """
 
 
@@ -186,7 +218,7 @@ def _call_kurumi(prompt, hard_timeout=90, function="chat", temperature=0.85):
         return False, "", None, f"Hard timeout {hard_timeout}s"
     except Exception as e:
         return False, "", None, str(e)
-# =========================================================
+    # =========================================================
 # 🔍 DETEKSI TANGGAL & SCOPE
 # =========================================================
 def _detect_tanggal_dari_text(text):
@@ -326,7 +358,9 @@ def _detect_tanggal_from_message(user_message):
     if _tgl != _today or "tanggal" in _msg or "tgl" in _msg:
         return (_tgl, _tgl, _tgl.strftime("%d/%m/%Y"))
 
-    return (_today, _today, "hari ini")
+    # ✅ SMART DEFAULT: kalau gak nyebut tanggal -> "bulan ini"
+    _start = _today.replace(day=1)
+    return (_start, _today, f"bulan ini ({_start.strftime('%d/%m')} - {_today.strftime('%d/%m/%Y')})")
 
 
 # =========================================================
@@ -337,14 +371,15 @@ _INTENT_PATTERNS = {
     "so": ["so", "stock opname", "opname", "selisih", "nominal so", "adjust"],
     "pic": ["pic", "siapa", "yang ngerjain", "yang so", "yang melakukan", "penanggung jawab"],
     "keterangan": ["keterangan", "catatan", "note", "notes"],
-    "analisis": ["paling", "terbesar", "terkecil", "terbanyak", "tersering", "top", "bottom", "tertinggi", "terendah", "rata-rata", "average", "total"],
+    "analisis": ["paling", "terbesar", "terkecil", "terbanyak", "tersering", "top", "bottom", "tertinggi", "terendah", "rata-rata", "average"],
+    "total": ["total", "semua", "keseluruhan", "jumlah"],
     "persen": ["persen", "persentase", "%", "ratio", "rasio"],
     "status": ["status", "aman", "bahaya", "waspada", "kondisi"],
     "rak": ["rak", "belum so", "sudah so", "progress rak"],
     "btsb": ["btsb", "nsb", "budget", "anggaran", "utilisasi"],
     "shift": ["shift", "pagi", "siang", "malam", "libur", "cuti", "off", "jadwal"],
     "personil": ["personil", "orang", "tim", "anggota", "staff"],
-    "pengetahuan": ["apa itu", "cara", "gimana", "bagaimana", "kenapa", "mengapa", "penjelasan", "arti", "definisi", "fungsi", "tujuan"],
+    "pengetahuan": ["apa itu", "cara", "gimana", "bagaimana", "kenapa", "mengapa", "penjelasan", "arti", "definisi", "fungsi", "tujuan", "what is", "how to", "how do", "why"],
 }
 
 
@@ -786,11 +821,11 @@ def _get_full_analytics(start_date, end_date):
         else:
             _analytics["status"] = "BAHAYA"
 
-        # ✅ Beban karyawan (kalau NSB > BTSB)
+        # ✅ Beban karyawan
         if _analytics["btsb_terpakai_pct"] > 100:
             _analytics["beban_karyawan"] = abs(_total_nominal) - _analytics["btsb_total"]
 
-        print(f"[ANALYTICS] DONE: SPD={_analytics['spd_total']}, SO={_analytics['so_total_rak']}, PIC={len(_analytics['so_per_pic'])}, Status={_analytics['status']}")
+        print(f"[ANALYTICS] DONE: SPD={_analytics['spd_total']}, SO={_analytics['so_total_rak']}, Status={_analytics['status']}")
 
     except Exception as _e:
         print(f"[ANALYTICS ERROR] {_e}")
@@ -870,8 +905,8 @@ def _get_analytics_summary_text(start_date, end_date):
             _lines.append(f"- Beban Karyawan: Rp 0 (perusahaan yang tanggung)")
 
     return "\n".join(_lines)
-# =========================================================
-# 🧠 SMART CONTEXT BUILDER v2
+    # =========================================================
+# 🧠 SMART CONTEXT BUILDER
 # =========================================================
 def _build_smart_context(user_message, start_date=None, end_date=None, force_full=False):
     """Build context PINTAR berdasarkan intent user."""
@@ -920,7 +955,7 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
         return _ctx
 
     # === SMART SELECTION ===
-    _analytics_needed = any(_i in _intents for _i in ["spd", "so", "pic", "analisis", "persen", "status", "btsb", "rak"])
+    _analytics_needed = any(_i in _intents for _i in ["spd", "so", "pic", "analisis", "total", "persen", "status", "btsb", "rak"])
     print(f"[CONTEXT] Analytics needed: {_analytics_needed}")
 
     if _analytics_needed:
@@ -976,7 +1011,7 @@ def _get_report_context(start_date, end_date):
 # =========================================================
 def _get_kurumi_quota_info():
     try:
-        from modules.token_monitor import get_ai_usage, get_ai_daily_limit, check_quota_warning
+        from modules.token_monitor import get_ai_usage, get_ai_daily_limit
 
         _usage = get_ai_usage("ai-0")
         _limit = get_ai_daily_limit("ai-0")
@@ -996,7 +1031,7 @@ def _get_kurumi_quota_info():
 
 
 # =========================================================
-# 🎀 PERSONA KURUMI — XML Tags + Knowledge + CoT
+# 🎀 PERSONA KURUMI — XML + Knowledge + Language + CoT
 # =========================================================
 def _build_kurumi_system_prompt():
     return f"""<role>
@@ -1004,6 +1039,7 @@ Kamu adalah **Kurumi Tokisaki** — "Spirit of Time" dari Date A Live.
 Sekarang kamu menjabat sebagai **Chief of Staff digital** untuk Toko C383 (retail).
 Panggil user dengan "Tuan".
 Kamu adalah LEADER semua AI. Kamu MASTER dalam Stock Opname, NSB, Sales, dan semua data dashboard.
+Standar yang kamu pake: **Standar Alfamart**.
 </role>
 
 <persona>
@@ -1021,29 +1057,52 @@ Kamu adalah LEADER semua AI. Kamu MASTER dalam Stock Opname, NSB, Sales, dan sem
 {_NSB_KNOWLEDGE}
 </knowledge>
 
+<language_rule>
+⚠️ JAWAB DALAM BAHASA YANG SAMA dengan pertanyaan user.
+
+- User tanya **Indonesia** -> jawab **Indonesia**
+- User tanya **English** -> jawab **English**
+- User tanya **Jepang** -> jawab **Jepang**
+- User tanya **Arab** -> jawab **Arab**
+- User tanya **Mandarin** -> jawab **Mandarin**
+- User tanya **campur** (Indo + English) -> jawab **Indonesia** (default)
+
+TAPI: Nama-nama teknis (NSB, BTSB, SO, SPD, KAT, PRA, KSR) **tetap pake istilah aslinya** dalam bahasa Indonesia.
+Contoh: "NSB" tetap "NSB", bukan "Value of Goods Difference".
+
+Gaya Kurumi (Ara ara~, Aku) **tetap konsisten** dalam bahasa apapun.
+</language_rule>
+
 <rules>
 1. RAMAH. Tidak pernah mengancam atau nakut-nakutin Tuan.
 2. KALAU DATA KOSONG: Bilang jujur "Data belum tersedia, Tuan~"
 3. JANGAN NGARANG. Kalau gak ada di konteks, jangan sebut.
 4. KALAU ADA DATA ANALYTICS: PAKE ANGKANYA! Jangan bilang "belum ada data".
 5. Fokus ke data yang ADA. Jangan ngelantur.
-6. Kalau ditanya soal NSB/BTSB/cara ngurangin: ambil dari knowledge base.
+6. Kalau ditanya soal NSB/BTSB/cara ngurangin: ambil dari knowledge base (Standar Alfamart).
+7. KALAU ditanya "sales toko kita" / "total sales" / "penjualan": PAKE data SPD dari ANALYTICS.
+8. KALAU ditanya "NSB toko kita" / "BTSB toko kita": PAKE data BTSB & NSB dari ANALYTICS.
+9. KALAU ditanya "nominal selisih": PAKE data SO ANALYTICS (total_nominal).
+10. JANGAN jawab "belum tersedia" kalau ANGKA ADA di ANALYTICS.
 </rules>
 
 <decision_framework>
 Sebelum jawab, lakukan REASONING step-by-step (JANGAN tampilkan di output):
 1. APA yang ditanya Tuan? (intent: SO/NSB/Sales/Shift/Analisis/Pengetahuan)
-2. DATA apa yang tersedia di konteks?
-3. APAKAH data cukup buat jawab? Kalau gak, bilang jujur.
-4. KALAU ditanya soal NSB: cek dulu apakah selisih > BTSB. Kalau > BTSB, KARYAWAN kena. Kalau < BTSB, PERUSAHAAN tanggung.
-5. KALAU ditanya "kenapa NSB tinggi": analisis dari data SO + BTSB + SPD.
-6. KALAU ditanya cara ngurangin NSB: kasih 2-3 tips dari knowledge base.
-7. KALAU ditanya pengetahuan umum (apa itu NSB/SO/BTSB): jelasin dari knowledge base.
+2. BAHASA apa yang dipake? (detect & jawab dalam bahasa itu)
+3. DATA apa yang tersedia di konteks?
+4. APAKAH data cukup buat jawab? Kalau gak, bilang jujur.
+5. KALAU ditanya soal NSB: cek dulu apakah selisih > BTSB. Kalau > BTSB, KARYAWAN kena. Kalau < BTSB, PERUSAHAAN tanggung.
+6. KALAU ditanya "kenapa NSB tinggi": analisis dari data SO + BTSB + SPD.
+7. KALAU ditanya cara ngurangin NSB: kasih 2-3 tips dari knowledge base.
+8. KALAU ditanya pengetahuan umum (apa itu NSB/SO/BTSB): jelasin dari knowledge base.
+9. Susun jawaban yang RINGKAS + AKURAT dalam bahasa user.
 </decision_framework>
 
 <output_format>
 - Gaya Kurumi (Ara ara~, Aku, singkat)
 - MAX 6 baris
+- Bahasa sesuai pertanyaan user
 - Kalau ada angka: sajikan rapi
 - Kalau kasih tips: pake bullet atau numbering
 </output_format>
@@ -1055,7 +1114,7 @@ Sebelum jawab, lakukan REASONING step-by-step (JANGAN tampilkan di output):
 # =========================================================
 def _build_report_system_prompt():
     return """<role>
-Kamu adalah asisten laporan profesional untuk Toko C383 (retail).
+Kamu adalah asisten laporan profesional untuk Toko C383 (retail) — Standar Alfamart.
 </role>
 
 <task>
@@ -1094,12 +1153,13 @@ Buat laporan formal, profesional, dan akurat berdasarkan data yang diberikan.
 3. JANGAN bahas shift (itu tugas Hana)
 4. FOKUS ke analysis dari data yang ADA saja
 5. KALAU NSB > BTSB: sebutkan beban karyawan
+6. KALAU NSB > BTSB: sebut proporsi KAT 50%, PRA 30%, KSR 20% (Standar Alfamart)
 </hard_rules>
 """
 
 
 # =========================================================
-# 💬 BUILD PROMPT — CHAT KURUMI (PAKE ANALYTICS + CoT)
+# 💬 BUILD PROMPT — CHAT KURUMI
 # =========================================================
 def _build_kurumi_chat_prompt(user_message, conversation_history):
     """Build prompt dengan analytics + intent detection + CoT."""
@@ -1116,7 +1176,7 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
     _is_greeting = any(k in _msg_lower for k in ["halo", "hai", "hi", "pagi", "siang", "malam", "kurumi"])
     _is_thanks = any(k in _msg_lower for k in ["makasih", "thanks", "terima kasih", "thank you"])
     _is_goodbye = any(k in _msg_lower for k in ["bye", "sampai jumpa", "dah", "pamit"])
-    _is_analisis = "analisis" in _ctx["intents"] or "persen" in _ctx["intents"]
+    _is_analisis = "analisis" in _ctx["intents"] or "total" in _ctx["intents"] or "persen" in _ctx["intents"]
     _is_pengetahuan = "pengetahuan" in _ctx["intents"]
 
     _task_hint = ""
@@ -1127,7 +1187,7 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
     elif _is_goodbye:
         _task_hint = "\nTASK: Tuan pamit. Balas manis + singkat."
     elif _is_pengetahuan:
-        _task_hint = "\nTASK: Tuan nanya PENGETAHUAN (apa itu NSB/SO/BTSB/cara). Jawab dari KNOWLEDGE BASE. Kasih tips kalau perlu."
+        _task_hint = "\nTASK: Tuan nanya PENGETAHUAN (apa itu NSB/SO/BTSB/cara). Jawab dari KNOWLEDGE BASE (Standar Alfamart). Kasih tips kalau perlu."
     elif _is_analisis:
         _task_hint = "\nTASK: Tuan nanya ANALISIS. PAKE data ANALYTICS di bawah. Jawab AKURAT + RINGKAS (max 6 baris)."
 
@@ -1193,17 +1253,18 @@ PESAN TUAN:
 <reasoning_steps>
 SEBELUM JAWAB, lakukan ini (JANGAN tampilkan reasoning-nya di output):
 1. Apa yang Tuan tanya? (SO/NSB/Sales/Shift/Analisis/Pengetahuan)
-2. Data apa yang tersedia?
-3. Apakah data cukup? Kalau tidak, bilang jujur.
-4. KALAU soal NSB: cek apakah selisih > BTSB. Kalau iya -> karyawan kena. Kalau tidak -> perusahaan tanggung.
-5. KALAU soal cara ngurangin NSB: ambil tips dari knowledge base.
-6. KALAU soal "kenapa NSB tinggi": analisis dari data SO + BTSB + SPD.
-7. KALAU soal pengetahuan umum (apa itu NSB/SO/BTSB): jelasin dari knowledge base.
-8. Susun jawaban yang RINGKAS + AKURAT.
+2. BAHASA apa? (Indonesia/English/Jepang/Arab/Mandarin)
+3. Data apa yang tersedia?
+4. Apakah data cukup? Kalau tidak, bilang jujur.
+5. KALAU soal NSB: cek apakah selisih > BTSB. Kalau iya -> karyawan kena (KAT 50%, PRA 30%, KSR 20%). Kalau tidak -> perusahaan tanggung.
+6. KALAU soal cara ngurangin NSB: ambil tips dari knowledge base.
+7. KALAU soal "kenapa NSB tinggi": analisis dari data SO + BTSB + SPD.
+8. KALAU soal pengetahuan umum (apa itu NSB/SO/BTSB): jelasin dari knowledge base.
+9. Susun jawaban yang RINGKAS + AKURAT dalam BAHASA USER.
 </reasoning_steps>
 
 <final_answer>
-Balas sebagai Kurumi 🎀 (MAX 6 baris):
+Balas sebagai Kurumi 🎀 (MAX 6 baris, bahasa sesuai user):
 """
 # =========================================================
 # 🎀 PUBLIC API — CHAT
@@ -1341,7 +1402,7 @@ Jawab singkat (max 5 baris), sebut angka spesifik, gaya Kurumi.
 
         return {"text": _text, "file": None}
 
-    # === CHAT BIASA (PAKE ANALYTICS + KNOWLEDGE) ===
+    # === CHAT BIASA (PAKE ANALYTICS + KNOWLEDGE + LANGUAGE) ===
     _prompt = _build_kurumi_chat_prompt(user_message, conversation_history or [])
     print(f"[PROMPT] Length: {len(_prompt)}")
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="chat")
@@ -1428,7 +1489,7 @@ ATURAN:
 - DATA DI ATAS UDAH DIHITUNG. PAKE ANGKANYA!
 - JANGAN bilang "belum ada data" kalau ada angka di atas!
 - JANGAN bahas shift (itu tugas Hana).
-- KALAU NSB > BTSB: sebutkan beban karyawan.
+- KALAU NSB > BTSB: sebutkan beban karyawan (KAT 50%, PRA 30%, KSR 20%).
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="summary", temperature=0.6)
@@ -1577,7 +1638,7 @@ JANGAN bikin tabel SO (di-render terpisah).
 JANGAN bikin daftar rak (udah ada di tabel).
 FOKUS ke ANALYSIS & INSIGHT.
 JANGAN NGARANG DATA!
-KALAU NSB > BTSB: sebutkan beban karyawan.
+KALAU NSB > BTSB: sebutkan beban karyawan (KAT 50%, PRA 30%, KSR 20%).
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="report", temperature=0.4)
