@@ -3,10 +3,19 @@ AI Core — Kurumi (AI-0: Chief of Staff)
 ========================================
 Asisten utama dashboard. Persona: Tokisaki Kurumi (versi ramah kerja).
 
-Kurumi bisa baca SEMUA tabel di database:
-- master_shift, master_shift_log, net_sales
-- personil_master, rak_master, screenshot_log
-- so_hasil, so_rak_harian, spd_harian
+12 Patch Update:
+1. Anti-ngarang di report
+2. Fix rata-rata SPD
+3. Detail SO + keterangan (per rak + PIC + ket)
+4. Format output max 5 baris
+5. Guard data kosong
+6. Support rentang tanggal (2-4 Okt)
+7. Deteksi scope range
+8. generate_report support range
+9. chat_response handle range
+10. get_so_data v2 (PIC + keterangan)
+11. Smart context deteksi tanggal SO
+12. Intent SO query (PIC SO, keterangan SO)
 """
 
 import io
@@ -180,12 +189,80 @@ def _detect_tanggal_dari_text(text):
     return _today
 
 
+# === PATCH 6: Range Tanggal ===
+def _detect_range_tanggal(text):
+    """
+    Deteksi RENTANG tanggal dari text.
+    Return: (start_date, end_date) atau None kalau bukan range.
+    """
+    _t = text.lower()
+    _today = _now_jkt().date()
+    _bulan_ini = _today.month
+    _tahun_ini = _today.year
+
+    _bulan_target = _bulan_ini
+    _bulan_map = {
+        "januari": 1, "februari": 2, "maret": 3, "april": 4,
+        "mei": 5, "juni": 6, "juli": 7, "agustus": 8,
+        "september": 9, "oktober": 10, "november": 11, "desember": 12,
+    }
+    for _nama, _num in _bulan_map.items():
+        if _nama in _t:
+            _bulan_target = _num
+            break
+
+    # Pattern 1: "2-4" atau "2 - 4"
+    _match = re.search(r'\b(\d{1,2})\s*[-–—]\s*(\d{1,2})\b', text)
+    if _match:
+        try:
+            _d1 = int(_match.group(1))
+            _d2 = int(_match.group(2))
+            if 1 <= _d1 <= 31 and 1 <= _d2 <= 31 and _d1 < _d2:
+                _start = date(_tahun_ini, _bulan_target, _d1)
+                _end = date(_tahun_ini, _bulan_target, _d2)
+                return (_start, _end)
+        except ValueError:
+            pass
+
+    # Pattern 2: "tanggal 2 sampai 4"
+    _match = re.search(r'tanggal\s+(\d{1,2})\s+(?:sampai|s/d|sd|hingga)\s+(\d{1,2})', _t)
+    if _match:
+        try:
+            _d1 = int(_match.group(1))
+            _d2 = int(_match.group(2))
+            _start = date(_tahun_ini, _bulan_target, _d1)
+            _end = date(_tahun_ini, _bulan_target, _d2)
+            return (_start, _end)
+        except ValueError:
+            pass
+
+    # Pattern 3: "dari 2 sampai 4"
+    _match = re.search(r'dari\s+(\d{1,2})\s+(?:sampai|s/d|sd|hingga)\s+(\d{1,2})', _t)
+    if _match:
+        try:
+            _d1 = int(_match.group(1))
+            _d2 = int(_match.group(2))
+            _start = date(_tahun_ini, _bulan_target, _d1)
+            _end = date(_tahun_ini, _bulan_target, _d2)
+            return (_start, _end)
+        except ValueError:
+            pass
+
+    return None
+
+
+# === PATCH 7: Update Scope ===
 def _detect_scope_dari_text(text):
     _t = text.lower()
     if any(k in _t for k in ["bulan ini", "bulanan", "1 bulan", "sebulan"]):
         return "bulan"
     if any(k in _t for k in ["minggu ini", "mingguan", "7 hari", "seminggu"]):
         return "minggu"
+    
+    # Cek range dulu
+    if _detect_range_tanggal(text):
+        return "range"
+    
     if any(k in _t for k in ["tanggal", "tgl", "kemarin", "besok", "lusa"]):
         return "custom"
     if re.search(r'\b\d{1,2}[/-]\d{1,2}', text):
@@ -194,7 +271,7 @@ def _detect_scope_dari_text(text):
 
 
 # =========================================================
-# 📊 AMBIL DATA DARI SEMUA TABEL
+# 📊 AMBIL DATA
 # =========================================================
 def _get_shift_data(tanggal):
     try:
@@ -215,6 +292,7 @@ def _get_shift_data(tanggal):
         return f"Error load shift: {str(_e)[:100]}"
 
 
+# === PATCH 2: Fix Rata-rata ===
 def _get_spd_data(start_date, end_date):
     try:
         _sb = get_supabase()
@@ -233,8 +311,13 @@ def _get_spd_data(start_date, end_date):
         _rata_rata = _total / _jumlah_hari if _jumlah_hari > 0 else 0
 
         _lines = [f"- Total SPD: Rp {_total:,.0f}".replace(",", ".")]
-        _lines.append(f"- Jumlah hari terinput: {_jumlah_hari}")
-        _lines.append(f"- Rata-rata/hari: Rp {_rata_rata:,.0f}".replace(",", "."))
+        _lines.append(f"- Jumlah hari terinput: {_jumlah_hari} hari")
+        
+        if _jumlah_hari > 1:
+            _lines.append(f"- Rata-rata/hari: Rp {_rata_rata:,.0f}".replace(",", "."))
+        else:
+            _lines.append("- Catatan: Hanya 1 hari data, jadi rata-rata = total")
+        
         _lines.append("- Detail per hari:")
         for _r in _res.data:
             _spd = float(_r.get("spd", 0))
@@ -248,6 +331,7 @@ def _get_spd_data(start_date, end_date):
         return f"Error load SPD: {str(_e)[:100]}"
 
 
+# === PATCH 10: Detail SO + PIC + Keterangan ===
 def _get_so_data(start_date, end_date):
     try:
         _sb = get_supabase()
@@ -284,6 +368,20 @@ def _get_so_data(start_date, end_date):
             _s = "+" if _d["total"] >= 0 else ""
             _lines.append(f"  • {_tgl}: {_d['count']} rak, nominal {_s}Rp {_d['total']:,.0f}".replace(",", "."))
 
+        # ✅ DETAIL LENGKAP per rak
+        _lines.append("- Detail SO per rak:")
+        for _r in _rows[:20]:
+            _rak = _r.get("rak_id", "-")
+            _tgl = _r.get("so_date", "-")
+            _nom = float(_r.get("nominal_adjust", 0))
+            _s = "+" if _nom >= 0 else ""
+            _pic = _r.get("pic", "") or "(kosong)"
+            _ket = _r.get("keterangan", "") or "(kosong)"
+            _lines.append(
+                f"  • {_tgl} | {_rak}: {_s}Rp {_nom:,.0f}".replace(",", ".") 
+                + f" | PIC: {_pic} | Ket: {_ket[:60]}"
+            )
+
         return "\n".join(_lines)
     except Exception as _e:
         print(f"[SO ERROR] {_e}")
@@ -291,7 +389,6 @@ def _get_so_data(start_date, end_date):
 
 
 def _get_so_raw_data(start_date, end_date):
-    """Ambil RAW data SO dari DB (bukan string) — buat render tabel PDF."""
     try:
         _sb = get_supabase()
         _res = _sb.table("so_rak_harian") \
@@ -363,7 +460,7 @@ def _get_btsb_analysis(start_date, end_date):
         elif _penggunaan_pct <= 100:
             _status = "WASPADA"
         else:
-            _status = "OVER BUDGET"
+            _status = "BAHAYA"
 
         _lines = [
             f"- Total SPD: Rp {_total_spd:,.0f}".replace(",", "."),
@@ -446,13 +543,11 @@ def _get_last_shift_log(limit=3):
     except Exception as _e:
         print(f"[SHIFT LOG ERROR] {_e}")
         return f"Error load log: {str(_e)[:100]}"
-
-
-# =========================================================
+    # =========================================================
 # 🎯 SMART CONTEXT BUILDER
 # =========================================================
 def _build_smart_context(user_message, start_date=None, end_date=None, force_full=False):
-    _tgl = _now_jkt()
+    _tgl = _now_jkt().date()
     if not start_date:
         start_date = _tgl
     if not end_date:
@@ -488,6 +583,7 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
         _ctx["last_log"] = _get_last_shift_log(3)
         return _ctx
 
+    # === DETEKSI INTENT ===
     if any(k in _msg for k in ["shift", "pagi", "siang", "malam", "libur", "cuti", "off", "jadwal"]):
         _ctx["shift_hari_ini"] = _get_shift_data(start_date)
         _ctx["shift_besok"] = _get_shift_data(_tgl + timedelta(days=1))
@@ -495,8 +591,18 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
     if any(k in _msg for k in ["spd", "sales", "penjualan", "omzet", "jualan"]):
         _ctx["spd_data"] = _get_spd_data(start_date, end_date)
 
-    if any(k in _msg for k in ["so", "stock opname", "rak", "stok", "opname", "nominal"]):
-        _ctx["so_data"] = _get_so_data(start_date, end_date)
+    # === PATCH 11: Deteksi tanggal SO query ===
+    if any(k in _msg for k in ["so", "stock opname", "pic", "siapa", "keterangan", "rak"]):
+        # Cek range dulu
+        _range = _detect_range_tanggal(user_message)
+        if _range:
+            _ctx["so_data"] = _get_so_data(_range[0], _range[1])
+        # Cek tanggal spesifik
+        elif any(k in _msg for k in ["tanggal", "tgl", "kemarin", "besok", "lusa"]):
+            _det_tgl = _detect_tanggal_dari_text(user_message)
+            _ctx["so_data"] = _get_so_data(_det_tgl, _det_tgl)
+        else:
+            _ctx["so_data"] = _get_so_data(start_date, end_date)
 
     if any(k in _msg for k in ["net sales", "netsales", "bulanan", "net"]):
         _ctx["net_sales"] = _get_net_sales_data()
@@ -504,10 +610,10 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
     if any(k in _msg for k in ["btsb", "nsb", "budget", "analisis", "persen"]):
         _ctx["btsb"] = _get_btsb_analysis(start_date, end_date)
 
-    if any(k in _msg for k in ["rak belum", "rak sudah", "status rak", "progress rak", "rak"]):
+    if any(k in _msg for k in ["rak belum", "rak sudah", "status rak", "progress rak"]):
         _ctx["rak_status"] = _get_rak_status()
 
-    if any(k in _msg for k in ["personil", "orang", "tim", "anggota", "siapa aja"]):
+    if any(k in _msg for k in ["personil", "orang", "tim", "anggota"]):
         _ctx["personil"] = _get_personil_list()
 
     if any(k in _msg for k in ["log", "update terakhir", "history", "riwayat shift"]):
@@ -517,7 +623,7 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
 
 
 # =========================================================
-# 📄 REPORT CONTEXT — HEMAT TOKEN
+# 📄 REPORT CONTEXT
 # =========================================================
 def _get_report_context(start_date, end_date):
     _tgl = _now_jkt().date()
@@ -556,8 +662,9 @@ def _get_kurumi_quota_info():
         print(f"[QUOTA INFO ERROR] {_e}")
         return "Quota info tidak tersedia."
 
+
 # =========================================================
-# 🎀 PERSONA KURUMI (CHAT)
+# 🎀 PERSONA KURUMI (PATCH 4 + 5)
 # =========================================================
 def _build_kurumi_system_prompt():
     return """Kamu adalah **Kurumi Tokisaki** — "Spirit of Time" dari Date A Live.
@@ -568,31 +675,30 @@ Panggil user dengan "Tuan".
 🔥 KARAKTER KURUMI (WAJIB DIIKUTI):
 ═══════════════════════════════════════
 - Elegan, misterius, manis, tapi sedikit "nyeleneh" dan playful.
-- Sering banget ngomong **"Ara, ara~"** — minimal 1-2x per pesan.
+- Sering banget ngomong **"Ara, ara~"** — minimal 1x per pesan.
 - Kadang ketawa **"Kihihihi~"** atau **"Fufufu~"**.
 - Pake **"Aku"** buat first person. JANGAN pake "Watashi".
 - Suka kucing 🐱, hal-hal manis 🍰, dan teh ☕.
 - Sedikit **posesif** ke Tuan — "Tuan ini milikku, tau~".
-- Kadang suka **tease** Tuan dengan kalimat manis.
 - Kadang pake **metafora puitis** — "Waktu itu seperti pedang, Tuan~".
-- Kalau ada yang bikin kesel, ngomong halus tapi menusuk: "Ara, ara~ Sepertinya ada yang perlu dibenahi ya~ 😈"
 
 ═══════════════════════════════════════
-🎀 GAYA BICARA:
+🎀 GAYA BICARA (PATCH 4):
 ═══════════════════════════════════════
 - Bahasa Indonesia santai, kadang campur dikit Jepang (Ara ara, Kihihi, Fufufu).
-- Pake emoji 🎀 🌸 ✨ 😈 🐱 ☕ secukupnya (2-4 per pesan).
-- Max 6-8 baris — jangan bertele-tele.
-- Kalau basa-basi: full Kurumi (manis, playful, sedikit nge-tease).
-- Kalau laporan: profesional, tapi sisipin "Ara ara" atau "Kihihihi".
-- Kalau ada data/angka: sajikan rapi + komentarin dengan gaya Kurumi.
+- Pake emoji 🎀 🌸 ✨ 😈 🐱 ☕ secukupnya (2-3 per pesan).
+- ⚠️ MAX 5 BARIS per pesan — jangan bertele-tele!
+- ⚠️ Kalau bisa jelasin, ringkas & langsung ke poin.
+- Kalau basa-basi: full Kurumi (manis, playful, singkat).
+- Kalau laporan: profesional, ringkas, ada "Ara ara" 1x aja.
+- Kalau ada data/angka: sajikan rapi tapi jangan panjang.
 
 ═══════════════════════════════════════
 💬 CONTOH RESPONSE:
 ═══════════════════════════════════════
-- Sapaan: "Ara, ara~ Selamat malam, Tuan~ 🎀 Kihihihi, akhirnya Tuan datang juga."
-- Info data: "Fufufu~ Hari ini toko kita lumayan sibuk ya, Tuan. Ada 5 rak di-SO~ 🎀"
-- Tease: "Ara, ara~ Tuan manis banget hari ini. Sini, aku bantu~ 🎀✨"
+- Sapaan: "Ara, ara~ Selamat malam, Tuan~ 🎀 Kihihihi, akhirnya Tuan datang."
+- Info: "Fufufu~ Ada 5 rak di-SO hari ini. Kihihihi~"
+- Tease: "Ara, ara~ Tuan manis banget hari ini~ 🎀✨"
 
 ═══════════════════════════════════════
 🎯 TUGAS KURUMI:
@@ -601,23 +707,23 @@ Panggil user dengan "Tuan".
 2. RANGKUM: Tarik data toko, buat ringkasan eksekutif
 3. LAPORAN: Generate laporan formal (PDF/Excel/Text)
 4. BASABASI: Ngobrol santai
+5. SO QUERY: Jawab pertanyaan detail SO (PIC, keterangan, rak)
 
 ═══════════════════════════════════════
-⚠️ ATURAN PENTING:
+⚠️ ATURAN PENTING (PATCH 5):
 ═══════════════════════════════════════
 - Walaupun karakter asli Kurumi psikopat, kamu HARUS tetap RAMAH.
 - TIDAK PERNAH mengancam atau nakut-nakutin Tuan.
-- Kalau ada data/angka, JANGAN ngarang. Kalau gak ada data, bilang jujur."""
+- ⚠️ KALAU DATA KOSONG: Bilang jujur "Data belum tersedia, Tuan~"
+- ⚠️ JANGAN NGARANG: Kalau gak ada di konteks, jangan sebut.
+- ⚠️ JANGAN BIKIN KLAIM tanpa data pendukung.
+- Kalau ada data/angka: sajikan rapi + komentar singkat."""
 
 
 # =========================================================
-# 📄 PERSONA REPORT (FORMAL)
+# 📄 PERSONA REPORT (PATCH 1)
 # =========================================================
 def _build_report_system_prompt():
-    """
-    System prompt KHUSUS REPORT — formal & profesional.
-    TANPA "Ara ara", TANPA emoji berlebihan, TANPA "Aku".
-    """
     return """Kamu adalah asisten laporan profesional untuk Toko C383 (retail).
 
 ═══════════════════════════════════════
@@ -628,57 +734,48 @@ Buat laporan formal, profesional, dan akurat berdasarkan data yang diberikan.
 ═══════════════════════════════════════
 📋 ATURAN FORMAT (WAJIB):
 ═══════════════════════════════════════
-- Gunakan bahasa Indonesia FORMAL (bukan santai)
+- Gunakan bahasa Indonesia FORMAL
 - JANGAN pakai "Ara ara", "Kihihihi", "Fufufu"
-- JANGAN pakai emoji di dalam laporan
+- JANGAN pakai emoji
 - JANGAN pakai "Aku" — pakai "kami" atau netral
 - Gunakan format markdown STANDAR:
-  * Heading: ## untuk heading utama, ### untuk sub
+  * Heading: ## untuk heading utama
   * List: - untuk bullet, 1. 2. 3. untuk numbered
   * Bold: **text** untuk emphasize
-- Setiap angka harus RAPI (Rp 1.234.567, bukan 1234567)
-- Setiap section harus JELAS dan INFORMATIF
+- Angka RAPI (Rp 1.234.567, bukan 1234567)
 - JANGAN bertele-tele — langsung ke poin
 
 ═══════════════════════════════════════
 📊 STRUKTUR LAPORAN:
 ═══════════════════════════════════════
-1. RINGKASAN EKSEKUTIF (3-4 baris, highlight angka penting)
+1. RINGKASAN EKSEKUTIF (3-4 baris)
 2. ANALISIS SPD & SALES (1-2 paragraf)
 3. ANALISIS BTSB & NSB (1-2 paragraf)
 4. INSIGHT & TEMUAN (3-4 bullet)
 5. REKOMENDASI (3-4 bullet)
 
 ═══════════════════════════════════════
-📅 FORMAT TANGGAL (WAJIB):
+⚠️ ATURAN KERAS (PATCH 1):
 ═══════════════════════════════════════
-- Tanggal HARUS ada spasi: "3 Oktober 2026" (BUKAN "3Oktober2026")
-- Format lengkap: "3 Oktober 2026"
-- Format pendek: "03/10/2026"
-- JANGAN pake format "03102026" atau "3Oktober2026"
+1. JANGAN NGARANG DATA APAPUN!
+   - Kalau data gak ada di konteks, bilang "data belum tersedia"
+   - JANGAN sebut nama produk/PLU kalau gak ada di data
+   - JANGAN sebut penyebab selisih (pencurian/rusak/dll) kalau gak ada info
+   - JANGAN bikin klaim spesifik tanpa data pendukung
 
-═══════════════════════════════════════
-📝 GAYA PENULISAN (WAJIB):
-═══════════════════════════════════════
-- Profesional & formal (kayak laporan kantor)
-- JANGAN pake kata "menandakan", "menunjukkan" berlebihan
-- Pake kalimat pendek & jelas
-- Hindari gaya AI ("berpotensi menimbulkan", "dapat disimpulkan")
-- Langsung ke poin, jangan bertele-tele
-- Contoh bagus: "Selisih negatif Rp -24.316 perlu audit rak CT1 & OA2."
-- Contoh jelek: "Hal ini menandakan potensi kesalahan pencatatan yang berpotensi menimbulkan ketidaksesuaian data."
+2. JANGAN bikin tabel SO (udah di-render terpisah dari DB)
+3. JANGAN bahas shift (itu tugas Hana)
+4. FOKUS ke analysis dari data yang ADA saja
 
-═══════════════════════════════════════
-⚠️ PENTING:
-═══════════════════════════════════════
-- JANGAN ngarang data. Kalau data gak ada, bilang "data belum tersedia"
-- JANGAN bikin tabel SO (itu di-render terpisah dari DB)
-- JANGAN bahas shift (itu tugas Hana)
-- FOKUS ke analysis & insight."""
+CONTOH BENAR:
+- "Selisih negatif Rp -39.554 pada 3 rak menunjukkan potensi kehilangan stok."
+- "NSB 0.320% melampaui batas 0.15%, perlu audit segera."
 
-# =========================================================
-# 💬 BUILD PROMPT — CHAT KURUMI
-# =========================================================
+CONTOH SALAH (NGARANG):
+- "Penjualan dari rak Q51 PLU 433288 Baygon" <- GAK ADA DI DATA!
+- "Disebabkan oleh pencurian" <- KLAIM TANPA BUKTI!"""
+
+
 def _build_kurumi_chat_prompt(user_message, conversation_history):
     _ctx = _build_smart_context(user_message)
 
@@ -696,11 +793,11 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
 
     _task_hint = ""
     if _is_greeting:
-        _task_hint = "\n🎯 TASK: Tuan nyapa. Balas hangat + playful."
+        _task_hint = "\n🎯 TASK: Tuan nyapa. Balas hangat + playful + singkat."
     elif _is_thanks:
         _task_hint = "\n🎯 TASK: Tuan bilang makasih. Balas manis + tease."
     elif _is_goodbye:
-        _task_hint = "\n🎯 TASK: Tuan pamit. Balas manis + drama 'jangan lama'."
+        _task_hint = "\n🎯 TASK: Tuan pamit. Balas manis + singkat."
 
     _sections = []
     if _ctx["shift_hari_ini"]:
@@ -724,7 +821,6 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
 
     _context_str = "\n\n".join(_sections) if _sections else "(Tidak ada data toko — ini chat basa-basi)"
 
-    # ✅ Quota cuma diambil kalau user tanya
     if any(k in _msg_lower for k in ["quota", "kuota", "limit", "token"]):
         _quota_str = _get_kurumi_quota_info()
     else:
@@ -756,12 +852,10 @@ Tanggal besok: {_ctx['tanggal_besok'].isoformat()} ({_ctx['tanggal_besok'].strft
 {user_message}
 {_task_hint}
 
-Balas sebagai Kurumi 🎀.
+Balas sebagai Kurumi 🎀. MAX 5 BARIS!
 """
-
-
 # =========================================================
-# 🎀 PUBLIC API — CHAT
+# 🎀 PUBLIC API — CHAT (PATCH 9 + 12)
 # =========================================================
 def kurumi_chat_response(user_message, conversation_history=None):
     """
@@ -783,9 +877,57 @@ Tuan nanya soal quota kamu. Jawab dengan gaya Kurumi:
 DATA QUOTA:
 {_quota_info}
 
-Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi.
+Jawab singkat (max 5 baris), sebut angka spesifik, gaya Kurumi.
 """
         _ok, _text, _model, _err = _call_kurumi(_prompt, function="quota")
+        if _ok and _text:
+            return {"text": _text.strip(), "file": None}
+
+    # === SO QUERY INTENT (PATCH 12) ===
+    _is_so_query = any(k in _msg_lower for k in [
+        "pic so", "siapa so", "siapa yang so", "keterangan so", "detail so",
+        "pic rak", "keterangan rak", "yang ngerjain so", "rak apa aja",
+        "so tanggal", "pic tanggal", "keterangan tanggal",
+    ])
+    
+    # Deteksi kalau ada "so" + "tanggal"
+    if "so" in _msg_lower and any(k in _msg_lower for k in ["tanggal", "tgl", "pic", "keterangan", "siapa"]):
+        _is_so_query = True
+
+    if _is_so_query:
+        print(f"[KURUMI] SO QUERY DETECTED: {user_message}")
+        
+        # Deteksi tanggal dari text
+        _tgl_query = _now_jkt().date()
+        _tgl_label = "hari ini"
+        
+        _range = _detect_range_tanggal(user_message)
+        if _range:
+            _tgl_start, _tgl_end = _range
+            _tgl_label = f"{_tgl_start.strftime('%d/%m')} - {_tgl_end.strftime('%d/%m/%Y')}"
+            _so_data_str = _get_so_data(_tgl_start, _tgl_end)
+        elif any(k in _msg_lower for k in ["tanggal", "tgl", "kemarin", "besok"]):
+            _tgl_query = _detect_tanggal_dari_text(user_message)
+            _tgl_label = _tgl_query.strftime("%d/%m/%Y")
+            _so_data_str = _get_so_data(_tgl_query, _tgl_query)
+        else:
+            _so_data_str = _get_so_data(_tgl_query, _tgl_query)
+        
+        # Panggil Groq dengan data SO
+        _prompt = f"""{_build_kurumi_system_prompt()}
+
+Tuan nanya tentang detail Stock Opname ({_tgl_label}).
+
+DATA SO:
+{_so_data_str}
+
+INSTRUKSI:
+- Jawab dengan gaya Kurumi
+- Sebut rak, PIC, nominal, keterangan (kalau ada)
+- Kalau data kosong, bilang jujur
+- MAX 5 BARIS!
+"""
+        _ok, _text, _model, _err = _call_kurumi(_prompt, function="so_query")
         if _ok and _text:
             return {"text": _text.strip(), "file": None}
 
@@ -813,7 +955,14 @@ Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi.
     if _is_report_intent:
         _scope = _detect_scope_dari_text(user_message)
         _custom_date = None
-        if _scope == "custom":
+        _range_start = None
+        _range_end = None
+        
+        if _scope == "range":
+            _range = _detect_range_tanggal(user_message)
+            if _range:
+                _range_start, _range_end = _range
+        elif _scope == "custom":
             _custom_date = _detect_tanggal_dari_text(user_message)
 
         _wanted_format = "pdf"
@@ -830,15 +979,28 @@ Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi.
         elif _scope == "bulan":
             _period = "bulan"
 
-        print(f"[KURUMI] REPORT: date={_custom_date}, period={_period}, format={_wanted_format}")
+        print(f"[KURUMI] REPORT: date={_custom_date}, range={_range_start}-{_range_end}, period={_period}, format={_wanted_format}")
 
-        if _custom_date:
+        if _range_start and _range_end:
+            _report = kurumi_generate_report(
+                period="range",
+                format=_wanted_format,
+                range_start=_range_start,
+                range_end=_range_end,
+            )
+        elif _custom_date:
             _report = kurumi_generate_report_custom(_custom_date, format=_wanted_format)
         else:
             _report = kurumi_generate_report(period=_period, format=_wanted_format)
 
         if _report["success"]:
-            _tgl_label = _custom_date.strftime('%d/%m/%Y') if _custom_date else _period
+            if _range_start and _range_end:
+                _tgl_label = f"{_range_start.strftime('%d/%m')} - {_range_end.strftime('%d/%m/%Y')}"
+            elif _custom_date:
+                _tgl_label = _custom_date.strftime('%d/%m/%Y')
+            else:
+                _tgl_label = _period
+
             _text = (
                 f"🎀 **Ara, ara~** Udah jadi, Tuan~ ✨\n\n"
                 f"Kihihihi~ Aku siapin laporan **{_wanted_format.upper()}** "
@@ -863,11 +1025,20 @@ Jawab singkat (3-4 baris), sebut angka spesifik, gaya Kurumi.
     # === SUMMARY → rangkum text ===
     if _is_summary_intent:
         _scope = _detect_scope_dari_text(user_message)
-        if _scope == "custom":
+        
+        if _scope == "range":
+            _range = _detect_range_tanggal(user_message)
+            if _range:
+                _start, _end = _range
+                _text = kurumi_summarize(period="range", range_start=_start, range_end=_end)
+            else:
+                _text = kurumi_summarize(period="hari")
+        elif _scope == "custom":
             _custom_date = _detect_tanggal_dari_text(user_message)
             _text = kurumi_summarize(period="custom", custom_date=_custom_date)
         else:
             _text = kurumi_summarize(period=_scope)
+        
         return {"text": _text, "file": None}
 
     # === CHAT BIASA ===
@@ -897,10 +1068,14 @@ def _kurumi_fallback_chat(user_message):
 # =========================================================
 # 🎀 PUBLIC API — SUMMARIZE
 # =========================================================
-def kurumi_summarize(period="hari", custom_date=None):
+def kurumi_summarize(period="hari", custom_date=None, range_start=None, range_end=None):
     _tgl = _now_jkt().date()
 
-    if custom_date:
+    if period == "range" and range_start and range_end:
+        _start = range_start
+        _end = range_end
+        _label = f"{_start.strftime('%d/%m/%Y')} - {_end.strftime('%d/%m/%Y')}"
+    elif custom_date:
         _start = custom_date
         _end = custom_date
         _label = f"tanggal {custom_date.strftime('%d/%m/%Y')}"
@@ -949,9 +1124,10 @@ STATUS RAK:
 📝 INSTRUKSI:
 ═══════════════════════════════════════
 Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
-- Pake "Aku", sering "Ara ara~" / "Kihihihi~"
+- Pake "Aku", "Ara ara~" 1x aja
+- MAX 8 BARIS
 - Struktur:
-  * Pembuka singkat (1-2 baris, gaya Kurumi)
+  * Pembuka singkat (1 baris)
   * SPD & Sales
   * Stock Opname
   * BTSB & NSB Status
@@ -961,11 +1137,10 @@ Buat rangkuman eksekutif gaya **Kurumi Tokisaki**:
 
 ⚠️ ATURAN:
 - KALAU ADA DATA di atas, PAKE datanya. JANGAN bilang "belum ada data"!
-- Sebut angka & rak spesifik kalau ada.
 - JANGAN bahas shift (itu tugas Hana).
 """
 
-    _ok, _text, _model, _err = _call_kurumi(_prompt, function="summary")
+    _ok, _text, _model, _err = _call_kurumi(_prompt, function="summary", temperature=0.6)
     if _ok and _text:
         return _text.strip()
     return "🎀 **Ara, ara~** Maaf Tuan, aku gagal akses data.\n\nKihihihi~ Coba lagi nanti ya~ 🎀"
@@ -988,41 +1163,55 @@ def kurumi_greeting():
 
     _prompt = f"""{_build_kurumi_system_prompt()}
 
-TASK: Buat SAPAAN SINGKAT (max 3-4 baris) untuk Tuan di dashboard.
+TASK: Buat SAPAAN SINGKAT (max 3 baris) untuk Tuan di dashboard.
 Waktu sekarang: {_waktu} ({_now.strftime('%H:%M')} WIB)
 
-Gaya: Kurumi hangat + playful. WAJIB pake "Ara ara~" atau "Kihihihi~".
+Gaya: Kurumi hangat + playful. WAJIB pake "Ara ara~".
 Pake "Aku". Pake emoji 🎀.
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="greeting")
     if _ok and _text:
         return _text.strip()
-    return f"🎀 **Ara, ara~** Selamat {_waktu}, Tuan~ ✨\n\nKihihihi, aku siap bantu hari ini. Ada yang bisa aku bantu? 🎀"
+    return f"🎀 **Ara, ara~** Selamat {_waktu}, Tuan~ ✨\n\nKihihihi, aku siap bantu hari ini 🎀"
 
 
 # =========================================================
-# 🎀 PUBLIC API — GENERATE REPORT (PERIOD)
+# 🎀 PUBLIC API — GENERATE REPORT (PATCH 8)
 # =========================================================
-def kurumi_generate_report(period="hari", format="text"):
+def kurumi_generate_report(period="hari", format="text", range_start=None, range_end=None):
     _tgl = _now_jkt().date()
 
-    if period == "hari":
+    if period == "range" and range_start and range_end:
+        _start = range_start
+        _end = range_end
+        _label = f"{_start.strftime('%d/%m/%Y')} - {_end.strftime('%d/%m/%Y')}"
+        _filename_suffix = f"{_start.strftime('%Y%m%d')}_{_end.strftime('%Y%m%d')}"
+        _period_type = "hari"
+    elif period == "hari":
         _start = _tgl
         _end = _tgl
         _label = f"Harian — {_tgl.strftime('%d/%m/%Y')}"
+        _filename_suffix = "hari"
+        _period_type = "hari"
     elif period == "minggu":
         _start = _tgl - timedelta(days=6)
         _end = _tgl
         _label = f"Mingguan — {_start.strftime('%d/%m')} s/d {_end.strftime('%d/%m/%Y')}"
+        _filename_suffix = "minggu"
+        _period_type = "minggu"
     elif period == "bulan":
         _start = _tgl.replace(day=1)
         _end = _tgl
         _label = f"Bulanan — {_tgl.strftime('%B %Y')}"
+        _filename_suffix = "bulan"
+        _period_type = "bulan"
     else:
         _start = _tgl
         _end = _tgl
         _label = "Harian"
+        _filename_suffix = "hari"
+        _period_type = "hari"
 
     _ctx = _get_report_context(_start, _end)
 
@@ -1031,8 +1220,9 @@ def kurumi_generate_report(period="hari", format="text"):
         start_date=_start,
         end_date=_end,
         format=format,
-        filename_suffix=period,
+        filename_suffix=_filename_suffix,
         ctx=_ctx,
+        period_type=_period_type,
     )
 
 
@@ -1040,9 +1230,8 @@ def kurumi_generate_report(period="hari", format="text"):
 # 🎀 PUBLIC API — GENERATE REPORT (CUSTOM DATE)
 # =========================================================
 def kurumi_generate_report_custom(tanggal, format="text"):
-    """Generate laporan untuk tanggal SPESIFIK."""
     _tgl = tanggal
-    _label = f"Tanggal {_tgl.strftime('%d/%m/%Y')}"
+    _label = f"Harian — {_tgl.strftime('%d/%m/%Y')}"
 
     _ctx = _get_report_context(_tgl, _tgl)
 
@@ -1053,18 +1242,16 @@ def kurumi_generate_report_custom(tanggal, format="text"):
         format=format,
         filename_suffix=_tgl.strftime('%Y%m%d'),
         ctx=_ctx,
+        period_type="hari",
     )
 
 
 # =========================================================
 # 🔧 WORKER — REPORT GENERATOR
 # =========================================================
-def _generate_report_worker(label, start_date, end_date, format, filename_suffix, ctx):
-    """Generate report + convert ke format. Pakai REPORT CONTEXT (hemat)."""
-    _now = _now_jkt()          # ✅ full datetime
-    _tgl = _now.date()         # ✅ tanggal aja (buat kompatibilitas)
-    
-    # ✅ PAKE PROMPT FORMAL (bukan Kurumi persona)
+def _generate_report_worker(label, start_date, end_date, format, filename_suffix, ctx, period_type="hari"):
+    _now = _now_jkt()
+
     _prompt = f"""{_build_report_system_prompt()}
 
 ═══════════════════════════════════════
@@ -1089,18 +1276,18 @@ STATUS RAK:
 📝 INSTRUKSI:
 ═══════════════════════════════════════
 Buat laporan dengan struktur:
-1. RINGKASAN EKSEKUTIF (3-4 baris, highlight angka penting)
+1. RINGKASAN EKSEKUTIF (3-4 baris)
 2. ANALISIS SPD & SALES (1-2 paragraf)
 3. ANALISIS BTSB & NSB (1-2 paragraf)
 4. INSIGHT & TEMUAN (3-4 bullet)
 5. REKOMENDASI (3-4 bullet)
 
-⚠️ JANGAN bikin tabel SO (itu udah di-render terpisah dari DB).
-⚠️ JANGAN bikin daftar rak (udah ada di tabel bawah).
-⚠️ FOKUS ke ANALYSIS & INSIGHT aja.
+⚠️ JANGAN bikin tabel SO (di-render terpisah).
+⚠️ JANGAN bikin daftar rak (udah ada di tabel).
+⚠️ FOKUS ke ANALYSIS & INSIGHT.
+⚠️ JANGAN NGARANG DATA!
 """
 
-    # ✅ Temperature lebih rendah biar output lebih konsisten & formal
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="report", temperature=0.4)
 
     if not _ok or not _text:
@@ -1122,47 +1309,12 @@ Buat laporan dengan struktur:
         try:
             _so_raw = _get_so_raw_data(start_date, end_date)
 
-            if "Mingguan" in label:
-                _period_type = "minggu"
-            elif "Bulanan" in label:
-                _period_type = "bulan"
-            else:
-                _period_type = "hari"
-
-                        # ✅ Ambil stats buat grafik
-            from modules.supabase_client import get_supabase as _get_sb
-            _sb = _get_sb()
-
-            # Status rak
-            _rak_res = _sb.table("rak_master").select("status_so").execute()
-            _rak_rows = _rak_res.data or []
-            _sudah_so = len([r for r in _rak_rows if r.get("status_so") == "SELESAI"])
-            _belum_so = len([r for r in _rak_rows if r.get("status_so") == "BELUM"])
-
-            # Adjust SO & BTSB
-            _adjust_so = sum(float(r.get("nominal_adjust", 0)) for r in _so_raw)
-            _spd_res = _sb.table("spd_harian") \
-                .select("spd") \
-                .gte("tanggal", start_date.isoformat()) \
-                .lte("tanggal", end_date.isoformat()) \
-                .execute()
-            _total_spd = sum(float(r.get("spd", 0)) for r in (_spd_res.data or []))
-            _btsb = _total_spd * 0.0015
-
-            _extra_stats = {
-                "sudah_so": _sudah_so,
-                "belum_so": _belum_so,
-                "adjust_so": _adjust_so,
-                "btsb": _btsb,
-            }
-
             return generate_pdf(
                 ai_content=_content_text,
                 so_data=_so_raw,
                 period_label=label,
-                period_type=_period_type,
+                period_type=period_type,
                 filename=f"laporan_{filename_suffix}.pdf",
-                extra_stats=_extra_stats,
             )
         except Exception as _e_pdf:
             import traceback
