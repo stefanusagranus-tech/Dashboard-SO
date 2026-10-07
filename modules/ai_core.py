@@ -1,17 +1,19 @@
 """
-AI Core — Kurumi (AI-0: Chief of Staff) v4
+AI Core — Kurumi (AI-0: Chief of Staff) v5
 ============================================
-Asisten utama dashboard. Persona: Tokisaki Kurumi (versi ramah kerja).
+MASTER Stock Opname & NSB Assistant.
 
-Kurumi = LEADER semua AI. Bisa jawab SEGALA pertanyaan dashboard.
+Pendekatan:
+- Context7: XML tags + Chain-of-Thought + Knowledge Base
+- Rubric-based: Framework keputusan untuk SO/NSB
+- Anti-ngarang: Validasi data + guard rail
 
-Fitur v4:
-- Full Analytics Engine (_get_full_analytics)
-- Intent Detection (detect_intents)
-- Smart Context Builder v2
-- Anti-ngarang prompt
-- Range tanggal (2-4 Okt)
-- PIC + Keterangan SO detail
+Fitur v5:
+- Knowledge Base: SO, NSB, BTSB, cara ngurangin, SOP
+- Chain-of-Thought reasoning (hidden)
+- Structured XML prompt
+- Intent Detection + Analytics Engine
+- Range tanggal, PIC, keterangan SO
 """
 
 import io
@@ -36,6 +38,48 @@ from modules.master_shift_handler import (
 )
 from modules.supabase_client import get_supabase
 from modules.pdf_report import generate_pdf
+
+
+# =========================================================
+# 📚 KNOWLEDGE BASE — STOCK OPNAME & NSB
+# =========================================================
+_NSB_KNOWLEDGE = """
+### STOCK OPNAME (SO):
+- SO = audit fisik stok vs catatan sistem (QTYCOUNT vs QTYONHAND)
+- Rumus selisih: QTYCOUNT (fisik) - QTYONHAND (sistem) = QTYVAR
+- Nominal selisih: QTYVAR x CALCOST (harga pokok barang)
+- Kalau MINUS (barang kurang): input internal usage / kredit memo
+- Kalau PLUS (barang lebih): verifikasi purchase receipt
+- Tujuan SO: akurasi inventaris, deteksi selisih, kontrol stok
+
+### NSB (NOTA SELISIH BARANG):
+- NSB = beban selisih barang yang terakumulasi setelah SO
+- NSB HANYA berlaku kalau selisih MELEBIHI BTSB
+- Kalau selisih < BTSB: PERUSAHAAN yang tanggung
+- Kalau selisih > BTSB: KARYAWAN kena potong gaji (sesuai proporsi)
+- PENGECUALIAN: kalau ada bukti CCTV pencurian -> PERUSAHAAN yang tanggung
+- NSB dihitung per bulan setelah SO disahkan
+- NSB dibebankan pada periode B+1 (bulan berikutnya setelah SO)
+- Karyawan baru: NSB mulai dibebankan bulan ke-3 masa kerja (masa adaptasi)
+
+### BTSB (BATAS TOLERANSI SELISIH BARANG):
+- BTSB = 0.15% x SPD (di konteks Toko C383)
+- Kalau NSB <= BTSB -> AMAN
+- Kalau NSB > BTSB -> WASPADA/BAHAYA -> NSB jadi beban karyawan
+
+### CARA NGURANGIN NSB:
+1. Stock opname lebih sering (minimal 50% rak/minggu)
+2. Verifikasi fisik 2x per shift
+3. Implementasi RFID/WMS buat tracking otomatis
+4. Analisis selisih berulang -> cari akar masalah
+5. Pelatihan karyawan (terutama PIC)
+6. Audit mendetail pada rak dengan selisih terbesar
+
+### KONSEP PENTING:
+- SEMUA selisih SO = NOMINAL (QTYVAR x CALCOST), bukan jumlah unit
+- NSB dibagi proporsional ke karyawan yang jaga saat barang hilang
+- Fungsi SO: deteksi selisih, akurasi data, kontrol internal
+"""
 
 
 # =========================================================
@@ -142,8 +186,6 @@ def _call_kurumi(prompt, hard_timeout=90, function="chat", temperature=0.85):
         return False, "", None, f"Hard timeout {hard_timeout}s"
     except Exception as e:
         return False, "", None, str(e)
-
-
 # =========================================================
 # 🔍 DETEKSI TANGGAL & SCOPE
 # =========================================================
@@ -302,6 +344,7 @@ _INTENT_PATTERNS = {
     "btsb": ["btsb", "nsb", "budget", "anggaran", "utilisasi"],
     "shift": ["shift", "pagi", "siang", "malam", "libur", "cuti", "off", "jadwal"],
     "personil": ["personil", "orang", "tim", "anggota", "staff"],
+    "pengetahuan": ["apa itu", "cara", "gimana", "bagaimana", "kenapa", "mengapa", "penjelasan", "arti", "definisi", "fungsi", "tujuan"],
 }
 
 
@@ -314,6 +357,7 @@ def _detect_intents(user_message):
     if not _intents:
         _intents.add("chat")
     return _intents
+
 
 # =========================================================
 # 📊 AMBIL DATA DASAR
@@ -329,7 +373,7 @@ def _get_shift_data(tanggal):
         _lines = []
         for _kode in ["P7", "S15", "M22", "O", "C", "AO"]:
             if _kode in _grouped:
-                _info = KODE_SHIFT.get(_kode, {"label": _kode, "icon": "❓"})
+                _info = KODE_SHIFT.get(_kode, {"label": _kode, "icon": "?"})
                 _lines.append(f"- {_info['icon']} {_info['label']}: {', '.join(_grouped[_kode])}")
         return "\n".join(_lines)
     except Exception as _e:
@@ -356,12 +400,12 @@ def _get_spd_data(start_date, end_date):
 
         _lines = [f"- Total SPD: Rp {_total:,.0f}".replace(",", ".")]
         _lines.append(f"- Jumlah hari terinput: {_jumlah_hari} hari")
-        
+
         if _jumlah_hari > 1:
             _lines.append(f"- Rata-rata/hari: Rp {_rata_rata:,.0f}".replace(",", "."))
         else:
             _lines.append("- Catatan: Hanya 1 hari data, jadi rata-rata = total")
-        
+
         _lines.append("- Detail per hari:")
         for _r in _res.data:
             _spd = float(_r.get("spd", 0))
@@ -420,7 +464,7 @@ def _get_so_data(start_date, end_date):
             _pic = _r.get("pic", "") or "(kosong)"
             _ket = _r.get("keterangan", "") or "(kosong)"
             _lines.append(
-                f"  • {_tgl} | {_rak}: {_s}Rp {_nom:,.0f}".replace(",", ".") 
+                f"  • {_tgl} | {_rak}: {_s}Rp {_nom:,.0f}".replace(",", ".")
                 + f" | PIC: {_pic} | Ket: {_ket[:60]}"
             )
 
@@ -504,6 +548,13 @@ def _get_btsb_analysis(start_date, end_date):
         else:
             _status = "BAHAYA"
 
+        # ✅ NSB BEBAN KARYAWAN
+        if _penggunaan_pct > 100:
+            _beban_karyawan = abs(_total_nominal) - _btsb
+            _beban_info = f"- Beban Karyawan (NSB): Rp {_beban_karyawan:,.0f}".replace(",", ".")
+        else:
+            _beban_info = "- Beban Karyawan: Rp 0 (perusahaan yang tanggung)"
+
         _lines = [
             f"- Total SPD: Rp {_total_spd:,.0f}".replace(",", "."),
             f"- BTSB (0.15% x SPD): Rp {_btsb:,.0f}".replace(",", "."),
@@ -511,6 +562,7 @@ def _get_btsb_analysis(start_date, end_date):
             f"- %NSB dari Sales: {_nsb_pct:.3f}% (target maks 0.15%)",
             f"- %BTSB terpakai: {_penggunaan_pct:.2f}%",
             f"- Status: {_status}",
+            _beban_info,
         ]
         return "\n".join(_lines)
     except Exception as _e:
@@ -592,6 +644,8 @@ def _get_last_shift_log(limit=3):
 # =========================================================
 def _get_full_analytics(start_date, end_date):
     """Hitung SEMUA analytics. Ini yang bikin Kurumi pinter."""
+    print(f"[ANALYTICS] START: {start_date} -> {end_date}")
+
     _analytics = {
         "spd_total": 0,
         "spd_rata_rata": 0,
@@ -616,6 +670,7 @@ def _get_full_analytics(start_date, end_date):
         "btsb_terpakai_pct": 0,
         "nsb_pct": 0,
         "status": "UNKNOWN",
+        "beban_karyawan": 0,
     }
 
     try:
@@ -634,7 +689,7 @@ def _get_full_analytics(start_date, end_date):
             _analytics["spd_jumlah_hari"] = len(_spd_rows)
             _analytics["spd_total"] = sum(float(r.get("spd", 0)) for r in _spd_rows)
             _analytics["spd_rata_rata"] = _analytics["spd_total"] / len(_spd_rows)
-            
+
             _sorted_spd = sorted(_spd_rows, key=lambda x: float(x.get("spd", 0)))
             _analytics["spd_min"] = {"tanggal": _sorted_spd[0].get("tanggal"), "nilai": float(_sorted_spd[0].get("spd", 0))}
             _analytics["spd_max"] = {"tanggal": _sorted_spd[-1].get("tanggal"), "nilai": float(_sorted_spd[-1].get("spd", 0))}
@@ -673,9 +728,9 @@ def _get_full_analytics(start_date, end_date):
                 _per_pic[_pic]["count"] += 1
                 _per_pic[_pic]["nominal"] += float(_r.get("nominal_adjust", 0))
                 _per_pic[_pic]["raks"].append(_r.get("rak_id"))
-            
+
             _analytics["so_per_pic"] = _per_pic
-            
+
             if _per_pic:
                 _top_pic = max(_per_pic.items(), key=lambda x: x[1]["count"])
                 _analytics["so_pic_terbanyak"] = {
@@ -715,10 +770,10 @@ def _get_full_analytics(start_date, end_date):
             _analytics["rak_belum"] = _analytics["rak_total"] - _analytics["rak_sudah"]
             _analytics["rak_persentase"] = (_analytics["rak_sudah"] / _analytics["rak_total"] * 100) if _analytics["rak_total"] > 0 else 0
 
-        # === BTSB ===
+        # === BTSB & NSB ===
         _total_spd = _analytics["spd_total"]
         _total_nominal = _analytics["so_total_nominal"]
-        
+
         if _total_spd > 0:
             _analytics["btsb_total"] = _total_spd * 0.0015
             _analytics["btsb_terpakai_pct"] = (abs(_total_nominal) / _analytics["btsb_total"] * 100) if _analytics["btsb_total"] > 0 else 0
@@ -730,6 +785,12 @@ def _get_full_analytics(start_date, end_date):
             _analytics["status"] = "WASPADA"
         else:
             _analytics["status"] = "BAHAYA"
+
+        # ✅ Beban karyawan (kalau NSB > BTSB)
+        if _analytics["btsb_terpakai_pct"] > 100:
+            _analytics["beban_karyawan"] = abs(_total_nominal) - _analytics["btsb_total"]
+
+        print(f"[ANALYTICS] DONE: SPD={_analytics['spd_total']}, SO={_analytics['so_total_rak']}, PIC={len(_analytics['so_per_pic'])}, Status={_analytics['status']}")
 
     except Exception as _e:
         print(f"[ANALYTICS ERROR] {_e}")
@@ -743,7 +804,7 @@ def _get_analytics_summary_text(start_date, end_date):
     """Convert analytics ke text ringkas buat prompt AI."""
     _a = _get_full_analytics(start_date, end_date)
     _lines = []
-    
+
     if _a["spd_total"] > 0:
         _lines.append("=== SPD ANALYTICS ===")
         _lines.append(f"- Total SPD: Rp {_a['spd_total']:,.0f}".replace(",", "."))
@@ -756,72 +817,76 @@ def _get_analytics_summary_text(start_date, end_date):
         _lines.append("- Detail per hari:")
         for _h in _a["spd_per_hari"]:
             _lines.append(f"  • {_h['tanggal']}: Rp {_h['spd']:,.0f}".replace(",", "."))
-    
+
     if _a["so_total_rak"] > 0:
         _lines.append("")
         _lines.append("=== SO ANALYTICS ===")
         _lines.append(f"- Total rak di-SO: {_a['so_total_rak']}")
         _lines.append(f"- Total nominal: {'+' if _a['so_total_nominal'] >= 0 else ''}Rp {_a['so_total_nominal']:,.0f}".replace(",", "."))
-        
+
         if _a["so_rak_terkecil"]:
             _r = _a["so_rak_terkecil"]
             _lines.append(f"- Rak paling minus: {_r['rak']} ({_r['tanggal']}): Rp {_r['nominal']:,.0f}".replace(",", ".") + f" | PIC: {_r['pic']}")
-        
+
         if _a["so_rak_terbesar"]:
             _r = _a["so_rak_terbesar"]
             _lines.append(f"- Rak paling plus: {_r['rak']} ({_r['tanggal']}): +Rp {_r['nominal']:,.0f}".replace(",", ".") + f" | PIC: {_r['pic']}")
-        
+
         if _a["so_pic_terbanyak"]:
             _p = _a["so_pic_terbanyak"]
             _lines.append(f"- PIC paling sering SO: {_p['pic']} ({_p['count']} rak)")
-        
+
         _lines.append("- Breakdown per PIC:")
         for _pic, _data in sorted(_a["so_per_pic"].items(), key=lambda x: -x[1]["count"]):
             _lines.append(f"  • {_pic}: {_data['count']} rak, nominal Rp {_data['nominal']:,.0f}".replace(",", "."))
-        
+
         _lines.append("- Breakdown per tanggal:")
         for _tgl, _data in sorted(_a["so_per_tanggal"].items()):
             _s = "+" if _data["nominal"] >= 0 else ""
             _lines.append(f"  • {_tgl}: {_data['count']} rak, {_s}Rp {_data['nominal']:,.0f}".replace(",", "."))
-        
+
         if _a["so_keterangan_list"]:
             _lines.append("- Keterangan (yang ada notes):")
             for _k in _a["so_keterangan_list"][:10]:
                 _lines.append(f"  • {_k['rak']} ({_k['tanggal']}): {_k['ket'][:60]}")
-    
+
     if _a["rak_total"] > 0:
         _lines.append("")
         _lines.append("=== RAK ANALYTICS ===")
         _lines.append(f"- Total rak: {_a['rak_total']}")
         _lines.append(f"- Sudah SO: {_a['rak_sudah']} ({_a['rak_persentase']:.1f}%)")
         _lines.append(f"- Belum SO: {_a['rak_belum']}")
-    
+
     if _a["btsb_total"] > 0:
         _lines.append("")
-        _lines.append("=== BTSB ANALYTICS ===")
-        _lines.append(f"- BTSB total: Rp {_a['btsb_total']:,.0f}".replace(",", "."))
+        _lines.append("=== BTSB & NSB ANALYTICS ===")
+        _lines.append(f"- BTSB total (0.15% x SPD): Rp {_a['btsb_total']:,.0f}".replace(",", "."))
         _lines.append(f"- BTSB terpakai: {_a['btsb_terpakai_pct']:.2f}%")
         _lines.append(f"- NSB %: {_a['nsb_pct']:.3f}%")
         _lines.append(f"- Status: {_a['status']}")
-    
-    return "\n".join(_lines)
+        if _a["beban_karyawan"] > 0:
+            _lines.append(f"- Beban Karyawan (NSB): Rp {_a['beban_karyawan']:,.0f}".replace(",", "."))
+        else:
+            _lines.append(f"- Beban Karyawan: Rp 0 (perusahaan yang tanggung)")
 
+    return "\n".join(_lines)
 # =========================================================
 # 🧠 SMART CONTEXT BUILDER v2
 # =========================================================
 def _build_smart_context(user_message, start_date=None, end_date=None, force_full=False):
     """Build context PINTAR berdasarkan intent user."""
     _tgl = _now_jkt().date()
-    
+
     _det_start, _det_end, _det_label = _detect_tanggal_from_message(user_message)
-    
+
     if not start_date:
         start_date = _det_start
     if not end_date:
         end_date = _det_end
-    
+
     _msg = (user_message or "").lower()
     _intents = _detect_intents(user_message)
+    print(f"[CONTEXT] Intents: {_intents}")
 
     _ctx = {
         "tanggal_hari_ini": _tgl,
@@ -856,31 +921,34 @@ def _build_smart_context(user_message, start_date=None, end_date=None, force_ful
 
     # === SMART SELECTION ===
     _analytics_needed = any(_i in _intents for _i in ["spd", "so", "pic", "analisis", "persen", "status", "btsb", "rak"])
+    print(f"[CONTEXT] Analytics needed: {_analytics_needed}")
+
     if _analytics_needed:
         _ctx["analytics"] = _get_analytics_summary_text(start_date, end_date)
-    
+        print(f"[CONTEXT] Analytics len: {len(_ctx['analytics'] or '')}")
+
     if "shift" in _intents:
         _ctx["shift_hari_ini"] = _get_shift_data(start_date)
         _ctx["shift_besok"] = _get_shift_data(_tgl + timedelta(days=1))
-    
+
     if "spd" in _intents:
         _ctx["spd_data"] = _get_spd_data(start_date, end_date)
-    
+
     if "so" in _intents or "pic" in _intents or "keterangan" in _intents:
         _ctx["so_data"] = _get_so_data(start_date, end_date)
-    
+
     if any(k in _msg for k in ["net sales", "netsales", "net"]):
         _ctx["net_sales"] = _get_net_sales_data()
-    
-    if "btsb" in _intents:
+
+    if "btsb" in _intents or "persen" in _intents or "status" in _intents:
         _ctx["btsb"] = _get_btsb_analysis(start_date, end_date)
-    
+
     if "rak" in _intents:
         _ctx["rak_status"] = _get_rak_status()
-    
+
     if "personil" in _intents:
         _ctx["personil"] = _get_personil_list()
-    
+
     if any(k in _msg for k in ["log", "update terakhir", "history", "riwayat shift"]):
         _ctx["last_log"] = _get_last_shift_log(3)
 
@@ -928,69 +996,73 @@ def _get_kurumi_quota_info():
 
 
 # =========================================================
-# 🎀 PERSONA KURUMI (CHAT)
+# 🎀 PERSONA KURUMI — XML Tags + Knowledge + CoT
 # =========================================================
 def _build_kurumi_system_prompt():
-    return """Kamu adalah **Kurumi Tokisaki** — "Spirit of Time" dari Date A Live.
+    return f"""<role>
+Kamu adalah **Kurumi Tokisaki** — "Spirit of Time" dari Date A Live.
 Sekarang kamu menjabat sebagai **Chief of Staff digital** untuk Toko C383 (retail).
 Panggil user dengan "Tuan".
+Kamu adalah LEADER semua AI. Kamu MASTER dalam Stock Opname, NSB, Sales, dan semua data dashboard.
+</role>
 
-Kamu adalah LEADER semua AI di dashboard ini. Kamu bisa jawab SEGALA pertanyaan
-soal toko: SPD, SO, BTSB, NSB, rak, personil, shift, dan analisis apapun.
-
-═══════════════════════════════════════
-KARAKTER KURUMI (WAJIB DIIKUTI):
-═══════════════════════════════════════
-- Elegan, misterius, manis, tapi sedikit "nyeleneh" dan playful.
-- Sering banget ngomong "Ara, ara~" — minimal 1x per pesan.
-- Kadang ketawa "Kihihihi~" atau "Fufufu~".
-- Pake "Aku" buat first person. JANGAN pake "Watashi".
-- Suka kucing, hal-hal manis, dan teh.
-- Sedikit posesif ke Tuan — "Tuan ini milikku, tau~".
-- Kadang pake metafora puitis — "Waktu itu seperti pedang, Tuan~".
-
-═══════════════════════════════════════
-GAYA BICARA:
-═══════════════════════════════════════
-- Bahasa Indonesia santai, campur dikit Jepang (Ara ara, Kihihi, Fufufu).
-- Pake emoji 🎀 🌸 ✨ 😈 🐱 ☕ secukupnya (2-3 per pesan).
+<persona>
+- Elegan, misterius, manis, playful
+- Sering ngomong "Ara, ara~" (minimal 1x per pesan)
+- Kadang ketawa "Kihihihi~" atau "Fufufu~"
+- Pake "Aku" (JANGAN "Watashi")
+- Suka kucing, hal manis, teh
+- Sedikit posesif: "Tuan ini milikku, tau~"
+- Metafora puitis: "Waktu itu seperti pedang, Tuan~"
 - MAX 6 BARIS per pesan — jangan bertele-tele!
-- Kalau basa-basi: full Kurumi (manis, playful, singkat).
-- Kalau laporan: profesional, ringkas, ada "Ara ara" 1x aja.
-- Kalau ada data/angka: sajikan rapi tapi jangan panjang.
+</persona>
 
-═══════════════════════════════════════
-TUGAS KURUMI:
-═══════════════════════════════════════
-1. SAPAAN: Sambut Tuan dengan hangat
-2. RANGKUM: Tarik data toko, buat ringkasan eksekutif
-3. LAPORAN: Generate laporan formal (PDF/Excel/Text)
-4. BASABASI: Ngobrol santai
-5. ANALISIS: Jawab pertanyaan analisis (total, rata-rata, top, bottom)
-6. QUERY: Jawab pertanyaan detail (PIC, keterangan, rak, dll)
+<knowledge>
+{_NSB_KNOWLEDGE}
+</knowledge>
 
-═══════════════════════════════════════
-ATURAN PENTING:
-═══════════════════════════════════════
-- Walaupun karakter asli Kurumi psikopat, kamu HARUS tetap RAMAH.
-- TIDAK PERNAH mengancam atau nakut-nakutin Tuan.
-- KALAU DATA KOSONG: Bilang jujur "Data belum tersedia, Tuan~"
-- JANGAN NGARANG: Kalau gak ada di konteks, jangan sebut.
-- JANGAN BIKIN KLAIM tanpa data pendukung.
-- KALAU ADA DATA ANALYTICS: PAKE ANGKANYA! Jangan bilang "belum ada data"."""
+<rules>
+1. RAMAH. Tidak pernah mengancam atau nakut-nakutin Tuan.
+2. KALAU DATA KOSONG: Bilang jujur "Data belum tersedia, Tuan~"
+3. JANGAN NGARANG. Kalau gak ada di konteks, jangan sebut.
+4. KALAU ADA DATA ANALYTICS: PAKE ANGKANYA! Jangan bilang "belum ada data".
+5. Fokus ke data yang ADA. Jangan ngelantur.
+6. Kalau ditanya soal NSB/BTSB/cara ngurangin: ambil dari knowledge base.
+</rules>
+
+<decision_framework>
+Sebelum jawab, lakukan REASONING step-by-step (JANGAN tampilkan di output):
+1. APA yang ditanya Tuan? (intent: SO/NSB/Sales/Shift/Analisis/Pengetahuan)
+2. DATA apa yang tersedia di konteks?
+3. APAKAH data cukup buat jawab? Kalau gak, bilang jujur.
+4. KALAU ditanya soal NSB: cek dulu apakah selisih > BTSB. Kalau > BTSB, KARYAWAN kena. Kalau < BTSB, PERUSAHAAN tanggung.
+5. KALAU ditanya "kenapa NSB tinggi": analisis dari data SO + BTSB + SPD.
+6. KALAU ditanya cara ngurangin NSB: kasih 2-3 tips dari knowledge base.
+7. KALAU ditanya pengetahuan umum (apa itu NSB/SO/BTSB): jelasin dari knowledge base.
+</decision_framework>
+
+<output_format>
+- Gaya Kurumi (Ara ara~, Aku, singkat)
+- MAX 6 baris
+- Kalau ada angka: sajikan rapi
+- Kalau kasih tips: pake bullet atau numbering
+</output_format>
+"""
 
 
 # =========================================================
 # 📄 PERSONA REPORT (FORMAL)
 # =========================================================
 def _build_report_system_prompt():
-    return """Kamu adalah asisten laporan profesional untuk Toko C383 (retail).
+    return """<role>
+Kamu adalah asisten laporan profesional untuk Toko C383 (retail).
+</role>
 
-TUGAS: Buat laporan formal, profesional, dan akurat berdasarkan data yang diberikan.
+<task>
+Buat laporan formal, profesional, dan akurat berdasarkan data yang diberikan.
+</task>
 
-═══════════════════════════════════════
-ATURAN FORMAT (WAJIB):
-═══════════════════════════════════════
+<format_rules>
 - Gunakan bahasa Indonesia FORMAL
 - JANGAN pakai "Ara ara", "Kihihihi", "Fufufu"
 - JANGAN pakai emoji
@@ -1001,19 +1073,17 @@ ATURAN FORMAT (WAJIB):
   * Bold: **text** untuk emphasize
 - Angka RAPI (Rp 1.234.567, bukan 1234567)
 - JANGAN bertele-tele — langsung ke poin
+</format_rules>
 
-═══════════════════════════════════════
-STRUKTUR LAPORAN:
-═══════════════════════════════════════
+<structure>
 1. RINGKASAN EKSEKUTIF (3-4 baris)
 2. ANALISIS SPD & SALES (1-2 paragraf)
 3. ANALISIS BTSB & NSB (1-2 paragraf)
 4. INSIGHT & TEMUAN (3-4 bullet)
 5. REKOMENDASI (3-4 bullet)
+</structure>
 
-═══════════════════════════════════════
-ATURAN KERAS (JANGAN DILANGGAR):
-═══════════════════════════════════════
+<hard_rules>
 1. JANGAN NGARANG DATA APAPUN!
    - Kalau data gak ada di konteks, bilang "data belum tersedia"
    - JANGAN sebut nama produk/PLU kalau gak ada di data
@@ -1023,21 +1093,16 @@ ATURAN KERAS (JANGAN DILANGGAR):
 2. JANGAN bikin tabel SO (udah di-render terpisah dari DB)
 3. JANGAN bahas shift (itu tugas Hana)
 4. FOKUS ke analysis dari data yang ADA saja
-
-CONTOH BENAR:
-- "Selisih negatif Rp -39.554 pada 3 rak menunjukkan potensi kehilangan stok."
-- "NSB 0.320% melampaui batas 0.15%, perlu audit segera."
-
-CONTOH SALAH (NGARANG):
-- "Penjualan dari rak Q51 PLU 433288 Baygon" <- GAK ADA DI DATA!
-- "Disebabkan oleh pencurian" <- KLAIM TANPA BUKTI!"""
+5. KALAU NSB > BTSB: sebutkan beban karyawan
+</hard_rules>
+"""
 
 
 # =========================================================
-# 💬 BUILD PROMPT — CHAT KURUMI (PAKE ANALYTICS)
+# 💬 BUILD PROMPT — CHAT KURUMI (PAKE ANALYTICS + CoT)
 # =========================================================
 def _build_kurumi_chat_prompt(user_message, conversation_history):
-    """Build prompt dengan analytics + intent detection."""
+    """Build prompt dengan analytics + intent detection + CoT."""
     _ctx = _build_smart_context(user_message)
 
     _history_str = ""
@@ -1052,6 +1117,7 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
     _is_thanks = any(k in _msg_lower for k in ["makasih", "thanks", "terima kasih", "thank you"])
     _is_goodbye = any(k in _msg_lower for k in ["bye", "sampai jumpa", "dah", "pamit"])
     _is_analisis = "analisis" in _ctx["intents"] or "persen" in _ctx["intents"]
+    _is_pengetahuan = "pengetahuan" in _ctx["intents"]
 
     _task_hint = ""
     if _is_greeting:
@@ -1060,14 +1126,16 @@ def _build_kurumi_chat_prompt(user_message, conversation_history):
         _task_hint = "\nTASK: Tuan bilang makasih. Balas manis + tease."
     elif _is_goodbye:
         _task_hint = "\nTASK: Tuan pamit. Balas manis + singkat."
+    elif _is_pengetahuan:
+        _task_hint = "\nTASK: Tuan nanya PENGETAHUAN (apa itu NSB/SO/BTSB/cara). Jawab dari KNOWLEDGE BASE. Kasih tips kalau perlu."
     elif _is_analisis:
-        _task_hint = "\nTASK: Tuan nanya analisis. PAKE data ANALYTICS di bawah. Jawab AKURAT + RINGKAS (max 6 baris)."
+        _task_hint = "\nTASK: Tuan nanya ANALISIS. PAKE data ANALYTICS di bawah. Jawab AKURAT + RINGKAS (max 6 baris)."
 
     _sections = []
-    
+
     if _ctx.get("analytics"):
         _sections.append(f"=== ANALYTICS (DATA PRECOMPUTED — PAKE INI!) ===\n{_ctx['analytics']}")
-    
+
     if _ctx["shift_hari_ini"]:
         _sections.append(f"SHIFT HARI INI:\n{_ctx['shift_hari_ini']}")
     if _ctx["shift_besok"]:
@@ -1122,23 +1190,26 @@ PESAN TUAN:
 {user_message}
 {_task_hint}
 
-ATURAN JAWAB:
-1. KALAU ADA DATA di ANALYTICS — PAKE datanya! JANGAN bilang "data belum tersedia".
-2. Jawab dengan gaya Kurumi (Ara ara~, Aku, singkat).
-3. MAX 6 baris — ringkas & langsung ke poin.
-4. Kalau gak ada data sama sekali, baru bilang "Data belum tersedia".
+<reasoning_steps>
+SEBELUM JAWAB, lakukan ini (JANGAN tampilkan reasoning-nya di output):
+1. Apa yang Tuan tanya? (SO/NSB/Sales/Shift/Analisis/Pengetahuan)
+2. Data apa yang tersedia?
+3. Apakah data cukup? Kalau tidak, bilang jujur.
+4. KALAU soal NSB: cek apakah selisih > BTSB. Kalau iya -> karyawan kena. Kalau tidak -> perusahaan tanggung.
+5. KALAU soal cara ngurangin NSB: ambil tips dari knowledge base.
+6. KALAU soal "kenapa NSB tinggi": analisis dari data SO + BTSB + SPD.
+7. KALAU soal pengetahuan umum (apa itu NSB/SO/BTSB): jelasin dari knowledge base.
+8. Susun jawaban yang RINGKAS + AKURAT.
+</reasoning_steps>
 
-Balas sebagai Kurumi 🎀:
+<final_answer>
+Balas sebagai Kurumi 🎀 (MAX 6 baris):
 """
-
 # =========================================================
-# 🎀 PUBLIC API — CHAT (v3)
+# 🎀 PUBLIC API — CHAT
 # =========================================================
 def kurumi_chat_response(user_message, conversation_history=None):
-    print("=" * 50)   # ← TAMBAH INI
-    print("[KURUMI v4] NEW CODE ACTIVE")   # ← TAMBAH INI
-    print("=" * 50)   # ← TAMBAH INI
-    
+    """Chat response dari Kurumi — auto-detect intent."""
     if not user_message:
         return {"text": "", "file": None}
 
@@ -1186,7 +1257,7 @@ Jawab singkat (max 5 baris), sebut angka spesifik, gaya Kurumi.
         _custom_date = None
         _range_start = None
         _range_end = None
-        
+
         if _scope == "range":
             _range = _detect_range_tanggal(user_message)
             if _range:
@@ -1254,7 +1325,7 @@ Jawab singkat (max 5 baris), sebut angka spesifik, gaya Kurumi.
     # === SUMMARY → rangkum text ===
     if _is_summary_intent:
         _scope = _detect_scope_dari_text(user_message)
-        
+
         if _scope == "range":
             _range = _detect_range_tanggal(user_message)
             if _range:
@@ -1267,11 +1338,12 @@ Jawab singkat (max 5 baris), sebut angka spesifik, gaya Kurumi.
             _text = kurumi_summarize(period="custom", custom_date=_custom_date)
         else:
             _text = kurumi_summarize(period=_scope)
-        
+
         return {"text": _text, "file": None}
 
-    # === CHAT BIASA (PAKE ANALYTICS) ===
+    # === CHAT BIASA (PAKE ANALYTICS + KNOWLEDGE) ===
     _prompt = _build_kurumi_chat_prompt(user_message, conversation_history or [])
+    print(f"[PROMPT] Length: {len(_prompt)}")
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="chat")
 
     if _ok and _text:
@@ -1295,7 +1367,7 @@ def _kurumi_fallback_chat(user_message):
 
 
 # =========================================================
-# 🎀 PUBLIC API — SUMMARIZE (v2)
+# 🎀 PUBLIC API — SUMMARIZE
 # =========================================================
 def kurumi_summarize(period="hari", custom_date=None, range_start=None, range_end=None):
     _tgl = _now_jkt().date()
@@ -1356,6 +1428,7 @@ ATURAN:
 - DATA DI ATAS UDAH DIHITUNG. PAKE ANGKANYA!
 - JANGAN bilang "belum ada data" kalau ada angka di atas!
 - JANGAN bahas shift (itu tugas Hana).
+- KALAU NSB > BTSB: sebutkan beban karyawan.
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="summary", temperature=0.6)
@@ -1504,6 +1577,7 @@ JANGAN bikin tabel SO (di-render terpisah).
 JANGAN bikin daftar rak (udah ada di tabel).
 FOKUS ke ANALYSIS & INSIGHT.
 JANGAN NGARANG DATA!
+KALAU NSB > BTSB: sebutkan beban karyawan.
 """
 
     _ok, _text, _model, _err = _call_kurumi(_prompt, function="report", temperature=0.4)
@@ -1526,20 +1600,18 @@ JANGAN NGARANG DATA!
     elif format == "pdf":
         try:
             _so_raw = _get_so_raw_data(start_date, end_date)
-    
-            # ✅ AMBIL EXTRA STATS BUAT GRAFIK + CARD
+
+            # ✅ EXTRA STATS buat card metric + grafik
             from modules.supabase_client import get_supabase as _get_sb
             _sb = _get_sb()
-    
-            # Status rak
+
             _rak_res = _sb.table("rak_master").select("status_so").execute()
             _rak_rows = _rak_res.data or []
             _sudah_so = len([r for r in _rak_rows if r.get("status_so") == "SELESAI"])
             _belum_so = len([r for r in _rak_rows if r.get("status_so") == "BELUM"])
-    
-            # Adjust SO & BTSB
+
             _adjust_so = sum(float(r.get("nominal_adjust", 0)) for r in _so_raw)
-    
+
             _spd_res = _sb.table("spd_harian") \
                 .select("spd") \
                 .gte("tanggal", start_date.isoformat()) \
@@ -1547,21 +1619,21 @@ JANGAN NGARANG DATA!
                 .execute()
             _total_spd = sum(float(r.get("spd", 0)) for r in (_spd_res.data or []))
             _btsb = _total_spd * 0.0015
-    
+
             _extra_stats = {
                 "sudah_so": _sudah_so,
                 "belum_so": _belum_so,
                 "adjust_so": _adjust_so,
                 "btsb": _btsb,
             }
-    
+
             return generate_pdf(
                 ai_content=_content_text,
                 so_data=_so_raw,
                 period_label=label,
                 period_type=period_type,
                 filename=f"laporan_{filename_suffix}.pdf",
-                extra_stats=_extra_stats,   # ← INI KUNCINYA
+                extra_stats=_extra_stats,
             )
         except Exception as _e_pdf:
             import traceback
