@@ -1135,7 +1135,10 @@ Balas sebagai Kurumi 🎀:
 # 🎀 PUBLIC API — CHAT (v3)
 # =========================================================
 def kurumi_chat_response(user_message, conversation_history=None):
-    """Chat response dari Kurumi — auto-detect intent."""
+    print("=" * 50)   # ← TAMBAH INI
+    print("[KURUMI v4] NEW CODE ACTIVE")   # ← TAMBAH INI
+    print("=" * 50)   # ← TAMBAH INI
+    
     if not user_message:
         return {"text": "", "file": None}
 
