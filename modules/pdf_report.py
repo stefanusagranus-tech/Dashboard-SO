@@ -1,9 +1,13 @@
 """
-PDF Report Generator v3.1 — Professional Layout (Reorder)
-==========================================================
-Layout:
-- Halaman 1: Header + Card + Ringkasan + Analisis SPD + Grafik
-- Halaman 2: Analisis BTSB + Tabel SO + Insight + Rekomendasi
+PDF Report Generator v4 — Unicode Safe
+========================================
+Pake font DejaVu Unicode — anti-error, anti-emoji bocor.
+
+Fix:
+- DejaVuSans font (support Unicode: em-dash, bullet, basic emoji)
+- Fallback Helvetica kalau DejaVu gak ada
+- Validasi tahun (2024-2100)
+- Layout profesional: banner, card metric, grafik 2 kolom
 """
 
 import io
@@ -34,7 +38,7 @@ _PAGE_W = 210
 _PAGE_H = 297
 _MARGIN_L = 15
 _MARGIN_R = 15
-_CONTENT_W = _PAGE_W - _MARGIN_L - _MARGIN_R  # = 180
+_CONTENT_W = _PAGE_W - _MARGIN_L - _MARGIN_R
 
 _NAMA_BULAN = {
     1: "Januari", 2: "Februari", 3: "Maret", 4: "April",
@@ -59,67 +63,35 @@ def _fmt_rp(value):
 
 
 def _fmt_tgl_short(tgl_str):
-    """
-    Fix: pastikan tahun valid (2024-2100).
-    Kalau tahun aneh (2016, 2013), paksa ke tahun sekarang.
-    """
+    """Format tanggal: '2026-10-04' -> '04/10/2026'. Validasi tahun."""
     if not tgl_str:
         return "-"
-    
     try:
         _tgl_clean = str(tgl_str).strip()[:10]
         _dt = datetime.strptime(_tgl_clean, "%Y-%m-%d")
-        
-        # ✅ Validasi tahun
         _now = _now_jkt()
         if _dt.year < 2024 or _dt.year > 2100:
-            print(f"[PDF DATE FIX] Tahun aneh: {_dt.year} → {_now.year}")
+            print(f"[PDF DATE FIX] Tahun aneh: {_dt.year} -> {_now.year}")
             _dt = _dt.replace(year=_now.year)
-        
         return _dt.strftime("%d/%m/%Y")
     except Exception as _e:
         print(f"[PDF DATE ERROR] {_e} | input: {tgl_str}")
         return str(tgl_str)[:10]
-    
-def _sanitize_text(text):
-    """
-    Ganti karakter unicode gak didukung Helvetica jadi ASCII.
-    Pake whitelist — cuma keep char printable ASCII.
-    """
+
+
+def _clean_text(text):
+    """Minimal cleanup: hapus char control, jaga unicode lain."""
     if not text:
         return ""
-    
-    _replacements = {
-        "—": "-", "–": "-", "−": "-", "…": "...",
-        "“": '"', "”": '"', "‘": "'", "’": "'",
-        "•": "-", "·": "-", "→": "->", "←": "<-",
-        "≥": ">=", "≤": "<=", "×": "x", "÷": "/",
-        "≈": "~=", "≠": "!=",
-        "\u00a0": " ", "\u200b": "", "\u200c": "", "\u200d": "",
-        "\ufeff": "",  # BOM
-    }
-    _result = text
-    for _k, _v in _replacements.items():
-        _result = _result.replace(_k, _v)
-    
-    # ✅ Whitelist: cuma keep char 32-126 (printable ASCII)
-    _result = "".join(
-        c for c in _result 
-        if 32 <= ord(c) <= 126 or c in "\n\t"
-    )
-    
-    return _result
-
-def _strip_emoji(text):
     _result = []
     for _ch in text:
         _cat = unicodedata.category(_ch)
-        if _cat in ("So", "Sk", "Cs", "Cn"):
-            continue
-        if ord(_ch) > 0x2600:
+        if _cat in ("Cc", "Cs", "Cn", "Co"):
+            if _ch in "\n\t":
+                _result.append(_ch)
             continue
         _result.append(_ch)
-    return _sanitize_text("".join(_result))
+    return "".join(_result)
 
 
 # =========================================================
@@ -195,19 +167,10 @@ def _make_bar_chart(adjust_so, btsb):
 
 
 # =========================================================
-# 🔧 PARSE AI CONTENT — SPLIT PER SECTION
+# 🔧 PARSE AI CONTENT
 # =========================================================
 def _parse_sections(content_text):
-    """
-    Parse AI content jadi dict per section.
-    Return: {
-        "ringkasan": "...",
-        "analisis_spd": "...",
-        "analisis_btsb": "...",
-        "insight": "...",
-        "rekomendasi": "...",
-    }
-    """
+    """Parse AI content jadi dict per section."""
     _sections = {
         "ringkasan": "",
         "analisis_spd": "",
@@ -224,14 +187,11 @@ def _parse_sections(content_text):
         _line_strip = _line.strip()
         _line_lower = _line_strip.lower()
 
-        # Deteksi heading
         if _line_strip.startswith("#"):
-            # Simpan buffer sebelumnya
             if _buffer:
                 _sections[_current] += "\n".join(_buffer) + "\n"
                 _buffer = []
 
-            # Tentukan section baru
             if "ringkasan" in _line_lower or "eksekutif" in _line_lower:
                 _current = "ringkasan"
             elif "spd" in _line_lower or "sales" in _line_lower:
@@ -248,13 +208,10 @@ def _parse_sections(content_text):
 
         _buffer.append(_line)
 
-    # Simpan buffer terakhir
     if _buffer:
         _sections[_current] += "\n".join(_buffer) + "\n"
 
     return _sections
-
-
 # =========================================================
 # 📄 MAIN: GENERATE PDF
 # =========================================================
@@ -275,50 +232,82 @@ def generate_pdf(
         _pdf.set_auto_page_break(auto=True, margin=10)
         _pdf.add_page()
 
+        # ✅ REGISTER FONT UNICODE (DejaVu)
+        _FONT_NAME = "Helvetica"
+        _FONT_PATHS = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        ]
+        _FONT_PATHS_B = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+        ]
+        _FONT_PATHS_I = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+            "/usr/share/fonts/dejavu/DejaVuSans-Oblique.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans-Oblique.ttf",
+        ]
+
+        _font_reg = next((p for p in _FONT_PATHS if __import__("os").path.exists(p)), None)
+        _font_bold = next((p for p in _FONT_PATHS_B if __import__("os").path.exists(p)), None)
+        _font_italic = next((p for p in _FONT_PATHS_I if __import__("os").path.exists(p)), None)
+
+        if _font_reg:
+            try:
+                _pdf.add_font("DejaVu", "", _font_reg)
+                if _font_bold:
+                    _pdf.add_font("DejaVu", "B", _font_bold)
+                if _font_italic:
+                    _pdf.add_font("DejaVu", "I", _font_italic)
+                _FONT_NAME = "DejaVu"
+                print(f"[PDF] DejaVu loaded OK: {_font_reg}")
+            except Exception as _e_font:
+                print(f"[PDF] DejaVu error, fallback Helvetica: {_e_font}")
+        else:
+            print("[PDF] DejaVu not found, fallback Helvetica")
+
+        # Simpan font name di variabel global-ish (pake attribute)
+        _pdf.font_name = _FONT_NAME
+
         # Parse AI content
         _sections = _parse_sections(ai_content)
 
         # ============================================
-        # HALAMAN 1: Header + Card + Ringkasan + Analisis SPD + Grafik
+        # HALAMAN 1
         # ============================================
-        _render_header_banner(_pdf, period_label)
-        _render_strip(_pdf)
+        _render_header_banner(_pdf, period_label, _FONT_NAME)
+        _render_strip(_pdf, _FONT_NAME)
 
         if extra_stats:
-            _render_metric_cards(_pdf, extra_stats)
+            _render_metric_cards(_pdf, extra_stats, _FONT_NAME)
 
-        # Ringkasan Eksekutif
         if _sections["ringkasan"]:
-            _render_section(_pdf, "Ringkasan Eksekutif", _sections["ringkasan"])
+            _render_section(_pdf, "Ringkasan Eksekutif", _sections["ringkasan"], _FONT_NAME)
 
-        # Analisis SPD & Sales
         if _sections["analisis_spd"]:
-            _render_section(_pdf, "Analisis SPD & Sales", _sections["analisis_spd"])
+            _render_section(_pdf, "Analisis SPD & Sales", _sections["analisis_spd"], _FONT_NAME)
 
-        # Grafik
         if extra_stats:
-            _render_charts_2col(_pdf, extra_stats)
+            _render_charts_2col(_pdf, extra_stats, _FONT_NAME)
 
         # ============================================
-        # HALAMAN 2: Analisis BTSB + Tabel + Insight + Rekomendasi
+        # HALAMAN 2
         # ============================================
         _pdf.add_page()
 
-        # Analisis BTSB & NSB
         if _sections["analisis_btsb"]:
-            _render_section(_pdf, "Analisis BTSB & NSB", _sections["analisis_btsb"])
+            _render_section(_pdf, "Analisis BTSB & NSB", _sections["analisis_btsb"], _FONT_NAME)
 
-        # Tabel SO
         if so_data:
-            _render_so_table(_pdf, so_data, period_type, new_page=False)
+            _render_so_table(_pdf, so_data, period_type, _FONT_NAME)
 
-        # Insight & Temuan
         if _sections["insight"]:
-            _render_section(_pdf, "Insight & Temuan", _sections["insight"])
+            _render_section(_pdf, "Insight & Temuan", _sections["insight"], _FONT_NAME)
 
-        # Rekomendasi
         if _sections["rekomendasi"]:
-            _render_section(_pdf, "Rekomendasi", _sections["rekomendasi"])
+            _render_section(_pdf, "Rekomendasi", _sections["rekomendasi"], _FONT_NAME)
 
         _out = _pdf.output(dest="S")
         _pdf_bytes = _out.encode("latin-1") if isinstance(_out, str) else bytes(_out)
@@ -343,28 +332,25 @@ def _reset_x(pdf):
     pdf.set_x(_MARGIN_L)
 
 
-def _render_header_banner(pdf, period_label):
-    """Banner ungu besar di atas."""
+def _render_header_banner(pdf, period_label, font_name="Helvetica"):
     pdf.set_fill_color(*_C_PRIMARY)
     pdf.rect(0, 0, _PAGE_W, 42, "F")
 
-    # Garis oranye di kiri
     pdf.set_fill_color(*_C_ORANGE)
     pdf.rect(0, 0, 6, 42, "F")
 
-    # Judul
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 26)
+    pdf.set_font(font_name, "B", 26)
     pdf.set_y(10)
     pdf.set_x(_MARGIN_L + 6)
     pdf.cell(_CONTENT_W - 6, 12, "Laporan Stock Opname", align="L")
 
-    pdf.set_font("Helvetica", "", 11)
+    pdf.set_font(font_name, "", 11)
     pdf.set_y(23)
     pdf.set_x(_MARGIN_L + 6)
     pdf.cell(_CONTENT_W - 6, 6, f"Periode: {period_label}", align="L")
 
-    pdf.set_font("Helvetica", "", 10)
+    pdf.set_font(font_name, "", 10)
     pdf.set_y(30)
     pdf.set_x(_MARGIN_L + 6)
     pdf.cell(_CONTENT_W - 6, 5, "Toko C383 - Karang Satria", align="L")
@@ -374,15 +360,14 @@ def _render_header_banner(pdf, period_label):
     _reset_x(pdf)
 
 
-def _render_strip(pdf):
-    """Strip ungu tipis di bawah header."""
+def _render_strip(pdf, font_name="Helvetica"):
     _y = pdf.get_y()
 
     pdf.set_fill_color(*_C_PRIMARY)
     pdf.rect(0, _y, _PAGE_W, 8, "F")
 
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font(font_name, "", 9)
     pdf.set_y(_y + 2)
     pdf.set_x(_MARGIN_L)
     pdf.cell(_CONTENT_W / 2, 4, "Disusun Oleh", align="L")
@@ -395,14 +380,12 @@ def _render_strip(pdf):
     _reset_x(pdf)
 
 
-def _render_metric_cards(pdf, stats):
-    """4 card metric — Rak di-SO, Belum SO, Adjust SO, Status."""
+def _render_metric_cards(pdf, stats, font_name="Helvetica"):
     _sudah = stats.get("sudah_so", 0)
     _belum = stats.get("belum_so", 0)
     _adjust = stats.get("adjust_so", 0)
     _btsb = stats.get("btsb", 0)
 
-    # ✅ Hitung status
     if _btsb > 0:
         _penggunaan = (abs(_adjust) / _btsb * 100)
     else:
@@ -436,11 +419,11 @@ def _render_metric_cards(pdf, stats):
         pdf.rect(_x, _y_start, _card_w, _card_h, "F")
 
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "", 8)
+        pdf.set_font(font_name, "", 8)
         pdf.set_xy(_x, _y_start + 3)
         pdf.cell(_card_w, 4, _card["label"], align="C")
 
-        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_font(font_name, "B", 13)
         pdf.set_xy(_x, _y_start + 10)
         pdf.cell(_card_w, 8, _card["value"], align="C")
 
@@ -449,13 +432,11 @@ def _render_metric_cards(pdf, stats):
     _reset_x(pdf)
 
 
-def _render_section(pdf, title, content):
-    """Render section dengan heading + content."""
+def _render_section(pdf, title, content, font_name="Helvetica"):
     _reset_x(pdf)
     pdf.ln(3)
 
-    # Heading dengan kotak
-    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_font(font_name, "B", 13)
     pdf.set_text_color(*_C_PRIMARY)
     pdf.set_fill_color(*_C_ACCENT)
     pdf.rect(_MARGIN_L, pdf.get_y() + 1.5, 3, 4, "F")
@@ -463,29 +444,25 @@ def _render_section(pdf, title, content):
     pdf.cell(_CONTENT_W - 5, 7, title, align="L")
     pdf.ln(8)
 
-    # Garis
     pdf.set_draw_color(*_C_ACCENT)
     pdf.set_line_width(0.3)
     pdf.line(_MARGIN_L, pdf.get_y(), _PAGE_W - _MARGIN_R, pdf.get_y())
     pdf.ln(3)
     _reset_x(pdf)
 
-    # Content
-    _render_content_text(pdf, content)
+    _render_content_text(pdf, content, font_name)
     _reset_x(pdf)
 
 
-def _render_content_text(pdf, content):
-    """Render text content dengan bullet kotak."""
+def _render_content_text(pdf, content, font_name="Helvetica"):
     for _line in content.split("\n"):
-        _line_clean = _strip_emoji(_line).strip()
+        _line_clean = _clean_text(_line).strip()
 
         if not _line_clean:
             pdf.ln(1)
             _reset_x(pdf)
             continue
 
-        # BULLET
         if _line_clean.startswith(("- ", "* ", "• ", "■ ")):
             _text = _line_clean[2:].strip().replace("**", "").replace("*", "")
             _y = pdf.get_y()
@@ -493,7 +470,7 @@ def _render_content_text(pdf, content):
             pdf.set_fill_color(*_C_ACCENT)
             pdf.rect(_MARGIN_L + 2, _y + 1.5, 2, 2, "F")
 
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(font_name, "", 10)
             pdf.set_text_color(*_C_DARK)
             pdf.set_x(_MARGIN_L + 7)
             pdf.multi_cell(_CONTENT_W - 7, 5.5, _text)
@@ -501,12 +478,11 @@ def _render_content_text(pdf, content):
             _reset_x(pdf)
             continue
 
-        # NUMBERED
         _match_num = re.match(r'^(\d+)\.\s+(.+)', _line_clean)
         if _match_num:
             _num = _match_num.group(1)
             _text = _match_num.group(2).replace("**", "").replace("*", "")
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(font_name, "", 10)
             pdf.set_text_color(*_C_DARK)
             pdf.set_x(_MARGIN_L + 5)
             pdf.multi_cell(_CONTENT_W - 5, 5.5, f"{_num}.  {_text}")
@@ -514,9 +490,8 @@ def _render_content_text(pdf, content):
             _reset_x(pdf)
             continue
 
-        # PARAGRAF
         _text = _line_clean.replace("**", "").replace("*", "")
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(font_name, "", 10)
         pdf.set_text_color(*_C_DARK)
         _reset_x(pdf)
         pdf.multi_cell(_CONTENT_W, 5.5, _text)
@@ -524,8 +499,7 @@ def _render_content_text(pdf, content):
         _reset_x(pdf)
 
 
-def _render_charts_2col(pdf, stats):
-    """Render 2 grafik side-by-side."""
+def _render_charts_2col(pdf, stats, font_name="Helvetica"):
     _sudah = stats.get("sudah_so", 0)
     _belum = stats.get("belum_so", 0)
     _adjust = stats.get("adjust_so", 0)
@@ -537,8 +511,7 @@ def _render_charts_2col(pdf, stats):
     pdf.ln(3)
     _reset_x(pdf)
 
-    # Section header
-    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_font(font_name, "B", 13)
     pdf.set_text_color(*_C_PRIMARY)
     pdf.set_fill_color(*_C_ACCENT)
     pdf.rect(_MARGIN_L, pdf.get_y() + 1.5, 3, 4, "F")
@@ -555,27 +528,23 @@ def _render_charts_2col(pdf, stats):
     _y_start = pdf.get_y()
     _chart_w = (_CONTENT_W - 6) / 2
 
-    # PIE CHART (kiri)
     _pie_buf = _make_pie_chart(_sudah, _belum)
     if _pie_buf:
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_font(font_name, "B", 9)
         pdf.set_text_color(*_C_DARK)
         pdf.set_xy(_MARGIN_L, _y_start)
         pdf.cell(_chart_w, 5, "1. Rasio Stock Opname", align="C")
-
         try:
             pdf.image(_pie_buf, x=_MARGIN_L + 3, y=_y_start + 5, w=_chart_w - 6)
         except Exception as _e:
             print(f"[PDF IMG PIE ERROR] {_e}")
 
-    # BAR CHART (kanan)
     _bar_buf = _make_bar_chart(_adjust, _btsb)
     if _bar_buf:
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_font(font_name, "B", 9)
         pdf.set_text_color(*_C_DARK)
         pdf.set_xy(_MARGIN_L + _chart_w + 6, _y_start)
         pdf.cell(_chart_w, 5, "2. Adjust SO vs BTSB", align="C")
-
         try:
             pdf.image(_bar_buf, x=_MARGIN_L + _chart_w + 9, y=_y_start + 5, w=_chart_w - 6)
         except Exception as _e:
@@ -585,16 +554,11 @@ def _render_charts_2col(pdf, stats):
     _reset_x(pdf)
 
 
-def _render_so_table(pdf, so_data, period_type, new_page=False):
-    """Render tabel SO."""
-    if new_page:
-        pdf.add_page()
-
+def _render_so_table(pdf, so_data, period_type, font_name="Helvetica"):
     pdf.ln(3)
     _reset_x(pdf)
 
-    # Section header
-    pdf.set_font("Helvetica", "B", 13)
+    pdf.set_font(font_name, "B", 13)
     pdf.set_text_color(*_C_PRIMARY)
     pdf.set_fill_color(*_C_ACCENT)
     pdf.rect(_MARGIN_L, pdf.get_y() + 1.5, 3, 4, "F")
@@ -608,8 +572,7 @@ def _render_so_table(pdf, so_data, period_type, new_page=False):
     pdf.ln(4)
     _reset_x(pdf)
 
-    # Info
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font(font_name, "", 9)
     pdf.set_text_color(*_C_GRAY)
     _total = len(so_data)
     _limit_info = ""
@@ -622,7 +585,6 @@ def _render_so_table(pdf, so_data, period_type, new_page=False):
     pdf.ln(2)
     _reset_x(pdf)
 
-    # Filter
     if period_type == "minggu":
         _rows = sorted(so_data, key=lambda x: abs(float(x.get("nominal_adjust", 0))), reverse=True)[:5]
     elif period_type == "bulan":
@@ -630,20 +592,19 @@ def _render_so_table(pdf, so_data, period_type, new_page=False):
     else:
         _rows = so_data
 
-    # Kolom
     _col_w = [38, 30, 70, 42]
     _headers = ["Tanggal", "Rak", "Nominal", "PIC"]
 
     pdf.set_fill_color(*_C_PRIMARY)
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_font(font_name, "B", 9)
     _reset_x(pdf)
 
     for _i, _h in enumerate(_headers):
         pdf.cell(_col_w[_i], 8, _h, border=0, fill=True, align="C")
     pdf.ln(8)
 
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font(font_name, "", 9)
     for _idx, _r in enumerate(_rows):
         _tgl = _r.get("so_date", "-")
         _rak = _r.get("rak_id", "-")
@@ -673,13 +634,11 @@ def _render_so_table(pdf, so_data, period_type, new_page=False):
         pdf.cell(_col_w[3], 7, _pic[:20], border=0, fill=_fill, align="C")
         pdf.ln(7)
 
-    # Garis
     pdf.set_draw_color(*_C_ACCENT)
     pdf.set_line_width(0.3)
     pdf.line(_MARGIN_L, pdf.get_y(), _PAGE_W - _MARGIN_R, pdf.get_y())
     pdf.ln(2)
 
-    # Total
     _total_nom = sum(float(r.get("nominal_adjust", 0)) for r in so_data)
     if _total_nom < 0:
         pdf.set_text_color(*_C_RED)
@@ -688,7 +647,7 @@ def _render_so_table(pdf, so_data, period_type, new_page=False):
     else:
         pdf.set_text_color(*_C_DARK)
 
-    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_font(font_name, "B", 10)
     _reset_x(pdf)
     pdf.cell(sum(_col_w[:2]), 8, "TOTAL", border=0, align="C")
     pdf.cell(_col_w[2], 8, _fmt_rp(_total_nom), border=0, align="R")
