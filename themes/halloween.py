@@ -1,10 +1,10 @@
 """
-🎃 HALLOWEEN THEME v4 — Performance-First + Complete
-======================================================
-- Ringan (GPU-friendly: transform + opacity only)
-- Native PC / Android / iOS
+🎃 HALLOWEEN THEME v5 — Gothic Atmospheric
+============================================
+- Deep purple + inky black + eerie orange
+- Fog + stars (GPU-friendly: opacity only)
+- Flying icons (transform + opacity)
 - Variant by time (pagi/siang/sore/malam/midnight)
-- LENGKAP: header, metric, menu card, table, dialog, dll
 """
 
 # =========================================================
@@ -13,7 +13,7 @@
 THEME_INFO = {
     "name": "Halloween",
     "emoji": "🎃",
-    "primary": "#E8B189",
+    "primary": "#FF6B1A",
     "secondary": "#7FB99B",
     "dark": "#0F0A1E",
     "light": "#F8F5F0",
@@ -21,7 +21,7 @@ THEME_INFO = {
 
 
 # =========================================================
-# 🌅 TIME VARIANTS (5 varian)
+# 🌅 TIME VARIANTS
 # =========================================================
 THEME_VARIANTS = {
     "pagi": {
@@ -33,7 +33,7 @@ THEME_VARIANTS = {
         "accent": "#FFEB3B",
         "bg_top": "#1A1F3A",
         "bg_bot": "#4A2511",
-        "bg_glow": "rgba(255, 215, 0, 0.15)",
+        "bg_glow": "rgba(255, 215, 0, 0.18)",
         "text": "#FFF8E1",
         "text_dim": "#C9A961",
         "emoji": "🌅",
@@ -63,7 +63,7 @@ THEME_VARIANTS = {
         "accent": "#F97316",
         "bg_top": "#1A0D2E",
         "bg_bot": "#4A1810",
-        "bg_glow": "rgba(255, 107, 26, 0.18)",
+        "bg_glow": "rgba(255, 107, 26, 0.20)",
         "text": "#FEF2F2",
         "text_dim": "#B89B8E",
         "emoji": "🌇",
@@ -78,7 +78,7 @@ THEME_VARIANTS = {
         "accent": "#FBBF24",
         "bg_top": "#0F0A1E",
         "bg_bot": "#1A0D2E",
-        "bg_glow": "rgba(107, 33, 168, 0.15)",
+        "bg_glow": "rgba(107, 33, 168, 0.20)",
         "text": "#F8F5F0",
         "text_dim": "#A89B8E",
         "emoji": "🌆",
@@ -93,7 +93,7 @@ THEME_VARIANTS = {
         "accent": "#C4B5FD",
         "bg_top": "#05030F",
         "bg_bot": "#0A0514",
-        "bg_glow": "rgba(168, 85, 247, 0.18)",
+        "bg_glow": "rgba(168, 85, 247, 0.22)",
         "text": "#E9D5FF",
         "text_dim": "#8B7BA8",
         "emoji": "🌙",
@@ -103,7 +103,6 @@ THEME_VARIANTS = {
 
 
 def get_variant(variant="malam"):
-    """Get variant config."""
     return THEME_VARIANTS.get(variant, THEME_VARIANTS["malam"])
 
 
@@ -111,7 +110,6 @@ def get_variant(variant="malam"):
 # 🎨 GET CSS
 # =========================================================
 def get_css(variant="malam"):
-    """Return CSS dengan variant warna."""
     _v = get_variant(variant)
 
     _css = f"""
@@ -134,16 +132,17 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 BASE — BACKGROUND (RINGAN)
+    🎃 BASE — DEEP PURPLE + INKY BLACK
     ============================================ */
     .stApp {{
         background:
             radial-gradient(circle at 15% 10%, var(--bg-glow) 0%, transparent 40%),
             radial-gradient(circle at 85% 90%, var(--bg-glow) 0%, transparent 40%),
+            radial-gradient(circle at 50% 50%, rgba(76, 29, 149, 0.15) 0%, transparent 60%),
             linear-gradient(180deg, var(--midnight) 0%, var(--midnight-2) 50%, var(--midnight) 100%);
         background-attachment: fixed;
         color: var(--ghost);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         min-height: 100vh;
     }}
 
@@ -160,99 +159,139 @@ def get_css(variant="malam"):
         background: var(--pumpkin-dark);
         border-radius: 5px;
     }}
-    ::-webkit-scrollbar-thumb:hover {{
-        background: var(--pumpkin);
-    }}
 
     /* ============================================
-    🎃 HEADER ROYAL (Dashboard)
+    🎃 HEADER ROYAL — GOTHIC ATMOSPHERIC
     ============================================ */
     .royal-header {{
         position: relative;
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--witch-dark) 50%, var(--midnight) 100%);
+        background: linear-gradient(135deg, #0F0A1E 0%, #2E1065 40%, #4C1D95 70%, #0F0A1E 100%);
         border: 2px solid var(--pumpkin);
-        border-radius: 14px;
-        padding: 20px 24px;
+        border-radius: 18px;
+        padding: 28px 24px 24px 24px;
         margin-bottom: 20px;
-        box-shadow: 0 0 30px var(--bg-glow);
+        box-shadow:
+            0 0 40px rgba(107, 33, 168, 0.35),
+            0 0 80px rgba(255, 107, 26, 0.15),
+            inset 0 0 60px rgba(0, 0, 0, 0.7);
+        overflow: hidden;
     }}
 
+    /* Fog effect pakai radial gradient (GPU-friendly) */
+    .royal-header::before {{
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background:
+            radial-gradient(ellipse at 20% 30%, rgba(255, 107, 26, 0.12), transparent 50%),
+            radial-gradient(ellipse at 80% 70%, rgba(168, 85, 247, 0.10), transparent 50%);
+        animation: headerFogDrift 25s infinite ease-in-out;
+        pointer-events: none;
+        z-index: 0;
+        will-change: transform, opacity;
+    }}
+
+    @keyframes headerFogDrift {{
+        0%, 100% {{ transform: translate3d(0, 0, 0); opacity: 0.6; }}
+        50% {{ transform: translate3d(30px, -20px, 0); opacity: 1; }}
+    }}
+
+    /* Ornamen pojok */
+    .royal-ornament {{
+        position: absolute;
+        color: var(--pumpkin);
+        font-size: 22px;
+        z-index: 2;
+        filter: drop-shadow(0 0 8px var(--pumpkin));
+    }}
+
+    .royal-orn-tl {{ top: 10px; left: 14px; }}
+    .royal-orn-tr {{ top: 10px; right: 14px; }}
+    .royal-orn-bl {{ bottom: 10px; left: 14px; }}
+    .royal-orn-br {{ bottom: 10px; right: 14px; }}
+
     .royal-title {{
-        font-family: 'Cinzel', -apple-system, sans-serif;
-        font-size: 28px;
+        position: relative;
+        font-family: 'Creepster', 'Cinzel', -apple-system, serif;
+        font-size: 32px;
         font-weight: 900;
         color: var(--pumpkin);
         text-align: center;
         margin: 0;
-        letter-spacing: 3px;
-        text-shadow: 0 0 15px var(--pumpkin);
+        letter-spacing: 4px;
+        text-shadow:
+            0 0 20px var(--pumpkin),
+            0 0 40px rgba(255, 107, 26, 0.6),
+            0 0 60px rgba(255, 107, 26, 0.4),
+            2px 2px 4px rgba(0, 0, 0, 0.95);
+        z-index: 2;
     }}
 
     .royal-subtitle {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        position: relative;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 11px;
         color: var(--pumpkin-light);
         text-align: center;
-        margin-top: 6px;
-        letter-spacing: 2px;
+        margin-top: 8px;
+        letter-spacing: 4px;
         text-transform: uppercase;
+        z-index: 2;
+        text-shadow: 0 0 8px rgba(255, 107, 26, 0.5);
     }}
-
-    .royal-ornament {{
-        position: absolute;
-        color: var(--pumpkin);
-        font-size: 20px;
-    }}
-
-    .royal-orn-tl {{ top: 8px; left: 12px; }}
-    .royal-orn-tr {{ top: 8px; right: 12px; }}
-    .royal-orn-bl {{ bottom: 8px; left: 12px; }}
-    .royal-orn-br {{ bottom: 8px; right: 12px; }}
 
     .header-clock {{
+        position: relative;
         text-align: center;
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px dashed rgba(255, 107, 26, 0.3);
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px dashed rgba(255, 107, 26, 0.4);
+        z-index: 2;
     }}
 
     .clock-time {{
         font-family: 'JetBrains Mono', 'Courier New', monospace;
-        font-size: 20px;
+        font-size: 22px;
         font-weight: 900;
         color: var(--candy);
-        letter-spacing: 2px;
+        letter-spacing: 3px;
+        text-shadow: 0 0 15px var(--candy), 0 0 30px rgba(255, 107, 26, 0.5);
     }}
 
     .clock-date {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 10px;
         color: var(--pumpkin-light);
-        letter-spacing: 1.5px;
+        letter-spacing: 2px;
         text-transform: uppercase;
         margin-top: 4px;
     }}
 
     /* ============================================
-    🎃 PROFILE HEADER (Halaman SO / Master Shift)
+    🎃 PROFILE HEADER (Halaman SO, dll)
     ============================================ */
     .profile-header {{
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 14px 20px;
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
-        border: 1px solid rgba(232, 177, 137, 0.25);
+        background: linear-gradient(135deg, #0F0A1E 0%, #2E1065 100%);
+        border: 1px solid rgba(232, 177, 137, 0.3);
         border-radius: 14px;
         margin-bottom: 20px;
+        box-shadow: 0 0 20px rgba(107, 33, 168, 0.2);
     }}
 
     .profile-title {{
-        font-family: 'Cinzel', -apple-system, sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 16px;
         font-weight: 900;
         color: var(--pumpkin);
         letter-spacing: 2px;
+        text-shadow: 0 0 10px rgba(255, 107, 26, 0.4);
     }}
 
     .profile-sub {{
@@ -269,13 +308,13 @@ def get_css(variant="malam"):
         color: var(--secondary);
         text-align: right;
     }}
-    
+
     /* ============================================
-    🎃 METRIC CARD (clean)
+    🎃 METRIC CARD
     ============================================ */
     .metric-clean,
     .metric-card-v2 {{
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        background: linear-gradient(135deg, #0F0A1E 0%, #1A0D2E 100%);
         border: 1px solid rgba(232, 177, 137, 0.25);
         border-left: 3px solid var(--pumpkin);
         border-radius: 10px;
@@ -283,52 +322,48 @@ def get_css(variant="malam"):
         margin-bottom: 8px;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }}
-    
-    .metric-clean:hover,
-    .metric-card-v2:hover {{
+
+    .metric-clean:hover {{
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 107, 26, 0.2);
     }}
-    
-    .metric-clean .label,
-    .metric-label-v2 {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+
+    .metric-clean .label {{
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 10px;
         color: var(--ghost-dim);
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
         text-transform: uppercase;
         margin-bottom: 6px;
     }}
-    
-    .metric-clean .value,
-    .metric-value-v2 {{
+
+    .metric-clean .value {{
         font-family: 'JetBrains Mono', 'Courier New', monospace;
         font-size: 24px;
         font-weight: 900;
         color: var(--pumpkin);
         line-height: 1.1;
         word-break: break-all;
+        text-shadow: 0 0 10px rgba(255, 107, 26, 0.4);
     }}
-    
-    .metric-clean .sub,
-    .metric-sub-v2 {{
+
+    .metric-clean .sub {{
         font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
         font-size: 10px;
         color: var(--ghost-dim);
         margin-top: 4px;
     }}
-    
     /* ============================================
     🎃 MENU CARD (Homepage)
     ============================================ */
     .menu-card-v2 {{
         position: relative;
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        background: linear-gradient(135deg, #0F0A1E 0%, #1A0D2E 100%);
         border: 2px solid var(--pumpkin-dark);
         border-radius: 16px;
         padding: 24px 18px;
         text-align: center;
-        transition: transform 0.25s ease, box-shadow 0.25s ease;
+        transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
         min-height: 180px;
         display: flex;
         flex-direction: column;
@@ -336,12 +371,14 @@ def get_css(variant="malam"):
         align-items: center;
         overflow: hidden;
         margin-bottom: 10px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
     }}
     
     .menu-card-v2:hover {{
         border-color: var(--pumpkin);
-        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7), 0 0 30px var(--bg-glow);
+        box-shadow:
+            0 15px 40px rgba(0, 0, 0, 0.8),
+            0 0 30px rgba(255, 107, 26, 0.4);
         transform: translateY(-4px);
     }}
     
@@ -350,11 +387,11 @@ def get_css(variant="malam"):
         margin-bottom: 12px;
         line-height: 1;
         display: block;
-        filter: drop-shadow(0 0 10px var(--pumpkin));
+        filter: drop-shadow(0 0 12px var(--pumpkin));
     }}
     
     .menu-title-v2 {{
-        font-family: 'Cinzel', -apple-system, sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 14px;
         font-weight: 900;
         color: var(--pumpkin-light);
@@ -379,23 +416,23 @@ def get_css(variant="malam"):
         font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
         font-size: 12px;
         margin-top: 8px;
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        background: linear-gradient(135deg, #0F0A1E 0%, #1A0D2E 100%);
         border-radius: 10px;
-        border: 1px solid rgba(168, 85, 247, 0.2);
+        border: 1px solid rgba(168, 85, 247, 0.25);
         overflow: hidden;
     }}
     
     .so-table thead th {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 10px;
         font-weight: 700;
         color: var(--ghost-dim);
-        letter-spacing: 1px;
+        letter-spacing: 1.2px;
         text-transform: uppercase;
         text-align: left;
         padding: 12px 14px;
-        border-bottom: 2px solid rgba(232, 177, 137, 0.3);
-        background: rgba(45, 25, 75, 0.5);
+        border-bottom: 2px solid rgba(255, 107, 26, 0.4);
+        background: rgba(45, 25, 75, 0.6);
     }}
     
     .so-table tbody td {{
@@ -417,6 +454,7 @@ def get_css(variant="malam"):
     .so-table td.rak-id {{
         color: var(--pumpkin);
         font-weight: 900;
+        text-shadow: 0 0 6px rgba(255, 107, 26, 0.3);
     }}
     
     .so-table td.nominal {{
@@ -426,17 +464,19 @@ def get_css(variant="malam"):
     
     .so-table td.nominal.neg {{
         color: #E88B8B;
+        text-shadow: 0 0 6px rgba(232, 139, 139, 0.3);
     }}
     
     .so-table td.nominal.pos {{
         color: var(--secondary);
+        text-shadow: 0 0 6px rgba(127, 185, 155, 0.3);
     }}
     
     /* ============================================
     🎃 KETERANGAN PANEL
     ============================================ */
     .keterangan-panel {{
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        background: linear-gradient(135deg, #0F0A1E 0%, #1A0D2E 100%);
         border: 1px solid rgba(232, 177, 137, 0.3);
         border-radius: 12px;
         padding: 16px 20px;
@@ -444,7 +484,7 @@ def get_css(variant="malam"):
     }}
     
     .keterangan-panel .panel-label {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 10px;
         font-weight: 700;
         color: var(--secondary);
@@ -454,11 +494,12 @@ def get_css(variant="malam"):
     }}
     
     .keterangan-panel .panel-value {{
-        font-family: 'Cinzel', -apple-system, sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 26px;
         font-weight: 900;
         color: var(--pumpkin);
         line-height: 1.1;
+        text-shadow: 0 0 10px rgba(255, 107, 26, 0.4);
     }}
     
     .keterangan-panel .panel-sub {{
@@ -492,8 +533,8 @@ def get_css(variant="malam"):
         align-items: center;
         justify-content: space-between;
         padding: 8px 12px;
-        background: var(--midnight);
-        border: 1px solid rgba(168, 85, 247, 0.25);
+        background: #0F0A1E;
+        border: 1px solid rgba(168, 85, 247, 0.3);
         border-radius: 8px;
         margin-bottom: 4px;
     }}
@@ -516,8 +557,8 @@ def get_css(variant="malam"):
         align-items: center;
         gap: 12px;
         padding: 10px 14px;
-        background: var(--midnight);
-        border: 1px solid rgba(127, 185, 155, 0.3);
+        background: #0F0A1E;
+        border: 1px solid rgba(127, 185, 155, 0.35);
         border-left: 3px solid var(--secondary);
         border-radius: 8px;
         margin-bottom: 6px;
@@ -554,15 +595,17 @@ def get_css(variant="malam"):
         font-size: 72px;
         margin-bottom: 16px;
         text-align: center;
+        filter: drop-shadow(0 0 25px rgba(127, 185, 155, 0.8));
     }}
     
     .success-title {{
-        font-family: 'Cinzel', -apple-system, sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-size: 28px;
         font-weight: 900;
         color: var(--secondary);
         letter-spacing: 3px;
         text-align: center;
+        text-shadow: 0 0 20px rgba(127, 185, 155, 0.6);
     }}
     
     .success-sub {{
@@ -587,29 +630,24 @@ def get_css(variant="malam"):
         color: var(--ghost-dim);
         letter-spacing: 1.5px;
     }}
-        /* ============================================
+    /* ============================================
     🎃 DIALOG / MODAL
     ============================================ */
     [data-testid="stDialog"] div[role="dialog"] {{
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        background: linear-gradient(135deg, #0F0A1E 0%, #1A0D2E 100%);
         border: 1px solid var(--pumpkin);
         border-radius: 16px;
-        box-shadow: 0 0 30px var(--bg-glow);
-    }}
-
-    [data-testid="stDialog"] header {{
-        background: transparent;
-        border-bottom: 1px solid rgba(232, 177, 137, 0.3);
+        box-shadow: 0 0 40px rgba(107, 33, 168, 0.5);
     }}
 
     [data-testid="stDialog"] h2 {{
         color: var(--pumpkin);
-        font-family: 'Cinzel', -apple-system, sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         letter-spacing: 2px;
     }}
 
     [data-testid="stDialogBackdrop"] {{
-        background: rgba(10, 5, 20, 0.75);
+        background: rgba(10, 5, 20, 0.8);
     }}
 
     /* ============================================
@@ -618,15 +656,15 @@ def get_css(variant="malam"):
     div.stButton > button,
     div.stFormSubmitButton > button,
     div.stDownloadButton > button {{
-        background: linear-gradient(135deg, var(--midnight-2) 0%, var(--witch-dark) 100%);
+        background: linear-gradient(135deg, #1A0D2E 0%, #4C1D95 100%);
         color: var(--pumpkin-light);
         border: 2px solid var(--pumpkin-dark);
         border-radius: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-weight: 700;
         font-size: 13px;
         padding: 12px 20px;
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
         min-height: 48px;
         transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
     }}
@@ -636,11 +674,7 @@ def get_css(variant="malam"):
         color: #FFFFFF;
         border-color: var(--candy);
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px var(--bg-glow);
-    }}
-
-    div.stButton > button:active {{
-        transform: translateY(0);
+        box-shadow: 0 6px 20px rgba(255, 107, 26, 0.4);
     }}
 
     /* ============================================
@@ -649,7 +683,7 @@ def get_css(variant="malam"):
     div[data-baseweb="input"] > div,
     div[data-baseweb="select"] > div,
     div[data-baseweb="textarea"] > div {{
-        background-color: var(--midnight);
+        background-color: #0F0A1E;
         border: 1px solid rgba(168, 85, 247, 0.3);
         border-radius: 10px;
         min-height: 44px;
@@ -666,10 +700,10 @@ def get_css(variant="malam"):
     label,
     div[data-testid="stWidgetLabel"] label {{
         color: var(--pumpkin-light);
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-weight: 600;
         font-size: 11px;
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
         text-transform: uppercase;
     }}
 
@@ -687,13 +721,12 @@ def get_css(variant="malam"):
     div[data-baseweb="tab-list"] button {{
         background: transparent;
         color: var(--ghost-dim);
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-weight: 700;
         font-size: 12px;
         min-height: 44px;
         padding: 10px 16px;
         border-radius: 8px;
-        transition: background 0.2s ease, color 0.2s ease;
     }}
 
     div[data-baseweb="tab-list"] button[aria-selected="true"] {{
@@ -713,14 +746,13 @@ def get_css(variant="malam"):
     }}
 
     div[data-testid="stExpander"] summary {{
-        background: linear-gradient(90deg, var(--witch-dark) 0%, var(--bg-glow) 100%);
+        background: linear-gradient(90deg, #2E1065 0%, rgba(255, 107, 26, 0.1) 100%);
         color: var(--pumpkin-light);
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Cinzel', -apple-system, serif;
         font-weight: 700;
         font-size: 13px;
         padding: 14px 16px;
         min-height: 48px;
-        border-bottom: 1px dashed rgba(255, 107, 26, 0.2);
     }}
 
     /* ============================================
@@ -736,12 +768,8 @@ def get_css(variant="malam"):
     🎃 SIDEBAR
     ============================================ */
     [data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        background: linear-gradient(180deg, #0F0A1E 0%, #1A0D2E 100%);
         border-right: 1px solid var(--pumpkin-dark);
-    }}
-
-    [data-testid="stSidebar"] * {{
-        color: var(--ghost);
     }}
 
     /* ============================================
@@ -754,204 +782,31 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 MOBILE RESPONSIVE
+    🎃 ANIMASI — FOG + STARS + FLYERS + WEB
     ============================================ */
-    @media (max-width: 768px) {{
-        .royal-header {{
-            padding: 16px;
-            border-radius: 12px;
-        }}
 
-        .royal-title {{
-            font-size: 20px;
-            letter-spacing: 2px;
-        }}
-
-        .royal-subtitle {{
-            font-size: 9px;
-        }}
-
-        .metric-clean .value,
-        .metric-value-v2 {{
-            font-size: 20px;
-        }}
-
-        .so-table thead th {{
-            padding: 8px 10px;
-            font-size: 9px;
-        }}
-
-        .so-table tbody td {{
-            padding: 8px 10px;
-            font-size: 11px;
-        }}
-
-        div.stButton > button,
-        div.stFormSubmitButton > button,
-        div.stDownloadButton > button {{
-            min-height: 52px;
-            font-size: 14px;
-        }}
-
-        .main .block-container {{
-            padding-left: 1rem;
-            padding-right: 1rem;
-            padding-top: 0.5rem;
-        }}
-    }}
-
-    @media (max-width: 480px) {{
-        .royal-title {{
-            font-size: 16px;
-        }}
-
-        .metric-clean .value {{
-            font-size: 18px;
-        }}
-
-        .main .block-container {{
-            padding-left: 0.75rem;
-            padding-right: 0.75rem;
-        }}
-    }}
-
-    /* ============================================
-    ♿ REDUCED MOTION (accessibility)
-    ============================================ */
-    @media (prefers-reduced-motion: reduce) {{
-        *,
-        *::before,
-        *::after {{
-            animation-duration: 0.01ms !important;
-            transition-duration: 0.01ms !important;
-        }}
-    }}
-
-    /* ============================================
-    🎃 FADE IN UP (utility)
-    ============================================ */
-    .fade-in-up {{
-        animation: fadeInUp 0.4s ease-out;
-    }}
-
-    @keyframes fadeInUp {{
-        from {{
-            opacity: 0;
-            transform: translateY(10px);
-        }}
-        to {{
-            opacity: 1;
-            transform: translateY(0);
-        }}
-    }}
-    /* ============================================
-    🎃 ANIMASI HALOWEEN — 6 FLYER + BINTANG + JARING
-    Ringan: cuma transform & opacity (GPU)
-    ============================================ */
-    
-    /* === BASE FLYER === */
-    .hw-flyer {{
+    /* === FOG BACKGROUND === */
+    .hw-fog {{
         position: fixed;
-        left: -60px;
-        z-index: 999;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
         pointer-events: none;
-        opacity: 0;
+        z-index: 0;
+        background:
+            radial-gradient(ellipse 800px 400px at 20% 30%, rgba(107, 33, 168, 0.15), transparent),
+            radial-gradient(ellipse 600px 300px at 80% 70%, rgba(255, 107, 26, 0.10), transparent);
+        animation: hwFogDrift 40s infinite ease-in-out;
         will-change: transform, opacity;
-        transform: translate3d(0, 0, 0);
-        line-height: 1;
     }}
-    
-    /* === FLYER 1: KELELAWAR ATAS (cepat) === */
-    .hw-flyer-1 {{
-        top: 6%;
-        font-size: 26px;
-        animation: hwSweep1 18s infinite linear;
-        animation-delay: 0s;
+
+    @keyframes hwFogDrift {{
+        0%, 100% {{ transform: translate3d(0, 0, 0); opacity: 0.6; }}
+        50% {{ transform: translate3d(40px, -30px, 0); opacity: 1; }}
     }}
-    
-    /* === FLYER 2: LABU ATAS (sedang) === */
-    .hw-flyer-2 {{
-        top: 10%;
-        font-size: 24px;
-        animation: hwSweep2 24s infinite linear;
-        animation-delay: 3s;
-    }}
-    
-    /* === FLYER 3: HANTU TENGAH (sedang) === */
-    .hw-flyer-3 {{
-        top: 20%;
-        font-size: 28px;
-        animation: hwSweep1 26s infinite linear;
-        animation-delay: 6s;
-    }}
-    
-    /* === FLYER 4: LABA-LABA TENGAH (lambat) === */
-    .hw-flyer-4 {{
-        top: 30%;
-        font-size: 20px;
-        animation: hwSweep2 30s infinite linear;
-        animation-delay: 10s;
-    }}
-    
-    /* === FLYER 5: KELELAWAR BAWAH (sedang) === */
-    .hw-flyer-5 {{
-        top: 70%;
-        font-size: 22px;
-        animation: hwSweep1 28s infinite linear;
-        animation-delay: 14s;
-    }}
-    
-    /* === FLYER 6: LABU BAWAH (lambat) === */
-    .hw-flyer-6 {{
-        top: 82%;
-        font-size: 20px;
-        animation: hwSweep2 34s infinite linear;
-        animation-delay: 18s;
-    }}
-    
-    /* === KEYFRAMES SWEEP 1: horizontal + naik === */
-    @keyframes hwSweep1 {{
-        0% {{
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }}
-        8% {{
-            opacity: 0.9;
-        }}
-        50% {{
-            transform: translate3d(55vw, -25px, 0);
-        }}
-        92% {{
-            opacity: 0.9;
-        }}
-        100% {{
-            transform: translate3d(110vw, -40px, 0);
-            opacity: 0;
-        }}
-    }}
-    
-    /* === KEYFRAMES SWEEP 2: horizontal + turun === */
-    @keyframes hwSweep2 {{
-        0% {{
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }}
-        8% {{
-            opacity: 0.9;
-        }}
-        50% {{
-            transform: translate3d(55vw, 20px, 0);
-        }}
-        92% {{
-            opacity: 0.9;
-        }}
-        100% {{
-            transform: translate3d(110vw, 35px, 0);
-            opacity: 0;
-        }}
-    }}
-    
-    /* === BINTANG BERKEDIP (background) === */
+
+    /* === STARS === */
     .hw-stars {{
         position: fixed;
         top: 0;
@@ -973,13 +828,13 @@ def get_css(variant="malam"):
         animation: hwStarsTwinkle 6s infinite ease-in-out;
         will-change: opacity;
     }}
-    
+
     @keyframes hwStarsTwinkle {{
         0%, 100% {{ opacity: 0.5; }}
-        50% {{ opacity: 0.8; }}
+        50% {{ opacity: 0.85; }}
     }}
-    
-    /* === JARING LABA-LABA (pojok kanan atas, static) === */
+
+    /* === SPIDER WEB === */
     .hw-spider-web {{
         position: fixed;
         top: 0;
@@ -990,86 +845,224 @@ def get_css(variant="malam"):
         z-index: 1;
         background-image:
             linear-gradient(45deg, transparent 48%, rgba(232, 177, 137, 0.4) 49%, rgba(232, 177, 137, 0.4) 51%, transparent 52%),
-            linear-gradient(-45deg, transparent 48%, rgba(232, 177, 137, 0.4) 49%, rgba(232, 177, 137, 0.4) 51%, transparent 52%),
-            radial-gradient(circle, rgba(232, 177, 137, 0.5) 1px, transparent 1px);
-        background-size: 40px 40px, 40px 40px, 20px 20px;
+            linear-gradient(-45deg, transparent 48%, rgba(232, 177, 137, 0.4) 49%, rgba(232, 177, 137, 0.4) 51%, transparent 52%);
+        background-size: 40px 40px, 40px 40px;
         clip-path: polygon(100% 0, 100% 100%, 0 0);
         opacity: 0.5;
-        animation: hwWebPulse 8s infinite ease-in-out;
-        will-change: opacity;
     }}
-    
-    @keyframes hwWebPulse {{
-        0%, 100% {{ opacity: 0.4; }}
-        50% {{ opacity: 0.7; }}
+
+    /* === FLYERS (6 icon) === */
+    .hw-flyer {{
+        position: fixed;
+        left: -60px;
+        z-index: 999;
+        pointer-events: none;
+        opacity: 0;
+        will-change: transform, opacity;
+        transform: translate3d(0, 0, 0);
+        line-height: 1;
     }}
-    
+
+    .hw-flyer-1 {{
+        top: 6%;
+        font-size: 26px;
+        animation: hwSweep1 18s infinite linear;
+        animation-delay: 0s;
+    }}
+
+    .hw-flyer-2 {{
+        top: 10%;
+        font-size: 24px;
+        animation: hwSweep2 24s infinite linear;
+        animation-delay: 3s;
+    }}
+
+    .hw-flyer-3 {{
+        top: 20%;
+        font-size: 28px;
+        animation: hwSweep1 26s infinite linear;
+        animation-delay: 6s;
+    }}
+
+    .hw-flyer-4 {{
+        top: 30%;
+        font-size: 20px;
+        animation: hwSweep2 30s infinite linear;
+        animation-delay: 10s;
+    }}
+
+    .hw-flyer-5 {{
+        top: 70%;
+        font-size: 22px;
+        animation: hwSweep1 28s infinite linear;
+        animation-delay: 14s;
+    }}
+
+    .hw-flyer-6 {{
+        top: 82%;
+        font-size: 20px;
+        animation: hwSweep2 34s infinite linear;
+        animation-delay: 18s;
+    }}
+
+    @keyframes hwSweep1 {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        50% {{ transform: translate3d(55vw, -25px, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(110vw, -40px, 0); opacity: 0; }}
+    }}
+
+    @keyframes hwSweep2 {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        50% {{ transform: translate3d(55vw, 20px, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(110vw, 35px, 0); opacity: 0; }}
+    }}
+
     /* ============================================
-    📱 MOBILE OPTIMIZATION — Kurangi animasi
+    📱 MOBILE OPTIMIZATION
     ============================================ */
-    
-    /* Tablet & mobile besar: kurangi flyer, hide sebagian */
     @media (max-width: 1024px) {{
         .hw-flyer-4,
         .hw-flyer-5,
         .hw-flyer-6 {{
             display: none !important;
         }}
-        .hw-spider-web {{
-            width: 80px;
-            height: 80px;
-        }}
     }}
-    
-    /* Mobile & HP: cuma 2 flyer, matikan bintang & jaring */
+
     @media (max-width: 768px) {{
+        .royal-header {{
+            padding: 20px 16px 16px 16px;
+            border-radius: 14px;
+        }}
+
+        .royal-title {{
+            font-size: 22px;
+            letter-spacing: 2px;
+        }}
+
+        .royal-subtitle {{
+            font-size: 9px;
+            letter-spacing: 2px;
+        }}
+
+        .clock-time {{
+            font-size: 18px;
+        }}
+
+        .metric-clean .value {{
+            font-size: 20px;
+        }}
+
+        /* Mobile: cuma 2 flyer */
         .hw-flyer-2,
         .hw-flyer-4,
         .hw-flyer-5,
         .hw-flyer-6 {{
             display: none !important;
         }}
-        .hw-stars {{
-            display: none !important;
-        }}
-        .hw-spider-web {{
-            display: none !important;
-        }}
-        /* Sisa: flyer-1 (🦇) & flyer-3 (👻) */
-        .hw-flyer-1,
-        .hw-flyer-3 {{
-            font-size: 22px;
-            animation-duration: 26s;
-        }}
-    }}
-    
-    /* HP kecil (iPhone SE): cuma 1 flyer */
-    @media (max-width: 480px) {{
-        .hw-flyer-3 {{
-            display: none !important;
-        }}
-        .hw-flyer-1 {{
-            font-size: 20px;
-            animation-duration: 30s;
-        }}
-    }}
-    
-    /* iOS: hindari render ulang terus-menerus */
-    @media (hover: none) and (pointer: coarse) {{
-        .hw-flyer {{
-            /* Pastikan pake GPU layer */
-            transform: translateZ(0);
-            backface-visibility: hidden;
-        }}
-    }}
-    
-    /* Accessibility: hormati prefers-reduced-motion */
-    @media (prefers-reduced-motion: reduce) {{
-        .hw-flyer,
+
+        /* Sembunyiin bintang & jaring di mobile */
         .hw-stars,
         .hw-spider-web {{
             display: none !important;
         }}
+
+        /* Fog lebih subtle di mobile */
+        .hw-fog {{
+            animation-duration: 60s;
+            opacity: 0.5;
+        }}
+
+        /* Flyer lebih lambat di mobile */
+        .hw-flyer-1 {{
+            animation-duration: 26s;
+            font-size: 22px;
+        }}
+
+        .hw-flyer-3 {{
+            animation-duration: 32s;
+            font-size: 24px;
+        }}
+
+        .main .block-container {{
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-top: 0.5rem;
+        }}
+
+        div.stButton > button {{
+            min-height: 52px;
+            font-size: 14px;
+        }}
+
+        .so-table thead th {{
+            padding: 8px 10px;
+            font-size: 9px;
+        }}
+
+        .so-table tbody td {{
+            padding: 8px 10px;
+            font-size: 11px;
+        }}
+    }}
+
+    @media (max-width: 480px) {{
+        .royal-title {{
+            font-size: 18px;
+        }}
+
+        /* Mobile kecil: cuma 1 flyer */
+        .hw-flyer-3 {{
+            display: none !important;
+        }}
+
+        .hw-flyer-1 {{
+            font-size: 20px;
+            animation-duration: 30s;
+        }}
+
+        .main .block-container {{
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+        }}
+    }}
+
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {{
+        .hw-flyer,
+        .hw-stars,
+        .hw-fog,
+        .hw-spider-web {{
+            display: none !important;
+        }}
+
+        *,
+        *::before,
+        *::after {{
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+        }}
+    }}
+
+    /* iOS: pake GPU layer */
+    @media (hover: none) and (pointer: coarse) {{
+        .hw-flyer {{
+            transform: translateZ(0);
+            backface-visibility: hidden;
+        }}
+    }}
+
+    /* Utility */
+    .fade-in-up {{
+        animation: fadeInUp 0.4s ease-out;
+    }}
+
+    @keyframes fadeInUp {{
+        from {{ opacity: 0; transform: translateY(10px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
     }}
 </style>
 """
