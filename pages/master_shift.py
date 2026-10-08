@@ -2,7 +2,7 @@
 Master Shift Page v2
 ====================
 Struktur baru:
-- 🌸 Hana       (all-in-one chat: Q&A + update + rekomendasi + konfirmasi)
+- 🌸 Hana       (all-in-one chat: Q&A + update + delete + konfirmasi)
 - 📸 Screenshot (OCR kalender)
 - 📊 Matrix     (sub-tab: tabel master | personil | download)
 - 📈 Usage      (monitoring token)
@@ -50,8 +50,8 @@ try:
         load_master_shift_matrix,
         get_shift_hari_ini,
         generate_master_shift_excel,
-        delete_shift_by_name,
-        delete_shift_all_dates,
+        delete_shift_by_name,      # ✅ FIX C4: dipake buat hapus per tanggal
+        delete_shift_all_dates,    # ✅ FIX C4: dipake buat hapus semua tanggal
         KODE_SHIFT,
         NAMA_BULAN_ID,
     )
@@ -72,7 +72,6 @@ except ImportError as e:
 def inject_pill_css():
     st.markdown("""
     <style>
-        /* Sembunyiin default button style di tab-nav */
         div[data-testid="stHorizontalBlock"] > div > div > div > button[kind="secondary"],
         div[data-testid="stHorizontalBlock"] > div > div > div > button[kind="primary"] {
             border-radius: 999px !important;
@@ -129,7 +128,7 @@ render_header()
 # Back button
 _col_back, _ = st.columns([1, 4])
 with _col_back:
-    if st.button("← Dashboard", key="btn_back_home"):
+    if st.button("← Dashboard", key="btn_back_home", width="stretch"):
         try:
             st.switch_page("Dashboard.py")
         except Exception:
@@ -156,17 +155,15 @@ for _i, (_key, _label) in enumerate(_TABS):
         if st.button(
             _label,
             key=f"ms_tab_btn_{_key}",
-            use_container_width=True,
+            width="stretch",
             type="primary" if _is_active else "secondary",
         ):
             st.session_state["ms_tab"] = _key
             st.rerun()
 
 st.markdown("---")
-
-
 # =========================================================================
-# TAB 1: HANA (CHAT + UPDATE)
+# TAB 1: HANA (CHAT + UPDATE + DELETE)
 # =========================================================================
 def render_hana():
     """Tab Hana — chat all-in-one."""
@@ -193,13 +190,13 @@ def render_hana():
     # Contoh perintah (quick action)
     _c1, _c2, _c3 = st.columns(3)
     with _c1:
-        if st.button("📅 Jadwal hari ini?", use_container_width=True, key="hana_qa1"):
+        if st.button("📅 Jadwal hari ini?", width="stretch", key="hana_qa1"):
             st.session_state["hana_preset"] = "Jadwal hari ini?"
     with _c2:
-        if st.button("👤 Siapa libur?", use_container_width=True, key="hana_qa2"):
+        if st.button("👤 Siapa libur?", width="stretch", key="hana_qa2"):
             st.session_state["hana_preset"] = "Siapa aja yang libur hari ini?"
     with _c3:
-        if st.button("🔄 Atur Reza ke siang", use_container_width=True, key="hana_qa3"):
+        if st.button("🔄 Atur Reza ke siang", width="stretch", key="hana_qa3"):
             st.session_state["hana_preset"] = "Atur Reza ke shift siang ya"
 
     st.markdown("---")
@@ -211,9 +208,92 @@ def render_hana():
         with st.chat_message(_role, avatar="👤" if _role == "user" else "🌸"):
             st.markdown(_content)
 
-    # === PENDING UPDATE PREVIEW ===
+    # =====================================================================
+    # ✅ FIX C4: PENDING UPDATE PREVIEW — Handle UPDATE & DELETE mode
+    # =====================================================================
     if st.session_state["hana_pending_update"]:
         _parsed = st.session_state["hana_pending_update"]
+        _mode = _parsed.get("mode", "update")
+
+        # -----------------------------------------------------------------
+        # ✅ FIX C4: MODE DELETE (BARU — sebelumnya gak di-handle!)
+        # -----------------------------------------------------------------
+        if _mode == "delete":
+            _delete_targets = _parsed.get("delete_targets", [])
+            _delete_all_dates = _parsed.get("delete_all_dates", False)
+
+            st.markdown("#### 🗑️ Preview Hapus Shift")
+
+            # Warning info
+            if _delete_all_dates:
+                st.warning(
+                    f"⚠️ Akan hapus **SEMUA shift** untuk: "
+                    f"**{', '.join(_delete_targets)}**"
+                )
+            else:
+                _tgl_list = _parsed.get("tanggal_list", [_parsed.get("tanggal")])
+                _tgl_str = ", ".join([t.strftime("%d/%m/%Y") for t in _tgl_list])
+                st.warning(
+                    f"⚠️ Akan hapus shift **{', '.join(_delete_targets)}** "
+                    f"untuk: {_tgl_str}"
+                )
+
+            # Tombol konfirmasi & batal
+            _col1, _col2 = st.columns(2)
+            with _col1:
+                if st.button(
+                    "✅ KONFIRMASI HAPUS",
+                    width="stretch",
+                    type="primary",
+                    key="btn_hana_delete",
+                ):
+                    _total_deleted = 0
+
+                    if _delete_all_dates:
+                        # Hapus semua tanggal
+                        for _nama in _delete_targets:
+                            _ok, _msg = delete_shift_all_dates(_nama)
+                            if _ok:
+                                _total_deleted += 1
+                    else:
+                        # Hapus per tanggal
+                        for _tgl_hapus in _parsed.get("tanggal_list", [_parsed.get("tanggal")]):
+                            _ok, _msg, _detail = delete_shift_by_name(_tgl_hapus, _delete_targets)
+                            if _ok:
+                                _total_deleted += _detail.get("deleted", 0)
+
+                    if _total_deleted > 0:
+                        st.session_state["hana_last_saved"] = f"🗑️ {_total_deleted} shift dihapus!"
+                        st.session_state["hana_history"].append({
+                            "role": "assistant",
+                            "content": f"🗑️ Sip! **{_total_deleted} shift** udah Hana hapus 🌸",
+                        })
+                        st.session_state["hana_pending_update"] = None
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Gagal hapus shift")
+
+            with _col2:
+                if st.button(
+                    "❌ BATAL",
+                    width="stretch",
+                    key="btn_hana_cancel_delete",
+                ):
+                    st.session_state["hana_history"].append({
+                        "role": "assistant",
+                        "content": "Oke, gak jadi hapus ya! 🌸",
+                    })
+                    st.session_state["hana_pending_update"] = None
+                    st.rerun()
+
+            st.markdown("---")
+            return  # ← Stop, jangan render preview shift_map di bawah
+
+        # -----------------------------------------------------------------
+        # MODE UPDATE (EXISTING — gak berubah)
+        # -----------------------------------------------------------------
         _shift_map = _parsed.get("shift_map", {})
         _tgl_list = _parsed.get("tanggal_list", [_parsed["tanggal"]])
 
@@ -230,7 +310,7 @@ def render_hana():
                         "🔄 Kode": _kode,
                         "📋 Ket.": _info["label"],
                     })
-            st.dataframe(pd.DataFrame(_preview_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(_preview_rows), width="stretch", hide_index=True)
 
             _catatan = st.text_input(
                 "📝 Catatan (opsional)",
@@ -242,7 +322,7 @@ def render_hana():
             with _col1:
                 if st.button(
                     "✅ KONFIRMASI SIMPAN",
-                    use_container_width=True,
+                    width="stretch",
                     type="primary",
                     key="btn_hana_save",
                 ):
@@ -278,7 +358,7 @@ def render_hana():
             with _col2:
                 if st.button(
                     "❌ BATAL",
-                    use_container_width=True,
+                    width="stretch",
                     key="btn_hana_cancel",
                 ):
                     st.session_state["hana_history"].append({
@@ -313,8 +393,8 @@ def render_hana():
         # Simpan AI response
         st.session_state["hana_history"].append({"role": "assistant", "content": _text})
 
-        # Kalau intent UPDATE, set pending
-        if _resp.get("intent") == "update" and _resp.get("parsed"):
+        # Kalau intent UPDATE atau DELETE, set pending
+        if _resp.get("parsed"):
             st.session_state["hana_pending_update"] = _resp["parsed"]
 
         st.rerun()
@@ -324,7 +404,7 @@ def render_hana():
         st.markdown("---")
         _col_clr, _ = st.columns([1, 4])
         with _col_clr:
-            if st.button("🗑️ Clear Chat", key="btn_clear_hana"):
+            if st.button("🗑️ Clear Chat", key="btn_clear_hana", width="stretch"):
                 st.session_state["hana_history"] = []
                 st.session_state["hana_pending_update"] = None
                 st.rerun()
@@ -387,9 +467,9 @@ def render_screenshot():
     )
 
     if _uploaded and _nama_pilih:
-        st.image(_uploaded, caption=f"Preview: {_uploaded.name}", use_container_width=True)
+        st.image(_uploaded, caption=f"Preview: {_uploaded.name}", width="stretch")
 
-        if st.button("🔍 PROSES OCR", type="primary", use_container_width=True, key="btn_ocr"):
+        if st.button("🔍 PROSES OCR", type="primary", width="stretch", key="btn_ocr"):
             with st.spinner("🌸 Hana lagi baca kalender... (10-20 detik)"):
                 _ai_result = ocr_ai_smart(
                     _uploaded.getvalue(),
@@ -437,11 +517,11 @@ def render_screenshot():
                 "🎨 Kode": _kode,
                 "📋 Ket.": _info["label"],
             })
-        st.dataframe(pd.DataFrame(_preview_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(_preview_rows), width="stretch", hide_index=True)
 
         _col1, _col2 = st.columns(2)
         with _col1:
-            if st.button("💾 SIMPAN KE MASTER SHIFT", type="primary", use_container_width=True, key="btn_ocr_save"):
+            if st.button("💾 SIMPAN KE MASTER SHIFT", type="primary", width="stretch", key="btn_ocr_save"):
                 with st.spinner("⏳ Menyimpan..."):
                     _ok, _msg = save_ocr_to_master_shift(
                         nama=_res["nama"],
@@ -461,11 +541,9 @@ def render_screenshot():
                     st.error(_msg)
 
         with _col2:
-            if st.button("❌ BATAL", use_container_width=True, key="btn_ocr_cancel"):
+            if st.button("❌ BATAL", width="stretch", key="btn_ocr_cancel"):
                 st.session_state["ocr_result"] = None
                 st.rerun()
-
-
 # =========================================================================
 # TAB 3: MATRIX (SUB-TAB)
 # =========================================================================
@@ -481,14 +559,14 @@ def render_matrix():
         ("download", "📥 Download"),
     ]
 
-    _cols = st.columns(len(_subs))
+    _sub_cols = st.columns(len(_subs))  # ✅ Rename biar gak bentrok
     for _i, (_key, _label) in enumerate(_subs):
-        with _cols[_i]:
+        with _sub_cols[_i]:
             _is_active = st.session_state["matrix_sub"] == _key
             if st.button(
                 _label,
                 key=f"matrix_sub_{_key}",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if _is_active else "secondary",
             ):
                 st.session_state["matrix_sub"] = _key
@@ -514,7 +592,7 @@ def render_matrix():
                 key="matrix_tahun",
             )
         with _col_b3:
-            if st.button("🔄 Refresh", use_container_width=True, key="matrix_refresh"):
+            if st.button("🔄 Refresh", width="stretch", key="matrix_refresh"):
                 st.cache_data.clear()
                 st.rerun()
 
@@ -533,7 +611,7 @@ def render_matrix():
             if len(_cols_1_15) > 1:
                 st.dataframe(
                     _matrix_df[_cols_1_15],
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     height=min(500, 40 + len(_matrix_df) * 38),
                 )
@@ -542,7 +620,7 @@ def render_matrix():
             if len(_cols_16_31) > 1:
                 st.dataframe(
                     _matrix_df[_cols_16_31],
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     height=min(500, 40 + len(_matrix_df) * 38),
                 )
@@ -563,7 +641,7 @@ def render_matrix():
         with st.expander("➕ Tambah Personil Baru"):
             with st.form("form_add_personil"):
                 _new_nama = st.text_input("Nama", placeholder="Contoh: BUDI").strip().upper()
-                _btn_add = st.form_submit_button("💾 TAMBAH", use_container_width=True, type="primary")
+                _btn_add = st.form_submit_button("💾 TAMBAH", width="stretch", type="primary")
                 if _btn_add:
                     if not _new_nama:
                         st.error("⚠️ Nama wajib diisi!")
@@ -590,11 +668,11 @@ def render_matrix():
                     st.markdown(f"{_icon} **{_nama}** — {_status}")
                 with _col_l2:
                     if _aktif:
-                        if st.button("🚫 Non-aktif", key=f"deact_{_nama}", use_container_width=True):
+                        if st.button("🚫 Non-aktif", key=f"deact_{_nama}", width="stretch"):
                             update_personil_status(_nama, False)
                             st.rerun()
                     else:
-                        if st.button("✅ Aktifkan", key=f"act_{_nama}", use_container_width=True):
+                        if st.button("✅ Aktifkan", key=f"act_{_nama}", width="stretch"):
                             update_personil_status(_nama, True)
                             st.rerun()
 
@@ -629,7 +707,7 @@ def render_matrix():
                     data=_excel_bytes,
                     file_name=f"Master_Shift_{NAMA_BULAN_ID[_dl_bulan]}_{_dl_tahun}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
+                    width="stretch",
                     type="primary",
                     key="dl_excel",
                 )
