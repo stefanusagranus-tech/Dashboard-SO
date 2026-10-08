@@ -761,80 +761,6 @@ def _render_input_form():
     else:
         st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
     
-    # ============================================================
-    # RAK BELUM SO (Expander)
-    # ============================================================
-    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-    
-    with st.expander("📋 Rak Belum SO (Klik untuk buka)", expanded=False):
-        try:
-            from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
-    
-            _rak_belum_df = _get_belum_so_df(_rak_df)
-    
-            if not _rak_belum_df.empty:
-                _jumlah_belum = len(_rak_belum_df)
-                st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO")
-    
-                _search_belum = st.text_input(
-                    "🔍 Filter rak belum SO",
-                    key="search_rak_belum",
-                    placeholder="Ketik kode/nama rak...",
-                    label_visibility="collapsed",
-                )
-    
-                _rak_filtered = _rak_belum_df.copy()
-                if _search_belum and len(_search_belum.strip()) >= 1:
-                    _q = _search_belum.strip().upper()
-                    _rak_filtered = _rak_filtered[
-                        _rak_filtered["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
-                        _rak_filtered["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
-                    ]
-    
-                # Grid compact HTML
-                _grid_html = (
-                    "<div style='display: grid; "
-                    "grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); "
-                    "gap: 8px; margin-top: 12px;'>"
-                )
-    
-                for _rak in _rak_filtered[["rak_id", "rak_name"]].to_dict("records"):
-                    _rid = str(_rak.get("rak_id", "-"))
-                    _rname = str(_rak.get("rak_name", "-"))[:20]
-    
-                    _grid_html += (
-                        f"<div style='background: rgba(20, 12, 35, 0.95); "
-                        f"border: 1px solid rgba(232, 139, 139, 0.4); "
-                        f"border-left: 3px solid #E88B8B; "
-                        f"border-radius: 8px; padding: 8px 10px;'>"
-                        f"<div style='font-family: JetBrains Mono, monospace; font-size: 12px; "
-                        f"font-weight: 900; color: #E8B189;'>{_rid}</div>"
-                        f"<div style='font-family: Quicksand, sans-serif; font-size: 9px; "
-                        f"color: #7a9b8e; margin-top: 2px;'>{_rname}</div>"
-                        f"</div>"
-                    )
-    
-                _grid_html += "</div>"
-                st.markdown(_grid_html, unsafe_allow_html=True)
-    
-                # Download
-                _list_text = "\n".join([
-                    f"{r['rak_id']} — {r['rak_name']}"
-                    for r in _rak_filtered[["rak_id", "rak_name"]].to_dict("records")
-                ])
-    
-                st.download_button(
-                    label=f"📥 Download List ({len(_rak_filtered)} rak)",
-                    data=_list_text,
-                    file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
-                    mime="text/plain",
-                    width="stretch",
-                    key="dl_rak_belum_so",
-                )
-            else:
-                st.success("🎉 Semua rak sudah di-SO!")
-        except Exception as _e_belum:
-            st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
     
     # ============================================================
     # TOMBOL LANJUT KE KONFIRMASI
@@ -881,323 +807,323 @@ def _render_input_form():
             st.rerun()
 
 #part4
-# =========================================================================
-# SCREEN 2: KONFIRMASI
-# =========================================================================
-def _render_konfirmasi():
-    """Layar 2: Review data sebelum simpan."""
-    _pending = st.session_state.get("so_pending_data")
-
-    if not _pending:
-        st.session_state["so_screen"] = "form"
-        st.rerun()
-        return
-
-    st.markdown("### ✅ Konfirmasi SO")
-    st.caption("Review data sebelum disimpan. Pastikan semua sudah benar.")
-
-    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-    # ============================================================
-    # INFO CARD — 3 kolom
-    # ============================================================
-    _col_i1, _col_i2, _col_i3 = st.columns(3)
-
-    with _col_i1:
-        st.markdown(
-            f"<div class='metric-clean'>"
-            f"<div class='label'>📅 TANGGAL SO</div>"
-            f"<div class='value' style='font-size: 18px;'>"
-            f"{_pending['tanggal'].strftime('%d/%m/%Y')}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    with _col_i2:
-        st.markdown(
-            f"<div class='metric-clean'>"
-            f"<div class='label'>👤 PIC</div>"
-            f"<div class='value' style='font-size: 18px;'>{_pending['pic']}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    with _col_i3:
-        _spd_show = _pending.get("spd", 0)
-        st.markdown(
-            f"<div class='metric-clean'>"
-            f"<div class='label'>💰 SPD</div>"
-            f"<div class='value' style='font-size: 18px; color: #7FB99B;'>"
-            f"{fmt_rp(_spd_show) if _spd_show > 0 else '—'}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    # Keterangan (kalau ada)
-    if _pending.get("keterangan"):
-        st.markdown(
-            f"<div style='margin-top: 12px; padding: 12px 16px; "
-            f"background: rgba(20, 12, 35, 0.95); "
-            f"border-left: 3px solid #E8B189; border-radius: 8px;'>"
-            f"<div style='font-family: Quicksand, sans-serif; font-size: 10px; "
-            f"color: #A89B8E; letter-spacing: 1px; text-transform: uppercase;'>"
-            f"📝 Keterangan</div>"
-            f"<div style='font-family: Quicksand, sans-serif; font-size: 13px; "
-            f"color: #F5E6D3; margin-top: 4px;'>{_pending['keterangan']}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-    # ============================================================
-    # TABEL RAK YANG AKAN DISIMPAN
-    # ============================================================
-    st.markdown(f"#### 📋 Rak yang Akan Disimpan ({len(_pending['rak_items'])} rak)")
-
-    if _pending["rak_items"]:
-        _rows_html = ""
-        _total_nom = 0
-
-        for _item in _pending["rak_items"]:
-            _rid = _item.get("rak_id", "-")
-            _nom = float(_item.get("nominal_adjust", 0))
-            _total_nom += _nom
-
-            _rak_info = get_rak_by_kode_exact(_rid)
-            _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
-            _nom_class = "neg" if _nom < 0 else "pos"
-
-            _rows_html += (
-                f"<tr>"
-                f"<td class='rak-id'>{_rid}</td>"
-                f"<td style='font-family: Quicksand, sans-serif;'>{_rname}</td>"
-                f"<td class='nominal {_nom_class}'>{fmt_rp_signed(_nom)}</td>"
-                f"</tr>"
-            )
-
-        _table_html = (
-            "<table class='so-table'>"
-            "<thead><tr>"
-            "<th>Kode Rak</th>"
-            "<th>Nama Rak</th>"
-            "<th style='text-align: right;'>Nominal</th>"
-            "</tr></thead>"
-            f"<tbody>{_rows_html}</tbody>"
-            "</table>"
-        )
-
-        st.markdown(_table_html, unsafe_allow_html=True)
-
-        # Total
-        _color_total = "#E88B8B" if _total_nom < 0 else "#7FB99B"
-        st.markdown(
-            f"<div class='metric-clean' style='border-left-color: {_color_total}; "
-            f"margin-top: 16px; text-align: right;'>"
-            f"<div class='label'>💰 TOTAL NOMINAL SO</div>"
-            f"<div class='value' style='color: {_color_total};'>"
-            f"{fmt_rp_signed(_total_nom)}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.info("💡 Tidak ada rak (cuma SPD yang akan disimpan)")
-
-    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-    # ============================================================
-    # TOMBOL KONFIRMASI
-    # ============================================================
-    _col_ok, _col_batal = st.columns([2, 1])
-
-    with _col_ok:
-        if st.button(
-            "✅ SIMPAN SEKARANG",
-            width="stretch",
-            type="primary",
-            key="btn_konfirmasi_simpan",
-        ):
-            with st.spinner("⏳ Menyimpan..."):
-                _ok, _msg, _detail = save_input_harian(
-                    tanggal=_pending["tanggal"],
-                    spd=_pending["spd"],
-                    rak_items=_pending["rak_items"],
-                    keterangan=_pending["keterangan"],
-                    pic=_pending["pic"],
-                    update_status_rak=True,
-                )
-
-            if _ok:
-                # ✅ Simpan data sukses & pindah ke layar sukses
-                st.session_state["so_saved_data"] = {
-                    "tanggal": _pending["tanggal"],
-                    "spd": _pending["spd"],
-                    "rak_items": list(_pending["rak_items"]),
-                    "keterangan": _pending["keterangan"],
-                    "pic": _pending["pic"],
-                    "message": _msg,
-                }
-                # Reset
-                st.session_state["so_pending_data"] = None
-                st.session_state["so_rak_list"] = []
-                st.session_state["so_search_results"] = []
-                st.session_state["so_search_shown"] = False
-                st.session_state["so_last_loaded_date"] = None
-                st.session_state["so_screen"] = "sukses"
-                st.cache_data.clear()
-                st.rerun()
-            else:
-                st.error(_msg)
-
-    with _col_batal:
-        if st.button(
-            "❌ BATAL",
-            width="stretch",
-            key="btn_konfirmasi_batal",
-        ):
-            # Balik ke form — data pending tetap ada biar gampang edit
+    # =========================================================================
+    # SCREEN 2: KONFIRMASI
+    # =========================================================================
+    def _render_konfirmasi():
+        """Layar 2: Review data sebelum simpan."""
+        _pending = st.session_state.get("so_pending_data")
+    
+        if not _pending:
             st.session_state["so_screen"] = "form"
             st.rerun()
-
-
-# =========================================================================
-# SCREEN 3: SUKSES
-# =========================================================================
-def _render_sukses():
-    """Layar 3: Notifikasi sukses + summary."""
-    _saved = st.session_state.get("so_saved_data")
-
-    if not _saved:
-        st.session_state["so_screen"] = "form"
-        st.rerun()
-        return
-
-    # ============================================================
-    # NOTIFIKASI SUKSES BESAR
-    # ============================================================
-    st.markdown(
-        "<div style='text-align: center; padding: 40px 20px 20px 20px;'>"
-        "<div class='success-icon'>✅</div>"
-        "<div class='success-title'>BERHASIL DISIMPAN</div>"
-        "<div class='success-sub'>Data SO sudah tersimpan ke database</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-    # ============================================================
-    # SUMMARY CARD
-    # ============================================================
-    _total_rak = len(_saved.get("rak_items", []))
-    _total_nom = sum(float(i.get("nominal_adjust", 0)) for i in _saved.get("rak_items", []))
-    _spd_val = _saved.get("spd", 0)
-
-    _col_s1, _col_s2, _col_s3 = st.columns(3)
-
-    with _col_s1:
-        st.markdown(
-            f"<div class='metric-clean' style='border-left-color: #7FB99B;'>"
-            f"<div class='label'>🏪 RAK DI-SO</div>"
-            f"<div class='value'>{_total_rak}</div>"
-            f"<div class='sub'>rak</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    with _col_s2:
-        _color_nom = "#E88B8B" if _total_nom < 0 else "#7FB99B"
-        st.markdown(
-            f"<div class='metric-clean' style='border-left-color: {_color_nom};'>"
-            f"<div class='label'>💰 TOTAL NOMINAL</div>"
-            f"<div class='value' style='color: {_color_nom}; font-size: 20px;'>"
-            f"{fmt_rp_signed(_total_nom)}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    with _col_s3:
-        if _spd_val > 0:
+            return
+    
+        st.markdown("### ✅ Konfirmasi SO")
+        st.caption("Review data sebelum disimpan. Pastikan semua sudah benar.")
+    
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+        # ============================================================
+        # INFO CARD — 3 kolom
+        # ============================================================
+        _col_i1, _col_i2, _col_i3 = st.columns(3)
+    
+        with _col_i1:
             st.markdown(
-                f"<div class='metric-clean' style='border-left-color: #7FB99B;'>"
+                f"<div class='metric-clean'>"
+                f"<div class='label'>📅 TANGGAL SO</div>"
+                f"<div class='value' style='font-size: 18px;'>"
+                f"{_pending['tanggal'].strftime('%d/%m/%Y')}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    
+        with _col_i2:
+            st.markdown(
+                f"<div class='metric-clean'>"
+                f"<div class='label'>👤 PIC</div>"
+                f"<div class='value' style='font-size: 18px;'>{_pending['pic']}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    
+        with _col_i3:
+            _spd_show = _pending.get("spd", 0)
+            st.markdown(
+                f"<div class='metric-clean'>"
                 f"<div class='label'>💰 SPD</div>"
-                f"<div class='value' style='color: #7FB99B; font-size: 20px;'>"
-                f"{fmt_rp(_spd_val)}</div>"
+                f"<div class='value' style='font-size: 18px; color: #7FB99B;'>"
+                f"{fmt_rp(_spd_show) if _spd_show > 0 else '—'}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    
+        # Keterangan (kalau ada)
+        if _pending.get("keterangan"):
+            st.markdown(
+                f"<div style='margin-top: 12px; padding: 12px 16px; "
+                f"background: rgba(20, 12, 35, 0.95); "
+                f"border-left: 3px solid #E8B189; border-radius: 8px;'>"
+                f"<div style='font-family: Quicksand, sans-serif; font-size: 10px; "
+                f"color: #A89B8E; letter-spacing: 1px; text-transform: uppercase;'>"
+                f"📝 Keterangan</div>"
+                f"<div style='font-family: Quicksand, sans-serif; font-size: 13px; "
+                f"color: #F5E6D3; margin-top: 4px;'>{_pending['keterangan']}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+        # ============================================================
+        # TABEL RAK YANG AKAN DISIMPAN
+        # ============================================================
+        st.markdown(f"#### 📋 Rak yang Akan Disimpan ({len(_pending['rak_items'])} rak)")
+    
+        if _pending["rak_items"]:
+            _rows_html = ""
+            _total_nom = 0
+    
+            for _item in _pending["rak_items"]:
+                _rid = _item.get("rak_id", "-")
+                _nom = float(_item.get("nominal_adjust", 0))
+                _total_nom += _nom
+    
+                _rak_info = get_rak_by_kode_exact(_rid)
+                _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
+                _nom_class = "neg" if _nom < 0 else "pos"
+    
+                _rows_html += (
+                    f"<tr>"
+                    f"<td class='rak-id'>{_rid}</td>"
+                    f"<td style='font-family: Quicksand, sans-serif;'>{_rname}</td>"
+                    f"<td class='nominal {_nom_class}'>{fmt_rp_signed(_nom)}</td>"
+                    f"</tr>"
+                )
+    
+            _table_html = (
+                "<table class='so-table'>"
+                "<thead><tr>"
+                "<th>Kode Rak</th>"
+                "<th>Nama Rak</th>"
+                "<th style='text-align: right;'>Nominal</th>"
+                "</tr></thead>"
+                f"<tbody>{_rows_html}</tbody>"
+                "</table>"
+            )
+    
+            st.markdown(_table_html, unsafe_allow_html=True)
+    
+            # Total
+            _color_total = "#E88B8B" if _total_nom < 0 else "#7FB99B"
+            st.markdown(
+                f"<div class='metric-clean' style='border-left-color: {_color_total}; "
+                f"margin-top: 16px; text-align: right;'>"
+                f"<div class='label'>💰 TOTAL NOMINAL SO</div>"
+                f"<div class='value' style='color: {_color_total};'>"
+                f"{fmt_rp_signed(_total_nom)}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
         else:
+            st.info("💡 Tidak ada rak (cuma SPD yang akan disimpan)")
+    
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+        # ============================================================
+        # TOMBOL KONFIRMASI
+        # ============================================================
+        _col_ok, _col_batal = st.columns([2, 1])
+    
+        with _col_ok:
+            if st.button(
+                "✅ SIMPAN SEKARANG",
+                width="stretch",
+                type="primary",
+                key="btn_konfirmasi_simpan",
+            ):
+                with st.spinner("⏳ Menyimpan..."):
+                    _ok, _msg, _detail = save_input_harian(
+                        tanggal=_pending["tanggal"],
+                        spd=_pending["spd"],
+                        rak_items=_pending["rak_items"],
+                        keterangan=_pending["keterangan"],
+                        pic=_pending["pic"],
+                        update_status_rak=True,
+                    )
+    
+                if _ok:
+                    # ✅ Simpan data sukses & pindah ke layar sukses
+                    st.session_state["so_saved_data"] = {
+                        "tanggal": _pending["tanggal"],
+                        "spd": _pending["spd"],
+                        "rak_items": list(_pending["rak_items"]),
+                        "keterangan": _pending["keterangan"],
+                        "pic": _pending["pic"],
+                        "message": _msg,
+                    }
+                    # Reset
+                    st.session_state["so_pending_data"] = None
+                    st.session_state["so_rak_list"] = []
+                    st.session_state["so_search_results"] = []
+                    st.session_state["so_search_shown"] = False
+                    st.session_state["so_last_loaded_date"] = None
+                    st.session_state["so_screen"] = "sukses"
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error(_msg)
+    
+        with _col_batal:
+            if st.button(
+                "❌ BATAL",
+                width="stretch",
+                key="btn_konfirmasi_batal",
+            ):
+                # Balik ke form — data pending tetap ada biar gampang edit
+                st.session_state["so_screen"] = "form"
+                st.rerun()
+    
+    
+    # =========================================================================
+    # SCREEN 3: SUKSES
+    # =========================================================================
+    def _render_sukses():
+        """Layar 3: Notifikasi sukses + summary."""
+        _saved = st.session_state.get("so_saved_data")
+    
+        if not _saved:
+            st.session_state["so_screen"] = "form"
+            st.rerun()
+            return
+    
+        # ============================================================
+        # NOTIFIKASI SUKSES BESAR
+        # ============================================================
+        st.markdown(
+            "<div style='text-align: center; padding: 40px 20px 20px 20px;'>"
+            "<div class='success-icon'>✅</div>"
+            "<div class='success-title'>BERHASIL DISIMPAN</div>"
+            "<div class='success-sub'>Data SO sudah tersimpan ke database</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+        # ============================================================
+        # SUMMARY CARD
+        # ============================================================
+        _total_rak = len(_saved.get("rak_items", []))
+        _total_nom = sum(float(i.get("nominal_adjust", 0)) for i in _saved.get("rak_items", []))
+        _spd_val = _saved.get("spd", 0)
+    
+        _col_s1, _col_s2, _col_s3 = st.columns(3)
+    
+        with _col_s1:
             st.markdown(
-                f"<div class='metric-clean'>"
-                f"<div class='label'>💰 SPD</div>"
-                f"<div class='value' style='font-size: 18px; color: #A89B8E;'>—</div>"
+                f"<div class='metric-clean' style='border-left-color: #7FB99B;'>"
+                f"<div class='label'>🏪 RAK DI-SO</div>"
+                f"<div class='value'>{_total_rak}</div>"
+                f"<div class='sub'>rak</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
-
-    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-    # ============================================================
-    # DETAIL RAK YANG DISIMPAN
-    # ============================================================
-    if _saved.get("rak_items"):
-        st.markdown("#### 📋 Rak yang Tersimpan")
-
-        _rows_html = ""
-        for _item in _saved["rak_items"]:
-            _rid = _item.get("rak_id", "-")
-            _nom = float(_item.get("nominal_adjust", 0))
-            _nom_class = "neg" if _nom < 0 else "pos"
-
-            _rows_html += (
-                f"<tr>"
-                f"<td class='rak-id'>{_rid}</td>"
-                f"<td class='nominal {_nom_class}'>{fmt_rp_signed(_nom)}</td>"
-                f"</tr>"
+    
+        with _col_s2:
+            _color_nom = "#E88B8B" if _total_nom < 0 else "#7FB99B"
+            st.markdown(
+                f"<div class='metric-clean' style='border-left-color: {_color_nom};'>"
+                f"<div class='label'>💰 TOTAL NOMINAL</div>"
+                f"<div class='value' style='color: {_color_nom}; font-size: 20px;'>"
+                f"{fmt_rp_signed(_total_nom)}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
             )
-
-        _table_html = (
-            "<table class='so-table'>"
-            "<thead><tr>"
-            "<th>Kode Rak</th>"
-            "<th style='text-align: right;'>Nominal</th>"
-            "</tr></thead>"
-            f"<tbody>{_rows_html}</tbody>"
-            "</table>"
-        )
-
-        st.markdown(_table_html, unsafe_allow_html=True)
-
-    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-    # ============================================================
-    # TOMBOL AKSI
-    # ============================================================
-    _col_again, _col_home = st.columns(2)
-
-    with _col_again:
-        if st.button(
-            "📝 Input SO Lagi",
-            width="stretch",
-            type="primary",
-            key="btn_input_again",
-        ):
-            st.session_state["so_saved_data"] = None
-            st.session_state["so_screen"] = "form"
-            st.rerun()
-
-    with _col_home:
-        if st.button(
-            "🏠 Ke Dashboard",
-            width="stretch",
-            key="btn_back_home_from_sukses",
-        ):
-            st.session_state["so_saved_data"] = None
-            st.session_state["so_screen"] = "form"
-            try:
-                st.switch_page("Dashboard.py")
-            except Exception:
+    
+        with _col_s3:
+            if _spd_val > 0:
+                st.markdown(
+                    f"<div class='metric-clean' style='border-left-color: #7FB99B;'>"
+                    f"<div class='label'>💰 SPD</div>"
+                    f"<div class='value' style='color: #7FB99B; font-size: 20px;'>"
+                    f"{fmt_rp(_spd_val)}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"<div class='metric-clean'>"
+                    f"<div class='label'>💰 SPD</div>"
+                    f"<div class='value' style='font-size: 18px; color: #A89B8E;'>—</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+    
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+        # ============================================================
+        # DETAIL RAK YANG DISIMPAN
+        # ============================================================
+        if _saved.get("rak_items"):
+            st.markdown("#### 📋 Rak yang Tersimpan")
+    
+            _rows_html = ""
+            for _item in _saved["rak_items"]:
+                _rid = _item.get("rak_id", "-")
+                _nom = float(_item.get("nominal_adjust", 0))
+                _nom_class = "neg" if _nom < 0 else "pos"
+    
+                _rows_html += (
+                    f"<tr>"
+                    f"<td class='rak-id'>{_rid}</td>"
+                    f"<td class='nominal {_nom_class}'>{fmt_rp_signed(_nom)}</td>"
+                    f"</tr>"
+                )
+    
+            _table_html = (
+                "<table class='so-table'>"
+                "<thead><tr>"
+                "<th>Kode Rak</th>"
+                "<th style='text-align: right;'>Nominal</th>"
+                "</tr></thead>"
+                f"<tbody>{_rows_html}</tbody>"
+                "</table>"
+            )
+    
+            st.markdown(_table_html, unsafe_allow_html=True)
+    
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+        # ============================================================
+        # TOMBOL AKSI
+        # ============================================================
+        _col_again, _col_home = st.columns(2)
+    
+        with _col_again:
+            if st.button(
+                "📝 Input SO Lagi",
+                width="stretch",
+                type="primary",
+                key="btn_input_again",
+            ):
+                st.session_state["so_saved_data"] = None
+                st.session_state["so_screen"] = "form"
                 st.rerun()
+    
+        with _col_home:
+            if st.button(
+                "🏠 Ke Dashboard",
+                width="stretch",
+                key="btn_back_home_from_sukses",
+            ):
+                st.session_state["so_saved_data"] = None
+                st.session_state["so_screen"] = "form"
+                try:
+                    st.switch_page("Dashboard.py")
+                except Exception:
+                    st.rerun()
                 
 #part5
 # =========================================================================
@@ -1435,7 +1361,81 @@ def render_analisis():
                 st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
         else:
             st.info("📭 Belum ada data SO di periode ini")
-
+    
+    # ============================================================
+    # RAK BELUM SO (Expander)
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    with st.expander("📋 Rak Belum SO (Klik untuk buka)", expanded=False):
+        try:
+            from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
+    
+            _rak_belum_df = _get_belum_so_df(_rak_df)
+    
+            if not _rak_belum_df.empty:
+                _jumlah_belum = len(_rak_belum_df)
+                st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO")
+    
+                _search_belum = st.text_input(
+                    "🔍 Filter rak belum SO",
+                    key="search_rak_belum",
+                    placeholder="Ketik kode/nama rak...",
+                    label_visibility="collapsed",
+                )
+    
+                _rak_filtered = _rak_belum_df.copy()
+                if _search_belum and len(_search_belum.strip()) >= 1:
+                    _q = _search_belum.strip().upper()
+                    _rak_filtered = _rak_filtered[
+                        _rak_filtered["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
+                        _rak_filtered["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
+                    ]
+    
+                # Grid compact HTML
+                _grid_html = (
+                    "<div style='display: grid; "
+                    "grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); "
+                    "gap: 8px; margin-top: 12px;'>"
+                )
+    
+                for _rak in _rak_filtered[["rak_id", "rak_name"]].to_dict("records"):
+                    _rid = str(_rak.get("rak_id", "-"))
+                    _rname = str(_rak.get("rak_name", "-"))[:20]
+    
+                    _grid_html += (
+                        f"<div style='background: rgba(20, 12, 35, 0.95); "
+                        f"border: 1px solid rgba(232, 139, 139, 0.4); "
+                        f"border-left: 3px solid #E88B8B; "
+                        f"border-radius: 8px; padding: 8px 10px;'>"
+                        f"<div style='font-family: JetBrains Mono, monospace; font-size: 12px; "
+                        f"font-weight: 900; color: #E8B189;'>{_rid}</div>"
+                        f"<div style='font-family: Quicksand, sans-serif; font-size: 9px; "
+                        f"color: #7a9b8e; margin-top: 2px;'>{_rname}</div>"
+                        f"</div>"
+                    )
+    
+                _grid_html += "</div>"
+                st.markdown(_grid_html, unsafe_allow_html=True)
+    
+                # Download
+                _list_text = "\n".join([
+                    f"{r['rak_id']} — {r['rak_name']}"
+                    for r in _rak_filtered[["rak_id", "rak_name"]].to_dict("records")
+                ])
+    
+                st.download_button(
+                    label=f"📥 Download List ({len(_rak_filtered)} rak)",
+                    data=_list_text,
+                    file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    width="stretch",
+                    key="dl_rak_belum_so",
+                )
+            else:
+                st.success("🎉 Semua rak sudah di-SO!")
+        except Exception as _e_belum:
+            st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
 
 # =========================================================================
 # TAB 3: PREVIEW & HAPUS
