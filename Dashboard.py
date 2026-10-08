@@ -414,8 +414,8 @@ def render_dashboard():
             desc="Input SO + Analisis<br>+ Preview dalam 1 halaman",
             accent="#7FB99B",
             accent_glow="rgba(127, 185, 155, 0.6)",
-            key="btn_menu_input_so",
-            target_page="input_so"
+            key="btn_menu_so",
+            target_page="so"
         )
 
     with col_menu2:
