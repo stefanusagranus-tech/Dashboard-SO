@@ -1,15 +1,7 @@
 """
-AI Chat Yui — Pembantu Input SO (AI-2)
-========================================
-Halaman chat fullscreen untuk Yui.
-Persona: Rekan kerja profesional, teliti, natural.
-
-Fitur:
-- Chat natural + memory persistent
-- Upload file (PDF/foto/Excel) → Yui baca
-- Parse natural language SO
-- Validasi + konfirmasi sebelum save
-- Auto-save ke Supabase
+AI Chat Yui — Pembantu Input SO (AI-2) v4
+==========================================
+Halaman chat fullscreen untuk Yui dengan debug log.
 """
 
 import streamlit as st
@@ -39,6 +31,24 @@ render_theme_animations(CURRENT_THEME)
 
 
 # =========================================================================
+# DEBUG LOG BUFFER
+# =========================================================================
+if "yui_debug_log" not in st.session_state:
+    st.session_state["yui_debug_log"] = []
+
+
+def yui_log(msg):
+    """Logger — print + save ke session state."""
+    print(msg)
+    try:
+        st.session_state["yui_debug_log"].append(str(msg))
+        if len(st.session_state["yui_debug_log"]) > 200:
+            st.session_state["yui_debug_log"] = st.session_state["yui_debug_log"][-200:]
+    except Exception:
+        pass
+
+
+# =========================================================================
 # IMPORT MODULES
 # =========================================================================
 try:
@@ -64,26 +74,29 @@ except ImportError as e:
     _YUI_OK = False
     _import_error = str(e)
 
-# =========================================================
-# DEBUG LOGGER — Tampilin log di UI
-# =========================================================
-if "yui_debug_log" not in st.session_state:
-    st.session_state["yui_debug_log"] = []
+
+# Hubungkan buffer ke modules
+try:
+    from modules.file_reader import set_log_buffer as set_file_buffer
+    from modules.ai_so_input import set_log_buffer as set_ai_buffer
+    set_file_buffer(st.session_state["yui_debug_log"])
+    set_ai_buffer(st.session_state["yui_debug_log"])
+except Exception as _e:
+    print(f"[Yui] Buffer connect error: {_e}")
 
 
-def yui_log(msg):
-    """Print ke console + save ke session state."""
-    print(msg)
+# Helper format Rp
+def fmt_rp_signed(value):
     try:
-        st.session_state["yui_debug_log"].append(str(msg))
-        # Batasi 100 baris terakhir
-        if len(st.session_state["yui_debug_log"]) > 100:
-            st.session_state["yui_debug_log"] = st.session_state["yui_debug_log"][-100:]
+        _v = float(value)
+        _sign = "+" if _v >= 0 else "-"
+        return f"{_sign}Rp {int(abs(_v)):,}".replace(",", ".")
     except Exception:
-        pass
-    
+        return "Rp 0"
+
+
 # =========================================================================
-# CSS — ROOM CHAT YUI
+# CSS
 # =========================================================================
 def inject_yui_css():
     st.markdown("""
@@ -94,93 +107,60 @@ def inject_yui_css():
         [data-testid="stSidebarCollapsedControl"] {
             display: none !important;
         }
-
         .main .block-container {
             max-width: 100% !important;
             padding-left: 2rem !important;
             padding-right: 2rem !important;
             padding-top: 1rem !important;
         }
-
         .stApp, .stApp * {
             color: #F5E6D3 !important;
         }
-
-        .stApp button {
-            color: inherit !important;
-        }
-
-        .stApp textarea,
-        .stApp input,
-        .stApp [contenteditable="true"] {
+        .stApp textarea, .stApp input, .stApp [contenteditable="true"] {
             color: #F5E6D3 !important;
             background: rgba(30, 20, 60, 0.6) !important;
             caret-color: #7FB99B !important;
         }
-
-        .stApp textarea::placeholder,
-        .stApp input::placeholder {
+        .stApp textarea::placeholder, .stApp input::placeholder {
             color: rgba(245, 230, 211, 0.5) !important;
         }
-
-        /* Chat bubble */
         [data-testid="stChatMessage"] {
             padding: 0.85rem 1.2rem !important;
             margin-bottom: 0.6rem !important;
             border-radius: 16px !important;
         }
-
-        [data-testid="stChatMessage"] p,
-        [data-testid="stChatMessage"] span,
-        [data-testid="stChatMessage"] div,
-        [data-testid="stChatMessage"] li,
-        [data-testid="stChatMessage"] strong,
-        [data-testid="stChatMessage"] em {
+        [data-testid="stChatMessage"] p, [data-testid="stChatMessage"] span,
+        [data-testid="stChatMessage"] div, [data-testid="stChatMessage"] li,
+        [data-testid="stChatMessage"] strong, [data-testid="stChatMessage"] em {
             color: #F5E6D3 !important;
         }
-
-        /* USER bubble — mint */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
             background: linear-gradient(135deg, rgba(127, 185, 155, 0.25), rgba(232, 177, 137, 0.15)) !important;
             border: 1.5px solid rgba(127, 185, 155, 0.6) !important;
             margin-left: 20% !important;
         }
-
-        /* YUI bubble — deep purple */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
             background: linear-gradient(135deg, rgba(30, 20, 60, 0.85), rgba(76, 29, 149, 0.65)) !important;
             border: 1.5px solid rgba(127, 185, 155, 0.5) !important;
             margin-right: 20% !important;
         }
-
         [data-testid="chatAvatarIcon-assistant"] {
             background: linear-gradient(135deg, #7FB99B, #4C9B7F) !important;
         }
-
-        /* Chat input */
         [data-testid="stChatInputContainer"] {
             background: rgba(30, 20, 60, 0.6) !important;
             border-radius: 16px !important;
             border: 1.5px solid rgba(127, 185, 155, 0.6) !important;
         }
-
-        [data-testid="stChatInputContainer"] textarea,
-        [data-testid="stChatInputContainer"] input {
+        [data-testid="stChatInputContainer"] textarea {
             color: #F5E6D3 !important;
             background: transparent !important;
         }
-
-        [data-testid="stChatInputContainer"] textarea::placeholder {
-            color: rgba(245, 230, 211, 0.5) !important;
-        }
-
         [data-testid="stChatInputContainer"] button {
             background: linear-gradient(135deg, #7FB99B, #4C9B7F) !important;
             border: none !important;
             color: #fff !important;
         }
-
-        /* Memory info bar */
         .memory-info {
             background: rgba(20, 12, 35, 0.95);
             border-left: 3px solid #7FB99B;
@@ -191,8 +171,6 @@ def inject_yui_css():
             font-size: 10px;
             color: #A89B8E;
         }
-
-        /* Preview card */
         .preview-card {
             background: linear-gradient(135deg, rgba(28, 16, 48, 0.95), rgba(45, 25, 75, 0.9));
             border: 1px solid rgba(127, 185, 155, 0.4);
@@ -201,7 +179,6 @@ def inject_yui_css():
             padding: 16px 20px;
             margin: 12px 0;
         }
-
         .preview-card .preview-title {
             font-family: 'Cinzel', serif;
             font-size: 14px;
@@ -210,8 +187,6 @@ def inject_yui_css():
             margin-bottom: 10px;
             text-transform: uppercase;
         }
-
-        /* Warning card */
         .warning-card {
             background: linear-gradient(135deg, rgba(251, 191, 36, 0.10), rgba(245, 158, 11, 0.15));
             border: 1px solid #fbbf24;
@@ -223,8 +198,6 @@ def inject_yui_css():
             font-size: 12px;
             color: #FDE68A;
         }
-
-        /* PIC required banner */
         .pic-required {
             background: linear-gradient(135deg, rgba(232, 139, 139, 0.15), rgba(220, 38, 38, 0.10));
             border: 1.5px solid #E88B8B;
@@ -233,7 +206,6 @@ def inject_yui_css():
             padding: 14px 18px;
             margin: 12px 0;
         }
-
         .pic-required .pic-title {
             font-family: 'Cinzel', serif;
             font-size: 13px;
@@ -242,25 +214,6 @@ def inject_yui_css():
             margin-bottom: 6px;
             text-transform: uppercase;
         }
-
-        .pic-required .pic-sub {
-            font-family: 'Quicksand', sans-serif;
-            font-size: 11px;
-            color: #F5E6D3;
-        }
-
-        /* File info card */
-        .file-info {
-            background: rgba(20, 12, 35, 0.95);
-            border: 1px solid rgba(168, 85, 247, 0.3);
-            border-radius: 10px;
-            padding: 10px 14px;
-            margin: 8px 0;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            color: #A89B8E;
-        }
-
         div[data-testid="stHorizontalBlock"] button {
             border-radius: 12px !important;
             font-weight: 700 !important;
@@ -273,11 +226,10 @@ inject_yui_css()
 
 
 # =========================================================================
-# GUARD — Cek import
+# GUARD
 # =========================================================================
 if not _YUI_OK:
     st.error(f"❌ Gagal import module: {_import_error}")
-    st.info("💡 Pastikan `modules/ai_so_input.py` + `modules/file_reader.py` + `modules/chat_memory.py` udah ada.")
     st.stop()
 
 
@@ -345,7 +297,6 @@ render_yui_header()
 # =========================================================================
 _session_id = get_or_create_session_id("yui")
 
-# Init history — LOAD DARI SUPABASE
 if "yui_history" not in st.session_state:
     with st.spinner("⏳ Load chat history..."):
         _saved = load_messages("yui", _session_id, limit=100)
@@ -358,16 +309,11 @@ if "yui_history" not in st.session_state:
 if "yui_pending_data" not in st.session_state:
     st.session_state["yui_pending_data"] = None
 
-if "yui_uploaded_file_info" not in st.session_state:
-    st.session_state["yui_uploaded_file_info"] = None
-
 if "yui_last_saved" not in st.session_state:
     st.session_state["yui_last_saved"] = None
 
 
-# =========================================================================
-# WELCOME MESSAGE (kalau history kosong)
-# =========================================================================
+# Welcome
 if not st.session_state["yui_history"]:
     _welcome = (
         "📦 **Halo Bos!** Aku Yui, siap bantu urusan input SO.\n\n"
@@ -383,17 +329,12 @@ if not st.session_state["yui_history"]:
     save_message("yui", _session_id, "assistant", _welcome)
 
 
-# =========================================================================
-# NOTIFIKASI SUKSES
-# =========================================================================
 if st.session_state["yui_last_saved"]:
     st.success(st.session_state["yui_last_saved"])
     st.session_state["yui_last_saved"] = None
 
 
-# =========================================================================
-# MEMORY INFO BAR
-# =========================================================================
+# Memory Info
 _total_msg = len(st.session_state["yui_history"])
 st.markdown(
     f"<div class='memory-info'>"
@@ -428,7 +369,25 @@ with _col_t4:
         clear_session("yui", _session_id)
         st.session_state["yui_history"] = []
         st.session_state["yui_pending_data"] = None
+        st.session_state["yui_debug_log"] = []
         st.rerun()
+
+
+# =========================================================================
+# 🐛 DEBUG LOG
+# =========================================================================
+with st.expander("🐛 Debug Log (klik untuk buka)", expanded=False):
+    _debug_log = st.session_state.get("yui_debug_log", [])
+
+    if _debug_log:
+        _log_text = "\n".join(_debug_log[-50:])
+        st.code(_log_text, language="log")
+
+        if st.button("🗑️ Clear Log", key="btn_clear_yui_log"):
+            st.session_state["yui_debug_log"] = []
+            st.rerun()
+    else:
+        st.caption("📭 Belum ada log. Upload file dulu.")
 
 st.markdown("---")
 
@@ -453,7 +412,6 @@ def _dialog_upload_file():
         label_visibility="collapsed",
     )
 
-    # Konteks tambahan (opsional)
     with st.expander("➕ Tambah Konteks (Opsional)", expanded=False):
         _col_c1, _col_c2 = st.columns(2)
 
@@ -491,7 +449,6 @@ def _dialog_upload_file():
             _file_bytes = _uploaded.getvalue()
             _ftype = detect_file_type(_file_name)
 
-            # Simpan ke session state buat process
             st.session_state["yui_file_to_process"] = {
                 "name": _file_name,
                 "bytes": _file_bytes,
@@ -508,9 +465,10 @@ def _dialog_upload_file():
             st.rerun()
 
 
-# Show dialog kalau flag aktif
 if st.session_state.get("yui_show_upload"):
     _dialog_upload_file()
+
+
 # =========================================================================
 # RENDER CHAT HISTORY
 # =========================================================================
@@ -525,7 +483,7 @@ for _idx, _msg in enumerate(st.session_state["yui_history"]):
 
 
 # =========================================================================
-# PROCESS FILE (kalau ada yang perlu diproses)
+# PROCESS FILE
 # =========================================================================
 if st.session_state.get("yui_file_to_process"):
     _file_data = st.session_state["yui_file_to_process"]
@@ -535,21 +493,23 @@ if st.session_state.get("yui_file_to_process"):
     _tgl_ctx = _file_data.get("tanggal")
     _rak_ctx = _file_data.get("rak_id")
 
-    # Show "sedang proses"
+    yui_log(f"[Yui] Processing file: {_file_name}")
+
     with st.chat_message("assistant", avatar="📦"):
         _processing_msg = f"📎 Aku baca file **{_file_name}** dulu ya Bos... ⏳"
         st.markdown(_processing_msg)
 
     with st.spinner(f"📦 Yui baca file {_file_name}..."):
-        # Step 1: Read file — auto-detect
         _read_result = read_file(
             _file_bytes,
             _file_name,
-            nama_personil="",  # Kosong buat tabel SO
+            nama_personil="",
             bulan=None,
             tahun=None,
         )
-        
+
+    yui_log(f"[Yui] Read result: success={_read_result.get('success')}, type={_read_result.get('type')}")
+
     if not _read_result.get("success"):
         _err_msg = f"❌ Waduh, aku gagal baca file-nya Bos.\n\n**Error:** {_read_result.get('error', 'Unknown')}"
         with st.chat_message("assistant", avatar="📦"):
@@ -560,7 +520,9 @@ if st.session_state.get("yui_file_to_process"):
         st.session_state["yui_file_to_process"] = None
         st.rerun()
 
-    # Step 2: Parse dengan Yui
+    _ocr_text = _read_result.get("text", "")
+    yui_log(f"[Yui] OCR text length: {len(_ocr_text)}")
+
     with st.spinner("📦 Yui olah data file..."):
         _context = {
             "tanggal": _tgl_ctx,
@@ -569,12 +531,13 @@ if st.session_state.get("yui_file_to_process"):
         }
 
         _parse_result = parse_file_text(
-            _read_result.get("text", ""),
+            _ocr_text,
             file_type=_read_result.get("type", "unknown"),
             context=_context,
         )
 
-    # Step 3: Handle hasil parsing
+    yui_log(f"[Yui] Parse result: success={_parse_result.get('success')}, model={_parse_result.get('model', 'unknown')}")
+
     if not _parse_result.get("success"):
         _fail_msg = f"❌ Aku gagal extract data SO dari file ini Bos.\n\n{_parse_result.get('warnings', [''])[0]}"
         with st.chat_message("assistant", avatar="📦"):
@@ -585,17 +548,17 @@ if st.session_state.get("yui_file_to_process"):
         st.session_state["yui_file_to_process"] = None
         st.rerun()
 
-    # Step 4: Preview data
     _data = _parse_result.get("data", {}) or {}
     _missing = _parse_result.get("missing", [])
     _warnings = _parse_result.get("warnings", [])
 
-    # Normalize
     _tanggal = _data.get("tanggal") or _tgl_ctx or datetime.now(ZoneInfo("Asia/Jakarta")).date().isoformat()
     _rak_id = _data.get("rak_id") or _rak_ctx or None
     _pic = _data.get("pic")
     _items = _data.get("items", [])
     _total_nominal = _data.get("total_nominal", 0)
+
+    yui_log(f"[Yui] Items extracted: {len(_items)}, total: {_total_nominal}")
 
     with st.chat_message("assistant", avatar="📦"):
         _preview_msg = f"✅ File **{_file_name}** berhasil aku baca Bos.\n\n"
@@ -615,49 +578,32 @@ if st.session_state.get("yui_file_to_process"):
 
         st.markdown(_preview_msg)
 
-    # Save preview ke history
     st.session_state["yui_history"].append({"role": "assistant", "content": _preview_msg})
     save_message("yui", _session_id, "assistant", _preview_msg)
 
-    # Step 5: Cek data yang kurang
     _missing_fields = []
     if not _rak_id:
         _missing_fields.append("rak_id")
     if not _pic:
         _missing_fields.append("pic")
 
-    if _missing_fields:
-        # Set pending data
-        st.session_state["yui_pending_data"] = {
-            "source": "file",
-            "file_name": _file_name,
-            "tanggal": _tanggal,
-            "rak_id": _rak_id,
-            "pic": _pic,
-            "items": _items,
-            "total_nominal": _total_nominal,
-            "missing": _missing_fields,
-        }
-        st.session_state["yui_file_to_process"] = None
-        st.rerun()
-    else:
-        # Data lengkap — langsung tampil preview + konfirmasi save
-        st.session_state["yui_pending_data"] = {
-            "source": "file",
-            "file_name": _file_name,
-            "tanggal": _tanggal,
-            "rak_id": _rak_id,
-            "pic": _pic,
-            "items": _items,
-            "total_nominal": _total_nominal,
-            "missing": [],
-        }
-        st.session_state["yui_file_to_process"] = None
-        st.rerun()
+    st.session_state["yui_pending_data"] = {
+        "source": "file",
+        "file_name": _file_name,
+        "tanggal": _tanggal,
+        "rak_id": _rak_id,
+        "pic": _pic,
+        "items": _items,
+        "total_nominal": _total_nominal,
+        "missing": _missing_fields,
+        "warnings": _warnings,
+    }
+    st.session_state["yui_file_to_process"] = None
+    st.rerun()
 
 
 # =========================================================================
-# PENDING DATA — TANYA FIELD YANG KURANG + PREVIEW + SAVE
+# PENDING DATA — PREVIEW + SAVE
 # =========================================================================
 if st.session_state.get("yui_pending_data"):
     _pending = st.session_state["yui_pending_data"]
@@ -665,13 +611,13 @@ if st.session_state.get("yui_pending_data"):
 
     st.markdown("---")
 
-    # === ASK MISSING FIELDS ===
     if _missing:
         st.markdown("#### ❓ Data Perlu Dilengkapi")
         st.markdown(
             f"<div class='pic-required'>"
             f"<div class='pic-title'>📝 DATA BELUM LENGKAP</div>"
-            f"<div class='pic-sub'>Aku butuh info berikut buat lanjut simpan:</div>"
+            f"<div style='font-family: Quicksand; font-size: 11px; color: #F5E6D3;'>"
+            f"Aku butuh info berikut buat lanjut simpan:</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -723,11 +669,9 @@ if st.session_state.get("yui_pending_data"):
                 )
 
             if _submit:
-                # Update pending data
                 for _key, _val in _input_values.items():
                     st.session_state["yui_pending_data"][_key] = _val
 
-                # Update missing — hapus yang udah diisi
                 _new_missing = [
                     m for m in _missing
                     if not st.session_state["yui_pending_data"].get(m)
@@ -736,17 +680,15 @@ if st.session_state.get("yui_pending_data"):
                 st.rerun()
 
             if _cancel:
-                _cancel_msg = "Oke Bos, aku batalkan file ini. Ada yang lain?"
+                _cancel_msg = "Oke Bos, aku batalkan file ini."
                 st.session_state["yui_history"].append({"role": "assistant", "content": _cancel_msg})
                 save_message("yui", _session_id, "assistant", _cancel_msg)
                 st.session_state["yui_pending_data"] = None
                 st.rerun()
 
-    # === PREVIEW + KONFIRMASI SAVE ===
     else:
         st.markdown("#### 📋 Preview Data SO")
 
-        # Build preview table
         _preview_html = (
             f"<div class='preview-card'>"
             f"<div class='preview-title'>📦 DATA SIAP DISIMPAN</div>"
@@ -767,7 +709,6 @@ if st.session_state.get("yui_pending_data"):
         )
         st.markdown(_preview_html, unsafe_allow_html=True)
 
-        # Warning kalau ada
         _warnings_pending = _pending.get("warnings", [])
         if _warnings_pending:
             for _w in _warnings_pending:
@@ -776,22 +717,23 @@ if st.session_state.get("yui_pending_data"):
                     unsafe_allow_html=True,
                 )
 
-        # Total nominal
         _total_nom = _pending.get("total_nominal", 0)
         _color_total = "#E88B8B" if _total_nom < 0 else "#7FB99B"
 
         st.markdown(
-            f"<div class='metric-clean' style='border-left-color: {_color_total}; "
-            f"text-align: right; margin-top: 12px;'>"
-            f"<div class='label'>💰 TOTAL NOMINAL</div>"
-            f"<div class='value' style='color: {_color_total};'>"
-            f"{fmt_rp_signed(_total_nom) if 'fmt_rp_signed' in dir() else f'Rp {int(_total_nom):,}'.replace(',', '.')}</div>"
+            f"<div style='background: rgba(20, 12, 35, 0.95); "
+            f"border-left: 3px solid {_color_total}; border-radius: 10px; "
+            f"padding: 14px 18px; margin-top: 12px; text-align: right;'>"
+            f"<div style='font-family: Quicksand; font-size: 10px; color: #A89B8E; "
+            f"letter-spacing: 1px; text-transform: uppercase;'>💰 TOTAL NOMINAL</div>"
+            f"<div style='font-family: JetBrains Mono; font-size: 24px; font-weight: 900; "
+            f"color: {_color_total}; margin-top: 4px;'>"
+            f"{fmt_rp_signed(_total_nom)}</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
 
-        # Tombol aksi
-        _col_save, _col_edit, _col_cancel = st.columns([2, 1, 1])
+        _col_save, _col_cancel = st.columns([2, 1])
 
         with _col_save:
             if st.button(
@@ -801,14 +743,14 @@ if st.session_state.get("yui_pending_data"):
                 key="btn_yui_save_so",
             ):
                 with st.spinner("📦 Aku simpan ya Bos..."):
-                    # Prepare items
                     _items_to_save = []
                     for _item in _pending.get("items", []):
-                        if "rak_id" not in _item:
+                        if "rak_id" not in _item or not _item.get("rak_id"):
                             _item["rak_id"] = _pending.get("rak_id")
                         _items_to_save.append(_item)
 
-                    # Save via input_handler
+                    yui_log(f"[Yui] Saving {len(_items_to_save)} items...")
+
                     try:
                         _save_ok, _save_msg, _save_detail = save_input_harian(
                             tanggal=datetime.strptime(_pending["tanggal"], "%Y-%m-%d").date(),
@@ -845,16 +787,8 @@ if st.session_state.get("yui_pending_data"):
                         else:
                             st.error(f"❌ Gagal simpan: {_save_msg}")
                     except Exception as _e_save:
+                        yui_log(f"[Yui] Save error: {_e_save}")
                         st.error(f"❌ Error: {str(_e_save)[:200]}")
-
-        with _col_edit:
-            if st.button(
-                "✏️ EDIT",
-                width="stretch",
-                key="btn_yui_edit_pending",
-            ):
-                st.session_state["yui_pending_data"]["editing"] = True
-                st.rerun()
 
         with _col_cancel:
             if st.button(
@@ -882,14 +816,12 @@ if _preset and not _user_msg:
     _user_msg = _preset
 
 if _user_msg:
-    # Simpan user message
     st.session_state["yui_history"].append({"role": "user", "content": _user_msg})
     save_message("yui", _session_id, "user", _user_msg)
 
     with st.chat_message("user", avatar="👤"):
         st.markdown(_user_msg)
 
-    # Detect intent: parse SO atau chat biasa
     _user_lower = _user_msg.lower()
     _is_so_input = any(kw in _user_lower for kw in [
         "rak", "q51", "q52", "minus", "plus", "so ", "input so",
@@ -899,7 +831,6 @@ if _user_msg:
     with st.chat_message("assistant", avatar="📦"):
         with st.spinner("📦 Aku cek..."):
             if _is_so_input:
-                # Coba parse natural language
                 _parse_result = parse_natural_language(_user_msg, _rak_list[:100])
 
                 if _parse_result.get("success") and _parse_result.get("data"):
@@ -908,12 +839,10 @@ if _user_msg:
                     _tanggal = _data.get("tanggal", datetime.now(ZoneInfo("Asia/Jakarta")).date().isoformat())
                     _warnings = _parse_result.get("warnings", [])
 
-                    # Detect PIC & rak dari items
                     _first_item = _items[0] if _items else {}
                     _rak_id = _first_item.get("rak_id")
                     _pic = _first_item.get("pic")
 
-                    # Cek missing
                     _missing = []
                     if not _rak_id:
                         _missing.append("rak_id")
@@ -922,7 +851,6 @@ if _user_msg:
 
                     _total_nominal = sum(float(i.get("nominal_adjust", 0) or 0) for i in _items)
 
-                    # Response Yui
                     _resp_text = (
                         f"📦 Oke Bos, aku catat ya:\n\n"
                         f"- 📅 Tanggal: **{_tanggal}**\n"
@@ -939,11 +867,9 @@ if _user_msg:
 
                     st.markdown(_resp_text)
 
-                    # Simpan response
                     st.session_state["yui_history"].append({"role": "assistant", "content": _resp_text})
                     save_message("yui", _session_id, "assistant", _resp_text)
 
-                    # Set pending
                     st.session_state["yui_pending_data"] = {
                         "source": "chat",
                         "tanggal": _tanggal,
@@ -955,7 +881,6 @@ if _user_msg:
                         "missing": _missing,
                     }
                 else:
-                    # Fallback ke chat biasa
                     _chat_resp = yui_chat(_user_msg, st.session_state["yui_history"])
                     _resp_text = _chat_resp.get("text", "")
                     st.markdown(_resp_text)
@@ -963,7 +888,6 @@ if _user_msg:
                     st.session_state["yui_history"].append({"role": "assistant", "content": _resp_text})
                     save_message("yui", _session_id, "assistant", _resp_text)
             else:
-                # Chat biasa
                 _chat_resp = yui_chat(_user_msg, st.session_state["yui_history"])
                 _resp_text = _chat_resp.get("text", "")
                 st.markdown(_resp_text)
