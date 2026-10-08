@@ -1055,6 +1055,114 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
+    🎃 DIALOG / MODAL / POP-UP (GLOBAL)
+    ============================================ */
+    /* Container utama dialog */
+    [data-testid="stDialog"] div[role="dialog"] {{
+        background: linear-gradient(135deg, rgba(28, 16, 48, 0.98), rgba(45, 25, 75, 0.95)) !important;
+        border: 1px solid #E8B189 !important;
+        border-radius: 16px !important;
+        box-shadow: 0 0 30px rgba(168, 85, 247, 0.4),
+                    inset 0 0 60px rgba(168, 85, 247, 0.05) !important;
+    }}
+    
+    /* Header dialog */
+    [data-testid="stDialog"] header {{
+        background: transparent !important;
+        border-bottom: 1px solid rgba(232, 177, 137, 0.3) !important;
+        padding-bottom: 10px !important;
+    }}
+    
+    /* Judul dialog */
+    [data-testid="stDialog"] h2 {{
+        color: #E8B189 !important;
+        font-family: 'Cinzel', serif !important;
+        letter-spacing: 2px !important;
+        text-shadow: 0 0 10px rgba(232, 177, 137, 0.5) !important;
+    }}
+    
+    /* Text dalam dialog */
+    [data-testid="stDialog"] p,
+    [data-testid="stDialog"] span,
+    [data-testid="stDialog"] div {{
+        color: #F5E6D3;
+    }}
+    
+    /* Tombol close (X) */
+    [data-testid="stDialog"] button[aria-label="Close"] svg {{
+        fill: #E8B189 !important;
+        color: #E8B189 !important;
+    }}
+    
+    [data-testid="stDialog"] button[aria-label="Close"]:hover {{
+        background: rgba(232, 177, 137, 0.15) !important;
+    }}
+    
+    /* Metric card dalam dialog (konsisten) */
+    [data-testid="stDialog"] .metric-clean {{
+        background: linear-gradient(135deg, rgba(28, 16, 48, 0.95), rgba(45, 25, 75, 0.9)) !important;
+        border: 1px solid rgba(168, 85, 247, 0.25) !important;
+        border-left: 3px solid #E8B189 !important;
+        border-radius: 10px !important;
+        padding: 12px 16px !important;
+        margin-bottom: 8px !important;
+    }}
+    
+    /* Table dalam dialog */
+    [data-testid="stDialog"] .so-table {{
+        background: rgba(20, 12, 35, 0.95) !important;
+        border: 1px solid rgba(168, 85, 247, 0.2) !important;
+        border-radius: 10px !important;
+    }}
+    
+    /* Input dalam dialog */
+    [data-testid="stDialog"] input,
+    [data-testid="stDialog"] textarea,
+    [data-testid="stDialog"] select {{
+        background: rgba(20, 12, 35, 0.95) !important;
+        color: #F5E6D3 !important;
+        border: 1px solid rgba(168, 85, 247, 0.3) !important;
+        border-radius: 8px !important;
+    }}
+    
+    /* Button dalam dialog */
+    [data-testid="stDialog"] div.stButton > button {{
+        background: linear-gradient(135deg, var(--midnight-2) 0%, var(--witch-dark) 100%) !important;
+        color: var(--pumpkin-light) !important;
+        border: 2px solid var(--pumpkin-dark) !important;
+        border-radius: 12px !important;
+        font-family: 'Cinzel', serif !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+        padding: 14px 20px !important;
+        letter-spacing: 1px !important;
+        text-transform: uppercase !important;
+        transition: all 0.3s ease !important;
+        min-height: 48px !important;
+    }}
+    
+    [data-testid="stDialog"] div.stButton > button:hover {{
+        background: linear-gradient(135deg, var(--pumpkin-dark) 0%, var(--pumpkin) 100%) !important;
+        color: #FFFFFF !important;
+        border-color: var(--candy) !important;
+        box-shadow: 0 0 25px var(--bg-glow-1),
+                    0 0 50px var(--bg-glow-2) !important;
+        transform: translateY(-2px) !important;
+    }}
+    
+    /* Backdrop (background belakang dialog) */
+    [data-testid="stDialogBackdrop"] {{
+        background: rgba(10, 5, 20, 0.75) !important;
+        backdrop-filter: blur(6px) !important;
+    }}
+    
+    /* Section divider dalam dialog */
+    [data-testid="stDialog"] .section-divider {{
+        margin: 16px 0 !important;
+        border-top: 1px solid rgba(168, 85, 247, 0.2) !important;
+    }}
+
+    /* ============================================
     🎃 COPYRIGHT
     ============================================ */
     .copyright-footer {{
