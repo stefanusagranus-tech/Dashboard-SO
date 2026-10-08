@@ -64,12 +64,29 @@ def read_pdf(file_bytes):
 # BACA IMAGE (via Gemini Vision)
 # =========================================================================
 def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
-    """Baca gambar via Gemini Vision (OCR AI)."""
+    """
+    Baca gambar — auto-detect: kalender shift atau tabel SO?
+    """
     try:
-        from modules.ocr_ai_handler import ocr_via_gemini
+        from modules.ocr_ai_handler import ocr_via_gemini, ocr_so_table, ocr_auto_detect
 
-        # Kalau ada context
-        if bulan and tahun:
+        # Auto-detect tipe gambar
+        print(f"[FileReader] Auto-detect tipe gambar...")
+        _detect = ocr_auto_detect(file_bytes)
+        _detected_type = _detect.get("type", "UNKNOWN")
+        print(f"[FileReader] Detected: {_detected_type}")
+
+        # === KALAU KALENDER SHIFT ===
+        if _detected_type == "SHIFT":
+            if not (bulan and tahun and nama_personil):
+                return {
+                    "success": False,
+                    "type": "image_shift",
+                    "text": "",
+                    "error": "Kalender shift butuh konteks: nama personil + bulan + tahun",
+                }
+
+            print(f"[FileReader] Mode SHIFT: {nama_personil} - {bulan}/{tahun}")
             _result = ocr_via_gemini(
                 file_bytes,
                 nama_personil=nama_personil,
@@ -84,8 +101,28 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
                     "shift_map": _result.get("shift_map", {}),
                     "error": None,
                 }
+            return {
+                "success": False,
+                "type": "image_shift",
+                "text": "",
+                "error": _result.get("error", "OCR shift gagal"),
+            }
 
-        # Generic OCR — extract text dari gambar
+        # === KALAU TABEL SO atau UNKNOWN ===
+        print(f"[FileReader] Mode SO_TABLE")
+        _result_so = ocr_so_table(file_bytes)
+
+        if _result_so.get("success"):
+            return {
+                "success": True,
+                "type": "image_so_table",
+                "text": _result_so.get("text", ""),
+                "error": None,
+                "model": _result_so.get("model", ""),
+            }
+
+        # === FALLBACK: TESSERACT ===
+        print(f"[FileReader] Fallback ke Tesseract...")
         try:
             from PIL import Image
             import pytesseract
@@ -96,20 +133,22 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
                 "type": "image_ocr",
                 "text": _text.strip(),
                 "error": None,
+                "model": "tesseract",
             }
         except Exception as _e_ocr:
             return {
                 "success": False,
                 "type": "image",
                 "text": "",
-                "error": f"OCR gagal: {str(_e_ocr)[:150]}",
+                "error": f"OCR gagal: {_result_so.get('error', '')} | Tesseract: {str(_e_ocr)[:100]}",
             }
-    except ImportError:
+
+    except ImportError as _e:
         return {
             "success": False,
             "type": "image",
             "text": "",
-            "error": "Module OCR gak tersedia",
+            "error": f"Module gak tersedia: {str(_e)[:150]}",
         }
     except Exception as e:
         return {
