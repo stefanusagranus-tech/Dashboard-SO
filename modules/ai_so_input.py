@@ -525,6 +525,11 @@ Output HANYA JSON.
 
     _json = _extract_json(_text)
     
+    # ✅ DEBUG: Cek apakah JSON valid
+    print(f"[Yui] JSON valid: {bool(_json)}")
+    if _json:
+        print(f"[Yui] JSON items count: {len(_json.get('data', {}).get('items', []))}")
+    
     # ✅ Kalau LLM return JSON valid
     if _json and _json.get("data"):
         _data = _json.get("data", {})
@@ -541,9 +546,10 @@ Output HANYA JSON.
                 "model": _model,
             }
     
-    # ✅ Fallback JALAN — prioritas pakai TEXT ASLI (bukan LLM response)
-    print("[Yui] LLM gagal/kosong, coba fallback regex...")
-    _fallback_data = _fallback_regex_extract(file_text)  # ← file_text ASLI (dari OCR)
+    # ✅ FALLBACK: PASTIKAN pakai file_text (hasil OCR), bukan _text (response Groq)
+    print("[Yui] LLM return invalid/kosong, coba fallback regex dengan OCR text...")
+    print(f"[Yui] Fallback input len: {len(file_text)}")
+    _fallback_data = _fallback_regex_extract(file_text)
 
     if _fallback_data and _fallback_data.get("items"):
         print(f"[Yui] ✅ Fallback OK: {len(_fallback_data['items'])} items")
