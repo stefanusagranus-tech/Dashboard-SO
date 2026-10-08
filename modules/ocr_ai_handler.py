@@ -469,7 +469,186 @@ def get_usage_df():
 
     return pd.DataFrame(_rows)
 
+# =========================================================
+# 📊 OCR UNTUK TABEL SO (General Purpose)
+# =========================================================
+def ocr_so_table(image_bytes):
+    """
+    OCR gambar tabel SO → text.
+    Khusus buat laporan SO dari web Alfamart.
+    
+    Args:
+        image_bytes: bytes dari file gambar
+        
+    Returns:
+        dict {success, text, error, model}
+    """
+    if not GEMINI_AVAILABLE:
+        return {"success": False, "text": "", "error": "Gemini not available", "model": ""}
 
+    try:
+        _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        if not _api_key:
+            return {"success": False, "text": "", "error": "GEMINI_API_KEY belum diset", "model": ""}
+
+        _client = genai.Client(api_key=_api_key)
+        _img = Image.open(io.BytesIO(image_bytes))
+
+        _prompt = """Baca TABEL LAPORAN STOCK OPNAME ini dengan SANGAT TELITI.
+
+Kolom yang mungkin ada:
+- No | PLU | Nama Barang | Rak | Stock | Fisik | Plus/Minus | Selisih Rupiah
+- Atau: Kode | Nama | QTYCOUNT | QTYONHAND | QTYVAR | NOMINAL
+
+TUGAS:
+1. Extract SETIAP BARIS dari tabel
+2. Format: 1 baris = 1 baris (SPASI sebagai separator)
+3. Format output: No PLU Nama_Barang Rak Stock Fisik PlusMinus Nominal
+4. JANGAN ubah data apapun — copy apa adanya
+5. Kalau ada tanda koma di angka (contoh: 5,333.58) → tetap tulis 5333.58
+6. Kalau ada tanda minus (-5926.15) → tetap tulis -5926.15
+
+FORMAT OUTPUT (plain text, 1 baris per item):
+1 444756 WOW SPAGETI BOLOGNESE 76G 900 51 51 0 5333.58
+2 443704 FIESTA RTG SOSIS SPICY KOREAN 60G 900 17 17 0 -5926.15
+3 454314 DIAMOND MILK JEL MELON TP 200ML 900 27 - 27 4410.0
+...
+
+JANGAN kasih header, JANGAN penjelasan apapun. LANGSUNG data-nya aja.
+"""
+
+        # Loop model (fallback)
+        _last_error = None
+        _response = None
+        _model_used = None
+
+        for _model_name in MODEL_PRIORITY:
+            try:
+                print(f"[OCR SO] Trying {_model_name}...")
+                _resp = _client.models.generate_content(
+                    model=_model_name,
+                    contents=[_prompt, _img],
+                    config=genai_types.GenerateContentConfig(
+                        temperature=0.05,
+                        max_output_tokens=4096,
+                    ),
+                )
+
+                if _resp and hasattr(_resp, "text") and _resp.text:
+                    _response = _resp
+                    _model_used = _model_name
+                    print(f"[OCR SO] ✅ Success: {_model_name}")
+                    break
+                else:
+                    _last_error = f"Empty response dari {_model_name}"
+                    continue
+            except Exception as _e:
+                _last_error = str(_e)[:200]
+                print(f"[OCR SO] ❌ {_model_name}: {_last_error}")
+                continue
+
+        if _response is None:
+            _err_lower = (_last_error or "").lower()
+            if "429" in _err_lower or "quota" in _err_lower or "resource_exhausted" in _err_lower:
+                return {
+                    "success": False,
+                    "text": "",
+                    "error": "🚫 Quota Gemini habis. Coba beberapa menit lagi atau pakai file PDF.",
+                    "model": "",
+                }
+            return {"success": False, "text": "", "error": _last_error or "Unknown error", "model": ""}
+
+        # Record usage
+        try:
+            _usage = getattr(_response, "usage_metadata", None)
+            if _usage:
+                record_api_usage(
+                    prompt_tokens=getattr(_usage, "prompt_token_count", 0),
+                    output_tokens=getattr(_usage, "candidates_token_count", 0),
+                    model_name=_model_used,
+                    success=True,
+                )
+        except Exception:
+            pass
+
+        _text = _response.text.strip()
+
+        # Clean markdown backtick
+        _text = re.sub(r'^```\w*\s*', '', _text)
+        _text = re.sub(r'\s*```$', '', _text)
+
+        print(f"[OCR SO] Text length: {len(_text)}")
+        print(f"[OCR SO] First 500: {_text[:500]}")
+
+        return {
+            "success": True,
+            "text": _text,
+            "error": "",
+            "model": _model_used,
+        }
+
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "text": "", "error": str(e)[:300], "model": ""}
+
+
+# =========================================================
+# 🔍 DETEKSI TIPE GAMBAR (Shift Kalender atau Tabel SO)
+# =========================================================
+def ocr_auto_detect(image_bytes):
+    """
+    Auto-detect: kalender shift atau tabel SO?
+    Pakai Gemini buat tentuin.
+    """
+    if not GEMINI_AVAILABLE:
+        return {"success": False, "type": "unknown", "error": "Gemini not available"}
+
+    try:
+        _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        if not _api_key:
+            return {"success": False, "type": "unknown", "error": "GEMINI_API_KEY belum diset"}
+
+        _client = genai.Client(api_key=_api_key)
+        _img = Image.open(io.BytesIO(image_bytes))
+
+        _prompt = """Lihat gambar ini. Apa isinya?
+
+Jawab HANYA dengan 1 kata:
+- "SHIFT" kalau ini kalender shift (kotak-kotak tanggal dengan kode P7/S15/M22/O/C/AO)
+- "SO_TABLE" kalau ini tabel laporan Stock Opname (kolom No, PLU, Nama, Rak, Stock, Fisik, Nominal)
+- "UNKNOWN" kalau gak jelas
+
+Jawab SATU KATA aja."""
+
+        for _model_name in MODEL_PRIORITY:
+            try:
+                _resp = _client.models.generate_content(
+                    model=_model_name,
+                    contents=[_prompt, _img],
+                    config=genai_types.GenerateContentConfig(
+                        temperature=0.0,
+                        max_output_tokens=20,
+                    ),
+                )
+                if _resp and hasattr(_resp, "text") and _resp.text:
+                    _answer = _resp.text.strip().upper()
+                    print(f"[OCR Detect] Answer: {_answer}")
+                    if "SHIFT" in _answer:
+                        return {"success": True, "type": "SHIFT"}
+                    elif "SO_TABLE" in _answer or "SO" in _answer:
+                        return {"success": True, "type": "SO_TABLE"}
+                    else:
+                        return {"success": True, "type": "UNKNOWN"}
+            except Exception as _e:
+                print(f"[OCR Detect] {_model_name} error: {_e}")
+                continue
+
+        return {"success": False, "type": "unknown", "error": "Semua model gagal"}
+
+    except Exception as e:
+        return {"success": False, "type": "unknown", "error": str(e)[:200]}
+        
 # =========================================================
 # 🎨 HELPER: FORMAT NUMBER
 # =========================================================
