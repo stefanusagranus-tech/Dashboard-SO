@@ -525,10 +525,14 @@ Output HANYA JSON.
 
     _json = _extract_json(_text)
     
-    # ✅ DEBUG: Cek apakah JSON valid
+    # ✅ DEBUG: Handle _json None
     print(f"[Yui] JSON valid: {bool(_json)}")
-    if _json:
-        print(f"[Yui] JSON items count: {len(_json.get('data', {}).get('items', []))}")
+    if _json and isinstance(_json, dict):
+        _data_temp = _json.get('data') or {}
+        _items_temp = _data_temp.get('items', []) if isinstance(_data_temp, dict) else []
+        print(f"[Yui] JSON items count: {len(_items_temp)}")
+    else:
+        print(f"[Yui] JSON invalid/None, skip count")
     
     # ✅ Kalau LLM return JSON valid
     if _json and _json.get("data"):
@@ -537,7 +541,7 @@ Output HANYA JSON.
     
         if _items:
             print(f"[Yui] LLM sukses: {len(_items)} items")
-            return {
+     is        return {
                 "success": _json.get("success", True),
                 "data": _data,
                 "missing": _json.get("missing", []),
