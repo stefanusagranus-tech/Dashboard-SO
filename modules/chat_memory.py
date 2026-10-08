@@ -138,15 +138,18 @@ def clear_session(ai_name, session_id):
 # SESSION ID HELPER
 # =========================================================================
 def get_or_create_session_id(ai_name):
-    """Ambil atau bikin session ID unik per user."""
+    """
+    ✅ FIX: Session ID persistent — gak berubah tiap refresh.
+    Format: {ai_name}_{YYYYMMDD}
+    Auto-reset tiap hari baru.
+    """
     _key = f"session_id_{ai_name}"
 
     if _key not in st.session_state:
         _now = datetime.now(ZoneInfo("Asia/Jakarta"))
-        st.session_state[_key] = f"{ai_name}_{_now.strftime('%Y%m%d_%H%M%S')}"
+        st.session_state[_key] = f"{ai_name}_{_now.strftime('%Y%m%d')}"
 
     return st.session_state[_key]
-
 
 def new_session_id(ai_name):
     """Force bikin session ID baru (buat reset chat)."""
