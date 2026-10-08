@@ -19,7 +19,23 @@ except ImportError:
 
 from modules.ai_config import get_ai_api_key, get_ai_config
 from modules.token_monitor import record_usage_v2, check_auto_pause
+# =========================================================
+# LOG BUFFER
+# =========================================================
+_LOG_BUFFER = []
 
+
+def set_log_buffer(buffer):
+    global _LOG_BUFFER
+    _LOG_BUFFER = buffer
+
+
+def _log(msg):
+    print(msg)
+    try:
+        _LOG_BUFFER.append(str(msg))
+    except Exception:
+        pass
 
 # =========================================================
 # 🔧 HELPER
