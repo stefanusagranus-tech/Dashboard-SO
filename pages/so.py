@@ -689,97 +689,99 @@ def _render_input_form():
                             "pic": _default_pic,
                         })
                         st.rerun()
+                        
     elif st.session_state.get("so_search_shown") and not _search_results:
         st.warning("⚠️ Rak tidak ditemukan.")
-        
-        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-        # ============================================================
-        # LIST RAK TERPILIH — KIRI (rak) | NOMINAL | PIC | DELETE
-        # ============================================================
-        if st.session_state["so_rak_list"]:
-            st.markdown(f"#### 📋 Rak Terpilih ({len(st.session_state['so_rak_list'])})")
-            st.caption("Isi nominal & PIC per rak")
-        
-            _items_to_remove = []
-        
-            for _idx, _item in enumerate(st.session_state["so_rak_list"]):
-                _rid = _item["rak_id"]
-                _rak_info = get_rak_by_kode_exact(_rid)
-                _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
-        
-                # ✅ 4 kolom: rak | nominal | PIC | delete
-                _c1, _c2, _c3, _c4 = st.columns([2, 1.5, 1.5, 0.5])
-        
-                with _c1:
-                    st.markdown(
-                        f"<div class='rak-selected' style='margin-top: 4px;'>"
-                        f"<div class='rak-selected-id'>{_rid}</div>"
-                        f"<div class='rak-selected-name'>{_rname}</div>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-        
-                with _c2:
-                    _new_nominal = st.number_input(
-                        f"Nominal {_rid}",
-                        min_value=-999_999_999,
-                        max_value=999_999_999,
-                        step=1000,
-                        value=int(_item.get("nominal_adjust", 0)),
-                        key=f"nominal_{_rid}_{_idx}",
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    # ============================================================
+    # LIST RAK TERPILIH — FIX: key unik pakai index statis
+    # ============================================================
+    if st.session_state["so_rak_list"]:
+        st.markdown(f"#### 📋 Rak Terpilih ({len(st.session_state['so_rak_list'])})")
+        st.caption("Isi nominal & PIC per rak")
+    
+        _items_to_remove = []
+    
+        for _idx, _item in enumerate(st.session_state["so_rak_list"]):
+            _rid = _item["rak_id"]
+            _rak_info = get_rak_by_kode_exact(_rid)
+            _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
+    
+            # ✅ FIX: key pake rak_id + index biar selalu unik
+            _key_suffix = f"{_rid}_{_idx}"
+    
+            _c1, _c2, _c3, _c4 = st.columns([2, 1.5, 1.5, 0.5])
+    
+            with _c1:
+                st.markdown(
+                    f"<div class='rak-selected' style='margin-top: 4px;'>"
+                    f"<div class='rak-selected-id'>{_rid}</div>"
+                    f"<div class='rak-selected-name'>{_rname}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+    
+            with _c2:
+                _new_nominal = st.number_input(
+                    f"Nominal {_rid}",
+                    min_value=-999_999_999,
+                    max_value=999_999_999,
+                    step=1000,
+                    value=int(_item.get("nominal_adjust", 0)),
+                    key=f"so_nominal_{_key_suffix}",       # ✅ key unik
+                    label_visibility="collapsed",
+                )
+                st.session_state["so_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
+    
+            with _c3:
+                _current_pic = _item.get("pic", "")
+                if _personil_list:
+                    _pic_index = _personil_list.index(_current_pic) if _current_pic in _personil_list else 0
+                    _new_pic = st.selectbox(
+                        f"PIC {_rid}",
+                        options=_personil_list,
+                        index=_pic_index,
+                        key=f"so_pic_{_key_suffix}",          # ✅ key unik
                         label_visibility="collapsed",
                     )
-                    st.session_state["so_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
-        
-                with _c3:
-                    # ✅ PIC per rak (default dari PIC utama)
-                    _current_pic = _item.get("pic", "")
-                    if _personil_list:
-                        _pic_index = _personil_list.index(_current_pic) if _current_pic in _personil_list else 0
-                        _new_pic = st.selectbox(
-                            f"PIC {_rid}",
-                            options=_personil_list,
-                            index=_pic_index,
-                            key=f"pic_{_rid}_{_idx}",
-                            label_visibility="collapsed",
-                        )
-                    else:
-                        _new_pic = st.text_input(
-                            f"PIC {_rid}",
-                            value=_current_pic,
-                            key=f"pic_{_rid}_{_idx}",
-                            label_visibility="collapsed",
-                        )
-                    st.session_state["so_rak_list"][_idx]["pic"] = _new_pic
-        
-                with _c4:
-                    if st.button("🗑️", key=f"btn_del_{_rid}_{_idx}", width="stretch"):
-                        _items_to_remove.append(_idx)
-        
-            if _items_to_remove:
-                for _i in sorted(_items_to_remove, reverse=True):
-                    st.session_state["so_rak_list"].pop(_i)
-                st.rerun()
-        
-            # Total nominal
-            _total_nominal_input = sum(
-                item.get("nominal_adjust", 0)
-                for item in st.session_state["so_rak_list"]
-            )
-            _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
-        
-            st.markdown(
-                f"<div class='metric-clean' style='border-left-color: {_color_total}; "
-                f"margin-top: 16px; text-align: right;'>"
-                f"<div class='label'>💰 TOTAL NOMINAL SO ({len(st.session_state['so_rak_list'])} RAK)</div>"
-                f"<div class='value' style='color: {_color_total};'>"
-                f"{fmt_rp_signed(_total_nominal_input)}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
+                else:
+                    _new_pic = st.text_input(
+                        f"PIC {_rid}",
+                        value=_current_pic,
+                        key=f"so_pic_{_key_suffix}",          # ✅ key unik
+                        label_visibility="collapsed",
+                    )
+                st.session_state["so_rak_list"][_idx]["pic"] = _new_pic
+    
+            with _c4:
+                if st.button("🗑️", key=f"so_del_{_key_suffix}", width="stretch"):   # ✅ key unik
+                    _items_to_remove.append(_idx)
+    
+        if _items_to_remove:
+            for _i in sorted(_items_to_remove, reverse=True):
+                st.session_state["so_rak_list"].pop(_i)
+            st.rerun()
+    
+        # Total nominal
+        _total_nominal_input = sum(
+            item.get("nominal_adjust", 0)
+            for item in st.session_state["so_rak_list"]
+        )
+        _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
+    
+        st.markdown(
+            f"<div class='metric-clean' style='border-left-color: {_color_total}; "
+            f"margin-top: 16px; text-align: right;'>"
+            f"<div class='label'>💰 TOTAL NOMINAL SO ({len(st.session_state['so_rak_list'])} RAK)</div>"
+            f"<div class='value' style='color: {_color_total};'>"
+            f"{fmt_rp_signed(_total_nominal_input)}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
         
         # ============================================================
         # TOMBOL LANJUT KE KONFIRMASI
@@ -1487,27 +1489,27 @@ def render_analisis():
             st.info("📭 Belum ada data SO di periode ini")
 
     # ============================================================
-    # RAK BELUM SO — Tabel HTML (Konsisten sama Rak Sudah SO)
+    # RAK BELUM SO — Tabel HTML (Limited + Load More)
     # ============================================================
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
+    
     with st.expander("📋 Rak Belum SO (Klik untuk buka)", expanded=False):
         try:
             from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
-
+    
             _rak_belum_df = _get_belum_so_df(_rak_df)
-
+    
             if not _rak_belum_df.empty:
                 _jumlah_belum = len(_rak_belum_df)
                 st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO")
-
+    
                 _search_belum = st.text_input(
                     "🔍 Cari rak",
                     key="search_rak_belum",
                     placeholder="Ketik kode/nama rak...",
                     label_visibility="collapsed",
                 )
-
+    
                 _rak_filtered = _rak_belum_df.copy()
                 if _search_belum and len(_search_belum.strip()) >= 1:
                     _q = _search_belum.strip().upper()
@@ -1515,10 +1517,19 @@ def render_analisis():
                         _rak_filtered["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
                         _rak_filtered["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
                     ]
-
-                # ✅ Tabel HTML (konsisten sama so-table)
+    
+                # ✅ FIX: Batasi tampilan (default 20)
+                _limit_key = "so_limit_belum"
+                if _limit_key not in st.session_state:
+                    st.session_state[_limit_key] = 20
+    
+                _total_filtered = len(_rak_filtered)
+                _limit = st.session_state[_limit_key]
+                _rak_shown = _rak_filtered.head(_limit)
+    
+                # Tabel HTML
                 _rows_html = ""
-                for _rak in _rak_filtered[["rak_id", "rak_name"]].to_dict("records"):
+                for _rak in _rak_shown[["rak_id", "rak_name"]].to_dict("records"):
                     _rid = str(_rak.get("rak_id", "-"))
                     _rname = str(_rak.get("rak_name", "-"))[:40]
                     _rows_html += (
@@ -1527,7 +1538,7 @@ def render_analisis():
                         f"<td style='font-family: Quicksand, sans-serif;'>{_rname}</td>"
                         f"</tr>"
                     )
-
+    
                 _table_html = (
                     "<table class='so-table'>"
                     "<thead><tr>"
@@ -1538,15 +1549,39 @@ def render_analisis():
                     "</table>"
                 )
                 st.markdown(_table_html, unsafe_allow_html=True)
-
+    
+                # ✅ FIX: Load More button
+                _col_info, _col_btn = st.columns([2, 1])
+    
+                with _col_info:
+                    st.caption(f"📊 Menampilkan **{len(_rak_shown)}** dari **{_total_filtered}** rak")
+    
+                with _col_btn:
+                    if _limit < _total_filtered:
+                        if st.button(
+                            "📥 Load More (+20)",
+                            key="btn_load_more_belum",
+                            width="stretch",
+                        ):
+                            st.session_state[_limit_key] += 20
+                            st.rerun()
+                    else:
+                        if st.button(
+                            "🔼 Sembunyikan",
+                            key="btn_collapse_belum",
+                            width="stretch",
+                        ):
+                            st.session_state[_limit_key] = 20
+                            st.rerun()
+    
                 # Download
                 _list_text = "\n".join([
                     f"{r['rak_id']} — {r['rak_name']}"
                     for r in _rak_filtered[["rak_id", "rak_name"]].to_dict("records")
                 ])
-
+    
                 st.download_button(
-                    label=f"📥 Download List ({len(_rak_filtered)} rak)",
+                    label=f"📥 Download Semua List ({_total_filtered} rak)",
                     data=_list_text,
                     file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
                     mime="text/plain",
