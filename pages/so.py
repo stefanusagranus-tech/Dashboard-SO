@@ -461,7 +461,8 @@ def _dialog_konfirmasi_so():
 # TAB 1: INPUT SO (FORM UTAMA)
 # =========================================================================
 def render_input_so():
-    # ✅ Cek saved data DULU
+    """Router: dialog sukses → dialog konfirmasi → form input."""
+    # ✅ Cek saved data DULU (sukses)
     if st.session_state.get("so_saved_data"):
         _dialog_sukses_so()
         st.info("📌 Selesaikan dialog di atas untuk melanjutkan.")
@@ -477,20 +478,41 @@ def render_input_so():
     # ✅ Default: render form
     _render_input_form()
 
+
+# =========================================================================
+# SCREEN 1: FORM INPUT
+# =========================================================================
+def _render_input_form():
+    """Layar 1: Form input SO."""
     st.markdown("### 📝 Input SO")
     st.caption("Input SPD (opsional) + rak yang di-SO dalam 1 form")
 
     # --- INFO SO ---
     _col_tgl, _col_ket = st.columns([1.5, 3])
     with _col_tgl:
-        _tanggal = st.date_input("📅 Tanggal SO", value=datetime.now(ZoneInfo("Asia/Jakarta")).date(), key="so_input_tanggal")
+        _tanggal = st.date_input(
+            "📅 Tanggal SO",
+            value=datetime.now(ZoneInfo("Asia/Jakarta")).date(),
+            key="so_input_tanggal",
+        )
     with _col_ket:
-        _keterangan = st.text_input("📝 Keterangan (opsional)", placeholder="Contoh: Pendingan rak FE1", key="so_input_keterangan")
+        _keterangan = st.text_input(
+            "📝 Keterangan (opsional)",
+            placeholder="Contoh: Pendingan rak FE1",
+            key="so_input_keterangan",
+        )
 
     if st.session_state["so_last_loaded_date"] != _tanggal:
         with st.spinner("⏳ Load..."):
             _existing = load_so_summary_by_date(_tanggal)
-        st.session_state["so_rak_list"] = [{"rak_id": r.get("rak_id"), "nominal_adjust": float(r.get("nominal_adjust", 0)), "pic": r.get("pic", "") or ""} for r in (_existing or [])]
+        st.session_state["so_rak_list"] = [
+            {
+                "rak_id": r.get("rak_id"),
+                "nominal_adjust": float(r.get("nominal_adjust", 0)),
+                "pic": r.get("pic", "") or "",
+            }
+            for r in (_existing or [])
+        ]
         st.session_state["so_last_loaded_date"] = _tanggal
         st.rerun()
 
@@ -499,22 +521,47 @@ def render_input_so():
     # --- SPD ---
     _col_spd1, _col_spd2 = st.columns([1, 3])
     with _col_spd1:
-        _spd_val = st.number_input("💰 SPD Hari Ini", min_value=0, max_value=999_999_999_999, step=100_000, value=0, key="so_input_spd", help="Isi 0 kalau belum ada SPD hari ini")
+        _spd_val = st.number_input(
+            "💰 SPD Hari Ini",
+            min_value=0,
+            max_value=999_999_999_999,
+            step=100_000,
+            value=0,
+            key="so_input_spd",
+            help="Isi 0 kalau belum ada SPD hari ini",
+        )
     with _col_spd2:
         if _spd_val > 0:
-            st.markdown(f"<div class='metric-clean' style='border-left-color: #7FB99B; padding: 10px 14px; margin-top: 4px;'><div class='label'>💡 BTSB OTOMATIS</div><div class='value' style='font-size: 18px; color: #7FB99B;'>{fmt_rp(hitung_btsb_harian(_spd_val))}</div></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='metric-clean' style='border-left-color: #7FB99B; "
+                f"padding: 10px 14px; margin-top: 4px;'>"
+                f"<div class='label'>💡 BTSB OTOMATIS</div>"
+                f"<div class='value' style='font-size: 18px; color: #7FB99B;'>"
+                f"{fmt_rp(hitung_btsb_harian(_spd_val))}</div></div>",
+                unsafe_allow_html=True,
+            )
         else:
-            st.markdown("<div style='padding: 12px 0; font-family: JetBrains Mono, monospace; font-size: 11px; color: #A89B8E;'>💡 BTSB: — (SPD = 0)</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='padding: 12px 0; font-family: JetBrains Mono, monospace; "
+                "font-size: 11px; color: #A89B8E;'>💡 BTSB: — (SPD = 0)</div>",
+                unsafe_allow_html=True,
+            )
 
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     # --- SEARCH RAK ---
     st.markdown("#### 📦 Stock Opname (Multi-Rak)")
     st.caption("Cari rak → klik **+ Add** → isi nominal & PIC per rak")
+
     with st.form("form_search_rak", clear_on_submit=False, enter_to_submit=False):
         _col_search, _col_btn = st.columns([4, 1])
         with _col_search:
-            _search_query = st.text_input("🔍 Cari Rak", placeholder="Ketik kode rak...", key="so_search_input", label_visibility="collapsed")
+            _search_query = st.text_input(
+                "🔍 Cari Rak",
+                placeholder="Ketik kode rak...",
+                key="so_search_input",
+                label_visibility="collapsed",
+            )
         with _col_btn:
             _search_submit = st.form_submit_button("🔍 Cari", width="stretch", type="primary")
 
@@ -534,14 +581,24 @@ def render_input_so():
             _c1, _c2 = st.columns([4, 1])
             with _c1:
                 _status_icon = "✅" if _rak.get("status_so") == "SELESAI" else "⬜"
-                st.markdown(f"<div class='rak-result'><div><div class='rak-result-id'>{_status_icon} {_rid}</div><div class='rak-result-name'>{_rak.get('rak_name', '-')}</div></div></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='rak-result'><div>"
+                    f"<div class='rak-result-id'>{_status_icon} {_rid}</div>"
+                    f"<div class='rak-result-name'>{_rak.get('rak_name', '-')}</div>"
+                    f"</div></div>",
+                    unsafe_allow_html=True,
+                )
             with _c2:
                 if _already_selected:
                     st.button("✓", key=f"btn_add_{_idx}_{_rid}", disabled=True, width="stretch")
                 else:
                     if st.button("+ Add", key=f"btn_add_{_idx}_{_rid}", width="stretch", type="primary"):
                         _default_pic = _personil_list[0] if _personil_list else ""
-                        st.session_state["so_rak_list"].append({"rak_id": _rid, "nominal_adjust": 0.0, "pic": _default_pic})
+                        st.session_state["so_rak_list"].append({
+                            "rak_id": _rid,
+                            "nominal_adjust": 0.0,
+                            "pic": _default_pic,
+                        })
                         st.rerun()
     elif st.session_state.get("so_search_shown") and not st.session_state.get("so_search_results"):
         st.warning("⚠️ Rak tidak ditemukan.")
@@ -557,29 +614,60 @@ def render_input_so():
             _rak_info = get_rak_by_kode_exact(_rid)
             _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
             _c1, _c2, _c3, _c4 = st.columns([2, 1.5, 1.5, 0.5])
-            with _c1: st.markdown(f"<div class='rak-selected' style='margin-top: 4px;'><div class='rak-selected-id'>{_rid}</div><div class='rak-selected-name'>{_rname}</div></div>", unsafe_allow_html=True)
+            with _c1:
+                st.markdown(
+                    f"<div class='rak-selected' style='margin-top: 4px;'>"
+                    f"<div class='rak-selected-id'>{_rid}</div>"
+                    f"<div class='rak-selected-name'>{_rname}</div></div>",
+                    unsafe_allow_html=True,
+                )
             with _c2:
-                _new_nominal = st.number_input(f"Nominal {_rid}", min_value=-999_999_999, max_value=999_999_999, step=1000, value=int(_item.get("nominal_adjust", 0)), key=f"so_nominal_{_rid}_{_idx}", label_visibility="collapsed")
+                _new_nominal = st.number_input(
+                    f"Nominal {_rid}",
+                    min_value=-999_999_999,
+                    max_value=999_999_999,
+                    step=1000,
+                    value=int(_item.get("nominal_adjust", 0)),
+                    key=f"so_nominal_{_rid}_{_idx}",
+                    label_visibility="collapsed",
+                )
                 st.session_state["so_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
             with _c3:
                 _current_pic = _item.get("pic", "")
-                _new_pic = st.selectbox(f"PIC {_rid}", options=_personil_list, index=_personil_list.index(_current_pic) if _current_pic in _personil_list else 0, key=f"so_pic_{_rid}_{_idx}", label_visibility="collapsed")
+                _new_pic = st.selectbox(
+                    f"PIC {_rid}",
+                    options=_personil_list,
+                    index=_personil_list.index(_current_pic) if _current_pic in _personil_list else 0,
+                    key=f"so_pic_{_rid}_{_idx}",
+                    label_visibility="collapsed",
+                )
                 st.session_state["so_rak_list"][_idx]["pic"] = _new_pic
             with _c4:
-                if st.button("🗑️", key=f"so_del_{_rid}_{_idx}", width="stretch"): _items_to_remove.append(_idx)
+                if st.button("🗑️", key=f"so_del_{_rid}_{_idx}", width="stretch"):
+                    _items_to_remove.append(_idx)
+
         if _items_to_remove:
-            for _i in sorted(_items_to_remove, reverse=True): st.session_state["so_rak_list"].pop(_i)
+            for _i in sorted(_items_to_remove, reverse=True):
+                st.session_state["so_rak_list"].pop(_i)
             st.rerun()
-        
+
         _total_nominal_input = sum(item.get("nominal_adjust", 0) for item in st.session_state["so_rak_list"])
         _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
-        st.markdown(f"<div class='metric-clean' style='border-left-color: {_color_total}; margin-top: 16px; text-align: right;'><div class='label'>💰 TOTAL NOMINAL SO ({len(st.session_state['so_rak_list'])} RAK)</div><div class='value' style='color: {_color_total};'>{fmt_rp_signed(_total_nominal_input)}</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='metric-clean' style='border-left-color: {_color_total}; "
+            f"margin-top: 16px; text-align: right;'>"
+            f"<div class='label'>💰 TOTAL NOMINAL SO ({len(st.session_state['so_rak_list'])} RAK)</div>"
+            f"<div class='value' style='color: {_color_total};'>"
+            f"{fmt_rp_signed(_total_nominal_input)}</div></div>",
+            unsafe_allow_html=True,
+        )
     else:
         st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
 
     # --- TOMBOL AKSI ---
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
     _col_save, _col_cancel = st.columns([3, 1])
+
     with _col_save:
         if st.button("➡️ LANJUT KONFIRMASI", key="btn_ke_konfirmasi", width="stretch", type="primary"):
             _rak_tanpa_pic = [r["rak_id"] for r in st.session_state["so_rak_list"] if not r.get("pic")]
@@ -588,12 +676,19 @@ def render_input_so():
             elif _rak_tanpa_pic:
                 st.error(f"⚠️ Rak berikut belum punya PIC: **{', '.join(_rak_tanpa_pic)}**")
             else:
-                st.session_state["so_pending_data"] = {"tanggal": _tanggal, "spd": _spd_val, "rak_items": list(st.session_state["so_rak_list"]), "keterangan": _keterangan}
-                _dialog_konfirmasi_so() # ✅ Panggil pop-up
+                st.session_state["so_pending_data"] = {
+                    "tanggal": _tanggal,
+                    "spd": _spd_val,
+                    "rak_items": list(st.session_state["so_rak_list"]),
+                    "keterangan": _keterangan,
+                }
                 st.rerun()
+
     with _col_cancel:
         if st.button("🗑️ Clear", key="btn_clear_so", width="stretch"):
-            st.session_state["so_rak_list"] = []; st.session_state["so_search_results"] = []; st.session_state["so_search_shown"] = False
+            st.session_state["so_rak_list"] = []
+            st.session_state["so_search_results"] = []
+            st.session_state["so_search_shown"] = False
             st.rerun()
             
 # =========================================================================
