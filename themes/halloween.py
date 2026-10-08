@@ -348,43 +348,119 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 PROFILE HEADER (Halaman SO)
+    🎃 PROFILE HEADER — MEWAH (Halaman SO)
     ============================================ */
-    .profile-header {{
+    .profile-header {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 14px 20px;
-        background: linear-gradient(135deg, #0F0A1E 0%, #2E1065 100%);
-        border: 1px solid rgba(232, 177, 137, 0.3);
-        border-radius: 14px;
-        margin-bottom: 20px;
-        box-shadow: 0 0 20px rgba(107, 33, 168, 0.2);
-    }}
-
-    .profile-title {{
+        padding: 22px 28px;
+        background: linear-gradient(135deg, #0F0A1E 0%, #2E1065 40%, #4C1D95 70%, #0F0A1E 100%);
+        border: 2px solid var(--pumpkin);
+        border-radius: 18px;
+        margin-bottom: 24px;
+        overflow: hidden;
+        animation: headerBorderPulse 5s infinite ease-in-out;
+        box-shadow:
+            0 0 40px rgba(107, 33, 168, 0.35),
+            0 0 80px rgba(255, 107, 26, 0.15),
+            inset 0 0 60px rgba(0, 0, 0, 0.7);
+    }
+    
+    /* Fog drift di dalam header */
+    .profile-header::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background:
+            radial-gradient(ellipse at 20% 30%, rgba(255, 107, 26, 0.12), transparent 50%),
+            radial-gradient(ellipse at 80% 70%, rgba(168, 85, 247, 0.10), transparent 50%);
+        animation: headerFogDrift 25s infinite ease-in-out;
+        pointer-events: none;
+        z-index: 0;
+        will-change: transform, opacity;
+    }
+    
+    /* Ornamen pojok */
+    .profile-header-ornament {
+        position: absolute;
+        font-size: 18px;
+        color: var(--pumpkin);
+        z-index: 2;
+        filter: drop-shadow(0 0 8px var(--pumpkin));
+        animation: ornamentRotate 8s infinite linear;
+    }
+    
+    .profile-orn-tl { top: 8px; left: 12px; }
+    .profile-orn-tr { top: 8px; right: 12px; animation-direction: reverse; }
+    .profile-orn-bl { bottom: 8px; left: 12px; animation-direction: reverse; }
+    .profile-orn-br { bottom: 8px; right: 12px; }
+    
+    .profile-title {
+        position: relative;
         font-family: 'Cinzel Decorative', 'Cinzel', -apple-system, serif;
-        font-size: 16px;
+        font-size: 20px;
         font-weight: 900;
         color: var(--pumpkin);
-        letter-spacing: 2px;
-        text-shadow: 0 0 10px rgba(255, 107, 26, 0.4);
-    }}
-
-    .profile-sub {{
-        font-family: 'Quicksand', -apple-system, sans-serif;
-        font-size: 10px;
-        color: var(--secondary);
-        letter-spacing: 1px;
-        margin-top: 2px;
-    }}
-
-    .profile-status {{
+        letter-spacing: 3px;
+        z-index: 2;
+        text-shadow:
+            0 0 15px var(--pumpkin),
+            0 0 30px rgba(255, 107, 26, 0.7),
+            0 0 50px rgba(255, 107, 26, 0.4),
+            2px 2px 4px rgba(0, 0, 0, 0.95);
+        animation: titlePulse 4s infinite ease-in-out;
+    }
+    
+    .profile-sub {
+        position: relative;
+        font-family: 'Cinzel', -apple-system, serif;
+        font-size: 11px;
+        color: var(--pumpkin-light);
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-top: 6px;
+        z-index: 2;
+        animation: subtitleFlicker 3s infinite ease-in-out;
+    }
+    
+    .profile-status {
+        position: relative;
         font-family: 'JetBrains Mono', 'Courier New', monospace;
-        font-size: 10px;
+        font-size: 11px;
         color: var(--secondary);
         text-align: right;
-    }}
+        z-index: 2;
+        line-height: 1.5;
+        letter-spacing: 1px;
+    }
+    
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        .profile-header {
+            padding: 16px 18px;
+            border-radius: 14px;
+        }
+        .profile-title {
+            font-size: 15px;
+            letter-spacing: 2px;
+        }
+        .profile-sub {
+            font-size: 9px;
+            letter-spacing: 2px;
+        }
+        .profile-status {
+            font-size: 9px;
+        }
+        .profile-header-ornament {
+            font-size: 14px;
+            animation: none;
+        }
+    }
 
     /* ============================================
     🎃 METRIC CARD (dengan entrance animation)
@@ -982,75 +1058,165 @@ def get_css(variant="malam"):
         opacity: 0.5;
     }}
 
-    /* === FLYERS (6 icon) === */
-    .hw-flyer {{
+    /* === FLYER BASE === */
+    .hw-flyer {
         position: fixed;
-        left: -60px;
         z-index: 999;
         pointer-events: none;
         opacity: 0;
         will-change: transform, opacity;
         transform: translate3d(0, 0, 0);
         line-height: 1;
-    }}
-
-    .hw-flyer-1 {{
-        top: 6%;
+    }
+    
+    /* === FLYER 1: KELELAWAR — kiri→kanan naik === */
+    .hw-flyer-1 {
+        top: 5%;
+        left: -60px;
         font-size: 26px;
-        animation: hwSweep1 18s infinite linear;
+        animation: hwFlyLeftRightUp 22s infinite linear;
         animation-delay: 0s;
-    }}
-
-    .hw-flyer-2 {{
-        top: 10%;
+    }
+    
+    /* === FLYER 2: LABU — kanan→kiri turun === */
+    .hw-flyer-2 {
+        top: 15%;
+        right: -60px;
         font-size: 24px;
-        animation: hwSweep2 24s infinite linear;
-        animation-delay: 3s;
-    }}
-
-    .hw-flyer-3 {{
-        top: 20%;
+        animation: hwFlyRightLeftDown 28s infinite linear;
+        animation-delay: 4s;
+    }
+    
+    /* === FLYER 3: HANTU — atas→bawah zigzag === */
+    .hw-flyer-3 {
+        top: -60px;
+        left: 20%;
         font-size: 28px;
-        animation: hwSweep1 26s infinite linear;
-        animation-delay: 6s;
-    }}
-
-    .hw-flyer-4 {{
-        top: 30%;
+        animation: hwFlyTopBottom 32s infinite linear;
+        animation-delay: 8s;
+    }
+    
+    /* === FLYER 4: LABA-LABA — diagonal === */
+    .hw-flyer-4 {
+        bottom: -60px;
+        left: 10%;
         font-size: 20px;
-        animation: hwSweep2 30s infinite linear;
-        animation-delay: 10s;
-    }}
-
-    .hw-flyer-5 {{
-        top: 70%;
+        animation: hwFlyDiagonal 30s infinite linear;
+        animation-delay: 12s;
+    }
+    
+    /* === FLYER 5: KELELAWAR 2 — kiri→kanan gelombang === */
+    .hw-flyer-5 {
+        top: 65%;
+        left: -60px;
         font-size: 22px;
-        animation: hwSweep1 28s infinite linear;
-        animation-delay: 14s;
-    }}
-
-    .hw-flyer-6 {{
-        top: 82%;
+        animation: hwFlyWave 35s infinite linear;
+        animation-delay: 16s;
+    }
+    
+    /* === FLYER 6: LABU 2 — kanan→kiri naik === */
+    .hw-flyer-6 {
+        bottom: 15%;
+        right: -60px;
         font-size: 20px;
-        animation: hwSweep2 34s infinite linear;
-        animation-delay: 18s;
-    }}
-
-    @keyframes hwSweep1 {{
-        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
-        8% {{ opacity: 0.9; }}
-        50% {{ transform: translate3d(55vw, -25px, 0); }}
-        92% {{ opacity: 0.9; }}
-        100% {{ transform: translate3d(110vw, -40px, 0); opacity: 0; }}
-    }}
-
-    @keyframes hwSweep2 {{
-        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
-        8% {{ opacity: 0.9; }}
-        50% {{ transform: translate3d(55vw, 20px, 0); }}
-        92% {{ opacity: 0.9; }}
-        100% {{ transform: translate3d(110vw, 35px, 0); opacity: 0; }}
-    }}
+        animation: hwFlyRightLeftUp 38s infinite linear;
+        animation-delay: 20s;
+    }
+    
+    /* === ANIMASI 1: KIRI → KANAN NAIK === */
+    @keyframes hwFlyLeftRightUp {
+        0% {
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }
+        8% { opacity: 0.9; }
+        50% { transform: translate3d(55vw, -30px, 0); }
+        92% { opacity: 0.9; }
+        100% {
+            transform: translate3d(115vw, -50px, 0);
+            opacity: 0;
+        }
+    }
+    
+    /* === ANIMASI 2: KANAN → KIRI TURUN === */
+    @keyframes hwFlyRightLeftDown {
+        0% {
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }
+        8% { opacity: 0.9; }
+        50% { transform: translate3d(-55vw, 25px, 0); }
+        92% { opacity: 0.9; }
+        100% {
+            transform: translate3d(-115vw, 45px, 0);
+            opacity: 0;
+        }
+    }
+    
+    /* === ANIMASI 3: ATAS → BAWAH (zigzag horizontal tipis) === */
+    @keyframes hwFlyTopBottom {
+        0% {
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }
+        8% { opacity: 0.9; }
+        25% { transform: translate3d(20px, 25vh, 0); }
+        50% { transform: translate3d(-20px, 50vh, 0); }
+        75% { transform: translate3d(20px, 75vh, 0); }
+        92% { opacity: 0.9; }
+        100% {
+            transform: translate3d(0, 105vh, 0);
+            opacity: 0;
+        }
+    }
+    
+    /* === ANIMASI 4: DIAGONAL (kiri bawah → kanan atas) === */
+    @keyframes hwFlyDiagonal {
+        0% {
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }
+        8% { opacity: 0.9; }
+        50% { transform: translate3d(55vw, -50vh, 0); }
+        92% { opacity: 0.9; }
+        100% {
+            transform: translate3d(110vw, -100vh, 0);
+            opacity: 0;
+        }
+    }
+    
+    /* === ANIMASI 5: GELOMBANG (naik-turun kiri→kanan) === */
+    @keyframes hwFlyWave {
+        0% {
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }
+        8% { opacity: 0.9; }
+        20% { transform: translate3d(22vw, -40px, 0); }
+        40% { transform: translate3d(44vw, 40px, 0); }
+        60% { transform: translate3d(66vw, -40px, 0); }
+        80% { transform: translate3d(88vw, 40px, 0); }
+        92% { opacity: 0.9; }
+        100% {
+            transform: translate3d(115vw, 0, 0);
+            opacity: 0;
+        }
+    }
+    
+    /* === ANIMASI 6: KANAN → KIRI NAIK === */
+    @keyframes hwFlyRightLeftUp {
+        0% {
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }
+        8% { opacity: 0.9; }
+        50% { transform: translate3d(-55vw, -25px, 0); }
+        92% { opacity: 0.9; }
+        100% {
+            transform: translate3d(-115vw, -45px, 0);
+            opacity: 0;
+        }
+    }
 
     /* ============================================
     📱 MOBILE OPTIMIZATION
