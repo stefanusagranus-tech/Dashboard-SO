@@ -475,13 +475,7 @@ def get_usage_df():
 def ocr_so_table(image_bytes):
     """
     OCR gambar tabel SO → text.
-    Khusus buat laporan SO dari web Alfamart.
-    
-    Args:
-        image_bytes: bytes dari file gambar
-        
-    Returns:
-        dict {success, text, error, model}
+    FOKUS cuma ke TABEL-nya, bukan header.
     """
     if not GEMINI_AVAILABLE:
         return {"success": False, "text": "", "error": "Gemini not available", "model": ""}
@@ -494,30 +488,33 @@ def ocr_so_table(image_bytes):
         _client = genai.Client(api_key=_api_key)
         _img = Image.open(io.BytesIO(image_bytes))
 
-        _prompt = """Baca TABEL LAPORAN STOCK OPNAME ini dengan SANGAT TELITI.
+        # ✅ PROMPT LEBIH SPESIFIK — fokus ke BARIS DATA
+        _prompt = """Baca SEMUA BARIS DATA dari tabel laporan Stock Opname di gambar ini.
 
-Kolom yang mungkin ada:
-- No | PLU | Nama Barang | Rak | Stock | Fisik | Plus/Minus | Selisih Rupiah
-- Atau: Kode | Nama | QTYCOUNT | QTYONHAND | QTYVAR | NOMINAL
+TUGAS UTAMA:
+Extract setiap baris produk dari tabel. Format: 1 baris = 1 produk.
 
-TUGAS:
-1. Extract SETIAP BARIS dari tabel
-2. Format: 1 baris = 1 baris (SPASI sebagai separator)
-3. Format output: No PLU Nama_Barang Rak Stock Fisik PlusMinus Nominal
-4. JANGAN ubah data apapun — copy apa adanya
-5. Kalau ada tanda koma di angka (contoh: 5,333.58) → tetap tulis 5333.58
-6. Kalau ada tanda minus (-5926.15) → tetap tulis -5926.15
-
-FORMAT OUTPUT (plain text, 1 baris per item):
+Contoh format output (plain text, JANGAN ada header):
 1 444756 WOW SPAGETI BOLOGNESE 76G 900 51 51 0 5333.58
 2 443704 FIESTA RTG SOSIS SPICY KOREAN 60G 900 17 17 0 -5926.15
 3 454314 DIAMOND MILK JEL MELON TP 200ML 900 27 - 27 4410.0
-...
+4 454318 DIAMOND MILK JEL CONUT TP 200ML 900 27 - 17 -35280.0
 
-JANGAN kasih header, JANGAN penjelasan apapun. LANGSUNG data-nya aja.
+ATURAN:
+1. Copy SEMUA baris yang ada (bisa 30-50 baris)
+2. Nomor di awal (1, 2, 3, dst) — copy apa adanya
+3. PLU = angka 6+ digit, copy apa adanya
+4. Nama barang — copy persis, boleh ada spasi
+5. Rak = kode rak (angka 2-4 digit, atau Q61/QA1)
+6. Stock = angka qty sistem
+7. Fisik = angka qty fisik (kalau ada tanda "-" berarti kosong, tulis "-")
+8. Plus/Minus = qty var (angka, boleh ada + atau -)
+9. Selisih Rupiah = nominal adjust (angka, boleh + atau -)
+
+JANGAN tambah header, JANGAN tambah penjelasan apapun.
+LANGSUNG baris data-nya aja, satu baris per produk.
 """
 
-        # Loop model (fallback)
         _last_error = None
         _response = None
         _model_used = None
@@ -529,8 +526,8 @@ JANGAN kasih header, JANGAN penjelasan apapun. LANGSUNG data-nya aja.
                     model=_model_name,
                     contents=[_prompt, _img],
                     config=genai_types.GenerateContentConfig(
-                        temperature=0.05,
-                        max_output_tokens=4096,
+                        temperature=0.0,
+                        max_output_tokens=8192,
                     ),
                 )
 
@@ -553,12 +550,11 @@ JANGAN kasih header, JANGAN penjelasan apapun. LANGSUNG data-nya aja.
                 return {
                     "success": False,
                     "text": "",
-                    "error": "🚫 Quota Gemini habis. Coba beberapa menit lagi atau pakai file PDF.",
+                    "error": "🚫 Quota Gemini habis. Tunggu 1-2 menit atau upload PDF.",
                     "model": "",
                 }
             return {"success": False, "text": "", "error": _last_error or "Unknown error", "model": ""}
 
-        # Record usage
         try:
             _usage = getattr(_response, "usage_metadata", None)
             if _usage:
@@ -572,13 +568,13 @@ JANGAN kasih header, JANGAN penjelasan apapun. LANGSUNG data-nya aja.
             pass
 
         _text = _response.text.strip()
-
-        # Clean markdown backtick
         _text = re.sub(r'^```\w*\s*', '', _text)
         _text = re.sub(r'\s*```$', '', _text)
 
         print(f"[OCR SO] Text length: {len(_text)}")
-        print(f"[OCR SO] First 500: {_text[:500]}")
+        print(f"[OCR SO] First 1000 chars:")
+        print(_text[:1000])
+        print(f"[OCR SO] Total lines: {len(_text.splitlines())}")
 
         return {
             "success": True,
@@ -591,7 +587,6 @@ JANGAN kasih header, JANGAN penjelasan apapun. LANGSUNG data-nya aja.
         import traceback
         print(traceback.format_exc())
         return {"success": False, "text": "", "error": str(e)[:300], "model": ""}
-
 
 # =========================================================
 # 🔍 DETEKSI TIPE GAMBAR (Shift Kalender atau Tabel SO)
