@@ -1,14 +1,8 @@
 """
-AI SO Input — Yui (AI-2) v3
+AI SO Input — Yui (AI-2) v4
 =============================
 Pembantu Input Stock Opname.
 Persona: Rekan kerja profesional, teliti, natural.
-
-Fix v3:
-- Model 20b aja (120b known issue empty response)
-- Prompt khusus table extraction
-- Fallback regex kalau LLM gagal
-- Debug log lengkap
 """
 
 import json
@@ -53,7 +47,6 @@ def _clean_text_for_llm(text):
 
     _clean = str(text)
 
-    # Hapus HTML tags
     _clean = re.sub(r'</?table[^>]*>', '\n', _clean, flags=re.IGNORECASE)
     _clean = re.sub(r'</?thead[^>]*>', '\n', _clean, flags=re.IGNORECASE)
     _clean = re.sub(r'</?tbody[^>]*>', '\n', _clean, flags=re.IGNORECASE)
@@ -62,7 +55,6 @@ def _clean_text_for_llm(text):
     _clean = re.sub(r'</?td[^>]*>', ' | ', _clean, flags=re.IGNORECASE)
     _clean = re.sub(r'</?(?:div|span|p|br)[^>]*>', ' ', _clean, flags=re.IGNORECASE)
 
-    # Fix multiple spaces & newlines
     _clean = re.sub(r'[ \t]+', ' ', _clean)
     _clean = re.sub(r'\n{3,}', '\n\n', _clean)
     _clean = re.sub(r'(\n\s*)+', '\n', _clean)
@@ -71,12 +63,7 @@ def _clean_text_for_llm(text):
 
 
 def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
-    """
-    Call Groq untuk Yui.
-    - Model priority: 20b SAJA (120b sering empty)
-    - Truncate prompt max 10000 char
-    - Validasi response 5 layer
-    """
+    """Call Groq untuk Yui."""
     if check_auto_pause("ai-2"):
         return False, "", None, "Auto-pause: quota Yui hampir habis"
 
@@ -87,7 +74,6 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
     _cfg = get_ai_config("ai-2")
     _models = _cfg.get("model_priority", ["openai/gpt-oss-20b"])
 
-    # Truncate prompt
     _prompt = str(prompt)
     if len(_prompt) > 10000:
         print(f"[Yui] Truncate prompt: {len(_prompt)} → 10000")
@@ -106,7 +92,6 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
                     top_p=0.95,
                 )
 
-                # Validasi 5 layer
                 if not _resp:
                     _last_err = f"Response None dari {_model_name}"
                     print(f"[Yui] {_last_err}")
@@ -135,7 +120,7 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
                     print(f"[Yui] {_last_err}")
                     continue
 
-                print(f"[Yui] ✅ OK: {_model_name} ({len(_text)} chars)")
+                print(f"[Yui] OK: {_model_name} ({len(_text)} chars)")
 
                 _usage = {"model": _model_name, "success": True}
                 try:
@@ -191,13 +176,12 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
 
 
 def _extract_json(text):
-    """Extract JSON dari response Yui — improved."""
+    """Extract JSON dari response Yui."""
     if not text:
         return None
 
     _text = str(text).strip()
 
-    # Hapus markdown code block kalau ada
     _text = re.sub(r'^```(?:json)?\s*', '', _text)
     _text = re.sub(r'\s*```$', '', _text)
 
@@ -221,15 +205,10 @@ def _extract_json(text):
 
 
 # =========================================================
-# 🔧 FALLBACK REGEX — Extract table manual
+# 🔧 FALLBACK REGEX
 # =========================================================
 def _fallback_regex_extract(text):
-    """
-    Fallback: extract data SO via regex kalau LLM gagal.
-    Support berbagai format: 
-    - "1 444756 WOW SPAGETI BOLOGNESE 76G 900 51 51 0 5,333.58"
-    - "1 444756 WOW SPAGETI 76G 900 51 51 0 5333.58"
-    """
+    """Fallback: extract data SO via regex."""
     if not text:
         return None
 
@@ -239,16 +218,15 @@ def _fallback_regex_extract(text):
     print(f"[Yui Fallback] Text len: {len(_text)}")
     print(f"[Yui Fallback] Lines: {len(_text.splitlines())}")
 
-    # Pattern 1: No PLU Nama Rak Stock Fisik QtyVar Nominal
     _pattern = re.compile(
-        r'^\s*(\d{1,3})\s+'                                 # No
-        r'(\d{6,})\s+'                                      # PLU
-        r'([A-Z][A-Z0-9\s\.\-/&\'\(\)]+?)\s{2,}'            # Nama (biar gak greedy)
-        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'    # Rak
-        r'(-?\d+)\s+'                                       # Stock
-        r'(-|\d+)\s+'                                       # Fisik (bisa "-")
-        r'([-+]?\d+)\s+'                                    # Qty Var
-        r'([-+]?[\d,]+\.?\d*)\s*$',                         # Nominal
+        r'^\s*(\d{1,3})\s+'
+        r'(\d{6,})\s+'
+        r'([A-Z][A-Z0-9\s\.\-/&\'\(\)]+?)\s{2,}'
+        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'
+        r'(-?\d+)\s+'
+        r'(-|\d+)\s+'
+        r'([-+]?\d+)\s+'
+        r'([-+]?[\d,]+\.?\d*)\s*$',
         re.MULTILINE
     )
 
@@ -258,10 +236,10 @@ def _fallback_regex_extract(text):
             _nama = _match.group(3).strip()[:120]
             _rak = _match.group(4).strip().upper()
             _qty_sistem = int(_match.group(5))
-            
+
             _fisik_str = _match.group(6).strip()
             _qty_fisik = int(_fisik_str) if _fisik_str != "-" else 0
-            
+
             _qty_var = int(_match.group(7))
             _nominal_str = _match.group(8).replace(",", "")
             _nominal = float(_nominal_str)
@@ -280,21 +258,20 @@ def _fallback_regex_extract(text):
             print(f"[Yui Fallback] Line error: {_e}")
             continue
 
-    # Pattern 2 (fallback): lebih loose
     if not _items:
-        print("[Yui Fallback] Pattern 1 gak dapet, coba Pattern 2 (loose)...")
-        
+        print("[Yui Fallback] Pattern 1 gak dapet, coba Pattern 2...")
+
         _pattern2 = re.compile(
-            r'\b(\d{6,})\s+'                                    # PLU
-            r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'                   # Nama
-            r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'    # Rak
-            r'(-?\d+)\s+'                                       # Stock
-            r'(-|\d+)\s+'                                       # Fisik
-            r'([-+]?\d+)\s+'                                    # Qty Var
-            r'([-+]?[\d,]+\.?\d*)',                             # Nominal
+            r'\b(\d{6,})\s+'
+            r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'
+            r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'
+            r'(-?\d+)\s+'
+            r'(-|\d+)\s+'
+            r'([-+]?\d+)\s+'
+            r'([-+]?[\d,]+\.?\d*)',
             re.MULTILINE
         )
-        
+
         for _match in _pattern2.finditer(_text):
             try:
                 _items.append({
@@ -311,17 +288,18 @@ def _fallback_regex_extract(text):
                 continue
 
     if not _items:
-        print("[Yui Fallback] 0 items. Print sample text:")
+        print("[Yui Fallback] 0 items. Sample text:")
         print(_text[:500])
         return None
 
-    print(f"[Yui Fallback] ✅ {len(_items)} items extracted")
+    print(f"[Yui Fallback] {len(_items)} items extracted")
 
-    # Detect tanggal
     _tanggal = None
-    _bulan_map = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
-                  "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
-                  "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
+    _bulan_map = {
+        "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
+        "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
+        "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12",
+    }
 
     _tgl_match = re.search(r'(\d{1,2})-(\w{3})-(\d{4})', _text)
     if _tgl_match:
@@ -343,6 +321,7 @@ def _fallback_regex_extract(text):
         "pic": None,
     }
 
+
 # =========================================================
 # 🎯 PERSONA YUI
 # =========================================================
@@ -359,10 +338,6 @@ Rekan kerja asik, bukan chatbot kaku.
 - Kalau ada anomali, langsung bilang
 - Gak pake "Ara ara" atau bahasa lebay
 - Fokus, cepet, to-the-point
-
-Contoh:
-"Oke Bos, aku cek dulu ya... ⏳"
-"Sip, data udah lengkap. Aku simpen ya?"
 </persona>
 
 <expertise>
@@ -434,7 +409,7 @@ Output HANYA JSON.
 
 
 # =========================================================
-# 📄 2. PARSE FILE TEXT — dengan fallback regex
+# 📄 2. PARSE FILE TEXT
 # =========================================================
 def parse_file_text(file_text, file_type="pdf", context=None):
     """Parse text dari file → structured SO data."""
@@ -450,14 +425,12 @@ def parse_file_text(file_text, file_type="pdf", context=None):
     if _ctx.get("pic"):
         _ctx_str += f"\n- PIC: {_ctx['pic']} (dari konteks)"
 
-    # Clean text
     _clean_text = _clean_text_for_llm(file_text)
     _clean_text = _clean_text[:6000]
 
     print(f"[Yui] Clean text length: {len(_clean_text)}")
     print(f"[Yui] First 500 chars: {_clean_text[:500]}")
 
-    # Prompt spesifik table extraction
     _prompt = f"""Kamu Yui, asisten input SO. Baca text di bawah, extract data per BARIS TABEL.
 
 === MULAI TEXT ===
@@ -498,17 +471,16 @@ Output HANYA JSON.
     _ok, _text, _model, _err = _call_yui_groq(_prompt, function="file_parse", temperature=0.05)
 
     if not _ok:
-        # ✅ LLM gagal → coba fallback regex
         print(f"[Yui] LLM gagal ({_err}), coba fallback regex...")
         _fallback_data = _fallback_regex_extract(file_text)
 
         if _fallback_data and _fallback_data.get("items"):
-            print(f"[Yui] ✅ Fallback OK: {len(_fallback_data['items'])} items")
+            print(f"[Yui] Fallback OK: {len(_fallback_data['items'])} items")
             return {
                 "success": True,
                 "data": _fallback_data,
                 "missing": ["pic"],
-                "warnings": [f"⚠️ Extracted via regex (LLM offline): {len(_fallback_data['items'])} items"],
+                "warnings": [f"Extracted via regex (LLM offline): {len(_fallback_data['items'])} items"],
                 "raw": file_text,
                 "model": "regex_fallback",
             }
@@ -524,44 +496,44 @@ Output HANYA JSON.
     print(f"[Yui] Raw response: {_text[:500]}")
 
     _json = _extract_json(_text)
-    
-    # ✅ DEBUG: Handle _json None
+
     print(f"[Yui] JSON valid: {bool(_json)}")
     if _json and isinstance(_json, dict):
         _data_temp = _json.get('data') or {}
-        _items_temp = _data_temp.get('items', []) if isinstance(_data_temp, dict) else []
-        print(f"[Yui] JSON items count: {len(_items_temp)}")
+        if isinstance(_data_temp, dict):
+            _items_temp = _data_temp.get('items', []) or []
+            print(f"[Yui] JSON items count: {len(_items_temp)}")
+        else:
+            print(f"[Yui] Data bukan dict: {type(_data_temp)}")
     else:
-        print(f"[Yui] JSON invalid/None, skip count")
-    
-    # ✅ Kalau LLM return JSON valid
-    if _json and _json.get("data"):
-        _data = _json.get("data", {})
-        _items = _data.get("items", [])
-    
-        if _items:
-            print(f"[Yui] LLM sukses: {len(_items)} items")
-     is        return {
-                "success": _json.get("success", True),
-                "data": _data,
-                "missing": _json.get("missing", []),
-                "warnings": _json.get("warnings", []),
-                "raw": _text,
-                "model": _model,
-            }
-    
-    # ✅ FALLBACK: PASTIKAN pakai file_text (hasil OCR), bukan _text (response Groq)
-    print("[Yui] LLM return invalid/kosong, coba fallback regex dengan OCR text...")
-    print(f"[Yui] Fallback input len: {len(file_text)}")
+        print(f"[Yui] JSON None/invalid, skip count")
+
+    if _json and isinstance(_json, dict):
+        _data = _json.get("data") or {}
+        if isinstance(_data, dict):
+            _items = _data.get("items", []) or []
+
+            if _items:
+                print(f"[Yui] LLM sukses: {len(_items)} items")
+                return {
+                    "success": _json.get("success", True),
+                    "data": _data,
+                    "missing": _json.get("missing", []),
+                    "warnings": _json.get("warnings", []),
+                    "raw": _text,
+                    "model": _model,
+                }
+
+    print("[Yui] LLM gagal/kosong, coba fallback regex...")
     _fallback_data = _fallback_regex_extract(file_text)
 
     if _fallback_data and _fallback_data.get("items"):
-        print(f"[Yui] ✅ Fallback OK: {len(_fallback_data['items'])} items")
+        print(f"[Yui] Fallback OK: {len(_fallback_data['items'])} items")
         return {
             "success": True,
             "data": _fallback_data,
             "missing": ["pic"],
-            "warnings": [f"⚠️ Extracted via regex (fallback): {len(_fallback_data['items'])} items"],
+            "warnings": [f"Extracted via regex (fallback): {len(_fallback_data['items'])} items"],
             "raw": _text,
             "model": "regex_fallback",
         }
@@ -569,7 +541,7 @@ Output HANYA JSON.
     return {
         "success": False,
         "data": None,
-        "warnings": [f"Response bukan JSON valid. Raw: {_text[:200]}"],
+        "warnings": ["Response bukan JSON valid"],
         "missing": [],
         "raw": _text,
     }
