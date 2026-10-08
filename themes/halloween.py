@@ -165,109 +165,166 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 HEADER
+    🎃 PROFILE HEADER
     ============================================ */
-    .royal-header {{
-        position: relative;
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--witch-dark) 50%, var(--midnight) 100%);
-        border: 2px solid var(--pumpkin);
+    .profile-header {{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        border: 1px solid rgba(232, 177, 137, 0.25);
         border-radius: 14px;
-        padding: 20px 24px;
         margin-bottom: 20px;
-        box-shadow: 0 0 30px var(--bg-glow);
     }}
-
-    .royal-title {{
+    
+    .profile-title {{
+        font-family: 'Cinzel', -apple-system, sans-serif;
+        font-size: 16px;
+        font-weight: 900;
+        color: var(--pumpkin);
+        letter-spacing: 2px;
+    }}
+    
+    .profile-sub {{
+        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-size: 10px;
+        color: var(--secondary);
+        letter-spacing: 1px;
+        margin-top: 2px;
+    }}
+    
+    .profile-status {{
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+        font-size: 10px;
+        color: var(--secondary);
+        text-align: right;
+    }}
+    
+    /* ============================================
+    🎃 MENU CARD
+    ============================================ */
+    .menu-card-v2 {{
+        position: relative;
+        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        border: 2px solid var(--pumpkin-dark);
+        border-radius: 16px;
+        padding: 24px 18px;
+        text-align: center;
+        transition: all 0.3s ease;
+        min-height: 180px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        margin-bottom: 10px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+    }}
+    
+    .menu-card-v2:hover {{
+        border-color: var(--pumpkin);
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7), 0 0 30px var(--bg-glow);
+        transform: translateY(-4px);
+    }}
+    
+    .menu-icon-v2 {{
+        font-size: 48px;
+        margin-bottom: 12px;
+        filter: drop-shadow(0 0 15px var(--pumpkin));
+        line-height: 1;
+        display: block;
+    }}
+    
+    .menu-title-v2 {{
+        font-family: 'Cinzel', -apple-system, sans-serif;
+        font-size: 14px;
+        font-weight: 900;
+        color: var(--pumpkin-light);
+        letter-spacing: 2px;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+    }}
+    
+    .menu-desc-v2 {{
+        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-size: 10px;
+        color: var(--ghost-dim);
+        line-height: 1.5;
+    }}
+    
+    /* ============================================
+    🎃 METRIC CARD V2
+    ============================================ */
+    .metric-card-v2 {{
+        position: relative;
+        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
+        border: 2px solid var(--pumpkin-dark);
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 12px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.7);
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }}
+    
+    .metric-card-v2::before {{
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 5px;
+        height: 100%;
+        background: var(--accent-color, var(--pumpkin));
+        box-shadow: 0 0 15px var(--accent-color, var(--pumpkin));
+    }}
+    
+    .metric-card-v2:hover {{
+        transform: translateY(-3px);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8), 0 0 30px var(--accent-color, var(--bg-glow));
+    }}
+    
+    /* ============================================
+    🎃 ROYAL ORNAMENT (dekorasi header)
+    ============================================ */
+    .royal-ornament {{
+        position: absolute;
+        color: var(--pumpkin);
+        font-size: 20px;
+        filter: drop-shadow(0 0 8px var(--pumpkin));
+    }}
+    
+    .royal-orn-tl {{ top: 8px; left: 12px; }}
+    .royal-orn-tr {{ top: 8px; right: 12px; }}
+    .royal-orn-bl {{ bottom: 8px; left: 12px; }}
+    .royal-orn-br {{ bottom: 8px; right: 12px; }}
+    
+    /* ============================================
+    🎃 SUCCESS SCREEN
+    ============================================ */
+    .success-icon {{
+        font-size: 72px;
+        margin-bottom: 16px;
+        filter: drop-shadow(0 0 25px var(--secondary));
+        text-align: center;
+    }}
+    
+    .success-title {{
         font-family: 'Cinzel', -apple-system, sans-serif;
         font-size: 28px;
         font-weight: 900;
-        color: var(--pumpkin);
-        text-align: center;
-        margin: 0;
+        color: var(--secondary);
         letter-spacing: 3px;
-        text-shadow: 0 0 15px var(--pumpkin);
+        text-align: center;
     }}
-
-    .royal-subtitle {{
+    
+    .success-sub {{
         font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
-        font-size: 11px;
-        color: var(--pumpkin-light);
-        text-align: center;
-        margin-top: 6px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-    }}
-
-    .header-clock {{
-        text-align: center;
+        font-size: 13px;
+        color: var(--ghost-dim);
         margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px dashed rgba(255, 107, 26, 0.3);
-    }}
-
-    .clock-time {{
-        font-family: 'JetBrains Mono', 'Courier New', monospace;
-        font-size: 20px;
-        font-weight: 900;
-        color: var(--candy);
-        letter-spacing: 2px;
-    }}
-
-    .clock-date {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
-        font-size: 10px;
-        color: var(--pumpkin-light);
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        margin-top: 4px;
-    }}
-
-    /* ============================================
-    🎃 METRIC CARD
-    ============================================ */
-    .metric-clean,
-    .metric-card-v2 {{
-        background: linear-gradient(135deg, var(--midnight) 0%, var(--midnight-2) 100%);
-        border: 1px solid rgba(232, 177, 137, 0.25);
-        border-left: 3px solid var(--pumpkin);
-        border-radius: 10px;
-        padding: 14px 18px;
-        margin-bottom: 8px;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }}
-
-    .metric-clean:hover,
-    .metric-card-v2:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-    }}
-
-    .metric-clean .label,
-    .metric-label-v2 {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
-        font-size: 10px;
-        color: var(--ghost-dim);
         letter-spacing: 1px;
-        text-transform: uppercase;
-        margin-bottom: 6px;
-    }}
-
-    .metric-clean .value,
-    .metric-value-v2 {{
-        font-family: 'JetBrains Mono', 'Courier New', monospace;
-        font-size: 24px;
-        font-weight: 900;
-        color: var(--pumpkin);
-        line-height: 1.1;
-        word-break: break-all;
-    }}
-
-    .metric-clean .sub,
-    .metric-sub-v2 {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
-        font-size: 10px;
-        color: var(--ghost-dim);
-        margin-top: 4px;
+        text-align: center;
     }}
 
     /* ============================================
