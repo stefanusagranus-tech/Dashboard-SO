@@ -1557,12 +1557,12 @@ def _render_analisis_kategori(_so_detail_raw, _rak_df):
         st.markdown(_table_html, unsafe_allow_html=True)
         
 # =========================================================================
-# TAB 3: PREVIEW & HAPUS
+# TAB 3: PREVIEW & HAPUS (v2 — Edit Inline + Multi-Select)
 # =========================================================================
 def render_preview():
-    """Preview SO hari ini + hapus per rak."""
-    st.markdown("### 📋 Preview & Hapus SO")
-    st.caption("Lihat semua SO yang sudah diinput & hapus kalau perlu")
+    """Preview SO hari ini + edit inline + hapus per rak / massal."""
+    st.markdown("### 📋 Preview & Edit SO")
+    st.caption("Lihat, edit, dan hapus SO yang sudah diinput")
 
     # ============================================================
     # PILIH TANGGAL
@@ -1611,10 +1611,13 @@ def render_preview():
         st.info(f"📭 Belum ada SO untuk tanggal **{_tanggal.strftime('%d/%m/%Y')}**")
         return
 
+    # Simpan tanggal aktif ke session state (buat save handler)
+    st.session_state["preview_active_date"] = _tanggal
+
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     # ============================================================
-    # SUMMARY METRIC — 3 kolom
+    # SUMMARY METRIC
     # ============================================================
     _total_rak = len(_so_summary)
     _total_item = sum(int(r.get("total_item", 0)) for r in _so_summary)
@@ -1657,63 +1660,284 @@ def render_preview():
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     # ============================================================
-    # TABEL SUMMARY PER RAK — Search + Tabel HTML
+    # SEARCH + FILTER
     # ============================================================
     st.markdown("#### 📊 Summary per Rak")
+    st.caption("Centang **Pilih** untuk multi-select, edit langsung di tabel")
 
-    _search_preview = st.text_input(
-        "🔍 Cari Rak",
-        key="search_preview_rak",
-        placeholder="Ketik kode rak...",
-        label_visibility="collapsed",
-    )
+    _col_search, _col_pic_filter = st.columns([3, 2])
 
+    with _col_search:
+        _search_preview = st.text_input(
+            "🔍 Cari Rak",
+            key="search_preview_rak",
+            placeholder="Ketik kode rak...",
+            label_visibility="collapsed",
+        )
+
+    with _col_pic_filter:
+        _pic_options = ["(Semua)"] + sorted(set(
+            str(r.get("pic", "")).strip().upper()
+            for r in _so_summary
+            if r.get("pic")
+        ))
+        _pic_filter = st.selectbox(
+            "👤 Filter PIC",
+            options=_pic_options,
+            key="preview_pic_filter",
+            label_visibility="collapsed",
+        )
+
+    # Filter summary
     _so_summary_filtered = _so_summary
+
     if _search_preview and len(_search_preview.strip()) >= 1:
         _q = _search_preview.strip().upper()
         _so_summary_filtered = [
-            r for r in _so_summary
+            r for r in _so_summary_filtered
             if _q in str(r.get("rak_id", "")).upper()
         ]
 
+    if _pic_filter != "(Semua)":
+        _so_summary_filtered = [
+            r for r in _so_summary_filtered
+            if str(r.get("pic", "")).strip().upper() == _pic_filter
+        ]
+
+    # ============================================================
+    # TABEL EDITABLE (st.data_editor) — dengan checkbox
+    # ============================================================
     if not _so_summary_filtered:
-        st.info(f"📭 Tidak ada rak yang match dengan **'{_search_preview}'**")
+        st.info(f"📭 Tidak ada rak yang match dengan filter")
     else:
-        _rows_html = ""
+        # Build DataFrame buat data_editor
+        _editor_data = []
         for _r in _so_summary_filtered:
-            _rak = _r.get("rak_id", "-")
-            _pic = _r.get("pic", "-") or "-"
-            _item = int(_r.get("total_item", 0))
-            _qty_var = int(_r.get("total_qty_var", 0))
-            _nom = float(_r.get("nominal_adjust", 0))
+            _editor_data.append({
+                "Pilih": False,
+                "Rak": _r.get("rak_id", "-"),
+                "PIC": _r.get("pic", "") or "",
+                "Nominal": float(_r.get("nominal_adjust", 0)),
+                "Keterangan": _r.get("keterangan", "") or "",
+            })
 
-            _nom_class = "neg" if _nom < 0 else "pos"
+        _df_editor = pd.DataFrame(_editor_data)
 
-            _rows_html += (
-                f"<tr>"
-                f"<td class='rak-id'>{_rak}</td>"
-                f"<td style='font-family: Quicksand, sans-serif; color: #E8B189;'>{_pic}</td>"
-                f"<td style='text-align: center;'>{_item}</td>"
-                f"<td style='text-align: center;'>{_qty_var:+d}</td>"
-                f"<td class='nominal {_nom_class}'>{fmt_rp_signed(_nom)}</td>"
-                f"</tr>"
-            )
-
-        _table_html = (
-            "<table class='so-table'>"
-            "<thead><tr>"
-            "<th>Rak</th>"
-            "<th>PIC</th>"
-            "<th style='text-align: center;'>Item</th>"
-            "<th style='text-align: center;'>Qty Var</th>"
-            "<th style='text-align: right;'>Nominal</th>"
-            "</tr></thead>"
-            f"<tbody>{_rows_html}</tbody>"
-            "</table>"
+        # Editable table
+        _edited = st.data_editor(
+            _df_editor,
+            use_container_width=True,
+            hide_index=True,
+            height=min(400, 60 + len(_df_editor) * 40),
+            column_config={
+                "Pilih": st.column_config.CheckboxColumn(
+                    "✅",
+                    help="Centang untuk hapus massal",
+                    default=False,
+                    width="small",
+                ),
+                "Rak": st.column_config.TextColumn(
+                    "Kode Rak",
+                    disabled=True,
+                    width="small",
+                ),
+                "PIC": st.column_config.SelectboxColumn(
+                    "PIC",
+                    options=_personil_list if _personil_list else ["-"],
+                    required=False,
+                    width="medium",
+                ),
+                "Nominal": st.column_config.NumberColumn(
+                    "Nominal (Rp)",
+                    format="%+d",
+                    step=1000,
+                    width="medium",
+                ),
+                "Keterangan": st.column_config.TextColumn(
+                    "Keterangan",
+                    max_chars=200,
+                    width="large",
+                ),
+            },
+            key=f"preview_editor_{_tanggal}",
         )
 
-        st.markdown(_table_html, unsafe_allow_html=True)
-        st.caption(f"📊 Total **{len(_so_summary_filtered)}** rak")
+        # Detect perubahan
+        _changes = _df_editor.compare(_edited)
+        _has_changes = not _changes.empty
+
+        # Cek apakah ada yang dicentang
+        _selected_rows = _edited[_edited["Pilih"] == True]
+        _count_selected = len(_selected_rows)
+
+        st.markdown("")
+
+        # Tombol aksi
+        _col_save, _col_delete, _col_info2 = st.columns([2, 2, 2])
+
+        with _col_save:
+            _save_disabled = not _has_changes
+            if st.button(
+                "💾 SIMPAN PERUBAHAN",
+                key="btn_save_changes_preview",
+                width="stretch",
+                type="primary",
+                disabled=_save_disabled,
+            ):
+                with st.spinner("⏳ Menyimpan perubahan..."):
+                    _saved_count = 0
+                    _error_count = 0
+
+                    for _, _row in _edited.iterrows():
+                        _rak_id = _row["Rak"]
+
+                        # Cari data asli
+                        _original = next(
+                            (r for r in _so_summary if str(r.get("rak_id")) == str(_rak_id)),
+                            None,
+                        )
+                        if not _original:
+                            continue
+
+                        _new_pic = str(_row["PIC"]).strip().upper() if _row["PIC"] else ""
+                        _new_nominal = float(_row["Nominal"])
+                        _new_keterangan = str(_row["Keterangan"]).strip() if _row["Keterangan"] else ""
+
+                        _old_pic = str(_original.get("pic", "")).strip().upper()
+                        _old_nominal = float(_original.get("nominal_adjust", 0))
+                        _old_keterangan = str(_original.get("keterangan", "")).strip()
+
+                        # Skip kalau gak ada perubahan
+                        if (_new_pic == _old_pic and
+                            _new_nominal == _old_nominal and
+                            _new_keterangan == _old_keterangan):
+                            continue
+
+                        # Update ke Supabase
+                        try:
+                            from modules.supabase_client import get_supabase
+                            _sb = get_supabase()
+
+                            _update_data = {
+                                "pic": _new_pic,
+                                "nominal_adjust": _new_nominal,
+                                "keterangan": _new_keterangan,
+                                "updated_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat(),
+                            }
+
+                            _res = _sb.table("so_rak_harian") \
+                                .update(_update_data) \
+                                .eq("so_date", _tanggal.isoformat()) \
+                                .eq("rak_id", _rak_id) \
+                                .execute()
+
+                            if _res.data:
+                                _saved_count += 1
+                            else:
+                                _error_count += 1
+                        except Exception as _e_upd:
+                            print(f"[UPDATE ERROR] {_rak_id}: {_e_upd}")
+                            _error_count += 1
+
+                    if _saved_count > 0:
+                        st.success(f"✅ {_saved_count} perubahan tersimpan!")
+                        if _error_count > 0:
+                            st.warning(f"⚠️ {_error_count} gagal update")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.info("ℹ️ Tidak ada perubahan tersimpan")
+
+        with _col_delete:
+            if st.button(
+                f"🗑️ HAPUS TERPILIH ({_count_selected})",
+                key="btn_delete_selected",
+                width="stretch",
+                disabled=(_count_selected == 0),
+            ):
+                if _count_selected > 0:
+                    st.session_state["confirm_delete_rak_list"] = _selected_rows["Rak"].tolist()
+                    st.rerun()
+
+        with _col_info2:
+            if _has_changes:
+                st.markdown(
+                    f"<div style='padding-top: 10px; font-family: JetBrains Mono, monospace; "
+                    f"font-size: 11px; color: #FBBF24; text-align: right;'>"
+                    f"⚠️ Ada perubahan belum disimpan</div>",
+                    unsafe_allow_html=True,
+                )
+            elif _count_selected > 0:
+                st.markdown(
+                    f"<div style='padding-top: 10px; font-family: JetBrains Mono, monospace; "
+                    f"font-size: 11px; color: #E88B8B; text-align: right;'>"
+                    f"🗑️ {_count_selected} rak siap dihapus</div>",
+                    unsafe_allow_html=True,
+                )
+
+    # ============================================================
+    # KONFIRMASI HAPUS MASSAL
+    # ============================================================
+    if st.session_state.get("confirm_delete_rak_list"):
+        _rak_to_delete = st.session_state["confirm_delete_rak_list"]
+
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
+        st.warning(
+            f"⚠️ **Konfirmasi Hapus Massal**\n\n"
+            f"Kamu akan menghapus **{len(_rak_to_delete)} rak**:\n\n"
+            f"`{', '.join(_rak_to_delete)}`\n\n"
+            f"Tindakan ini tidak bisa dibatalkan."
+        )
+
+        _col_confirm_yes, _col_confirm_no = st.columns(2)
+
+        with _col_confirm_yes:
+            if st.button(
+                f"✅ YA, HAPUS {len(_rak_to_delete)} RAK",
+                key="btn_confirm_delete_yes",
+                width="stretch",
+                type="primary",
+            ):
+                with st.spinner("⏳ Menghapus..."):
+                    _deleted_count = 0
+                    _error_count = 0
+
+                    for _rak_id in _rak_to_delete:
+                        try:
+                            _ok, _msg, _detail = delete_so_by_date(
+                                _tanggal,
+                                rak_id=_rak_id,
+                            )
+                            if _ok:
+                                _deleted_count += 1
+                            else:
+                                _error_count += 1
+                        except Exception as _e_del:
+                            print(f"[DELETE ERROR] {_rak_id}: {_e_del}")
+                            _error_count += 1
+
+                    st.session_state["confirm_delete_rak_list"] = None
+
+                    if _deleted_count > 0:
+                        st.success(f"✅ {_deleted_count} rak dihapus!")
+                        if _error_count > 0:
+                            st.warning(f"⚠️ {_error_count} gagal dihapus")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Gagal hapus semua rak")
+
+        with _col_confirm_no:
+            if st.button(
+                "❌ BATAL",
+                key="btn_confirm_delete_no",
+                width="stretch",
+            ):
+                st.session_state["confirm_delete_rak_list"] = None
+                st.rerun()
 
     # ============================================================
     # DETAIL PRODUK (kalau ada)
@@ -1742,41 +1966,42 @@ def render_preview():
                 st.info("📭 Detail produk kosong")
 
     # ============================================================
-    # HAPUS SO PER RAK
+    # HAPUS SO PER RAK (Single — cara lama, buat fallback)
     # ============================================================
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-    st.markdown("#### 🗑️ Hapus SO")
 
-    _rak_so_list = [r.get("rak_id") for r in _so_summary if r.get("rak_id")]
+    with st.expander("🗑️ Hapus SO per Rak (Single)", expanded=False):
+        _rak_so_list = [r.get("rak_id") for r in _so_summary if r.get("rak_id")]
 
-    if _rak_so_list:
-        _col_h1, _col_h2 = st.columns([3, 1])
+        if _rak_so_list:
+            _col_h1, _col_h2 = st.columns([3, 1])
 
-        with _col_h1:
-            _rak_hapus = st.selectbox(
-                "Pilih rak yang mau dihapus:",
-                options=_rak_so_list,
-                key="so_preview_rak_hapus",
-            )
+            with _col_h1:
+                _rak_hapus = st.selectbox(
+                    "Pilih rak yang mau dihapus:",
+                    options=_rak_so_list,
+                    key="so_preview_rak_hapus",
+                )
 
-        with _col_h2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button(
-                "🗑️ HAPUS",
-                width="stretch",
-                type="primary",
-                key="btn_hapus_so",
-            ):
-                with st.spinner(f"⏳ Hapus SO rak {_rak_hapus}..."):
-                    _ok, _msg, _detail = delete_so_by_date(_tanggal, rak_id=_rak_hapus)
+            with _col_h2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button(
+                    "🗑️ HAPUS",
+                    width="stretch",
+                    type="primary",
+                    key="btn_hapus_so",
+                ):
+                    with st.spinner(f"⏳ Hapus SO rak {_rak_hapus}..."):
+                        _ok, _msg, _detail = delete_so_by_date(_tanggal, rak_id=_rak_hapus)
 
-                if _ok:
-                    st.success(_msg)
-                    st.cache_data.clear()
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error(_msg)
+                    if _ok:
+                        st.success(_msg)
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(_msg)
+
 # =========================================================================
 # INFO PANEL
 # =========================================================================
