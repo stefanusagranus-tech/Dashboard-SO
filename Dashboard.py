@@ -404,32 +404,6 @@ def render_dashboard():
     st.markdown("---")
 
     # ============================================================
-    # DETAIL SO RAK (TABEL)
-    # ============================================================
-    st.markdown("### 📋 Detail SO Rak (Terbaru)")
-
-    if _detail_so:
-        _df_detail = pd.DataFrame(_detail_so)
-        _cols_show = ["so_date", "rak_id", "nominal_adjust", "pic", "keterangan"]
-        _cols_show = [c for c in _cols_show if c in _df_detail.columns]
-        _df_show = _df_detail[_cols_show].copy()
-
-        if "nominal_adjust" in _df_show.columns:
-            _df_show["nominal_adjust"] = _df_show["nominal_adjust"].apply(
-                lambda v: f"{float(v):+,.0f}".replace(",", ".")
-            )
-
-        _col_names = ["Tanggal", "Kode Rak", "Nominal (Rp)", "PIC", "Keterangan"]
-        _df_show.columns = _col_names[:len(_df_show.columns)]
-
-        st.dataframe(_df_show, width="stretch", hide_index=True, height=400)
-        st.caption(f"📊 Menampilkan **{len(_df_show)}** SO rak terbaru")
-    else:
-        st.info("📭 Belum ada SO rak yang tercatat.")
-
-    st.markdown("---")
-
-    # ============================================================
     # MENU CARD
     # ============================================================
     st.markdown("### 📋 Pilih Menu")
