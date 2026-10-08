@@ -161,15 +161,12 @@ def fmt_rp(value):
 
 
 def fmt_rp_short(value):
+    """Format Rp FULL (tanpa singkatan K/Jt/M)."""
     try:
         _v = float(value)
-        if abs(_v) >= 1_000_000_000:
-            return f"Rp {_v/1_000_000_000:.1f}M"
-        elif abs(_v) >= 1_000_000:
-            return f"Rp {_v/1_000_000:.1f}Jt"
-        elif abs(_v) >= 1_000:
-            return f"Rp {_v/1_000:.0f}K"
-        return f"Rp {int(_v):,.0f}".replace(",", ".")
+        _sign = "-" if _v < 0 else ""
+        _abs = abs(_v)
+        return f"{_sign}Rp {int(_abs):,.0f}".replace(",", ".")
     except Exception:
         return "Rp 0"
 

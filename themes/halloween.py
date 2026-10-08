@@ -470,6 +470,11 @@ def get_css(variant="malam"):
         text-shadow: 0 0 15px var(--bg-glow-1);
         line-height: 1.1;
         word-wrap: break-word;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        max-width: 100%;
+        display: block;
     }}
 
     .metric-sub-v2 {{
