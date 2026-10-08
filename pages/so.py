@@ -303,38 +303,179 @@ def _dialog_konfirmasi_so():
             st.rerun()  # ✅ Tutup dialog
 
 # =========================================================================
-# DIALOG: SUKSES (POP-UP)
+# DIALOG: KONFIRMASI (POP-UP)
 # =========================================================================
-@st.dialog("🎉 Berhasil Disimpan", width="small")
-def _dialog_sukses_so():
-    _saved = st.session_state.get("so_saved_data")
-    if not _saved:
-        st.session_state["so_saved_data"] = None
-        st.rerun()
+@st.dialog("✅ Konfirmasi Data SO", width="large")
+def _dialog_konfirmasi_so():
+    _pending = st.session_state.get("so_pending_data")
+    if not _pending:
+        st.error("Data tidak ditemukan.")
         return
 
-    st.markdown("<div style='text-align: center; padding: 10px 0;'><div style='font-size: 60px; filter: drop-shadow(0 0 15px rgba(127, 185, 155, 0.8));'>✅</div><div style='font-family: Cinzel, serif; font-size: 20px; color: #7FB99B; letter-spacing: 2px;'>DATA TERSIMPAN</div></div>", unsafe_allow_html=True)
+    st.markdown("Review data sebelum disimpan:")
 
-    _total_rak = len(_saved.get("rak_items", []))
-    _total_nom = sum(float(i.get("nominal_adjust", 0)) for i in _saved.get("rak_items", []))
-    
-    st.markdown(f"<div class='metric-clean' style='text-align: center;'><div class='label'>🏪 RAK DI-SO</div><div class='value'>{_total_rak}</div></div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='metric-clean' style='text-align: center;'><div class='label'>💰 TOTAL NOMINAL</div><div class='value'>{fmt_rp_signed(_total_nom)}</div></div>", unsafe_allow_html=True)
+    # Metric
+    _c1, _c2, _c3 = st.columns(3)
+    with _c1:
+        st.markdown(
+            f"<div class='metric-clean'>"
+            f"<div class='label'>📅 TANGGAL</div>"
+            f"<div class='value' style='font-size: 16px;'>"
+            f"{_pending['tanggal'].strftime('%d/%m/%Y')}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    with _c2:
+        st.markdown(
+            f"<div class='metric-clean'>"
+            f"<div class='label'>🏪 RAK</div>"
+            f"<div class='value' style='font-size: 16px;'>"
+            f"{len(_pending['rak_items'])}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    with _c3:
+        _spd_txt = fmt_rp(_pending['spd']) if _pending['spd'] > 0 else '—'
+        st.markdown(
+            f"<div class='metric-clean'>"
+            f"<div class='label'>💰 SPD</div>"
+            f"<div class='value' style='font-size: 16px; color: #7FB99B;'>"
+            f"{_spd_txt}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
-    if st.button("TUTUP & INPUT LAGI", use_container_width=True, key="btn_tutup_sukses"):
-        st.session_state["so_saved_data"] = None
-        st.rerun()
+    st.markdown("<div style='margin-top: 10px;'>", unsafe_allow_html=True)
+
+    # Tabel
+    _rows_html = ""
+    _total_nom = 0
+    for _item in _pending["rak_items"]:
+        _nom = float(_item.get("nominal_adjust", 0))
+        _total_nom += _nom
+        _rak_info = get_rak_by_kode_exact(_item["rak_id"])
+        _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
+        _pic = _item.get("pic", "-")
+        _nom_class = "neg" if _nom < 0 else "pos"
+        _rows_html += (
+            f"<tr>"
+            f"<td class='rak-id'>{_item['rak_id']}</td>"
+            f"<td style='font-family: Quicksand, sans-serif;'>{_rname}</td>"
+            f"<td style='font-family: Quicksand, sans-serif; color: #E8B189;'>{_pic}</td>"
+            f"<td class='nominal {_nom_class}'>{fmt_rp_signed(_nom)}</td>"
+            f"</tr>"
+        )
+
+    st.markdown(
+        f"<table class='so-table'>"
+        f"<thead><tr>"
+        f"<th>Rak</th><th>Nama</th><th>PIC</th>"
+        f"<th style='text-align:right;'>Nominal</th>"
+        f"</tr></thead>"
+        f"<tbody>{_rows_html}</tbody>"
+        f"</table>",
+        unsafe_allow_html=True,
+    )
+
+    _color_total = "#E88B8B" if _total_nom < 0 else "#7FB99B"
+    st.markdown(
+        f"<div class='metric-clean' style='border-left-color: {_color_total}; "
+        f"margin-top: 16px; text-align: right;'>"
+        f"<div class='label'>💰 TOTAL NOMINAL</div>"
+        f"<div class='value'>{fmt_rp_signed(_total_nom)}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Tombol Aksi
+    _col_ok, _col_batal = st.columns(2)
+
+    with _col_ok:
+        if st.button(
+            "✅ SIMPAN SEKARANG",
+            use_container_width=True,
+            type="primary",
+            key="btn_simpan_dialog",
+        ):
+            with st.spinner("⏳ Menyimpan..."):
+                _ok_all = True
+                _msg_list = []
+
+                # Simpan SPD
+                if _pending.get("spd", 0) > 0:
+                    try:
+                        save_spd_harian(
+                            _pending["tanggal"],
+                            _pending["spd"],
+                            _pending.get("keterangan", ""),
+                        )
+                    except Exception as _e_spd:
+                        print(f"[SAVE SPD ERROR] {_e_spd}")
+
+                # Simpan per rak
+                for _item in _pending["rak_items"]:
+                    try:
+                        _ok, _msg, _ = save_input_harian(
+                            tanggal=_pending["tanggal"],
+                            spd=0,
+                            rak_items=[_item],
+                            keterangan=_pending.get("keterangan", ""),
+                            pic=_item.get("pic", ""),
+                            update_status_rak=True,
+                        )
+                        if _ok:
+                            _msg_list.append(f"✅ {_item['rak_id']}")
+                        else:
+                            _ok_all = False
+                            _msg_list.append(f"❌ {_item['rak_id']}")
+                    except Exception as _e_rak:
+                        _ok_all = False
+                        _msg_list.append(f"❌ {_item['rak_id']}: {str(_e_rak)[:50]}")
+
+            if _ok_all:
+                # ✅ Set saved data & clear pending
+                st.session_state["so_saved_data"] = dict(_pending)
+                st.session_state["so_pending_data"] = None
+                st.session_state["so_rak_list"] = []
+                st.session_state["so_search_results"] = []
+                st.session_state["so_search_shown"] = False
+                st.session_state["so_last_loaded_date"] = None
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.error("Gagal menyimpan:\n" + "\n".join(_msg_list))
+
+    with _col_batal:
+        if st.button(
+            "❌ BATAL",
+            use_container_width=True,
+            key="btn_batal_dialog",
+        ):
+            # ✅ Clear pending + tutup dialog
+            st.session_state["so_pending_data"] = None
+            st.rerun()
 
 # =========================================================================
 # TAB 1: INPUT SO (FORM UTAMA)
 # =========================================================================
 def render_input_so():
-    # 1. Cek apakah ada data yang baru disimpan untuk menampilkan pop-up sukses
+    # ✅ Cek saved data DULU
     if st.session_state.get("so_saved_data"):
         _dialog_sukses_so()
-        # Hentikan render form dulu supaya user fokus ke pop-up
         st.info("📌 Selesaikan dialog di atas untuk melanjutkan.")
         return
+
+    # ✅ Cek pending data (dialog konfirmasi)
+    if st.session_state.get("so_pending_data"):
+        _dialog_konfirmasi_so()
+        # Form tetap dirender di belakang
+        _render_input_form()
+        return
+
+    # ✅ Default: render form
+    _render_input_form()
 
     st.markdown("### 📝 Input SO")
     st.caption("Input SPD (opsional) + rak yang di-SO dalam 1 form")
@@ -770,7 +911,7 @@ def render_analisis():
             st.info("📭 Belum ada data SO di periode ini")
 
     # ============================================================
-    # RAK BELUM SO — st.dataframe (sama kayak Daftar Rak di-SO)
+    # RAK BELUM SO — st.dataframe (scroll internal)
     # ============================================================
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
     
@@ -792,43 +933,29 @@ def render_analisis():
     
                 _df_belum = _rak_belum_df.copy()
     
-                # Kolom yang ditampilkan (konsisten)
-                _cols_show = ["rak_id", "rak_name"]
-                _cols_show = [c for c in _cols_show if c in _df_belum.columns]
-                _df_show = _df_belum[_cols_show].copy()
-    
                 # Filter by search
                 if _search_belum and len(_search_belum.strip()) >= 1:
                     _q = _search_belum.strip().upper()
-                    _df_show = _df_show[
-                        _df_show["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
-                        _df_show["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
+                    _df_belum = _df_belum[
+                        _df_belum["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
+                        _df_belum["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
                     ]
     
-                # Rename kolom
-                _col_names = ["Kode Rak", "Nama Rak"]
-                _df_show.columns = _col_names[:len(_df_show.columns)]
+                # ✅ Siapkan DataFrame dengan kolom rename untuk display
+                _df_display = _df_belum[["rak_id", "rak_name"]].copy()
+                _df_display.columns = ["Kode Rak", "Nama Rak"]
     
-                # ✅ Sama kayak "Daftar Rak di-SO" — st.dataframe height=400
-                st.dataframe(_df_show, width="stretch", hide_index=True, height=400)
-                st.caption(f"📊 Total **{len(_df_show)}** rak belum di-SO")
-    
-                # Download — ✅ FIX: pake data SEBELUM rename
-                # Simpan untuk download SEBELUM rename
+                # ✅ Download pakai data ASLI (sebelum rename)
                 _download_text = "\n".join([
-                    f"{r['rak_id']} — {r['rak_name']}"
-                    for r in _df_show.to_dict("records")
+                    f"{r.get('rak_id', '-')} — {r.get('rak_name', '-')}"
+                    for r in _df_belum.to_dict("records")
                 ])
-                
-                # Rename untuk display
-                _col_names = ["Kode Rak", "Nama Rak"]
-                _df_show.columns = _col_names[:len(_df_show.columns)]
-                
-                st.dataframe(_df_show, width="stretch", hide_index=True, height=400)
-                st.caption(f"📊 Total **{len(_df_show)}** rak belum di-SO")
-                
+    
+                st.dataframe(_df_display, width="stretch", hide_index=True, height=400)
+                st.caption(f"📊 Total **{len(_df_display)}** rak belum di-SO")
+    
                 st.download_button(
-                    label=f"📥 Download List ({len(_df_show)} rak)",
+                    label=f"📥 Download List ({len(_df_display)} rak)",
                     data=_download_text,
                     file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
                     mime="text/plain",
@@ -839,7 +966,6 @@ def render_analisis():
             st.success("🎉 Semua rak sudah di-SO!")
     except Exception as _e_belum:
         st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
-
 
 # =========================================================================
 # TAB 3: PREVIEW & HAPUS
