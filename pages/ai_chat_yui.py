@@ -64,7 +64,24 @@ except ImportError as e:
     _YUI_OK = False
     _import_error = str(e)
 
+# =========================================================
+# DEBUG LOGGER — Tampilin log di UI
+# =========================================================
+if "yui_debug_log" not in st.session_state:
+    st.session_state["yui_debug_log"] = []
 
+
+def yui_log(msg):
+    """Print ke console + save ke session state."""
+    print(msg)
+    try:
+        st.session_state["yui_debug_log"].append(str(msg))
+        # Batasi 100 baris terakhir
+        if len(st.session_state["yui_debug_log"]) > 100:
+            st.session_state["yui_debug_log"] = st.session_state["yui_debug_log"][-100:]
+    except Exception:
+        pass
+    
 # =========================================================================
 # CSS — ROOM CHAT YUI
 # =========================================================================
