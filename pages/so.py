@@ -1057,7 +1057,30 @@ def render_analisis():
                 st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
         else:
             st.info("📭 Belum ada data SO di periode ini")
-
+    # ============================================================
+    # 🆕 TREND CHART (NSB vs BTSB Harian)
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    with st.expander("📈 Trend NSB vs BTSB Harian (Klik untuk buka)", expanded=False):
+        _render_analisis_trend(_so_detail_raw, _start, _end)
+    
+    # ============================================================
+    # 🆕 ANALYTICS PER PIC
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    with st.expander("👤 Analytics per PIC (Klik untuk buka)", expanded=False):
+        _render_analisis_pic(_so_detail_raw)
+    
+    # ============================================================
+    # 🆕 ANALYTICS PER KATEGORI
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    with st.expander("🏷️ Analytics per Kategori (Klik untuk buka)", expanded=False):
+        _render_analisis_kategori(_so_detail_raw, _rak_df)
+        
     # ============================================================
     # RAK BELUM SO — st.dataframe (scroll internal)
     # ============================================================
@@ -1115,6 +1138,318 @@ def render_analisis():
     except Exception as _e_belum:
         st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
 
+# =========================================================================
+# HELPER: ANALYTICS SO — TREND, PIC, KATEGORI
+# =========================================================================
+def _render_analisis_trend(_so_detail_raw, _start, _end):
+    """Render trend chart NSB vs BTSB per hari."""
+    import plotly.graph_objects as go
+
+    if not _so_detail_raw:
+        st.info("📭 Belum ada data untuk trend")
+        return
+
+    _df = pd.DataFrame(_so_detail_raw)
+    _df["so_date"] = pd.to_datetime(_df["so_date"], errors="coerce")
+    _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
+
+    _per_hari = _df.groupby("so_date")["nominal_adjust"].sum().reset_index()
+    _per_hari = _per_hari.sort_values("so_date")
+
+    if _per_hari.empty:
+        st.info("📭 Belum ada data trend")
+        return
+
+    # Ambil SPD per hari
+    try:
+        from modules.supabase_client import get_supabase
+        _sb = get_supabase()
+        _spd_res = _sb.table("spd_harian") \
+            .select("tanggal, spd") \
+            .gte("tanggal", _start.isoformat()) \
+            .lte("tanggal", _end.isoformat()) \
+            .execute()
+        _spd_map = {
+            pd.to_datetime(r["tanggal"]): float(r.get("spd", 0))
+            for r in (_spd_res.data or [])
+        }
+    except Exception:
+        _spd_map = {}
+
+    _tanggal_list = _per_hari["so_date"].dt.strftime("%d/%m").tolist()
+    _nominal_list = _per_hari["nominal_adjust"].abs().tolist()
+    _btsb_list = [
+        _spd_map.get(_tgl, 0) * 0.0015
+        for _tgl in _per_hari["so_date"]
+    ]
+
+    _fig = go.Figure()
+
+    _fig.add_trace(go.Scatter(
+        x=_tanggal_list,
+        y=_nominal_list,
+        mode="lines+markers",
+        name="Nominal SO",
+        line=dict(color="#E88B8B", width=3, shape="spline"),
+        marker=dict(size=10, color="#E88B8B", line=dict(color="#0F0A1E", width=2)),
+        fill="tozeroy",
+        fillcolor="rgba(232, 139, 139, 0.15)",
+        hovertemplate="<b>%{x}</b><br>Nominal: Rp %{y:,.0f}<extra></extra>",
+    ))
+
+    if any(_b > 0 for _b in _btsb_list):
+        _fig.add_trace(go.Scatter(
+            x=_tanggal_list,
+            y=_btsb_list,
+            mode="lines+markers",
+            name="BTSB Harian",
+            line=dict(color="#7FB99B", width=2, dash="dash"),
+            marker=dict(size=8, color="#7FB99B"),
+            hovertemplate="<b>%{x}</b><br>BTSB: Rp %{y:,.0f}<extra></extra>",
+        ))
+
+    _fig.update_layout(
+        height=380,
+        margin=dict(l=10, r=20, t=40, b=40),
+        plot_bgcolor="rgba(20, 12, 35, 0.5)",
+        paper_bgcolor="rgba(20, 12, 35, 0.95)",
+        font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
+        xaxis=dict(
+            title="Tanggal",
+            gridcolor="rgba(168, 85, 247, 0.1)",
+            type="category",
+        ),
+        yaxis=dict(
+            title="Nominal (Rp)",
+            gridcolor="rgba(168, 85, 247, 0.1)",
+            zeroline=True,
+            zerolinecolor="rgba(232, 177, 137, 0.3)",
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(color="#E8B189", size=10),
+        ),
+        hovermode="x unified",
+    )
+
+    st.plotly_chart(_fig, width="stretch", key="chart_trend_nsb_btsb")
+
+    _total_abs = sum(_nominal_list)
+    _total_btsb = sum(_btsb_list)
+    _pct = (_total_abs / _total_btsb * 100) if _total_btsb > 0 else 0
+
+    _color = "#7FB99B" if _pct <= 80 else ("#fbbf24" if _pct <= 100 else "#E88B8B")
+
+    st.markdown(
+        f"<div style='background: rgba(20, 12, 35, 0.95); "
+        f"border-left: 3px solid {_color}; border-radius: 8px; "
+        f"padding: 10px 14px; margin-top: 12px; "
+        f"font-family: JetBrains Mono, monospace; font-size: 11px; "
+        f"color: #A89B8E;'>"
+        f"📊 Total: <b style='color: {_color};'>Rp {int(_total_abs):,}</b>".replace(",", ".") +
+        f" | BTSB: <b style='color: #7FB99B;'>Rp {int(_total_btsb):,}</b>".replace(",", ".") +
+        f" | Penggunaan: <b style='color: {_color};'>{_pct:.1f}%</b>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_analisis_pic(_so_detail_raw):
+    """Render analytics per PIC."""
+    import plotly.graph_objects as go
+
+    if not _so_detail_raw:
+        st.info("📭 Belum ada data PIC")
+        return
+
+    _df = pd.DataFrame(_so_detail_raw)
+    _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
+    _df["pic"] = _df["pic"].fillna("(KOSONG)").astype(str).str.upper()
+
+    _per_pic = _df.groupby("pic").agg(
+        jumlah_rak=("rak_id", "nunique"),
+        total_nominal=("nominal_adjust", "sum"),
+        total_baris=("rak_id", "count"),
+    ).reset_index()
+
+    _per_pic["rata_rata"] = _per_pic["total_nominal"] / _per_pic["jumlah_rak"].replace(0, 1)
+    _per_pic = _per_pic.sort_values("total_nominal", ascending=True)
+
+    _fig = go.Figure()
+
+    _colors = ["#E88B8B" if v < 0 else "#7FB99B" for v in _per_pic["total_nominal"]]
+
+    _fig.add_trace(go.Bar(
+        x=_per_pic["total_nominal"],
+        y=_per_pic["pic"],
+        orientation="h",
+        marker=dict(color=_colors, line=dict(color="rgba(184, 115, 51, 0.5)", width=1)),
+        text=[f"{v:+,.0f}".replace(",", ".") for v in _per_pic["total_nominal"]],
+        textposition="outside",
+        textfont=dict(color="#E8B189", size=10, family="JetBrains Mono"),
+        customdata=_per_pic[["jumlah_rak", "total_baris"]].values,
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Nominal: Rp %{x:+,.0f}<br>"
+            "Rak: %{customdata[0]}<br>"
+            "Baris SO: %{customdata[1]}"
+            "<extra></extra>"
+        ),
+    ))
+
+    _fig.update_layout(
+        height=max(280, len(_per_pic) * 40),
+        margin=dict(l=10, r=80, t=20, b=40),
+        plot_bgcolor="rgba(20, 12, 35, 0.5)",
+        paper_bgcolor="rgba(20, 12, 35, 0.95)",
+        font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
+        xaxis=dict(
+            title="Nominal (Rp)",
+            gridcolor="rgba(168, 85, 247, 0.1)",
+            zeroline=True,
+            zerolinecolor="rgba(232, 177, 137, 0.5)",
+        ),
+        yaxis=dict(
+            gridcolor="rgba(168, 85, 247, 0.1)",
+            autorange="reversed",
+        ),
+        showlegend=False,
+    )
+
+    st.plotly_chart(_fig, width="stretch", key="chart_pic_analytics")
+
+    _per_pic_show = _per_pic.sort_values("total_nominal").copy()
+
+    _rows_html = ""
+    for _, _r in _per_pic_show.iterrows():
+        _nom = _r["total_nominal"]
+        _nom_class = "neg" if _nom < 0 else "pos"
+        _nom_str = f"{_nom:+,.0f}".replace(",", ".")
+        _rata_str = f"{_r['rata_rata']:+,.0f}".replace(",", ".")
+
+        _rows_html += (
+            f"<tr>"
+            f"<td class='rak-id'>{_r['pic']}</td>"
+            f"<td style='text-align: center;'>{int(_r['jumlah_rak'])}</td>"
+            f"<td style='text-align: center;'>{int(_r['total_baris'])}</td>"
+            f"<td class='nominal {_nom_class}'>Rp {_nom_str}</td>"
+            f"<td class='nominal {_nom_class}'>Rp {_rata_str}</td>"
+            f"</tr>"
+        )
+
+    _table_html = (
+        "<table class='so-table'>"
+        "<thead><tr>"
+        "<th>PIC</th>"
+        "<th style='text-align: center;'>Rak</th>"
+        "<th style='text-align: center;'>Baris</th>"
+        "<th style='text-align: right;'>Total</th>"
+        "<th style='text-align: right;'>Rata²/Rak</th>"
+        "</tr></thead>"
+        f"<tbody>{_rows_html}</tbody>"
+        "</table>"
+    )
+
+    st.markdown(_table_html, unsafe_allow_html=True)
+
+
+def _render_analisis_kategori(_so_detail_raw, _rak_df):
+    """Render analytics per kategori rak."""
+    import plotly.graph_objects as go
+
+    if not _so_detail_raw:
+        st.info("📭 Belum ada data kategori")
+        return
+
+    if _rak_df is None or _rak_df.empty:
+        st.info("📭 Data rak_master kosong")
+        return
+
+    _kategori_map = dict(zip(
+        _rak_df["rak_id"].astype(str).str.upper(),
+        _rak_df["kategori"].astype(str).str.upper(),
+    ))
+
+    _df = pd.DataFrame(_so_detail_raw)
+    _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
+    _df["rak_id"] = _df["rak_id"].astype(str).str.upper()
+    _df["kategori"] = _df["rak_id"].map(_kategori_map).fillna("LAINNYA")
+
+    _per_kat = _df.groupby("kategori").agg(
+        jumlah_rak=("rak_id", "nunique"),
+        total_nominal=("nominal_adjust", "sum"),
+        total_baris=("rak_id", "count"),
+    ).reset_index()
+
+    _per_kat = _per_kat.sort_values("total_nominal")
+
+    if _per_kat.empty:
+        st.info("📭 Belum ada data kategori")
+        return
+
+    _col_pie, _col_tab = st.columns([1, 1])
+
+    with _col_pie:
+        _fig_pie = go.Figure(data=[go.Pie(
+            labels=_per_kat["kategori"],
+            values=_per_kat["total_nominal"].abs(),
+            hole=0.5,
+            marker=dict(
+                colors=["#E8B189", "#7FB99B", "#E88B8B", "#A855F7", "#FBBF24", "#64748B"],
+                line=dict(color="#0F0A1E", width=2),
+            ),
+            textinfo="label+percent",
+            textfont=dict(color="#F5E6D3", size=10, family="JetBrains Mono"),
+            hovertemplate="<b>%{label}</b><br>Nominal: Rp %{value:,.0f}<br>%{percent}<extra></extra>",
+        )])
+
+        _fig_pie.update_layout(
+            height=320,
+            margin=dict(l=10, r=10, t=20, b=20),
+            plot_bgcolor="rgba(20, 12, 35, 0.5)",
+            paper_bgcolor="rgba(20, 12, 35, 0.95)",
+            font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
+            showlegend=True,
+            legend=dict(
+                font=dict(color="#E8B189", size=10),
+                bgcolor="rgba(20, 12, 35, 0.8)",
+            ),
+        )
+
+        st.plotly_chart(_fig_pie, width="stretch", key="chart_kategori_pie")
+
+    with _col_tab:
+        _rows_html = ""
+        for _, _r in _per_kat.iterrows():
+            _nom = _r["total_nominal"]
+            _nom_class = "neg" if _nom < 0 else "pos"
+            _nom_str = f"{_nom:+,.0f}".replace(",", ".")
+
+            _rows_html += (
+                f"<tr>"
+                f"<td class='rak-id'>{_r['kategori']}</td>"
+                f"<td style='text-align: center;'>{int(_r['jumlah_rak'])}</td>"
+                f"<td class='nominal {_nom_class}'>Rp {_nom_str}</td>"
+                f"</tr>"
+            )
+
+        _table_html = (
+            "<table class='so-table'>"
+            "<thead><tr>"
+            "<th>Kategori</th>"
+            "<th style='text-align: center;'>Rak</th>"
+            "<th style='text-align: right;'>Total</th>"
+            "</tr></thead>"
+            f"<tbody>{_rows_html}</tbody>"
+            "</table>"
+        )
+
+        st.markdown(_table_html, unsafe_allow_html=True)
+        
 # =========================================================================
 # TAB 3: PREVIEW & HAPUS
 # =========================================================================
