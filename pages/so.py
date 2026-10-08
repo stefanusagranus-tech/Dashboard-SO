@@ -630,4 +630,182 @@ def render_analisis():
         except Exception as _e_chart:
             st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
     else:
-        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
+        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai"
+# =========================================================================
+# TAB 3: PREVIEW & HAPUS
+# =========================================================================
+def render_preview():
+    """Preview SO hari ini + hapus per rak."""
+    st.markdown("### 📋 Preview & Hapus SO")
+    st.caption("Lihat semua SO yang sudah diinput & hapus kalau perlu")
+
+    # ============================================================
+    # PILIH TANGGAL
+    # ============================================================
+    _tanggal = st.date_input(
+        "📅 Pilih Tanggal",
+        value=datetime.now(ZoneInfo("Asia/Jakarta")).date(),
+        key="so_preview_tanggal",
+    )
+
+    with st.spinner("⏳ Load SO..."):
+        _so_summary = load_so_summary_by_date(_tanggal)
+        _so_detail = load_so_detail_by_date(_tanggal)
+
+    # ============================================================
+    # EMPTY STATE
+    # ============================================================
+    if not _so_summary:
+        st.info(f"📭 Belum ada SO untuk tanggal **{_tanggal.strftime('%d/%m/%Y')}**")
+        return
+
+    # ============================================================
+    # SUMMARY METRIC
+    # ============================================================
+    _total_rak = len(_so_summary)
+    _total_item = sum(int(r.get("total_item", 0)) for r in _so_summary)
+    _total_nominal = sum(float(r.get("nominal_adjust", 0)) for r in _so_summary)
+
+    _c1, _c2, _c3 = st.columns(3)
+    with _c1:
+        st.metric("🏪 Total Rak di-SO", f"{_total_rak}")
+    with _c2:
+        st.metric("📦 Total Produk", f"{_total_item}")
+    with _c3:
+        st.metric("💰 Total Nominal", fmt_rp(_total_nominal))
+
+    st.markdown("---")
+
+    # ============================================================
+    # TABEL SUMMARY PER RAK
+    # ============================================================
+    st.markdown("#### 📊 Summary per Rak")
+
+    _df_summary = pd.DataFrame(_so_summary)
+
+    _cols_show = ["rak_id", "pic", "total_item", "total_qty_var", "nominal_adjust", "keterangan"]
+    _cols_show = [c for c in _cols_show if c in _df_summary.columns]
+
+    if _cols_show:
+        _df_show = _df_summary[_cols_show].copy()
+
+        if "nominal_adjust" in _df_show.columns:
+            _df_show["nominal_adjust"] = _df_show["nominal_adjust"].apply(
+                lambda v: f"{float(v):+,.0f}".replace(",", ".")
+            )
+
+        _col_names = ["Rak", "PIC", "Total Item", "Qty Var", "Nominal", "Keterangan"]
+        _df_show.columns = _col_names[:len(_df_show.columns)]
+
+        st.dataframe(_df_show, width="stretch", hide_index=True)
+
+    # ============================================================
+    # DETAIL PRODUK (EXPANDER)
+    # ============================================================
+    if _so_detail:
+        st.markdown("---")
+        with st.expander(f"🔍 Detail Produk ({len(_so_detail)} produk)", expanded=False):
+            _df_detail = pd.DataFrame(_so_detail)
+            _cols_detail = ["rak_id", "plu", "nama_produk", "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust", "pic"]
+            _cols_detail = [c for c in _cols_detail if c in _df_detail.columns]
+
+            _df_detail_show = _df_detail[_cols_detail].copy()
+
+            if "nominal_adjust" in _df_detail_show.columns:
+                _df_detail_show["nominal_adjust"] = _df_detail_show["nominal_adjust"].apply(
+                    lambda v: f"{float(v):+,.0f}".replace(",", ".")
+                )
+
+            _col_names_detail = ["Rak", "PLU", "Nama Produk", "Qty Sistem", "Qty Fisik", "Qty Var", "Nominal", "PIC"]
+            _df_detail_show.columns = _col_names_detail[:len(_df_detail_show.columns)]
+
+            st.dataframe(_df_detail_show, width="stretch", hide_index=True, height=400)
+
+    # ============================================================
+    # HAPUS SO PER RAK
+    # ============================================================
+    st.markdown("---")
+    st.markdown("#### 🗑️ Hapus SO")
+
+    _rak_so_list = [r.get("rak_id") for r in _so_summary if r.get("rak_id")]
+
+    if _rak_so_list:
+        _col_h1, _col_h2 = st.columns([3, 1])
+
+        with _col_h1:
+            _rak_hapus = st.selectbox(
+                "Pilih rak yang mau dihapus:",
+                options=_rak_so_list,
+                key="so_preview_rak_hapus",
+            )
+
+        with _col_h2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🗑️ HAPUS", width="stretch", key="btn_hapus_so"):
+                with st.spinner(f"⏳ Hapus SO rak {_rak_hapus}..."):
+                    _ok, _msg, _detail = delete_so_by_date(_tanggal, rak_id=_rak_hapus)
+
+                if _ok:
+                    st.success(_msg)
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(_msg)
+
+
+# =========================================================================
+# INFO PANEL — CARA INPUT SO
+# =========================================================================
+with st.expander("ℹ️ Cara Input SO", expanded=False):
+    st.markdown("""
+    **📋 Langkah Input SO:**
+    
+    1. **Pilih Tanggal SO** — default hari ini
+    2. **Pilih Rak** — kode rak dari master (contoh: Q51)
+    3. **Pilih PIC** — nama yang ngelakuin SO
+    4. **Isi SPD** (opsional) — kalau ada penjualan hari ini
+    5. **Klik ➕ Tambah Produk** — max 10 produk per rak
+    6. **Isi Detail Produk:**
+       - **PLU**: Kode produk (dari laporan)
+       - **Nama Produk**: Nama barang
+       - **Qty Sistem**: Stok sistem
+       - **Qty Fisik**: Stok fisik (hasil hitung)
+       - **Nominal Adjust**: Nominal selisih (boleh minus)
+    7. **Isi Keterangan** (opsional)
+    8. **Klik 💾 SIMPAN SEMUA**
+    
+    **💡 Tips:**
+    - Input **5 PLU tertinggi** + **5 PLU terendah** per rak
+    - **Qty Var** otomatis dihitung = Qty Fisik - Qty Sistem
+    - **Total Nominal** auto-sum dari semua produk
+    - Data disimpan ke **2 tabel**: `so_hasil` (detail) + `so_rak_harian` (summary)
+    - Status rak otomatis jadi **SELESAI** setelah di-SO
+    - SPD disimpan terpisah ke tabel `spd_harian`
+    """)
+
+
+# =========================================================================
+# ROUTING TAB
+# =========================================================================
+_tab = st.session_state["so_tab"]
+
+if _tab == "input":
+    render_input_so()
+elif _tab == "analisis":
+    render_analisis()
+elif _tab == "preview":
+    render_preview()
+
+
+# =========================================================================
+# FOOTER
+# =========================================================================
+st.markdown(
+    "<div style='text-align: center; padding: 20px 0; "
+    "font-family: Quicksand, sans-serif; font-size: 10px; "
+    "color: #7a9b8e; letter-spacing: 1px;'>"
+    "📝 Stock Opname — Toko C383 🎀"
+    "</div>",
+    unsafe_allow_html=True,
+)
