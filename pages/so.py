@@ -606,18 +606,28 @@ def _render_input_form():
     st.markdown("#### 📦 Stock Opname (Multi-Rak)")
     st.caption("Cari rak → klik **+ Add** → isi nominal & PIC per rak")
 
-    with st.form("form_search_rak", clear_on_submit=False, enter_to_submit=False):
-        _col_search, _col_btn = st.columns([4, 1])
-        with _col_search:
-            _search_query = st.text_input(
-                "🔍 Cari Rak",
-                placeholder="Ketik kode rak...",
-                key="so_search_input",
-                label_visibility="collapsed",
-            )
-        with _col_btn:
-            _search_submit = st.form_submit_button("🔍 Cari", width="stretch", type="primary")
+    _col_search, _col_btn, _col_custom = st.columns([3, 1, 1])
 
+    with _col_search:
+        _search_query = st.text_input(
+            "🔍 Cari Rak",
+            placeholder="Ketik kode rak...",
+            key="so_search_input",
+            label_visibility="collapsed",
+        )
+    
+    with _col_btn:
+        _search_submit = st.button("🔍 Cari", key="btn_search_rak", width="stretch", type="primary")
+    
+    with _col_custom:
+        if st.button(
+            "➕ Custom Rak",
+            key="btn_custom_rak_open",
+            width="stretch",
+            help="Tambah rak yang belum ada di master",
+        ):
+            _dialog_custom_rak()
+        
     if _search_submit and _search_query and len(_search_query.strip()) >= 2:
         st.session_state["so_search_results"] = search_rak(_search_query, limit=10)
         st.session_state["so_search_shown"] = True
@@ -820,6 +830,102 @@ def render_analisis():
         st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
         return
 
+# =========================================================================
+# HELPER: HEATMAP RAK × TANGGAL
+# =========================================================================
+def _render_analisis_heatmap(_so_detail_raw, _start, _end):
+    """Heatmap rak × tanggal — visual nominal SO."""
+    import plotly.graph_objects as go
+
+    if not _so_detail_raw:
+        st.info("📭 Belum ada data untuk heatmap")
+        return
+
+    _df = pd.DataFrame(_so_detail_raw)
+    _df["so_date"] = pd.to_datetime(_df["so_date"], errors="coerce")
+    _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
+    _df["rak_id"] = _df["rak_id"].astype(str).str.upper()
+
+    # Pivot: rak × tanggal
+    _pivot = _df.pivot_table(
+        index="rak_id",
+        columns="so_date",
+        values="nominal_adjust",
+        aggfunc="sum",
+        fill_value=0,
+    )
+
+    if _pivot.empty:
+        st.info("📭 Data kosong setelah pivot")
+        return
+
+    # Sort: rak dengan total minus terbesar di atas
+    _pivot["_total"] = _pivot.sum(axis=1)
+    _pivot = _pivot.sort_values("_total", ascending=True)
+    _pivot = _pivot.drop(columns=["_total"])
+
+    # Batasi tampilan: max 30 rak
+    _max_rak = 30
+    if len(_pivot) > _max_rak:
+        st.caption(f"⚠️ Menampilkan **{_max_rak} rak** dengan minus terbesar (dari {len(_pivot)})")
+        _pivot = _pivot.head(_max_rak)
+
+    # Label tanggal
+    _x_labels = [_d.strftime("%d/%m") for _d in _pivot.columns]
+
+    # Heatmap
+    _fig = go.Figure(data=go.Heatmap(
+        z=_pivot.values,
+        x=_x_labels,
+        y=_pivot.index.tolist(),
+        colorscale=[
+            [0.0, "#7FB99B"],       # plus (hijau)
+            [0.5, "#1A0D2E"],       # netral (gelap)
+            [1.0, "#E88B8B"],       # minus (merah)
+        ],
+        zmid=0,
+        text=_pivot.values,
+        texttemplate="%{text:,.0f}",
+        textfont=dict(size=9, color="#F5E6D3", family="JetBrains Mono"),
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Tanggal: %{x}<br>"
+            "Nominal: Rp %{z:,.0f}"
+            "<extra></extra>"
+        ),
+        colorbar=dict(
+            title=dict(
+                text="Nominal (Rp)",
+                font=dict(color="#E8B189", size=10),
+            ),
+            tickfont=dict(color="#A89B8E", size=9),
+            bgcolor="rgba(20, 12, 35, 0.9)",
+            bordercolor="#4C1D95",
+            borderwidth=1,
+        ),
+    ))
+
+    _fig.update_layout(
+        height=max(400, len(_pivot) * 30),
+        margin=dict(l=10, r=20, t=30, b=60),
+        plot_bgcolor="rgba(20, 12, 35, 0.5)",
+        paper_bgcolor="rgba(20, 12, 35, 0.95)",
+        font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
+        xaxis=dict(
+            title="Tanggal",
+            gridcolor="rgba(168, 85, 247, 0.1)",
+            type="category",
+            tickangle=-45,
+        ),
+        yaxis=dict(
+            title="Rak",
+            gridcolor="rgba(168, 85, 247, 0.1)",
+            autorange="reversed",
+        ),
+    )
+
+    st.plotly_chart(_fig, width="stretch", key="chart_heatmap_rak")
+    
     # ============================================================
     # AMBIL FILTER DARI SESSION STATE
     # ============================================================
@@ -1080,6 +1186,14 @@ def render_analisis():
     
     with st.expander("🏷️ Analytics per Kategori (Klik untuk buka)", expanded=False):
         _render_analisis_kategori(_so_detail_raw, _rak_df)
+    
+    # ============================================================
+    # 🆕 HEATMAP RAK × TANGGAL
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    with st.expander("🔥 Heatmap Rak × Tanggal (Klik untuk buka)", expanded=False):
+        _render_analisis_heatmap(_so_detail_raw, _start, _end)  
         
     # ============================================================
     # RAK BELUM SO — st.dataframe (scroll internal)
@@ -2002,6 +2116,42 @@ def render_preview():
                     else:
                         st.error(_msg)
 
+    # ============================================================
+    # HAPUS SO PER RAK
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    st.markdown("#### 🗑️ Hapus SO")
+
+    _rak_so_list = [r.get("rak_id") for r in _so_summary if r.get("rak_id")]
+
+    if _rak_so_list:
+        _col_h1, _col_h2 = st.columns([3, 1])
+
+        with _col_h1:
+            _rak_hapus = st.selectbox(
+                "Pilih rak yang mau dihapus:",
+                options=_rak_so_list,
+                key="so_preview_rak_hapus",
+            )
+
+        with _col_h2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button(
+                "🗑️ HAPUS",
+                width="stretch",
+                type="primary",
+                key="btn_hapus_so",
+            ):
+                with st.spinner(f"⏳ Hapus SO rak {_rak_hapus}..."):
+                    _ok, _msg, _detail = delete_so_by_date(_tanggal, rak_id=_rak_hapus)
+
+                if _ok:
+                    st.success(_msg)
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(_msg)
 # =========================================================================
 # INFO PANEL
 # =========================================================================

@@ -285,3 +285,41 @@ def get_so_analytics(start_date, end_date):
     except Exception as _e:
         print(f"[SO ANALYTICS ERROR] {_e}")
         return {"total_produk": 0, "top_minus": [], "top_plus": []}
+
+def add_custom_rak(kode_rak, nama_rak, kategori="CUSTOM"):
+    """
+    Tambah rak baru ke rak_master.
+    
+    Returns:
+        (success, message)
+    """
+    try:
+        from modules.supabase_client import get_supabase
+        _sb = get_supabase()
+        
+        _kode = str(kode_rak).strip().upper()
+        _nama = str(nama_rak).strip()
+        _kat = str(kategori).strip().upper() or "CUSTOM"
+        
+        if not _kode or not _nama:
+            return False, "❌ Kode & nama rak wajib diisi"
+        
+        # Cek duplikat
+        _cek = _sb.table("rak_master").select("rak_id").eq("rak_id", _kode).execute()
+        if _cek.data:
+            return False, f"⚠️ Rak {_kode} sudah ada di master"
+        
+        # Insert
+        _res = _sb.table("rak_master").insert({
+            "rak_id": _kode,
+            "rak_name": _nama,
+            "kategori": _kat,
+            "status_so": "BELUM",
+        }).execute()
+        
+        if _res.data:
+            return True, f"✅ Rak {_kode} ditambahkan ke master"
+        return False, "❌ Gagal insert"
+    
+    except Exception as e:
+        return False, f"❌ {str(e)[:150]}"
