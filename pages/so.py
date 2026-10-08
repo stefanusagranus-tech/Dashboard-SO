@@ -1,13 +1,12 @@
 """
-SO — Stock Opname (Konsolidasi)
-================================
+SO — Stock Opname (Konsolidasi v2)
+===================================
 Full replacement pages/input_so.py.
 
-Mode sementara: Multi-Rak + Nominal (tanpa detail per PLU)
-
+Mode: Multi-Rak + Nominal (tanpa detail per PLU)
 Tab:
-1. 📝 Input SO   — SPD + Multi-Rak nominal (mode simple)
-2. 📊 Analisis   — Top rak + grafik
+1. 📝 Input SO   — SPD + Multi-Rak (compact)
+2. 📊 Analisis   — Tabel + Keterangan + Chart (expand)
 3. 📋 Preview    — Preview & hapus SO per rak
 """
 
@@ -43,6 +42,7 @@ render_theme_animations(CURRENT_THEME)
 try:
     from modules.so_handler import (
         load_so_summary_by_date,
+        load_so_detail_by_date,
         delete_so_by_date,
     )
     from modules.master_shift_handler import load_personil_master
@@ -50,6 +50,7 @@ try:
     from modules.spd_calculator import (
         save_spd_harian,
         hitung_btsb_harian,
+        hitung_btsb_akumulatif,
     )
     from modules.input_handler import (
         save_input_harian,
@@ -60,12 +61,11 @@ try:
     )
 except ImportError as _e:
     st.error(f"❌ Gagal import module: {_e}")
-    st.info("💡 Pastikan module `so_handler.py`, `input_handler.py`, `spd_calculator.py`, `data_loader.py`, `master_shift_handler.py` udah ada.")
     st.stop()
 
 
 # =========================================================================
-# CSS
+# CSS — PROFESIONAL, DARK ELEGANT, HALLOWEEN-ISH
 # =========================================================================
 def inject_css():
     st.markdown("""
@@ -75,46 +75,266 @@ def inject_css():
         }
         .main .block-container {
             max-width: 100% !important;
-            padding-left: 2rem !important;
-            padding-right: 2rem !important;
-            padding-top: 1rem !important;
-        }
-        .stApp, .stApp * {
-            color: #F5E6D3 !important;
-        }
-        .stApp button {
-            color: inherit !important;
-            border-radius: 12px !important;
-            font-weight: 700 !important;
-        }
-        .stApp input, .stApp textarea, .stApp select {
-            color: #F5E6D3 !important;
-            background: rgba(30, 20, 60, 0.6) !important;
-            border-radius: 8px !important;
-        }
-        .stApp input::placeholder, .stApp textarea::placeholder {
-            color: rgba(245, 230, 211, 0.5) !important;
+            padding-left: 1.5rem !important;
+            padding-right: 1.5rem !important;
+            padding-top: 0.5rem !important;
         }
 
-        /* Rak Result Card */
-        .rak-result-card {
-            background: linear-gradient(135deg, rgba(15, 31, 26, 0.95), rgba(10, 22, 18, 0.92));
-            border: 1.5px solid #7FB99B;
+        /* Base typography */
+        .stApp {
+            font-family: 'Quicksand', -apple-system, sans-serif;
+        }
+
+        /* Header profile card */
+        .profile-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            background: linear-gradient(135deg, rgba(28, 16, 48, 0.9), rgba(45, 25, 75, 0.85));
+            border: 1px solid rgba(232, 177, 137, 0.25);
+            border-radius: 14px;
+            margin-bottom: 20px;
+        }
+        .profile-title {
+            font-family: 'Cinzel', serif;
+            font-size: 16px;
+            font-weight: 900;
+            color: #E8B189;
+            letter-spacing: 2px;
+        }
+        .profile-sub {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 10px;
+            color: #7FB99B;
+            letter-spacing: 1px;
+            margin-top: 2px;
+        }
+        .profile-status {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #7FB99B;
+            text-align: right;
+        }
+
+        /* Input label - lebih kecil & subtle */
+        .stTextInput > label,
+        .stNumberInput > label,
+        .stSelectbox > label,
+        .stDateInput > label {
+            font-family: 'Quicksand', sans-serif !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            color: #A89B8E !important;
+            letter-spacing: 0.5px !important;
+            text-transform: uppercase !important;
+        }
+
+        /* Input fields - lebih compact */
+        .stTextInput input,
+        .stNumberInput input,
+        .stSelectbox > div > div,
+        .stDateInput input {
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 13px !important;
+            color: #F5E6D3 !important;
+            background: rgba(20, 12, 35, 0.8) !important;
+            border: 1px solid rgba(168, 85, 247, 0.3) !important;
+            border-radius: 8px !important;
+            min-height: 38px !important;
+        }
+
+        /* Buttons - subtle professional */
+        div.stButton > button,
+        div.stFormSubmitButton > button,
+        div.stDownloadButton > button {
+            font-family: 'Quicksand', sans-serif !important;
+            font-weight: 700 !important;
+            font-size: 13px !important;
+            letter-spacing: 0.5px !important;
+            border-radius: 10px !important;
+            min-height: 42px !important;
+            transition: all 0.2s ease !important;
+        }
+
+        /* Metric cards - clean, gak rame */
+        .metric-clean {
+            background: linear-gradient(135deg, rgba(28, 16, 48, 0.7), rgba(45, 25, 75, 0.6));
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-left: 3px solid #E8B189;
             border-radius: 10px;
-            padding: 10px 14px;
+            padding: 14px 18px;
+            margin-bottom: 8px;
+        }
+        .metric-clean .label {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 10px;
+            color: #A89B8E;
+            letter-spacing: 1px;
+            text-transform: uppercase;
             margin-bottom: 6px;
+        }
+        .metric-clean .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 900;
+            color: #E8B189;
+            line-height: 1.1;
+        }
+        .metric-clean .sub {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 10px;
+            color: #7a9b8e;
+            margin-top: 4px;
+        }
+
+        /* Rak result card - compact */
+        .rak-result {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: rgba(20, 12, 35, 0.6);
+            border: 1px solid rgba(168, 85, 247, 0.25);
+            border-radius: 8px;
+            margin-bottom: 4px;
         }
         .rak-result-id {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            font-weight: 900;
+            font-size: 12px;
+            font-weight: 700;
             color: #E8B189;
         }
         .rak-result-name {
             font-family: 'Quicksand', sans-serif;
             font-size: 10px;
             color: #7a9b8e;
-            margin-top: 2px;
+        }
+
+        /* Rak selected item - compact */
+        .rak-selected {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            background: rgba(20, 12, 35, 0.5);
+            border: 1px solid rgba(127, 185, 155, 0.3);
+            border-left: 3px solid #7FB99B;
+            border-radius: 8px;
+            margin-bottom: 6px;
+        }
+        .rak-selected-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 900;
+            color: #E8B189;
+            min-width: 70px;
+        }
+        .rak-selected-name {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 10px;
+            color: #7a9b8e;
+            flex: 1;
+        }
+
+        /* Custom HTML table - professional */
+        .so-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        .so-table thead th {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 10px;
+            font-weight: 600;
+            color: #A89B8E;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(168, 85, 247, 0.3);
+        }
+        .so-table tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(168, 85, 247, 0.1);
+            color: #F5E6D3;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+        .so-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .so-table td.rak-id {
+            color: #E8B189;
+            font-weight: 700;
+        }
+        .so-table td.nominal {
+            text-align: right;
+            font-weight: 700;
+        }
+        .so-table td.nominal.neg {
+            color: #E88B8B;
+        }
+        .so-table td.nominal.pos {
+            color: #7FB99B;
+        }
+        .so-table td.keterangan {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 11px;
+            color: #A89B8E;
+            max-width: 300px;
+        }
+
+        /* Big keterangan panel (di kanan tabel analisis) */
+        .keterangan-panel {
+            background: linear-gradient(135deg, rgba(28, 16, 48, 0.9), rgba(45, 25, 75, 0.85));
+            border: 1px solid rgba(232, 177, 137, 0.3);
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+        }
+        .keterangan-panel .panel-label {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 10px;
+            font-weight: 700;
+            color: #7FB99B;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .keterangan-panel .panel-value {
+            font-family: 'Cinzel', serif;
+            font-size: 28px;
+            font-weight: 900;
+            color: #E8B189;
+            line-height: 1.1;
+        }
+        .keterangan-panel .panel-sub {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 11px;
+            color: #A89B8E;
+            margin-top: 6px;
+        }
+        .keterangan-panel.danger {
+            border-left: 4px solid #E88B8B;
+        }
+        .keterangan-panel.danger .panel-value {
+            color: #E88B8B;
+        }
+        .keterangan-panel.safe {
+            border-left: 4px solid #7FB99B;
+        }
+        .keterangan-panel.safe .panel-value {
+            color: #7FB99B;
+        }
+
+        /* Section divider */
+        .section-divider {
+            margin: 24px 0 16px 0;
+            border: none;
+            border-top: 1px solid rgba(168, 85, 247, 0.15);
         }
     </style>
     """, unsafe_allow_html=True)
@@ -124,13 +344,13 @@ inject_css()
 
 
 # =========================================================================
-# HEADER
+# HEADER — PROFILE CARD STYLE
 # =========================================================================
 def render_header():
     _now = datetime.now(ZoneInfo("Asia/Jakarta"))
     _time_str = _now.strftime("%H:%M")
 
-    _col_back, _col_title, _col_status = st.columns([1, 3, 1])
+    _col_back, _col_profile = st.columns([1, 6])
 
     with _col_back:
         if st.button("← Dashboard", key="btn_back_so", width="stretch"):
@@ -139,29 +359,17 @@ def render_header():
             except Exception:
                 st.warning("⚠️ Gagal pindah halaman.")
 
-    with _col_title:
+    with _col_profile:
         st.markdown(
-            "<div style='text-align: center;'>"
-            "<div style='font-family: Cinzel, serif; font-size: 22px; "
-            "font-weight: 900; color: #E8B189; letter-spacing: 2px; "
-            "text-shadow: 0 0 15px rgba(232, 177, 137, 0.6);'>"
-            "📝 STOCK OPNAME 📝</div>"
-            "<div style='font-family: Quicksand, sans-serif; font-size: 10px; "
-            "color: #7FB99B; letter-spacing: 1.5px; margin-top: 2px;'>"
-            "Toko C383 - Karang Satria</div>"
-            "</div>",
+            f"<div class='profile-header'>"
+            f"<div>"
+            f"<div class='profile-title'>📝 STOCK OPNAME</div>"
+            f"<div class='profile-sub'>Toko C383 — Karang Satria</div>"
+            f"</div>"
+            f"<div class='profile-status'>🕐 {_time_str} WIB<br>● ONLINE</div>"
+            f"</div>",
             unsafe_allow_html=True,
         )
-
-    with _col_status:
-        st.markdown(
-            f"<div style='text-align: right; font-family: JetBrains Mono, monospace; "
-            f"font-size: 10px; color: #7FB99B; padding-top: 8px;'>"
-            f"🕐 {_time_str} WIB<br>● ONLINE</div>",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("---")
 
 
 render_header()
@@ -171,7 +379,7 @@ render_header()
 # SESSION STATE
 # =========================================================================
 if "so_rak_list" not in st.session_state:
-    st.session_state["so_rak_list"] = []   # list of dict {rak_id, nominal_adjust}
+    st.session_state["so_rak_list"] = []
 
 if "so_last_saved" not in st.session_state:
     st.session_state["so_last_saved"] = None
@@ -182,7 +390,6 @@ if "so_analisis_loaded" not in st.session_state:
 if "so_tab" not in st.session_state:
     st.session_state["so_tab"] = "input"
 
-# ✅ Auto-load existing SO saat tanggal berubah (biar bisa edit)
 if "so_last_loaded_date" not in st.session_state:
     st.session_state["so_last_loaded_date"] = None
 
@@ -192,13 +399,12 @@ if "so_last_loaded_date" not in st.session_state:
 # =========================================================================
 if st.session_state["so_last_saved"]:
     st.success(st.session_state["so_last_saved"])
-    st.balloons()
     st.session_state["so_last_saved"] = None
     time.sleep(1)
 
 
 # =========================================================================
-# LOAD MASTER DATA (cached)
+# LOAD MASTER DATA
 # =========================================================================
 @st.cache_data(ttl=60, show_spinner=False)
 def _load_master():
@@ -216,7 +422,18 @@ _personil_list = _personil_df["nama"].tolist() if not _personil_df.empty else []
 # =========================================================================
 def fmt_rp(value):
     try:
-        return f"Rp {int(value):,.0f}".replace(",", ".")
+        _v = float(value)
+        _sign = "-" if _v < 0 else ""
+        return f"{_sign}Rp {int(abs(_v)):,.0f}".replace(",", ".")
+    except Exception:
+        return "Rp 0"
+
+
+def fmt_rp_signed(value):
+    try:
+        _v = float(value)
+        _sign = "+" if _v >= 0 else "-"
+        return f"{_sign}Rp {int(abs(_v)):,.0f}".replace(",", ".")
     except Exception:
         return "Rp 0"
 
@@ -227,7 +444,7 @@ def fmt_rp(value):
 _TABS = [
     ("input", "📝 Input SO"),
     ("analisis", "📊 Analisis"),
-    ("preview", "📋 Preview & Hapus"),
+    ("preview", "📋 Preview"),
 ]
 
 _cols = st.columns(len(_TABS))
@@ -243,21 +460,19 @@ for _i, (_key, _label) in enumerate(_TABS):
             st.session_state["so_tab"] = _key
             st.rerun()
 
-st.markdown("---")
+st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 # =========================================================================
-# TAB 1: INPUT SO (SPD + Multi-Rak Nominal)
+# TAB 1: INPUT SO (Compact Layout)
 # =========================================================================
 def render_input_so():
-    """Input SO: SPD + Multi-Rak (nominal per rak) dalam 1 form."""
+    """Input SO: SPD + Multi-Rak (nominal per rak) — compact & efisien."""
     st.markdown("### 📝 Input SO")
-    st.caption("Isi SPD (opsional) + rak yang di-SO, lalu klik SIMPAN SEMUA")
+    st.caption("Input SPD (opsional) + rak yang di-SO dalam 1 form")
 
     # ============================================================
-    # INFO SO
+    # INFO SO — 3 kolom compact (tanggal, PIC, keterangan)
     # ============================================================
-    st.markdown("#### 📅 Info SO")
-
-    _col_tgl, _col_pic = st.columns([2, 2])
+    _col_tgl, _col_pic, _col_ket = st.columns([1.2, 1.5, 2])
 
     with _col_tgl:
         _tanggal = st.date_input(
@@ -269,21 +484,27 @@ def render_input_so():
     with _col_pic:
         if _personil_list:
             _pic_pilih = st.selectbox(
-                "👤 PIC (Nama)",
+                "👤 PIC",
                 options=_personil_list,
                 key="so_input_pic",
-                help="Pilih nama penanggung jawab SO",
             )
         else:
             _pic_pilih = st.text_input(
-                "👤 PIC (Nama)",
-                placeholder="Ketik nama PIC",
+                "👤 PIC",
+                placeholder="Nama PIC",
                 key="so_input_pic_manual",
             )
 
-    # ✅ AUTO-LOAD data existing saat tanggal berubah
+    with _col_ket:
+        _keterangan = st.text_input(
+            "📝 Keterangan (opsional)",
+            placeholder="Contoh: Pendingan rak FE1",
+            key="so_input_keterangan",
+        )
+
+    # ✅ AUTO-LOAD existing SO saat tanggal berubah
     if st.session_state["so_last_loaded_date"] != _tanggal:
-        with st.spinner("⏳ Load SO existing..."):
+        with st.spinner("⏳ Load..."):
             _existing = load_so_summary_by_date(_tanggal)
         st.session_state["so_rak_list"] = [
             {
@@ -295,41 +516,56 @@ def render_input_so():
         st.session_state["so_last_loaded_date"] = _tanggal
         st.rerun()
 
-    st.markdown("---")
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     # ============================================================
-    # SPD (OPSIONAL)
+    # SPD — compact single row
     # ============================================================
-    st.markdown("#### 💰 SPD Hari Ini (Opsional)")
-    st.caption("Kosongkan / isi 0 kalau belum ada SPD hari ini")
+    _col_spd1, _col_spd2 = st.columns([1, 3])
 
-    _spd_val = st.number_input(
-        "SPD (Rp)",
-        min_value=0,
-        max_value=999_999_999_999,
-        step=100_000,
-        value=0,
-        key="so_input_spd",
-    )
+    with _col_spd1:
+        _spd_val = st.number_input(
+            "💰 SPD Hari Ini",
+            min_value=0,
+            max_value=999_999_999_999,
+            step=100_000,
+            value=0,
+            key="so_input_spd",
+            help="Isi 0 kalau belum ada SPD hari ini",
+        )
 
-    if _spd_val > 0:
-        _btsb = hitung_btsb_harian(_spd_val)
-        st.success(f"💡 BTSB Otomatis: **{fmt_rp(_btsb)}** (0,15% × SPD)")
-    else:
-        st.info("💡 BTSB: — (SPD = 0)")
+    with _col_spd2:
+        if _spd_val > 0:
+            _btsb = hitung_btsb_harian(_spd_val)
+            st.markdown(
+                f"<div class='metric-clean' style='border-left-color: #7FB99B; padding: 10px 14px; margin-top: 4px;'>"
+                f"<div class='label'>💡 BTSB OTOMATIS (0,15%)</div>"
+                f"<div class='value' style='font-size: 18px; color: #7FB99B;'>{fmt_rp(_btsb)}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='padding: 12px 0; font-family: JetBrains Mono, monospace; "
+                "font-size: 11px; color: #A89B8E;'>"
+                "💡 BTSB: — (SPD = 0)"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
-    st.markdown("---")
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     # ============================================================
-    # MULTI-RAK (SEARCH + ADD)
+    # MULTI-RAK — Search + Add
     # ============================================================
     st.markdown("#### 📦 Stock Opname (Multi-Rak)")
-    st.caption("🔍 Cari rak → klik **+ Add** → isi nominal per rak")
+    st.caption("Cari rak → klik **+ Add** → isi nominal per rak")
 
     _search_query = st.text_input(
         "🔍 Cari Rak",
         key="so_search_rak",
-        placeholder="Ketik kode rak (contoh: AT, AU, CHILLER)",
+        placeholder="Ketik kode rak (contoh: QA1, AT, CHILLER)...",
+        label_visibility="collapsed",
     )
 
     # === HASIL SEARCH ===
@@ -337,7 +573,7 @@ def render_input_so():
         _search_results = search_rak(_search_query, limit=10)
 
         if _search_results:
-            st.caption(f"💡 {len(_search_results)} rak ditemukan:")
+            st.caption(f"💡 {len(_search_results)} rak ditemukan — klik **+ Add** untuk menambahkan")
 
             for _idx, _rak in enumerate(_search_results):
                 _rid = _rak.get("rak_id", "-")
@@ -352,17 +588,29 @@ def render_input_so():
                 with col_r1:
                     _status_icon = "✅" if _status == "SELESAI" else "⬜"
                     st.markdown(
-                        "<div class='rak-result-card'>"
+                        f"<div class='rak-result'>"
+                        f"<div>"
                         f"<div class='rak-result-id'>{_status_icon} {_rid}</div>"
                         f"<div class='rak-result-name'>{_rname}</div>"
-                        "</div>",
+                        f"</div>"
+                        f"</div>",
                         unsafe_allow_html=True,
                     )
                 with col_r2:
                     if _already_selected:
-                        st.button("✓ Ada", key=f"btn_add_{_idx}_{_rid}", disabled=True, width="stretch")
+                        st.button(
+                            "✓",
+                            key=f"btn_add_{_idx}_{_rid}",
+                            disabled=True,
+                            width="stretch",
+                        )
                     else:
-                        if st.button("+ Add", key=f"btn_add_{_idx}_{_rid}", width="stretch"):
+                        if st.button(
+                            "+ Add",
+                            key=f"btn_add_{_idx}_{_rid}",
+                            width="stretch",
+                            type="primary",
+                        ):
                             st.session_state["so_rak_list"].append({
                                 "rak_id": _rid,
                                 "nominal_adjust": 0.0,
@@ -373,14 +621,13 @@ def render_input_so():
     elif _search_query and len(_search_query.strip()) < 2:
         st.info("💡 Ketik minimal **2 karakter**.")
 
-    st.markdown("---")
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     # ============================================================
-    # LIST RAK TERPILIH + INPUT NOMINAL
+    # LIST RAK TERPILIH — Compact 1-row per rak
     # ============================================================
     if st.session_state["so_rak_list"]:
         st.markdown(f"#### 📋 Rak Terpilih ({len(st.session_state['so_rak_list'])})")
-        st.caption("Isi nominal adjustment per rak (bisa +/-)")
 
         _items_to_remove = []
 
@@ -389,28 +636,21 @@ def render_input_so():
             _rak_info = get_rak_by_kode_exact(_rid)
             _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
 
-            col_d1, col_d2, col_d3 = st.columns([2, 2, 1])
+            # Compact: rak info + nominal + delete dalam 1 baris
+            _c1, _c2, _c3 = st.columns([2.5, 2, 0.6])
 
-            with col_d1:
+            with _c1:
                 st.markdown(
-                    "<div style='"
-                    "padding: 12px 14px;"
-                    "background: rgba(15, 138, 114, 0.15);"
-                    "border: 1.5px solid #7FB99B;"
-                    "border-radius: 10px;"
-                    "margin-top: 8px;"
-                    "'>"
-                    f"<div style='font-family: \"JetBrains Mono\", monospace;"
-                    f"font-size: 14px; font-weight: 900; color: #E8B189;'>{_rid}</div>"
-                    f"<div style='font-family: \"Quicksand\", sans-serif;"
-                    f"font-size: 10px; color: #7a9b8e; margin-top: 2px;'>{_rname}</div>"
-                    "</div>",
+                    f"<div class='rak-selected' style='margin-top: 4px;'>"
+                    f"<div class='rak-selected-id'>{_rid}</div>"
+                    f"<div class='rak-selected-name'>{_rname}</div>"
+                    f"</div>",
                     unsafe_allow_html=True,
                 )
 
-            with col_d2:
+            with _c2:
                 _new_nominal = st.number_input(
-                    f"Nominal #{_idx+1}",
+                    f"Nominal {_rid}",
                     min_value=-999_999_999,
                     max_value=999_999_999,
                     step=1000,
@@ -420,9 +660,8 @@ def render_input_so():
                 )
                 st.session_state["so_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
 
-            with col_d3:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🗑️", key=f"btn_del_{_rid}_{_idx}"):
+            with _c3:
+                if st.button("🗑️", key=f"btn_del_{_rid}_{_idx}", width="stretch"):
                     _items_to_remove.append(_idx)
 
         if _items_to_remove:
@@ -436,49 +675,29 @@ def render_input_so():
             for item in st.session_state["so_rak_list"]
         )
         _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
-        _sign_total = "+" if _total_nominal_input >= 0 else ""
 
         st.markdown(
-            "<div style='"
-            "background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.85));"
-            f"border: 2px solid {_color_total};"
-            "border-radius: 12px;"
-            "padding: 14px 20px;"
-            "margin-top: 16px;"
-            "text-align: center;"
-            "'>"
-            "<div style='font-family: monospace; font-size: 10px;"
-            "color: #7a9b8e; letter-spacing: 1.5px;'>💰 TOTAL NOMINAL SO</div>"
-            f"<div style='font-family: \"JetBrains Mono\", monospace;"
-            f"font-size: 22px; font-weight: 900; color: {_color_total};"
-            f"margin-top: 6px;'>{_sign_total}{fmt_rp(_total_nominal_input)}</div>"
-            "</div>",
+            f"<div class='metric-clean' style='border-left-color: {_color_total}; "
+            f"margin-top: 16px; text-align: right;'>"
+            f"<div class='label'>💰 TOTAL NOMINAL SO ({len(st.session_state['so_rak_list'])} RAK)</div>"
+            f"<div class='value' style='color: {_color_total};'>"
+            f"{fmt_rp_signed(_total_nominal_input)}</div>"
+            f"</div>",
             unsafe_allow_html=True,
         )
     else:
         st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
 
-    st.markdown("---")
+    # ============================================================
+    # TOMBOL SIMPAN
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-    # ============================================================
-    # KETERANGAN
-    # ============================================================
-    _keterangan = st.text_input(
-        "📝 Keterangan (opsional)",
-        placeholder="Contoh: Pendingan rak FE1 1 item",
-        key="so_input_keterangan",
-    )
-
-    # ============================================================
-    # SIMPAN
-    # ============================================================
-    st.markdown("---")
-
-    _col_save, _col_cancel = st.columns([2, 1])
+    _col_save, _col_cancel = st.columns([3, 1])
 
     with _col_save:
         if st.button(
-            "💾 SIMPAN SEMUA",
+            "💾 SIMPAN SO",
             width="stretch",
             type="primary",
             key="btn_save_all_so",
@@ -513,7 +732,7 @@ def render_input_so():
 
     with _col_cancel:
         if st.button(
-            "🗑️ Clear Semua",
+            "🗑️ Clear",
             width="stretch",
             key="btn_clear_so",
         ):
@@ -522,28 +741,28 @@ def render_input_so():
 
 
 # =========================================================================
-# TAB 2: ANALISIS SO
+# TAB 2: ANALISIS SO (Redesign)
 # =========================================================================
 def render_analisis():
-    """Analisis SO: nominal per rak + summary."""
+    """Analisis: Tabel kiri + Keterangan kanan + Chart di expander bawah."""
     st.markdown("### 📊 Analisis SO")
-    st.caption("Analisis nominal SO per rak dalam periode tertentu")
+    st.caption("Ringkasan SO per periode")
 
     # ============================================================
-    # FILTER PERIODE
+    # FILTER PERIODE — compact 1 row
     # ============================================================
     _col_p1, _col_p2, _col_p3 = st.columns([2, 2, 1])
 
     with _col_p1:
         _tgl_start = st.date_input(
-            "📅 Dari Tanggal",
+            "📅 Dari",
             value=date.today().replace(day=1),
             key="so_analisis_start",
         )
 
     with _col_p2:
         _tgl_end = st.date_input(
-            "📅 Sampai Tanggal",
+            "📅 Sampai",
             value=date.today(),
             key="so_analisis_end",
         )
@@ -554,39 +773,145 @@ def render_analisis():
             st.session_state["so_analisis_loaded"] = True
             st.session_state["so_analisis_periode"] = (_tgl_start, _tgl_end)
 
+    if not st.session_state["so_analisis_loaded"]:
+        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
+        return
+
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
     # ============================================================
-    # HASIL ANALISIS
+    # HITUNG DATA ANALISIS
     # ============================================================
-    if st.session_state["so_analisis_loaded"]:
-        _start, _end = st.session_state.get("so_analisis_periode", (_tgl_start, _tgl_end))
+    with st.spinner("⏳ Load analytics..."):
+        _akumulasi = get_akumulasi_nominal_bulan()
+        _btsb_result = hitung_btsb_akumulatif()
+        _so_detail = get_so_rak_detail(limit=500)
 
-        with st.spinner("⏳ Load analytics..."):
-            _akumulasi = get_akumulasi_nominal_bulan()
+    _total_rak = _akumulasi.get("total_rak", 0)
+    _jumlah_hari = _akumulasi.get("jumlah_hari", 0)
+    _total_nominal = _akumulasi.get("total_nominal", 0)
+    _total_spd = _btsb_result.get("total_spd", 0)
+    _btsb_akum = _btsb_result.get("btsb_akumulatif", 0)
 
-        # === METRIC SUMMARY ===
-        _c1, _c2, _c3 = st.columns(3)
-        with _c1:
-            st.metric("🏪 Total Rak di-SO", f"{_akumulasi.get('total_rak', 0)}")
-        with _c2:
-            st.metric("📅 Jumlah Hari", f"{_akumulasi.get('jumlah_hari', 0)}")
-        with _c3:
-            _total_nom = _akumulasi.get("total_nominal", 0)
-            st.metric("💰 Total Nominal SO", fmt_rp(_total_nom))
+    # %NSB
+    if _total_spd > 0:
+        _pct_nsb = (abs(_total_nominal) / _total_spd * 100)
+    else:
+        _pct_nsb = 0.0
 
-        st.markdown("---")
+    # Status BTSB
+    _pct_btsb = (abs(_total_nominal) / _btsb_akum * 100) if _btsb_akum > 0 else 0
+    if _pct_btsb <= 80:
+        _status = "AMAN"
+        _status_color = "#7FB99B"
+        _status_class = "safe"
+    elif _pct_btsb <= 100:
+        _status = "WASPADA"
+        _status_color = "#fbbf24"
+        _status_class = ""
+    else:
+        _status = "BAHAYA"
+        _status_color = "#E88B8B"
+        _status_class = "danger"
 
-        # === GRAFIK PER RAK ===
-        st.markdown("#### 📊 Nominal SO per Rak")
+    # ============================================================
+    # TABEL ANALISIS — Kiri (tabel) + Kanan (keterangan besar)
+    # ============================================================
+    _col_table, _col_ket = st.columns([3, 2])
 
-        try:
-            _so_detail = get_so_rak_detail(limit=500)
+    with _col_table:
+        st.markdown("#### 📋 Ringkasan SO")
 
-            if _so_detail:
+        # Build custom HTML table
+        _table_html = (
+            "<table class='so-table'>"
+            "<thead><tr>"
+            "<th>Metric</th>"
+            "<th style='text-align: right;'>Nilai</th>"
+            "</tr></thead><tbody>"
+            f"<tr><td class='rak-id'>🏪 Jumlah Rak di-SO</td>"
+            f"<td class='nominal pos'>{_total_rak} rak</td></tr>"
+            f"<tr><td class='rak-id'>📅 Jumlah Hari</td>"
+            f"<td class='nominal pos'>{_jumlah_hari} hari</td></tr>"
+            f"<tr><td class='rak-id'>💰 Total Nominal SO</td>"
+            f"<td class='nominal {'neg' if _total_nominal < 0 else 'pos'}'>"
+            f"{fmt_rp_signed(_total_nominal)}</td></tr>"
+            f"<tr><td class='rak-id'>📈 Total SPD</td>"
+            f"<td class='nominal pos'>{fmt_rp(_total_spd)}</td></tr>"
+            f"<tr><td class='rak-id'>🎯 BTSB Akumulatif</td>"
+            f"<td class='nominal pos'>{fmt_rp(_btsb_akum)}</td></tr>"
+            f"<tr><td class='rak-id'>📊 %NSB dari Sales</td>"
+            f"<td class='nominal {'neg' if _pct_nsb > 0.15 else 'pos'}'>"
+            f"{_pct_nsb:.3f}%</td></tr>"
+            "</tbody></table>"
+        )
+        st.markdown(_table_html, unsafe_allow_html=True)
+
+    with _col_ket:
+        st.markdown("#### 💡 Keterangan")
+
+        # Keterangan besar — status
+        st.markdown(
+            f"<div class='keterangan-panel {_status_class}'>"
+            f"<div class='panel-label'>🎯 STATUS BTSB</div>"
+            f"<div class='panel-value' style='color: {_status_color};'>"
+            f"{_status}</div>"
+            f"<div class='panel-sub'>Penggunaan: {_pct_btsb:.2f}% dari BTSB</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        # Keterangan besar — gap
+        _gap = _btsb_akum - abs(_total_nominal)
+        _gap_color = "#7FB99B" if _gap >= 0 else "#E88B8B"
+        st.markdown(
+            f"<div class='keterangan-panel' style='border-left-color: {_gap_color};'>"
+            f"<div class='panel-label'>💰 SISA BUDGET BTSB</div>"
+            f"<div class='panel-value' style='color: {_gap_color}; font-size: 22px;'>"
+            f"{fmt_rp(_gap)}</div>"
+            f"<div class='panel-sub'>{'✅ Masih aman' if _gap >= 0 else '⚠️ Over budget'}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ============================================================
+    # DETAIL PER RAK — Scroll ke bawah (di expander biar gak berat)
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
+    with st.expander(f"📋 Daftar Rak yang di-SO ({len(_so_detail) if _so_detail else 0} baris)", expanded=False):
+        if _so_detail:
+            _df_detail = pd.DataFrame(_so_detail)
+            _cols_show = ["so_date", "rak_id", "nominal_adjust", "pic", "keterangan"]
+            _cols_show = [c for c in _cols_show if c in _df_detail.columns]
+
+            if _cols_show:
+                _df_show = _df_detail[_cols_show].copy()
+
+                if "nominal_adjust" in _df_show.columns:
+                    _df_show["nominal_adjust"] = _df_show["nominal_adjust"].apply(
+                        lambda v: fmt_rp_signed(v)
+                    )
+
+                _col_names = ["Tanggal", "Kode Rak", "Nominal", "PIC", "Keterangan"]
+                _df_show.columns = _col_names[:len(_df_show.columns)]
+
+                st.dataframe(_df_show, width="stretch", hide_index=True, height=400)
+                st.caption(f"📊 Total **{len(_df_show)}** baris SO")
+        else:
+            st.info("📭 Belum ada data SO di periode ini")
+
+    # ============================================================
+    # CHART ADJUST SO — di expander (biar gak bikin berat)
+    # ============================================================
+    with st.expander("📈 Grafik Adjust SO per Rak (Klik untuk buka)", expanded=False):
+        if _so_detail:
+            try:
                 _df = pd.DataFrame(_so_detail)
                 if "nominal_adjust" in _df.columns and "rak_id" in _df.columns:
                     _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
                     _grp = _df.groupby("rak_id")["nominal_adjust"].sum().reset_index()
-                    _grp = _grp.sort_values("nominal_adjust", ascending=True).head(20)
+                    _grp = _grp.sort_values("nominal_adjust", ascending=True)
 
                     import plotly.graph_objects as go
 
@@ -597,40 +922,40 @@ def render_analisis():
                         x=_grp["nominal_adjust"],
                         y=_grp["rak_id"],
                         orientation="h",
-                        marker=dict(color=_colors, line=dict(color="#B87333", width=1.5)),
-                        text=_grp["nominal_adjust"],
+                        marker=dict(color=_colors, line=dict(color="rgba(184, 115, 51, 0.5)", width=1)),
+                        text=[f"{v:+,.0f}".replace(",", ".") for v in _grp["nominal_adjust"]],
                         textposition="outside",
-                        textfont=dict(color="#E8B189", size=11, family="JetBrains Mono"),
+                        textfont=dict(color="#E8B189", size=10, family="JetBrains Mono"),
                         hovertemplate="<b>%{y}</b><br>Nominal: %{x:+,.0f}<extra></extra>",
                     ))
 
                     _fig.update_layout(
-                        height=max(300, len(_grp) * 30),
-                        margin=dict(l=10, r=40, t=20, b=20),
-                        plot_bgcolor="rgba(10, 22, 18, 0.4)",
+                        height=max(400, len(_grp) * 28),
+                        margin=dict(l=10, r=60, t=20, b=40),
+                        plot_bgcolor="rgba(28, 16, 48, 0.3)",
                         paper_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="#E8B189", family="JetBrains Mono", size=11),
+                        font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
                         xaxis=dict(
                             title="Nominal (Rp)",
-                            gridcolor="rgba(232, 177, 137, 0.15)",
+                            gridcolor="rgba(168, 85, 247, 0.1)",
                             zeroline=True,
-                            zerolinecolor="#E8B189",
-                            zerolinewidth=2,
+                            zerolinecolor="rgba(232, 177, 137, 0.5)",
+                            zerolinewidth=1,
                         ),
-                        yaxis=dict(gridcolor="rgba(232, 177, 137, 0.15)", autorange="reversed"),
+                        yaxis=dict(
+                            gridcolor="rgba(168, 85, 247, 0.1)",
+                            autorange="reversed",
+                        ),
                         showlegend=False,
                     )
 
-                    st.plotly_chart(_fig, width="stretch", key="chart_nominal_per_rak_so")
+                    st.plotly_chart(_fig, width="stretch", key="chart_adjust_so")
                 else:
                     st.info("📭 Data SO kosong")
-            else:
-                st.info("📭 Belum ada data SO")
-
-        except Exception as _e_chart:
-            st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
-    else:
-        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
+            except Exception as _e_chart:
+                st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
+        else:
+            st.info("📭 Belum ada data SO di periode ini")
 # =========================================================================
 # TAB 3: PREVIEW & HAPUS
 # =========================================================================
@@ -642,15 +967,42 @@ def render_preview():
     # ============================================================
     # PILIH TANGGAL
     # ============================================================
-    _tanggal = st.date_input(
-        "📅 Pilih Tanggal",
-        value=datetime.now(ZoneInfo("Asia/Jakarta")).date(),
-        key="so_preview_tanggal",
-    )
+    _col_tgl, _col_info = st.columns([1, 3])
+
+    with _col_tgl:
+        _tanggal = st.date_input(
+            "📅 Pilih Tanggal",
+            value=datetime.now(ZoneInfo("Asia/Jakarta")).date(),
+            key="so_preview_tanggal",
+        )
+
+    # ============================================================
+    # LOAD DATA — ✅ FIX NameError: pake try-except
+    # ============================================================
+    _so_summary = []
+    _so_detail = []
 
     with st.spinner("⏳ Load SO..."):
-        _so_summary = load_so_summary_by_date(_tanggal)
-        _so_detail = load_so_detail_by_date(_tanggal)
+        try:
+            _so_summary = load_so_summary_by_date(_tanggal) or []
+        except Exception as _e1:
+            print(f"[PREVIEW SUMMARY ERROR] {_e1}")
+            _so_summary = []
+
+        try:
+            _so_detail = load_so_detail_by_date(_tanggal) or []
+        except Exception as _e2:
+            print(f"[PREVIEW DETAIL ERROR] {_e2}")
+            _so_detail = []
+
+    with _col_info:
+        st.markdown(
+            f"<div style='padding-top: 8px; font-family: JetBrains Mono, monospace; "
+            f"font-size: 11px; color: #A89B8E;'>"
+            f"📅 Menampilkan data: <b style='color: #E8B189;'>"
+            f"{_tanggal.strftime('%d/%m/%Y')}</b></div>",
+            unsafe_allow_html=True,
+        )
 
     # ============================================================
     # EMPTY STATE
@@ -659,72 +1011,124 @@ def render_preview():
         st.info(f"📭 Belum ada SO untuk tanggal **{_tanggal.strftime('%d/%m/%Y')}**")
         return
 
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
     # ============================================================
-    # SUMMARY METRIC
+    # SUMMARY METRIC — 3 kolom compact
     # ============================================================
     _total_rak = len(_so_summary)
     _total_item = sum(int(r.get("total_item", 0)) for r in _so_summary)
     _total_nominal = sum(float(r.get("nominal_adjust", 0)) for r in _so_summary)
 
     _c1, _c2, _c3 = st.columns(3)
-    with _c1:
-        st.metric("🏪 Total Rak di-SO", f"{_total_rak}")
-    with _c2:
-        st.metric("📦 Total Produk", f"{_total_item}")
-    with _c3:
-        st.metric("💰 Total Nominal", fmt_rp(_total_nominal))
 
-    st.markdown("---")
+    with _c1:
+        st.markdown(
+            f"<div class='metric-clean'>"
+            f"<div class='label'>🏪 TOTAL RAK DI-SO</div>"
+            f"<div class='value'>{_total_rak}</div>"
+            f"<div class='sub'>rak</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    with _c2:
+        st.markdown(
+            f"<div class='metric-clean'>"
+            f"<div class='label'>📦 TOTAL PRODUK</div>"
+            f"<div class='value'>{_total_item}</div>"
+            f"<div class='sub'>item</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    with _c3:
+        _color_nom = "#E88B8B" if _total_nominal < 0 else "#7FB99B"
+        st.markdown(
+            f"<div class='metric-clean' style='border-left-color: {_color_nom};'>"
+            f"<div class='label'>💰 TOTAL NOMINAL</div>"
+            f"<div class='value' style='color: {_color_nom}; font-size: 20px;'>"
+            f"{fmt_rp_signed(_total_nominal)}</div>"
+            f"<div class='sub'>nominal SO</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
     # ============================================================
-    # TABEL SUMMARY PER RAK
+    # TABEL SUMMARY PER RAK — Custom HTML
     # ============================================================
     st.markdown("#### 📊 Summary per Rak")
 
-    _df_summary = pd.DataFrame(_so_summary)
+    _rows_html = ""
+    for _r in _so_summary:
+        _rak = _r.get("rak_id", "-")
+        _pic = _r.get("pic", "-") or "-"
+        _item = int(_r.get("total_item", 0))
+        _qty_var = int(_r.get("total_qty_var", 0))
+        _nom = float(_r.get("nominal_adjust", 0))
+        _ket = _r.get("keterangan", "") or "-"
 
-    _cols_show = ["rak_id", "pic", "total_item", "total_qty_var", "nominal_adjust", "keterangan"]
-    _cols_show = [c for c in _cols_show if c in _df_summary.columns]
+        _nom_class = "neg" if _nom < 0 else "pos"
 
-    if _cols_show:
-        _df_show = _df_summary[_cols_show].copy()
+        _rows_html += (
+            f"<tr>"
+            f"<td class='rak-id'>{_rak}</td>"
+            f"<td>{_pic}</td>"
+            f"<td style='text-align: center;'>{_item}</td>"
+            f"<td style='text-align: center;'>{_qty_var:+d}</td>"
+            f"<td class='nominal {_nom_class}'>{fmt_rp_signed(_nom)}</td>"
+            f"<td class='keterangan'>{_ket[:80]}</td>"
+            f"</tr>"
+        )
 
-        if "nominal_adjust" in _df_show.columns:
-            _df_show["nominal_adjust"] = _df_show["nominal_adjust"].apply(
-                lambda v: f"{float(v):+,.0f}".replace(",", ".")
-            )
+    _table_html = (
+        "<table class='so-table'>"
+        "<thead><tr>"
+        "<th>Rak</th>"
+        "<th>PIC</th>"
+        "<th style='text-align: center;'>Item</th>"
+        "<th style='text-align: center;'>Qty Var</th>"
+        "<th style='text-align: right;'>Nominal</th>"
+        "<th>Keterangan</th>"
+        "</tr></thead>"
+        f"<tbody>{_rows_html}</tbody>"
+        "</table>"
+    )
 
-        _col_names = ["Rak", "PIC", "Total Item", "Qty Var", "Nominal", "Keterangan"]
-        _df_show.columns = _col_names[:len(_df_show.columns)]
-
-        st.dataframe(_df_show, width="stretch", hide_index=True)
+    st.markdown(_table_html, unsafe_allow_html=True)
 
     # ============================================================
-    # DETAIL PRODUK (EXPANDER)
+    # DETAIL PRODUK (kalau ada) — Expander
     # ============================================================
     if _so_detail:
-        st.markdown("---")
-        with st.expander(f"🔍 Detail Produk ({len(_so_detail)} produk)", expanded=False):
+        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+
+        with st.expander(f"🔍 Detail Produk ({len(_so_detail)} baris)", expanded=False):
             _df_detail = pd.DataFrame(_so_detail)
             _cols_detail = ["rak_id", "plu", "nama_produk", "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust", "pic"]
             _cols_detail = [c for c in _cols_detail if c in _df_detail.columns]
 
-            _df_detail_show = _df_detail[_cols_detail].copy()
+            if _cols_detail:
+                _df_detail_show = _df_detail[_cols_detail].copy()
 
-            if "nominal_adjust" in _df_detail_show.columns:
-                _df_detail_show["nominal_adjust"] = _df_detail_show["nominal_adjust"].apply(
-                    lambda v: f"{float(v):+,.0f}".replace(",", ".")
-                )
+                if "nominal_adjust" in _df_detail_show.columns:
+                    _df_detail_show["nominal_adjust"] = _df_detail_show["nominal_adjust"].apply(
+                        lambda v: fmt_rp_signed(v)
+                    )
 
-            _col_names_detail = ["Rak", "PLU", "Nama Produk", "Qty Sistem", "Qty Fisik", "Qty Var", "Nominal", "PIC"]
-            _df_detail_show.columns = _col_names_detail[:len(_df_detail_show.columns)]
+                _col_names_detail = ["Rak", "PLU", "Nama Produk", "Qty Sistem", "Qty Fisik", "Qty Var", "Nominal", "PIC"]
+                _df_detail_show.columns = _col_names_detail[:len(_df_detail_show.columns)]
 
-            st.dataframe(_df_detail_show, width="stretch", hide_index=True, height=400)
+                st.dataframe(_df_detail_show, width="stretch", hide_index=True, height=400)
+            else:
+                st.info("📭 Detail produk kosong")
 
     # ============================================================
     # HAPUS SO PER RAK
     # ============================================================
-    st.markdown("---")
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
     st.markdown("#### 🗑️ Hapus SO")
 
     _rak_so_list = [r.get("rak_id") for r in _so_summary if r.get("rak_id")]
@@ -741,7 +1145,12 @@ def render_preview():
 
         with _col_h2:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️ HAPUS", width="stretch", key="btn_hapus_so"):
+            if st.button(
+                "🗑️ HAPUS",
+                width="stretch",
+                type="primary",
+                key="btn_hapus_so",
+            ):
                 with st.spinner(f"⏳ Hapus SO rak {_rak_hapus}..."):
                     _ok, _msg, _detail = delete_so_by_date(_tanggal, rak_id=_rak_hapus)
 
@@ -762,26 +1171,20 @@ with st.expander("ℹ️ Cara Input SO", expanded=False):
     **📋 Langkah Input SO:**
     
     1. **Pilih Tanggal SO** — default hari ini
-    2. **Pilih Rak** — kode rak dari master (contoh: Q51)
-    3. **Pilih PIC** — nama yang ngelakuin SO
+    2. **Pilih PIC** — nama yang ngelakuin SO
+    3. **Isi Keterangan** (opsional)
     4. **Isi SPD** (opsional) — kalau ada penjualan hari ini
-    5. **Klik ➕ Tambah Produk** — max 10 produk per rak
-    6. **Isi Detail Produk:**
-       - **PLU**: Kode produk (dari laporan)
-       - **Nama Produk**: Nama barang
-       - **Qty Sistem**: Stok sistem
-       - **Qty Fisik**: Stok fisik (hasil hitung)
-       - **Nominal Adjust**: Nominal selisih (boleh minus)
-    7. **Isi Keterangan** (opsional)
-    8. **Klik 💾 SIMPAN SEMUA**
+    5. **Cari Rak** — ketik kode rak (contoh: QA1)
+    6. **Klik + Add** untuk menambahkan rak ke daftar
+    7. **Isi Nominal** per rak (boleh minus)
+    8. **Klik 💾 SIMPAN SO**
     
     **💡 Tips:**
-    - Input **5 PLU tertinggi** + **5 PLU terendah** per rak
-    - **Qty Var** otomatis dihitung = Qty Fisik - Qty Sistem
-    - **Total Nominal** auto-sum dari semua produk
-    - Data disimpan ke **2 tabel**: `so_hasil` (detail) + `so_rak_harian` (summary)
-    - Status rak otomatis jadi **SELESAI** setelah di-SO
+    - **1x input bisa multi rak** — tinggal cari & add beberapa rak sekaligus
+    - **Nominal** diisi per rak, bisa positif/negatif
+    - **Total nominal** auto-sum dari semua rak
     - SPD disimpan terpisah ke tabel `spd_harian`
+    - Status rak otomatis jadi **SELESAI** setelah di-SO
     """)
 
 
@@ -801,11 +1204,12 @@ elif _tab == "preview":
 # =========================================================================
 # FOOTER
 # =========================================================================
+st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 st.markdown(
-    "<div style='text-align: center; padding: 20px 0; "
-    "font-family: Quicksand, sans-serif; font-size: 10px; "
-    "color: #7a9b8e; letter-spacing: 1px;'>"
-    "📝 Stock Opname — Toko C383 🎀"
+    "<div style='text-align: center; padding: 12px 0; "
+    "font-family: 'Quicksand', sans-serif; font-size: 10px; "
+    "color: #7a9b8e; letter-spacing: 1.5px; text-transform: uppercase;'>"
+    "Stock Opname — Toko C383"
     "</div>",
     unsafe_allow_html=True,
 )
