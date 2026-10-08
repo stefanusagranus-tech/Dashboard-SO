@@ -1127,66 +1127,175 @@ def _render_input_form():
                 
 #part5
 # =========================================================================
-# TAB 2: ANALISIS SO
+# TAB 2: ANALISIS SO (v2 — Filter Interaktif)
 # =========================================================================
 def render_analisis():
-    """Analisis: Tabel kiri + Keterangan kanan (status + budget) + Expander."""
+    """Analisis SO: Filter periode → hitung dari data yang di-filter."""
     st.markdown("### 📊 Analisis SO")
-    st.caption("Ringkasan SO per periode")
+    st.caption("Filter periode → data otomatis update")
 
     # ============================================================
-    # FILTER PERIODE
+    # FILTER PERIODE + RAK + PIC
     # ============================================================
-    _col_p1, _col_p2, _col_p3 = st.columns([2, 2, 1])
+    with st.form("form_filter_analisis", clear_on_submit=False, enter_to_submit=False):
+        _col_p1, _col_p2 = st.columns(2)
 
-    with _col_p1:
-        _tgl_start = st.date_input(
-            "📅 Dari",
-            value=date.today().replace(day=1),
-            key="so_analisis_start",
-        )
+        with _col_p1:
+            _tgl_start = st.date_input(
+                "📅 Dari Tanggal",
+                value=date.today().replace(day=1),
+                key="so_analisis_start",
+            )
 
-    with _col_p2:
-        _tgl_end = st.date_input(
-            "📅 Sampai",
-            value=date.today(),
-            key="so_analisis_end",
-        )
+        with _col_p2:
+            _tgl_end = st.date_input(
+                "📅 Sampai Tanggal",
+                value=date.today(),
+                key="so_analisis_end",
+            )
 
-    with _col_p3:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🔍 Analisis", width="stretch", type="primary", key="btn_analisis_so"):
-            st.session_state["so_analisis_loaded"] = True
-            st.session_state["so_analisis_periode"] = (_tgl_start, _tgl_end)
+        _col_f1, _col_f2, _col_f3 = st.columns([2, 2, 1])
 
-    if not st.session_state["so_analisis_loaded"]:
+        with _col_f1:
+            # Filter rak (opsional)
+            _filter_rak = st.text_input(
+                "🔍 Filter Kode Rak (opsional)",
+                placeholder="Contoh: Q51...",
+                key="so_analisis_filter_rak",
+            )
+
+        with _col_f2:
+            # Filter PIC (opsional) — ambil dari data
+            try:
+                _so_all = get_so_rak_detail(limit=1000)
+                _pic_list = sorted(set(
+                    str(r.get("pic", "")).strip().upper()
+                    for r in (_so_all or [])
+                    if r.get("pic")
+                ))
+            except Exception:
+                _pic_list = []
+
+            _pic_options = ["(Semua)"] + _pic_list
+            _filter_pic = st.selectbox(
+                "👤 Filter PIC (opsional)",
+                options=_pic_options,
+                index=0,
+                key="so_analisis_filter_pic",
+            )
+
+        with _col_f3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            _btn_analisis = st.form_submit_button(
+                "🔍 Analisis",
+                width="stretch",
+                type="primary",
+            )
+
+    # ✅ FIX: Pindah ke session state biar persist antar rerun
+    if _btn_analisis:
+        st.session_state["so_analisis_loaded"] = True
+        st.session_state["so_analisis_periode"] = (_tgl_start, _tgl_end)
+        st.session_state["so_analisis_filter_rak"] = _filter_rak.strip().upper() if _filter_rak else ""
+        st.session_state["so_analisis_filter_pic"] = "" if _filter_pic == "(Semua)" else _filter_pic
+
+    if not st.session_state.get("so_analisis_loaded"):
         st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
         return
 
+    # ============================================================
+    # AMBIL FILTER DARI SESSION STATE
+    # ============================================================
+    _start, _end = st.session_state.get("so_analisis_periode", (_tgl_start, _tgl_end))
+    _f_rak = st.session_state.get("so_analisis_filter_rak", "")
+    _f_pic = st.session_state.get("so_analisis_filter_pic", "")
+
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
+    # Info filter aktif
+    _filter_info = f"📅 {_start.strftime('%d/%m/%Y')} — {_end.strftime('%d/%m/%Y')}"
+    if _f_rak:
+        _filter_info += f" | 🔍 Rak: **{_f_rak}**"
+    if _f_pic:
+        _filter_info += f" | 👤 PIC: **{_f_pic}**"
+
+    st.markdown(
+        f"<div style='background: rgba(20, 12, 35, 0.95); "
+        f"border-left: 3px solid #E8B189; border-radius: 8px; "
+        f"padding: 10px 16px; margin-bottom: 16px; "
+        f"font-family: JetBrains Mono, monospace; font-size: 11px; "
+        f"color: #A89B8E;'>{_filter_info}</div>",
+        unsafe_allow_html=True,
+    )
+
     # ============================================================
-    # HITUNG DATA ANALISIS
+    # LOAD DATA SESUAI FILTER
     # ============================================================
     with st.spinner("⏳ Load analytics..."):
-        _akumulasi = get_akumulasi_nominal_bulan()
-        _btsb_result = hitung_btsb_akumulatif()
-        _so_detail = get_so_rak_detail(limit=500)
+        try:
+            # ✅ FIX: Load data, filter by tanggal & rak & pic
+            _so_detail_raw = []
+            _sb = None
+            try:
+                from modules.supabase_client import get_supabase
+                _sb = get_supabase()
+            except Exception:
+                pass
 
-    _total_rak = _akumulasi.get("total_rak", 0)
-    _jumlah_hari = _akumulasi.get("jumlah_hari", 0)
-    _total_nominal = _akumulasi.get("total_nominal", 0)
-    _total_spd = _btsb_result.get("total_spd", 0)
-    _btsb_akum = _btsb_result.get("btsb_akumulatif", 0)
+            if _sb:
+                _query = _sb.table("so_rak_harian") \
+                    .select("so_date, rak_id, nominal_adjust, pic, keterangan") \
+                    .gte("so_date", _start.isoformat()) \
+                    .lte("so_date", _end.isoformat())
 
-    # %NSB
+                if _f_rak:
+                    _query = _query.ilike("rak_id", f"%{_f_rak}%")
+                if _f_pic:
+                    _query = _query.eq("pic", _f_pic)
+
+                _res = _query.order("so_date", desc=True).execute()
+                _so_detail_raw = _res.data or []
+        except Exception as _e_load:
+            print(f"[ANALISIS LOAD ERROR] {_e_load}")
+            _so_detail_raw = []
+
+        # ✅ SPD data untuk periode ini (buat hitung BTSB yang bener)
+        try:
+            _spd_periode = _sb.table("spd_harian") \
+                .select("tanggal, spd") \
+                .gte("tanggal", _start.isoformat()) \
+                .lte("tanggal", _end.isoformat()) \
+                .execute()
+            _total_spd = sum(float(r.get("spd", 0)) for r in (_spd_periode.data or []))
+            _spd_ada = True
+        except Exception:
+            _total_spd = 0
+            _spd_ada = False
+
+    # ============================================================
+    # HITUNG METRIC DARI DATA YANG DI-FILTER
+    # ============================================================
+    _total_rak = len(_so_detail_raw)
+    _unique_rak = len(set(r.get("rak_id") for r in _so_detail_raw if r.get("rak_id")))
+    _unique_hari = len(set(r.get("so_date") for r in _so_detail_raw if r.get("so_date")))
+
+    _total_nominal = sum(
+        float(r.get("nominal_adjust", 0)) for r in _so_detail_raw
+    )
+
+    # ✅ BTSB dihitung dari SPD periode ini (bukan bulan ini)
+    _btsb_periode = _total_spd * 0.0015 if _total_spd > 0 else 0
+
+    # %NSB dari sales periode ini
     if _total_spd > 0:
         _pct_nsb = (abs(_total_nominal) / _total_spd * 100)
     else:
         _pct_nsb = 0.0
 
-    # Status BTSB
-    _pct_btsb = (abs(_total_nominal) / _btsb_akum * 100) if _btsb_akum > 0 else 0
+    # %BTSB terpakai
+    _pct_btsb = (abs(_total_nominal) / _btsb_periode * 100) if _btsb_periode > 0 else 0
+
+    # Status
     if _pct_btsb <= 80:
         _status = "AMAN"
         _status_color = "#7FB99B"
@@ -1214,17 +1323,17 @@ def render_analisis():
             "<th>Metric</th>"
             "<th style='text-align: right;'>Nilai</th>"
             "</tr></thead><tbody>"
-            f"<tr><td class='rak-id'>🏪 Jumlah Rak di-SO</td>"
+            f"<tr><td class='rak-id'>🏪 Total Rak di-SO</td>"
             f"<td class='nominal pos'>{_total_rak} rak</td></tr>"
             f"<tr><td class='rak-id'>📅 Jumlah Hari</td>"
-            f"<td class='nominal pos'>{_jumlah_hari} hari</td></tr>"
+            f"<td class='nominal pos'>{_unique_hari} hari</td></tr>"
             f"<tr><td class='rak-id'>💰 Total Nominal SO</td>"
             f"<td class='nominal {'neg' if _total_nominal < 0 else 'pos'}'>"
             f"{fmt_rp_signed(_total_nominal)}</td></tr>"
             f"<tr><td class='rak-id'>📈 Total SPD</td>"
             f"<td class='nominal pos'>{fmt_rp(_total_spd)}</td></tr>"
-            f"<tr><td class='rak-id'>🎯 BTSB Akumulatif</td>"
-            f"<td class='nominal pos'>{fmt_rp(_btsb_akum)}</td></tr>"
+            f"<tr><td class='rak-id'>🎯 BTSB Periode</td>"
+            f"<td class='nominal pos'>{fmt_rp(_btsb_periode)}</td></tr>"
             f"<tr><td class='rak-id'>📊 %NSB dari Sales</td>"
             f"<td class='nominal {'neg' if _pct_nsb > 0.15 else 'pos'}'>"
             f"{_pct_nsb:.3f}%</td></tr>"
@@ -1235,7 +1344,7 @@ def render_analisis():
     with _col_ket:
         st.markdown("#### 💡 Keterangan")
 
-        _gap = _btsb_akum - abs(_total_nominal)
+        _gap = _btsb_periode - abs(_total_nominal)
         _gap_color = "#7FB99B" if _gap >= 0 else "#E88B8B"
 
         _col_k1, _col_k2 = st.columns(2)
@@ -1267,12 +1376,12 @@ def render_analisis():
             )
 
     # ============================================================
-    # DETAIL PER RAK — Expander + Search (tanpa keterangan)
+    # DETAIL PER RAK — Expander + Search
     # ============================================================
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
 
-    with st.expander(f"📋 Daftar Rak yang di-SO ({len(_so_detail) if _so_detail else 0} baris)", expanded=False):
-        if _so_detail:
+    with st.expander(f"📋 Daftar Rak yang di-SO ({len(_so_detail_raw)} baris)", expanded=False):
+        if _so_detail_raw:
             _search_detail = st.text_input(
                 "🔍 Cari Rak",
                 key="search_detail_analisis",
@@ -1280,7 +1389,7 @@ def render_analisis():
                 label_visibility="collapsed",
             )
 
-            _df_detail = pd.DataFrame(_so_detail)
+            _df_detail = pd.DataFrame(_so_detail_raw)
             _cols_show = ["so_date", "rak_id", "nominal_adjust", "pic"]
             _cols_show = [c for c in _cols_show if c in _df_detail.columns]
 
@@ -1307,83 +1416,87 @@ def render_analisis():
             st.info("📭 Belum ada data SO di periode ini")
 
     # ============================================================
-    # CHART ADJUST SO — Expander
+    # ✅ GRAFIK ADJUST SO — SESUAI FILTER (Top 10 Minus)
     # ============================================================
-    with st.expander("📈 Grafik Adjust SO per Rak (Klik untuk buka)", expanded=False):
-        if _so_detail:
+    with st.expander("📈 Grafik Top 10 Rak Minus (Klik untuk buka)", expanded=False):
+        if _so_detail_raw:
             try:
-                _df = pd.DataFrame(_so_detail)
+                _df = pd.DataFrame(_so_detail_raw)
                 if "nominal_adjust" in _df.columns and "rak_id" in _df.columns:
                     _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
+
+                    # Group by rak
                     _grp = _df.groupby("rak_id")["nominal_adjust"].sum().reset_index()
-                    _grp = _grp.sort_values("nominal_adjust", ascending=True)
 
-                    import plotly.graph_objects as go
+                    # ✅ FIX: Top 10 MINUS tertinggi aja
+                    _grp_minus = _grp[_grp["nominal_adjust"] < 0].sort_values("nominal_adjust").head(10)
 
-                    _colors = ["#E88B8B" if v < 0 else "#7FB99B" for v in _grp["nominal_adjust"]]
+                    if _grp_minus.empty:
+                        st.success("✅ Tidak ada rak minus di periode ini")
+                    else:
+                        import plotly.graph_objects as go
 
-                    _fig = go.Figure()
-                    _fig.add_trace(go.Bar(
-                        x=_grp["nominal_adjust"],
-                        y=_grp["rak_id"],
-                        orientation="h",
-                        marker=dict(color=_colors, line=dict(color="rgba(184, 115, 51, 0.5)", width=1)),
-                        text=[f"{v:+,.0f}".replace(",", ".") for v in _grp["nominal_adjust"]],
-                        textposition="outside",
-                        textfont=dict(color="#E8B189", size=10, family="JetBrains Mono"),
-                        hovertemplate="<b>%{y}</b><br>Nominal: %{x:+,.0f}<extra></extra>",
-                    ))
+                        _fig = go.Figure()
+                        _fig.add_trace(go.Bar(
+                            x=_grp_minus["nominal_adjust"],
+                            y=_grp_minus["rak_id"],
+                            orientation="h",
+                            marker=dict(color="#E88B8B", line=dict(color="rgba(184, 115, 51, 0.5)", width=1)),
+                            text=[f"{v:+,.0f}".replace(",", ".") for v in _grp_minus["nominal_adjust"]],
+                            textposition="outside",
+                            textfont=dict(color="#E8B189", size=10, family="JetBrains Mono"),
+                            hovertemplate="<b>%{y}</b><br>Nominal: %{x:+,.0f}<extra></extra>",
+                        ))
 
-                    _fig.update_layout(
-                        height=max(400, len(_grp) * 28),
-                        margin=dict(l=10, r=60, t=20, b=40),
-                        plot_bgcolor="rgba(20, 12, 35, 0.5)",
-                        paper_bgcolor="rgba(20, 12, 35, 0.95)",
-                        font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
-                        xaxis=dict(
-                            title="Nominal (Rp)",
-                            gridcolor="rgba(168, 85, 247, 0.1)",
-                            zeroline=True,
-                            zerolinecolor="rgba(232, 177, 137, 0.5)",
-                            zerolinewidth=1,
-                        ),
-                        yaxis=dict(
-                            gridcolor="rgba(168, 85, 247, 0.1)",
-                            autorange="reversed",
-                        ),
-                        showlegend=False,
-                    )
+                        _fig.update_layout(
+                            height=max(300, len(_grp_minus) * 35),
+                            margin=dict(l=10, r=60, t=20, b=40),
+                            plot_bgcolor="rgba(20, 12, 35, 0.5)",
+                            paper_bgcolor="rgba(20, 12, 35, 0.95)",
+                            font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
+                            xaxis=dict(
+                                title="Nominal (Rp)",
+                                gridcolor="rgba(168, 85, 247, 0.1)",
+                                zeroline=True,
+                                zerolinecolor="rgba(232, 177, 137, 0.5)",
+                                zerolinewidth=1,
+                            ),
+                            yaxis=dict(
+                                gridcolor="rgba(168, 85, 247, 0.1)",
+                                autorange="reversed",
+                            ),
+                            showlegend=False,
+                        )
 
-                    st.plotly_chart(_fig, width="stretch", key="chart_adjust_so")
-                else:
-                    st.info("📭 Data SO kosong")
+                        st.plotly_chart(_fig, width="stretch", key="chart_top10_minus")
             except Exception as _e_chart:
                 st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
         else:
             st.info("📭 Belum ada data SO di periode ini")
-    
+
     # ============================================================
-    # RAK BELUM SO (Expander)
+    # ✅ RAK BELUM SO — SIMPEL (Count + Search + List Compact)
     # ============================================================
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-    
+
     with st.expander("📋 Rak Belum SO (Klik untuk buka)", expanded=False):
         try:
             from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
-    
+
             _rak_belum_df = _get_belum_so_df(_rak_df)
-    
+
             if not _rak_belum_df.empty:
                 _jumlah_belum = len(_rak_belum_df)
                 st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO")
-    
+
+                # Search
                 _search_belum = st.text_input(
-                    "🔍 Filter rak belum SO",
+                    "🔍 Cari rak",
                     key="search_rak_belum",
                     placeholder="Ketik kode/nama rak...",
                     label_visibility="collapsed",
                 )
-    
+
                 _rak_filtered = _rak_belum_df.copy()
                 if _search_belum and len(_search_belum.strip()) >= 1:
                     _q = _search_belum.strip().upper()
@@ -1391,39 +1504,30 @@ def render_analisis():
                         _rak_filtered["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
                         _rak_filtered["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
                     ]
-    
-                # Grid compact HTML
-                _grid_html = (
-                    "<div style='display: grid; "
-                    "grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); "
-                    "gap: 8px; margin-top: 12px;'>"
-                )
-    
+
+                # ✅ FIX: List compact (bukan grid besar)
+                _list_html = "<div style='margin-top: 8px;'>"
                 for _rak in _rak_filtered[["rak_id", "rak_name"]].to_dict("records"):
                     _rid = str(_rak.get("rak_id", "-"))
-                    _rname = str(_rak.get("rak_name", "-"))[:20]
-    
-                    _grid_html += (
-                        f"<div style='background: rgba(20, 12, 35, 0.95); "
-                        f"border: 1px solid rgba(232, 139, 139, 0.4); "
-                        f"border-left: 3px solid #E88B8B; "
-                        f"border-radius: 8px; padding: 8px 10px;'>"
-                        f"<div style='font-family: JetBrains Mono, monospace; font-size: 12px; "
-                        f"font-weight: 900; color: #E8B189;'>{_rid}</div>"
-                        f"<div style='font-family: Quicksand, sans-serif; font-size: 9px; "
-                        f"color: #7a9b8e; margin-top: 2px;'>{_rname}</div>"
+                    _rname = str(_rak.get("rak_name", "-"))[:35]
+                    _list_html += (
+                        f"<div style='display: flex; justify-content: space-between; "
+                        f"padding: 6px 10px; border-bottom: 1px solid rgba(168, 85, 247, 0.1);'>"
+                        f"<span style='font-family: JetBrains Mono, monospace; font-size: 11px; "
+                        f"font-weight: 700; color: #E8B189;'>{_rid}</span>"
+                        f"<span style='font-family: Quicksand, sans-serif; font-size: 10px; "
+                        f"color: #7a9b8e;'>{_rname}</span>"
                         f"</div>"
                     )
-    
-                _grid_html += "</div>"
-                st.markdown(_grid_html, unsafe_allow_html=True)
-    
+                _list_html += "</div>"
+                st.markdown(_list_html, unsafe_allow_html=True)
+
                 # Download
                 _list_text = "\n".join([
                     f"{r['rak_id']} — {r['rak_name']}"
                     for r in _rak_filtered[["rak_id", "rak_name"]].to_dict("records")
                 ])
-    
+
                 st.download_button(
                     label=f"📥 Download List ({len(_rak_filtered)} rak)",
                     data=_list_text,
