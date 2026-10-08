@@ -28,11 +28,9 @@ except ImportError:
 # 📋 MODEL PRIORITY (urut dari paling baru)
 # =========================================================
 MODEL_PRIORITY = [
-    "gemini-3.8-flash",              # ✅ Model terbaru (dari error message)
+    "gemini-3.8-flash",              # ✅ Model terbaru (recommended)
+    "gemini-3.5-flash-lite",         # ✅ Cepat, hemat
     "gemini-3.1-pro-preview",        # ✅ Fallback pro
-    "gemini-flash-latest",           # ✅ Alias latest
-    "gemini-2.0-flash",              # ✅ Legacy
-    "gemini-1.5-flash",              # ✅ Legacy
 ]
 
 
