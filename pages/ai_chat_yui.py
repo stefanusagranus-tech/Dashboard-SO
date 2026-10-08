@@ -524,14 +524,15 @@ if st.session_state.get("yui_file_to_process"):
         st.markdown(_processing_msg)
 
     with st.spinner(f"📦 Yui baca file {_file_name}..."):
-        # Step 1: Read file
+        # Step 1: Read file — auto-detect
         _read_result = read_file(
             _file_bytes,
             _file_name,
-            bulan=datetime.now(ZoneInfo("Asia/Jakarta")).month,
-            tahun=datetime.now(ZoneInfo("Asia/Jakarta")).year,
+            nama_personil="",  # Kosong buat tabel SO
+            bulan=None,
+            tahun=None,
         )
-
+        
     if not _read_result.get("success"):
         _err_msg = f"❌ Waduh, aku gagal baca file-nya Bos.\n\n**Error:** {_read_result.get('error', 'Unknown')}"
         with st.chat_message("assistant", avatar="📦"):
