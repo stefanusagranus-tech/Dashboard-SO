@@ -78,16 +78,16 @@ def load_so_hasil():
     
     Returns:
         DataFrame dengan kolom:
-        id, so_date, rak_id, plu, item_name,
-        qty_system, qty_actual, selisih, harga, created_at
+        id, so_date, rak_id, plu, nama_produk,
+        qty_sistem, qty_fisik, qty_var, nominal_adjust, pic, created_at
     """
     try:
         sb = get_supabase()
         if sb is None:
             print("[LOAD_SO] ❌ Supabase client None")
             return pd.DataFrame(columns=[
-                "so_date", "rak_id", "plu", "item_name",
-                "qty_system", "qty_actual", "selisih", "harga"
+                "so_date", "rak_id", "plu", "nama_produk",
+                "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust", "pic"
             ])
         
         # Query ke tabel so_hasil, urut tanggal terbaru
@@ -102,8 +102,8 @@ def load_so_hasil():
         if not _res.data:
             print("[LOAD_SO] ⚠️ Data kosong")
             return pd.DataFrame(columns=[
-                "so_date", "rak_id", "plu", "item_name",
-                "qty_system", "qty_actual", "selisih", "harga"
+                "so_date", "rak_id", "plu", "nama_produk",
+                "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust", "pic"
             ])
         
         df = pd.DataFrame(_res.data)
@@ -113,11 +113,17 @@ def load_so_hasil():
         if "rak_id" in df.columns:
             df["rak_id"] = df["rak_id"].astype(str).str.strip().str.upper()
         
-        for _col in ["qty_system", "qty_actual", "selisih", "harga"]:
+        # ✅ FIX C2: Kolom baru (11 kolom schema)
+        for _col in ["qty_sistem", "qty_fisik", "qty_var", "nominal_adjust"]:
             if _col in df.columns:
                 df[_col] = pd.to_numeric(df[_col], errors="coerce").fillna(0)
             else:
                 df[_col] = 0
+        
+        # Pastikan kolom wajib ada (fallback)
+        for _col in ["nama_produk", "plu", "pic"]:
+            if _col not in df.columns:
+                df[_col] = ""
         
         print(f"[LOAD_SO] ✅ {len(df)} baris SO dimuat")
         return df
@@ -125,8 +131,8 @@ def load_so_hasil():
     except Exception as e:
         print(f"[LOAD_SO ERROR] {e}")
         return pd.DataFrame(columns=[
-            "so_date", "rak_id", "plu", "item_name",
-            "qty_system", "qty_actual", "selisih", "harga"
+            "so_date", "rak_id", "plu", "nama_produk",
+            "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust", "pic"
         ])
 
 

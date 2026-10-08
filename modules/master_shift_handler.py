@@ -617,60 +617,6 @@ def delete_shift_by_name(tanggal, nama_list):
         return False, f"❌ {str(e)[:150]}", {}
 
 
-def delete_shift_by_name(tanggal, nama_list):
-    """
-    Hapus shift berdasarkan nama (untuk tanggal tertentu).
-    
-    Args:
-        tanggal: date
-        nama_list: list of str (nama yang mau dihapus)
-    
-    Returns:
-        (success, message, detail)
-    """
-    try:
-        sb = get_supabase()
-        
-        if not nama_list:
-            return False, "❌ Tidak ada nama yang dihapus", {}
-        
-        _tgl_str = tanggal.isoformat()[:10] if isinstance(tanggal, (date, datetime)) else str(tanggal)[:10]
-        
-        _deleted = 0
-        _not_found = []
-        
-        for _nama in nama_list:
-            _nama_clean = str(_nama).strip().upper()
-            
-            _res = sb.table("master_shift") \
-                .delete() \
-                .eq("tanggal", _tgl_str) \
-                .eq("nama", _nama_clean) \
-                .execute()
-            
-            if _res.data:
-                _deleted += len(_res.data)
-            else:
-                _not_found.append(_nama_clean)
-        
-        _msg_parts = []
-        if _deleted > 0:
-            _msg_parts.append(f"🗑️ {_deleted} shift dihapus")
-        if _not_found:
-            _msg_parts.append(f"⚠️ Tidak ditemukan: {', '.join(_not_found)}")
-        
-        _msg = " • ".join(_msg_parts) if _msg_parts else "Tidak ada perubahan"
-        
-        return True, _msg, {
-            "tanggal": _tgl_str,
-            "deleted": _deleted,
-            "not_found": _not_found,
-        }
-    
-    except Exception as e:
-        return False, f"❌ {str(e)[:150]}", {}
-
-
 def delete_shift_all_dates(nama):
     """Hapus SEMUA shift nama ini di semua tanggal."""
     try:

@@ -122,10 +122,22 @@ def update_status_rak(rak_id: str, status: str, pic: str = None):
         return False, f"❌ Gagal: {str(e)[:150]}"
 
 
-def insert_so_hasil(rak_id: str, plu: str, item_name: str, 
-                    qty_system: int, qty_actual: int, harga: float,
-                    so_date: str = None):
-    """Insert 1 baris hasil SO."""
+def insert_so_hasil(rak_id: str, plu: str, nama_produk: str,
+                    qty_sistem: int, qty_fisik: int, nominal_adjust: float,
+                    pic: str = "", so_date: str = None):
+    """
+    Insert 1 baris hasil SO (schema baru 11 kolom).
+    
+    Args:
+        rak_id: Kode rak
+        plu: Kode PLU produk
+        nama_produk: Nama produk
+        qty_sistem: Stok di sistem
+        qty_fisik: Stok fisik hasil hitung
+        nominal_adjust: Nominal selisih (boleh +/-)
+        pic: Nama PIC
+        so_date: Tanggal SO (default: hari ini)
+    """
     try:
         sb = get_supabase()
         if sb is None:
@@ -134,21 +146,25 @@ def insert_so_hasil(rak_id: str, plu: str, item_name: str,
         if so_date is None:
             so_date = datetime.now(ZoneInfo("Asia/Jakarta")).date().isoformat()
         
+        # ✅ Hitung qty_var otomatis
+        _qty_var = int(qty_fisik) - int(qty_sistem)
+        
         _data = {
             "so_date": so_date,
             "rak_id": rak_id.upper(),
             "plu": str(plu),
-            "item_name": item_name.upper(),
-            "qty_system": int(qty_system),
-            "qty_actual": int(qty_actual),
-            "selisih": int(qty_actual) - int(qty_system),
-            "harga": float(harga),
+            "nama_produk": nama_produk.upper(),
+            "qty_sistem": int(qty_sistem),
+            "qty_fisik": int(qty_fisik),
+            "qty_var": _qty_var,
+            "nominal_adjust": float(nominal_adjust),
+            "pic": str(pic).upper(),
         }
         
         _res = sb.table("so_hasil").insert(_data).execute()
         
         if _res.data:
-            return True, f"✅ SO hasil disimpan"
+            return True, f"✅ SO hasil disimpan (var: {_qty_var})"
         else:
             return False, "❌ Gagal insert"
     except Exception as e:
