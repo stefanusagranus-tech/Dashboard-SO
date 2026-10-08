@@ -60,19 +60,18 @@ AI_CONFIG = {
         "enabled": True,
     },
 
-    # ============================================
-    # AI-2: Yui — Stock Opname (Input)
-    # ============================================
     "ai-2": {
         "name": "Yui",
         "emoji": "📦",
-        "description": "Stock Opname — input data & validasi SO",
+        "description": "Stock Opname — input data, rekap, file reader",
+        "persona": "yui_professional",
         "model_priority": [
-            "openai/gpt-oss-20b",
+            "llama-3.1-8b-instant",      # ✅ Non-reasoning, stabil, cepat
+            "openai/gpt-oss-20b",        # Fallback
         ],
         "daily_limit": 1000,
         "max_tpm": 8000,
-        "functions": ["input", "validate", "anomaly"],
+        "functions": ["parse", "chat", "file_parse", "validate", "generate_pdf"],
         "api_key_secret": "GROQ_API_KEY_YUI",
         "enabled": True,
     },
