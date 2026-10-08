@@ -1489,109 +1489,67 @@ def render_analisis():
             st.info("📭 Belum ada data SO di periode ini")
 
     # ============================================================
-    # RAK BELUM SO — Tabel HTML (Limited + Load More)
+    # RAK BELUM SO — st.dataframe (sama kayak Daftar Rak di-SO)
     # ============================================================
     st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
     
-    with st.expander("📋 Rak Belum SO (Klik untuk buka)", expanded=False):
-        try:
-            from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
+    try:
+        from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
     
-            _rak_belum_df = _get_belum_so_df(_rak_df)
+        _rak_belum_df = _get_belum_so_df(_rak_df)
     
-            if not _rak_belum_df.empty:
-                _jumlah_belum = len(_rak_belum_df)
-                st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO")
+        if not _rak_belum_df.empty:
+            _jumlah_belum = len(_rak_belum_df)
     
+            with st.expander(f"📋 Rak Belum SO ({_jumlah_belum} rak)", expanded=False):
                 _search_belum = st.text_input(
-                    "🔍 Cari rak",
+                    "🔍 Cari Rak",
                     key="search_rak_belum",
                     placeholder="Ketik kode/nama rak...",
                     label_visibility="collapsed",
                 )
     
-                _rak_filtered = _rak_belum_df.copy()
+                _df_belum = _rak_belum_df.copy()
+    
+                # Kolom yang ditampilkan (konsisten)
+                _cols_show = ["rak_id", "rak_name"]
+                _cols_show = [c for c in _cols_show if c in _df_belum.columns]
+                _df_show = _df_belum[_cols_show].copy()
+    
+                # Filter by search
                 if _search_belum and len(_search_belum.strip()) >= 1:
                     _q = _search_belum.strip().upper()
-                    _rak_filtered = _rak_filtered[
-                        _rak_filtered["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
-                        _rak_filtered["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
+                    _df_show = _df_show[
+                        _df_show["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
+                        _df_show["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
                     ]
     
-                # ✅ FIX: Batasi tampilan (default 20)
-                _limit_key = "so_limit_belum"
-                if _limit_key not in st.session_state:
-                    st.session_state[_limit_key] = 20
+                # Rename kolom
+                _col_names = ["Kode Rak", "Nama Rak"]
+                _df_show.columns = _col_names[:len(_df_show.columns)]
     
-                _total_filtered = len(_rak_filtered)
-                _limit = st.session_state[_limit_key]
-                _rak_shown = _rak_filtered.head(_limit)
-    
-                # Tabel HTML
-                _rows_html = ""
-                for _rak in _rak_shown[["rak_id", "rak_name"]].to_dict("records"):
-                    _rid = str(_rak.get("rak_id", "-"))
-                    _rname = str(_rak.get("rak_name", "-"))[:40]
-                    _rows_html += (
-                        f"<tr>"
-                        f"<td class='rak-id'>{_rid}</td>"
-                        f"<td style='font-family: Quicksand, sans-serif;'>{_rname}</td>"
-                        f"</tr>"
-                    )
-    
-                _table_html = (
-                    "<table class='so-table'>"
-                    "<thead><tr>"
-                    "<th>Kode Rak</th>"
-                    "<th>Nama Rak</th>"
-                    "</tr></thead>"
-                    f"<tbody>{_rows_html}</tbody>"
-                    "</table>"
-                )
-                st.markdown(_table_html, unsafe_allow_html=True)
-    
-                # ✅ FIX: Load More button
-                _col_info, _col_btn = st.columns([2, 1])
-    
-                with _col_info:
-                    st.caption(f"📊 Menampilkan **{len(_rak_shown)}** dari **{_total_filtered}** rak")
-    
-                with _col_btn:
-                    if _limit < _total_filtered:
-                        if st.button(
-                            "📥 Load More (+20)",
-                            key="btn_load_more_belum",
-                            width="stretch",
-                        ):
-                            st.session_state[_limit_key] += 20
-                            st.rerun()
-                    else:
-                        if st.button(
-                            "🔼 Sembunyikan",
-                            key="btn_collapse_belum",
-                            width="stretch",
-                        ):
-                            st.session_state[_limit_key] = 20
-                            st.rerun()
+                # ✅ Sama kayak "Daftar Rak di-SO" — st.dataframe height=400
+                st.dataframe(_df_show, width="stretch", hide_index=True, height=400)
+                st.caption(f"📊 Total **{len(_df_show)}** rak belum di-SO")
     
                 # Download
                 _list_text = "\n".join([
                     f"{r['rak_id']} — {r['rak_name']}"
-                    for r in _rak_filtered[["rak_id", "rak_name"]].to_dict("records")
+                    for r in _df_show.to_dict("records")
                 ])
     
                 st.download_button(
-                    label=f"📥 Download Semua List ({_total_filtered} rak)",
+                    label=f"📥 Download List ({len(_df_show)} rak)",
                     data=_list_text,
                     file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
                     mime="text/plain",
                     width="stretch",
                     key="dl_rak_belum_so",
                 )
-            else:
-                st.success("🎉 Semua rak sudah di-SO!")
-        except Exception as _e_belum:
-            st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
+        else:
+            st.success("🎉 Semua rak sudah di-SO!")
+    except Exception as _e_belum:
+        st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
 
 
 # =========================================================================
