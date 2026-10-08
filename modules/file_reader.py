@@ -1,7 +1,8 @@
 """
-File Reader — Universal File Parser
-=====================================
+File Reader — Universal File Parser v2
+========================================
 Baca PDF, foto/screenshot, Excel → structured data.
+Plus logger buffer buat debug UI.
 """
 
 import io
@@ -9,9 +10,30 @@ import pandas as pd
 from datetime import datetime
 
 
-# =========================================================================
+# =========================================================
+# LOG BUFFER
+# =========================================================
+_LOG_BUFFER = []
+
+
+def set_log_buffer(buffer):
+    """Set external log buffer dari halaman Yui."""
+    global _LOG_BUFFER
+    _LOG_BUFFER = buffer
+
+
+def _log(msg):
+    """Internal logger — print + kirim ke buffer."""
+    print(msg)
+    try:
+        _LOG_BUFFER.append(str(msg))
+    except Exception:
+        pass
+
+
+# =========================================================
 # DETEKSI TIPE FILE
-# =========================================================================
+# =========================================================
 def detect_file_type(filename):
     """Deteksi tipe file dari extension."""
     _name = str(filename).lower()
@@ -26,17 +48,19 @@ def detect_file_type(filename):
     return "unknown"
 
 
-# =========================================================================
+# =========================================================
 # BACA PDF
-# =========================================================================
+# =========================================================
 def read_pdf(file_bytes):
-    """Baca PDF — extract text + tabel."""
+    """Baca PDF — extract text."""
     try:
         import PyPDF2
         _pdf = PyPDF2.PdfReader(io.BytesIO(file_bytes))
         _text = ""
         for _page in _pdf.pages:
             _text += _page.extract_text() + "\n"
+
+        _log(f"[PDF] Extracted {len(_text)} chars from {len(_pdf.pages)} pages")
 
         return {
             "success": True,
@@ -45,6 +69,7 @@ def read_pdf(file_bytes):
             "error": None,
         }
     except ImportError:
+        _log("[PDF] PyPDF2 not installed")
         return {
             "success": False,
             "type": "pdf",
@@ -52,6 +77,7 @@ def read_pdf(file_bytes):
             "error": "PyPDF2 gak keinstall. Tambahin `PyPDF2>=3.0.0` di requirements.txt",
         }
     except Exception as e:
+        _log(f"[PDF] Error: {e}")
         return {
             "success": False,
             "type": "pdf",
@@ -60,25 +86,23 @@ def read_pdf(file_bytes):
         }
 
 
-# =========================================================================
-# BACA IMAGE (via Gemini Vision)
-# =========================================================================
+# =========================================================
+# BACA IMAGE
+# =========================================================
 def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
-    """
-    Baca gambar — auto-detect: kalender shift atau tabel SO?
-    """
+    """Baca gambar — auto-detect tipe (kalender shift / tabel SO)."""
     try:
         from modules.ocr_ai_handler import ocr_via_gemini, ocr_so_table, ocr_auto_detect
 
-        # Auto-detect tipe gambar
-        print(f"[FileReader] Auto-detect tipe gambar...")
+        _log("[FileReader] Auto-detect tipe gambar...")
         _detect = ocr_auto_detect(file_bytes)
         _detected_type = _detect.get("type", "UNKNOWN")
-        print(f"[FileReader] Detected: {_detected_type}")
+        _log(f"[FileReader] Detected: {_detected_type}")
 
-        # === KALAU KALENDER SHIFT ===
+        # === KALENDER SHIFT ===
         if _detected_type == "SHIFT":
             if not (bulan and tahun and nama_personil):
+                _log("[FileReader] Shift mode butuh konteks (bulan/tahun/nama)")
                 return {
                     "success": False,
                     "type": "image_shift",
@@ -86,7 +110,7 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
                     "error": "Kalender shift butuh konteks: nama personil + bulan + tahun",
                 }
 
-            print(f"[FileReader] Mode SHIFT: {nama_personil} - {bulan}/{tahun}")
+            _log(f"[FileReader] Mode SHIFT: {nama_personil} - {bulan}/{tahun}")
             _result = ocr_via_gemini(
                 file_bytes,
                 nama_personil=nama_personil,
@@ -101,6 +125,7 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
                     "shift_map": _result.get("shift_map", {}),
                     "error": None,
                 }
+            _log(f"[FileReader] Shift OCR error: {_result.get('error', '')}")
             return {
                 "success": False,
                 "type": "image_shift",
@@ -108,26 +133,31 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
                 "error": _result.get("error", "OCR shift gagal"),
             }
 
-        # === KALAU TABEL SO atau UNKNOWN ===
-        print(f"[FileReader] Mode SO_TABLE")
+        # === TABEL SO ===
+        _log("[FileReader] Mode SO_TABLE")
         _result_so = ocr_so_table(file_bytes)
 
         if _result_so.get("success"):
+            _text = _result_so.get("text", "")
+            _log(f"[FileReader] SO table OCR success: {len(_text)} chars, model={_result_so.get('model', '')}")
             return {
                 "success": True,
                 "type": "image_so_table",
-                "text": _result_so.get("text", ""),
+                "text": _text,
                 "error": None,
                 "model": _result_so.get("model", ""),
             }
 
-        # === FALLBACK: TESSERACT ===
-        print(f"[FileReader] Fallback ke Tesseract...")
+        _log(f"[FileReader] SO table OCR failed: {_result_so.get('error', '')}")
+
+        # === FALLBACK TESSERACT ===
+        _log("[FileReader] Fallback ke Tesseract...")
         try:
             from PIL import Image
             import pytesseract
             _img = Image.open(io.BytesIO(file_bytes))
             _text = pytesseract.image_to_string(_img, lang="ind+eng")
+            _log(f"[FileReader] Tesseract extracted: {len(_text)} chars")
             return {
                 "success": True,
                 "type": "image_ocr",
@@ -136,6 +166,7 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
                 "model": "tesseract",
             }
         except Exception as _e_ocr:
+            _log(f"[FileReader] Tesseract failed: {_e_ocr}")
             return {
                 "success": False,
                 "type": "image",
@@ -144,6 +175,7 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
             }
 
     except ImportError as _e:
+        _log(f"[FileReader] Import error: {_e}")
         return {
             "success": False,
             "type": "image",
@@ -151,6 +183,7 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
             "error": f"Module gak tersedia: {str(_e)[:150]}",
         }
     except Exception as e:
+        _log(f"[FileReader] Error: {e}")
         return {
             "success": False,
             "type": "image",
@@ -159,17 +192,18 @@ def read_image(file_bytes, nama_personil="", bulan=None, tahun=None):
         }
 
 
-# =========================================================================
+# =========================================================
 # BACA EXCEL / CSV
-# =========================================================================
+# =========================================================
 def read_excel(file_bytes, filename=""):
-    """Baca Excel/CSV — return semua sheet sebagai text + dataframe."""
+    """Baca Excel/CSV."""
     try:
         _is_csv = str(filename).lower().endswith(".csv")
 
         if _is_csv:
             _df = pd.read_csv(io.BytesIO(file_bytes))
             _text = _df.to_string(index=False, max_rows=100)
+            _log(f"[Excel] CSV loaded: {_df.shape}")
             return {
                 "success": True,
                 "type": "csv",
@@ -178,7 +212,6 @@ def read_excel(file_bytes, filename=""):
                 "error": None,
             }
 
-        # Excel — baca semua sheet
         _xls = pd.ExcelFile(io.BytesIO(file_bytes))
         _all_text = []
         _sheets = {}
@@ -190,6 +223,8 @@ def read_excel(file_bytes, filename=""):
             _all_text.append(_df.to_string(index=False, max_rows=100))
             _all_text.append("")
 
+        _log(f"[Excel] Loaded {len(_xls.sheet_names)} sheets")
+
         return {
             "success": True,
             "type": "excel",
@@ -198,6 +233,7 @@ def read_excel(file_bytes, filename=""):
             "error": None,
         }
     except Exception as e:
+        _log(f"[Excel] Error: {e}")
         return {
             "success": False,
             "type": "excel",
@@ -207,29 +243,13 @@ def read_excel(file_bytes, filename=""):
         }
 
 
-# =========================================================================
+# =========================================================
 # UNIVERSAL READER
-# =========================================================================
+# =========================================================
 def read_file(file_bytes, filename, **kwargs):
-    """
-    Universal file reader.
-
-    Args:
-        file_bytes: bytes dari file
-        filename: nama file (buat deteksi tipe)
-        **kwargs: context (nama_personil, bulan, tahun)
-
-    Returns:
-        dict {
-            success: bool,
-            type: str,
-            text: str,
-            sheets: dict (kalau Excel),
-            shift_map: dict (kalau image shift),
-            error: str,
-        }
-    """
+    """Universal file reader."""
     _ftype = detect_file_type(filename)
+    _log(f"[FileReader] Type: {_ftype} | File: {filename}")
 
     if _ftype == "pdf":
         return read_pdf(file_bytes)
@@ -246,6 +266,7 @@ def read_file(file_bytes, filename, **kwargs):
         return read_excel(file_bytes, filename=filename)
 
     else:
+        _log(f"[FileReader] Unknown type: {_ftype}")
         return {
             "success": False,
             "type": "unknown",
