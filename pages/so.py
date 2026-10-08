@@ -695,190 +695,190 @@ def _render_input_form():
         st.warning("⚠️ Rak tidak ditemukan.")
 
 #part3
-st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-# ============================================================
-# LIST RAK TERPILIH — Compact: KIRI (rak) | KANAN (nominal)
-# ============================================================
-if st.session_state["so_rak_list"]:
-    st.markdown(f"#### 📋 Rak Terpilih ({len(st.session_state['so_rak_list'])})")
-
-    _items_to_remove = []
-
-    for _idx, _item in enumerate(st.session_state["so_rak_list"]):
-        _rid = _item["rak_id"]
-        _rak_info = get_rak_by_kode_exact(_rid)
-        _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
-
-        _c1, _c2, _c3 = st.columns([2, 1.5, 0.5])
-
-        with _c1:
-            st.markdown(
-                f"<div class='rak-selected' style='margin-top: 4px;'>"
-                f"<div class='rak-selected-id'>{_rid}</div>"
-                f"<div class='rak-selected-name'>{_rname}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-        with _c2:
-            _new_nominal = st.number_input(
-                f"Nominal {_rid}",
-                min_value=-999_999_999,
-                max_value=999_999_999,
-                step=1000,
-                value=int(_item.get("nominal_adjust", 0)),
-                key=f"nominal_{_rid}_{_idx}",
-                label_visibility="collapsed",
-            )
-            st.session_state["so_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
-
-        with _c3:
-            if st.button("🗑️", key=f"btn_del_{_rid}_{_idx}", width="stretch"):
-                _items_to_remove.append(_idx)
-
-    if _items_to_remove:
-        for _i in sorted(_items_to_remove, reverse=True):
-            st.session_state["so_rak_list"].pop(_i)
-        st.rerun()
-
-    # Total nominal
-    _total_nominal_input = sum(
-        item.get("nominal_adjust", 0)
-        for item in st.session_state["so_rak_list"]
-    )
-    _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
-
-    st.markdown(
-        f"<div class='metric-clean' style='border-left-color: {_color_total}; "
-        f"margin-top: 16px; text-align: right;'>"
-        f"<div class='label'>💰 TOTAL NOMINAL SO ({len(st.session_state['so_rak_list'])} RAK)</div>"
-        f"<div class='value' style='color: {_color_total};'>"
-        f"{fmt_rp_signed(_total_nominal_input)}</div>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-else:
-    st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
-
-# ============================================================
-# RAK BELUM SO (Expander)
-# ============================================================
-st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-with st.expander("📋 Rak Belum SO (Klik untuk buka)", expanded=False):
-    try:
-        from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
-
-        _rak_belum_df = _get_belum_so_df(_rak_df)
-
-        if not _rak_belum_df.empty:
-            _jumlah_belum = len(_rak_belum_df)
-            st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO")
-
-            _search_belum = st.text_input(
-                "🔍 Filter rak belum SO",
-                key="search_rak_belum",
-                placeholder="Ketik kode/nama rak...",
-                label_visibility="collapsed",
-            )
-
-            _rak_filtered = _rak_belum_df.copy()
-            if _search_belum and len(_search_belum.strip()) >= 1:
-                _q = _search_belum.strip().upper()
-                _rak_filtered = _rak_filtered[
-                    _rak_filtered["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
-                    _rak_filtered["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
-                ]
-
-            # Grid compact HTML
-            _grid_html = (
-                "<div style='display: grid; "
-                "grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); "
-                "gap: 8px; margin-top: 12px;'>"
-            )
-
-            for _rak in _rak_filtered[["rak_id", "rak_name"]].to_dict("records"):
-                _rid = str(_rak.get("rak_id", "-"))
-                _rname = str(_rak.get("rak_name", "-"))[:20]
-
-                _grid_html += (
-                    f"<div style='background: rgba(20, 12, 35, 0.95); "
-                    f"border: 1px solid rgba(232, 139, 139, 0.4); "
-                    f"border-left: 3px solid #E88B8B; "
-                    f"border-radius: 8px; padding: 8px 10px;'>"
-                    f"<div style='font-family: JetBrains Mono, monospace; font-size: 12px; "
-                    f"font-weight: 900; color: #E8B189;'>{_rid}</div>"
-                    f"<div style='font-family: Quicksand, sans-serif; font-size: 9px; "
-                    f"color: #7a9b8e; margin-top: 2px;'>{_rname}</div>"
-                    f"</div>"
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    # ============================================================
+    # LIST RAK TERPILIH — Compact: KIRI (rak) | KANAN (nominal)
+    # ============================================================
+    if st.session_state["so_rak_list"]:
+        st.markdown(f"#### 📋 Rak Terpilih ({len(st.session_state['so_rak_list'])})")
+    
+        _items_to_remove = []
+    
+        for _idx, _item in enumerate(st.session_state["so_rak_list"]):
+            _rid = _item["rak_id"]
+            _rak_info = get_rak_by_kode_exact(_rid)
+            _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
+    
+            _c1, _c2, _c3 = st.columns([2, 1.5, 0.5])
+    
+            with _c1:
+                st.markdown(
+                    f"<div class='rak-selected' style='margin-top: 4px;'>"
+                    f"<div class='rak-selected-id'>{_rid}</div>"
+                    f"<div class='rak-selected-name'>{_rname}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
                 )
-
-            _grid_html += "</div>"
-            st.markdown(_grid_html, unsafe_allow_html=True)
-
-            # Download
-            _list_text = "\n".join([
-                f"{r['rak_id']} — {r['rak_name']}"
-                for r in _rak_filtered[["rak_id", "rak_name"]].to_dict("records")
-            ])
-
-            st.download_button(
-                label=f"📥 Download List ({len(_rak_filtered)} rak)",
-                data=_list_text,
-                file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
-                mime="text/plain",
-                width="stretch",
-                key="dl_rak_belum_so",
-            )
-        else:
-            st.success("🎉 Semua rak sudah di-SO!")
-    except Exception as _e_belum:
-        st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
-
-# ============================================================
-# TOMBOL LANJUT KE KONFIRMASI
-# ============================================================
-st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-
-_col_save, _col_cancel = st.columns([3, 1])
-
-with _col_save:
-    if st.button(
-        "➡️ LANJUT KONFIRMASI",
-        width="stretch",
-        type="primary",
-        key="btn_ke_konfirmasi",
-    ):
-        _has_rak = len(st.session_state["so_rak_list"]) > 0
-        _has_spd = _spd_val > 0
-
-        if not _has_rak and not _has_spd:
-            st.error("⚠️ Minimal isi SPD atau tambahkan 1 rak!")
-        elif not _pic_pilih:
-            st.error("⚠️ Pilih/isi PIC dulu")
-        else:
-            # ✅ Simpan data ke pending & pindah ke layar konfirmasi
-            st.session_state["so_pending_data"] = {
-                "tanggal": _tanggal,
-                "spd": _spd_val,
-                "rak_items": list(st.session_state["so_rak_list"]),
-                "keterangan": _keterangan,
-                "pic": _pic_pilih,
-            }
-            st.session_state["so_screen"] = "konfirmasi"
+    
+            with _c2:
+                _new_nominal = st.number_input(
+                    f"Nominal {_rid}",
+                    min_value=-999_999_999,
+                    max_value=999_999_999,
+                    step=1000,
+                    value=int(_item.get("nominal_adjust", 0)),
+                    key=f"nominal_{_rid}_{_idx}",
+                    label_visibility="collapsed",
+                )
+                st.session_state["so_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
+    
+            with _c3:
+                if st.button("🗑️", key=f"btn_del_{_rid}_{_idx}", width="stretch"):
+                    _items_to_remove.append(_idx)
+    
+        if _items_to_remove:
+            for _i in sorted(_items_to_remove, reverse=True):
+                st.session_state["so_rak_list"].pop(_i)
             st.rerun()
-
-with _col_cancel:
-    if st.button(
-        "🗑️ Clear",
-        width="stretch",
-        key="btn_clear_so",
-    ):
-        st.session_state["so_rak_list"] = []
-        st.session_state["so_search_results"] = []
-        st.session_state["so_search_shown"] = False
-        st.rerun()
+    
+        # Total nominal
+        _total_nominal_input = sum(
+            item.get("nominal_adjust", 0)
+            for item in st.session_state["so_rak_list"]
+        )
+        _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
+    
+        st.markdown(
+            f"<div class='metric-clean' style='border-left-color: {_color_total}; "
+            f"margin-top: 16px; text-align: right;'>"
+            f"<div class='label'>💰 TOTAL NOMINAL SO ({len(st.session_state['so_rak_list'])} RAK)</div>"
+            f"<div class='value' style='color: {_color_total};'>"
+            f"{fmt_rp_signed(_total_nominal_input)}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
+    
+    # ============================================================
+    # RAK BELUM SO (Expander)
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    with st.expander("📋 Rak Belum SO (Klik untuk buka)", expanded=False):
+        try:
+            from modules.rak_monitor import get_rak_belum_so as _get_belum_so_df
+    
+            _rak_belum_df = _get_belum_so_df(_rak_df)
+    
+            if not _rak_belum_df.empty:
+                _jumlah_belum = len(_rak_belum_df)
+                st.caption(f"⚠️ **{_jumlah_belum} rak** belum di-SO")
+    
+                _search_belum = st.text_input(
+                    "🔍 Filter rak belum SO",
+                    key="search_rak_belum",
+                    placeholder="Ketik kode/nama rak...",
+                    label_visibility="collapsed",
+                )
+    
+                _rak_filtered = _rak_belum_df.copy()
+                if _search_belum and len(_search_belum.strip()) >= 1:
+                    _q = _search_belum.strip().upper()
+                    _rak_filtered = _rak_filtered[
+                        _rak_filtered["rak_id"].astype(str).str.upper().str.contains(_q, na=False) |
+                        _rak_filtered["rak_name"].astype(str).str.upper().str.contains(_q, na=False)
+                    ]
+    
+                # Grid compact HTML
+                _grid_html = (
+                    "<div style='display: grid; "
+                    "grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); "
+                    "gap: 8px; margin-top: 12px;'>"
+                )
+    
+                for _rak in _rak_filtered[["rak_id", "rak_name"]].to_dict("records"):
+                    _rid = str(_rak.get("rak_id", "-"))
+                    _rname = str(_rak.get("rak_name", "-"))[:20]
+    
+                    _grid_html += (
+                        f"<div style='background: rgba(20, 12, 35, 0.95); "
+                        f"border: 1px solid rgba(232, 139, 139, 0.4); "
+                        f"border-left: 3px solid #E88B8B; "
+                        f"border-radius: 8px; padding: 8px 10px;'>"
+                        f"<div style='font-family: JetBrains Mono, monospace; font-size: 12px; "
+                        f"font-weight: 900; color: #E8B189;'>{_rid}</div>"
+                        f"<div style='font-family: Quicksand, sans-serif; font-size: 9px; "
+                        f"color: #7a9b8e; margin-top: 2px;'>{_rname}</div>"
+                        f"</div>"
+                    )
+    
+                _grid_html += "</div>"
+                st.markdown(_grid_html, unsafe_allow_html=True)
+    
+                # Download
+                _list_text = "\n".join([
+                    f"{r['rak_id']} — {r['rak_name']}"
+                    for r in _rak_filtered[["rak_id", "rak_name"]].to_dict("records")
+                ])
+    
+                st.download_button(
+                    label=f"📥 Download List ({len(_rak_filtered)} rak)",
+                    data=_list_text,
+                    file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
+                    mime="text/plain",
+                    width="stretch",
+                    key="dl_rak_belum_so",
+                )
+            else:
+                st.success("🎉 Semua rak sudah di-SO!")
+        except Exception as _e_belum:
+            st.warning(f"⚠️ Gagal load rak belum SO: {str(_e_belum)[:100]}")
+    
+    # ============================================================
+    # TOMBOL LANJUT KE KONFIRMASI
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    _col_save, _col_cancel = st.columns([3, 1])
+    
+    with _col_save:
+        if st.button(
+            "➡️ LANJUT KONFIRMASI",
+            width="stretch",
+            type="primary",
+            key="btn_ke_konfirmasi",
+        ):
+            _has_rak = len(st.session_state["so_rak_list"]) > 0
+            _has_spd = _spd_val > 0
+    
+            if not _has_rak and not _has_spd:
+                st.error("⚠️ Minimal isi SPD atau tambahkan 1 rak!")
+            elif not _pic_pilih:
+                st.error("⚠️ Pilih/isi PIC dulu")
+            else:
+                # ✅ Simpan data ke pending & pindah ke layar konfirmasi
+                st.session_state["so_pending_data"] = {
+                    "tanggal": _tanggal,
+                    "spd": _spd_val,
+                    "rak_items": list(st.session_state["so_rak_list"]),
+                    "keterangan": _keterangan,
+                    "pic": _pic_pilih,
+                }
+                st.session_state["so_screen"] = "konfirmasi"
+                st.rerun()
+    
+    with _col_cancel:
+        if st.button(
+            "🗑️ Clear",
+            width="stretch",
+            key="btn_clear_so",
+        ):
+            st.session_state["so_rak_list"] = []
+            st.session_state["so_search_results"] = []
+            st.session_state["so_search_shown"] = False
+            st.rerun()
 
 #part4
 # =========================================================================
