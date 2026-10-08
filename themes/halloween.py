@@ -1,13 +1,12 @@
 """
 🎃 HALLOWEEN THEME v6 — Ultimate Atmospheric
 ==============================================
-- Cinzel Decorative font (gothic readable)
-- Title pulse + Border pulse + Ornament rotate
-- Footer pulse + Metric entrance + Menu float + Subtitle flicker
-- Flyer, fog, stars
-- Mobile optimized
+Tema Halloween dengan animasi mewah & flyer random.
 """
 
+# =========================================================
+# 🎃 THEME INFO
+# =========================================================
 THEME_INFO = {
     "name": "Halloween",
     "emoji": "🎃",
@@ -18,6 +17,9 @@ THEME_INFO = {
 }
 
 
+# =========================================================
+# 🌅 TIME VARIANTS
+# =========================================================
 THEME_VARIANTS = {
     "pagi": {
         "primary": "#FFA500",
@@ -101,6 +103,9 @@ def get_variant(variant="malam"):
     return THEME_VARIANTS.get(variant, THEME_VARIANTS["malam"])
 
 
+# =========================================================
+# 🎨 GET CSS
+# =========================================================
 def get_css(variant="malam"):
     _v = get_variant(variant)
 
@@ -127,7 +132,7 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 BASE
+    🎃 BASE — DEEP PURPLE + INKY BLACK
     ============================================ */
     .stApp {{
         background:
@@ -155,7 +160,7 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 HEADER ROYAL — GOTHIC ATMOSPHERIC
+    🎃 HEADER ROYAL — DASHBOARD
     ============================================ */
     .royal-header {{
         position: relative;
@@ -206,7 +211,6 @@ def get_css(variant="malam"):
         50% {{ transform: translate3d(30px, -20px, 0); opacity: 1; }}
     }}
 
-    /* Ornamen */
     .royal-ornament {{
         position: absolute;
         color: var(--pumpkin);
@@ -226,7 +230,6 @@ def get_css(variant="malam"):
     .royal-orn-bl {{ bottom: 10px; left: 14px; animation-direction: reverse; }}
     .royal-orn-br {{ bottom: 10px; right: 14px; }}
 
-    /* Title */
     .royal-title {{
         position: relative;
         font-family: 'Cinzel Decorative', 'Cinzel', -apple-system, serif;
@@ -279,7 +282,6 @@ def get_css(variant="malam"):
         }}
     }}
 
-    /* Subtitle dengan flicker */
     .royal-subtitle {{
         position: relative;
         font-family: 'Cinzel', -apple-system, serif;
@@ -294,32 +296,14 @@ def get_css(variant="malam"):
     }}
 
     @keyframes subtitleFlicker {{
-        0%, 100% {{
-            opacity: 1;
-            text-shadow: 0 0 8px rgba(255, 107, 26, 0.6);
-        }}
-        40% {{
-            opacity: 0.85;
-            text-shadow: 0 0 12px rgba(255, 107, 26, 0.8);
-        }}
-        45% {{
-            opacity: 0.6;
-            text-shadow: 0 0 5px rgba(255, 107, 26, 0.3);
-        }}
-        50% {{
-            opacity: 0.95;
-            text-shadow: 0 0 10px rgba(255, 107, 26, 0.7);
-        }}
-        55% {{
-            opacity: 0.7;
-        }}
-        60% {{
-            opacity: 1;
-            text-shadow: 0 0 12px rgba(255, 107, 26, 0.8);
-        }}
+        0%, 100% {{ opacity: 1; text-shadow: 0 0 8px rgba(255, 107, 26, 0.6); }}
+        40% {{ opacity: 0.85; text-shadow: 0 0 12px rgba(255, 107, 26, 0.8); }}
+        45% {{ opacity: 0.6; text-shadow: 0 0 5px rgba(255, 107, 26, 0.3); }}
+        50% {{ opacity: 0.95; text-shadow: 0 0 10px rgba(255, 107, 26, 0.7); }}
+        55% {{ opacity: 0.7; }}
+        60% {{ opacity: 1; text-shadow: 0 0 12px rgba(255, 107, 26, 0.8); }}
     }}
 
-    /* Clock */
     .header-clock {{
         position: relative;
         text-align: center;
@@ -350,7 +334,7 @@ def get_css(variant="malam"):
     /* ============================================
     🎃 PROFILE HEADER — MEWAH (Halaman SO)
     ============================================ */
-    .profile-header {
+    .profile-header {{
         position: relative;
         display: flex;
         align-items: center;
@@ -362,14 +346,9 @@ def get_css(variant="malam"):
         margin-bottom: 24px;
         overflow: hidden;
         animation: headerBorderPulse 5s infinite ease-in-out;
-        box-shadow:
-            0 0 40px rgba(107, 33, 168, 0.35),
-            0 0 80px rgba(255, 107, 26, 0.15),
-            inset 0 0 60px rgba(0, 0, 0, 0.7);
-    }
-    
-    /* Fog drift di dalam header */
-    .profile-header::before {
+    }}
+
+    .profile-header::before {{
         content: "";
         position: absolute;
         top: -50%;
@@ -383,24 +362,23 @@ def get_css(variant="malam"):
         pointer-events: none;
         z-index: 0;
         will-change: transform, opacity;
-    }
-    
-    /* Ornamen pojok */
-    .profile-header-ornament {
+    }}
+
+    .profile-header-ornament {{
         position: absolute;
         font-size: 18px;
         color: var(--pumpkin);
         z-index: 2;
         filter: drop-shadow(0 0 8px var(--pumpkin));
         animation: ornamentRotate 8s infinite linear;
-    }
-    
-    .profile-orn-tl { top: 8px; left: 12px; }
-    .profile-orn-tr { top: 8px; right: 12px; animation-direction: reverse; }
-    .profile-orn-bl { bottom: 8px; left: 12px; animation-direction: reverse; }
-    .profile-orn-br { bottom: 8px; right: 12px; }
-    
-    .profile-title {
+    }}
+
+    .profile-orn-tl {{ top: 8px; left: 12px; }}
+    .profile-orn-tr {{ top: 8px; right: 12px; animation-direction: reverse; }}
+    .profile-orn-bl {{ bottom: 8px; left: 12px; animation-direction: reverse; }}
+    .profile-orn-br {{ bottom: 8px; right: 12px; }}
+
+    .profile-title {{
         position: relative;
         font-family: 'Cinzel Decorative', 'Cinzel', -apple-system, serif;
         font-size: 20px;
@@ -408,15 +386,10 @@ def get_css(variant="malam"):
         color: var(--pumpkin);
         letter-spacing: 3px;
         z-index: 2;
-        text-shadow:
-            0 0 15px var(--pumpkin),
-            0 0 30px rgba(255, 107, 26, 0.7),
-            0 0 50px rgba(255, 107, 26, 0.4),
-            2px 2px 4px rgba(0, 0, 0, 0.95);
         animation: titlePulse 4s infinite ease-in-out;
-    }
-    
-    .profile-sub {
+    }}
+
+    .profile-sub {{
         position: relative;
         font-family: 'Cinzel', -apple-system, serif;
         font-size: 11px;
@@ -426,9 +399,9 @@ def get_css(variant="malam"):
         margin-top: 6px;
         z-index: 2;
         animation: subtitleFlicker 3s infinite ease-in-out;
-    }
-    
-    .profile-status {
+    }}
+
+    .profile-status {{
         position: relative;
         font-family: 'JetBrains Mono', 'Courier New', monospace;
         font-size: 11px;
@@ -437,33 +410,9 @@ def get_css(variant="malam"):
         z-index: 2;
         line-height: 1.5;
         letter-spacing: 1px;
-    }
-    
-    /* Mobile responsive */
-    @media (max-width: 768px) {
-        .profile-header {
-            padding: 16px 18px;
-            border-radius: 14px;
-        }
-        .profile-title {
-            font-size: 15px;
-            letter-spacing: 2px;
-        }
-        .profile-sub {
-            font-size: 9px;
-            letter-spacing: 2px;
-        }
-        .profile-status {
-            font-size: 9px;
-        }
-        .profile-header-ornament {
-            font-size: 14px;
-            animation: none;
-        }
-    }
-
+    }}
     /* ============================================
-    🎃 METRIC CARD (dengan entrance animation)
+    🎃 METRIC CARD
     ============================================ */
     .metric-clean,
     .metric-card-v2 {{
@@ -477,24 +426,17 @@ def get_css(variant="malam"):
         animation: metricEntrance 0.6s ease-out backwards;
     }}
     
-    .metric-clean:hover {{
+    .metric-clean:hover,
+    .metric-card-v2:hover {{
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 107, 26, 0.2);
     }}
     
-    /* Entrance: fade + slide up + scale */
     @keyframes metricEntrance {{
-        0% {{
-            opacity: 0;
-            transform: translateY(15px) scale(0.95);
-        }}
-        100% {{
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }}
+        0% {{ opacity: 0; transform: translateY(15px) scale(0.95); }}
+        100% {{ opacity: 1; transform: translateY(0) scale(1); }}
     }}
     
-    /* Stagger delay via nth-child */
     .metric-clean:nth-child(1) {{ animation-delay: 0.0s; }}
     .metric-clean:nth-child(2) {{ animation-delay: 0.1s; }}
     .metric-clean:nth-child(3) {{ animation-delay: 0.2s; }}
@@ -502,7 +444,8 @@ def get_css(variant="malam"):
     .metric-clean:nth-child(5) {{ animation-delay: 0.4s; }}
     .metric-clean:nth-child(6) {{ animation-delay: 0.5s; }}
     
-    .metric-clean .label {{
+    .metric-clean .label,
+    .metric-label-v2 {{
         font-family: 'Cinzel', -apple-system, serif;
         font-size: 10px;
         color: var(--ghost-dim);
@@ -511,7 +454,8 @@ def get_css(variant="malam"):
         margin-bottom: 6px;
     }}
     
-    .metric-clean .value {{
+    .metric-clean .value,
+    .metric-value-v2 {{
         font-family: 'JetBrains Mono', 'Courier New', monospace;
         font-size: 24px;
         font-weight: 900;
@@ -521,7 +465,8 @@ def get_css(variant="malam"):
         text-shadow: 0 0 10px rgba(255, 107, 26, 0.4);
     }}
     
-    .metric-clean .sub {{
+    .metric-clean .sub,
+    .metric-sub-v2 {{
         font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 10px;
         color: var(--ghost-dim);
@@ -529,7 +474,7 @@ def get_css(variant="malam"):
     }}
     
     /* ============================================
-    🎃 MENU CARD (dengan float animation)
+    🎃 MENU CARD
     ============================================ */
     .menu-card-v2 {{
         position: relative;
@@ -550,14 +495,9 @@ def get_css(variant="malam"):
         animation: menuFloat 4s ease-in-out infinite;
     }}
     
-    /* Float naik-turun halus */
     @keyframes menuFloat {{
-        0%, 100% {{
-            transform: translateY(0) rotate(0deg);
-        }}
-        50% {{
-            transform: translateY(-5px) rotate(0.5deg);
-        }}
+        0%, 100% {{ transform: translateY(0) rotate(0deg); }}
+        50% {{ transform: translateY(-5px) rotate(0.5deg); }}
     }}
     
     .menu-card-v2:hover {{
@@ -569,7 +509,6 @@ def get_css(variant="malam"):
         transform: translateY(-8px) scale(1.03);
     }}
     
-    /* Stagger float delay */
     .menu-card-v2:nth-child(1) {{ animation-delay: 0s; }}
     .menu-card-v2:nth-child(2) {{ animation-delay: 0.5s; }}
     .menu-card-v2:nth-child(3) {{ animation-delay: 1.0s; }}
@@ -812,7 +751,7 @@ def get_css(variant="malam"):
     }}
     
     /* ============================================
-    🎃 FOOTER (dengan pulse animation)
+    🎃 FOOTER PULSE
     ============================================ */
     .copyright-footer {{
         text-align: center;
@@ -827,17 +766,10 @@ def get_css(variant="malam"):
     }}
     
     @keyframes footerPulse {{
-        0%, 100% {{
-            opacity: 0.8;
-            text-shadow: 0 0 6px rgba(255, 107, 26, 0.4);
-        }}
-        50% {{
-            opacity: 1;
-            text-shadow:
-                0 0 12px rgba(255, 107, 26, 0.8),
-                0 0 20px rgba(255, 107, 26, 0.5);
-        }}
+        0%, 100% {{ opacity: 0.8; text-shadow: 0 0 6px rgba(255, 107, 26, 0.4); }}
+        50% {{ opacity: 1; text-shadow: 0 0 12px rgba(255, 107, 26, 0.8), 0 0 20px rgba(255, 107, 26, 0.5); }}
     }}
+    
     /* ============================================
     🎃 DIALOG / MODAL
     ============================================ */
@@ -847,17 +779,17 @@ def get_css(variant="malam"):
         border-radius: 16px;
         box-shadow: 0 0 40px rgba(107, 33, 168, 0.5);
     }}
-    
+
     [data-testid="stDialog"] h2 {{
         color: var(--pumpkin);
         font-family: 'Cinzel', -apple-system, serif;
         letter-spacing: 2px;
     }}
-    
+
     [data-testid="stDialogBackdrop"] {{
         background: rgba(10, 5, 20, 0.8);
     }}
-    
+
     /* ============================================
     🎃 BUTTONS
     ============================================ */
@@ -876,7 +808,7 @@ def get_css(variant="malam"):
         min-height: 48px;
         transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
     }}
-    
+
     div.stButton > button:hover {{
         background: linear-gradient(135deg, var(--pumpkin-dark) 0%, var(--pumpkin) 100%);
         color: #FFFFFF;
@@ -884,7 +816,7 @@ def get_css(variant="malam"):
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(255, 107, 26, 0.4);
     }}
-    
+
     /* ============================================
     🎃 INPUT FIELDS
     ============================================ */
@@ -896,7 +828,7 @@ def get_css(variant="malam"):
         border-radius: 10px;
         min-height: 44px;
     }}
-    
+
     div[data-baseweb="input"] input,
     div[data-baseweb="select"] span,
     div[data-baseweb="textarea"] textarea {{
@@ -904,7 +836,7 @@ def get_css(variant="malam"):
         font-family: 'JetBrains Mono', 'Courier New', monospace;
         font-size: 13px;
     }}
-    
+
     label,
     div[data-testid="stWidgetLabel"] label {{
         color: var(--pumpkin-light);
@@ -914,7 +846,7 @@ def get_css(variant="malam"):
         letter-spacing: 1px;
         text-transform: uppercase;
     }}
-    
+
     /* ============================================
     🎃 TABS
     ============================================ */
@@ -925,7 +857,7 @@ def get_css(variant="malam"):
         border: 1px solid var(--pumpkin-dark);
         gap: 4px;
     }}
-    
+
     div[data-baseweb="tab-list"] button {{
         background: transparent;
         color: var(--ghost-dim);
@@ -936,12 +868,12 @@ def get_css(variant="malam"):
         padding: 10px 16px;
         border-radius: 8px;
     }}
-    
+
     div[data-baseweb="tab-list"] button[aria-selected="true"] {{
         background: linear-gradient(135deg, var(--pumpkin-dark) 0%, var(--pumpkin) 100%);
         color: #FFFFFF;
     }}
-    
+
     /* ============================================
     🎃 EXPANDER
     ============================================ */
@@ -952,7 +884,7 @@ def get_css(variant="malam"):
         overflow: hidden;
         margin-bottom: 10px;
     }}
-    
+
     div[data-testid="stExpander"] summary {{
         background: linear-gradient(90deg, #2E1065 0%, rgba(255, 107, 26, 0.1) 100%);
         color: var(--pumpkin-light);
@@ -962,7 +894,7 @@ def get_css(variant="malam"):
         padding: 14px 16px;
         min-height: 48px;
     }}
-    
+
     /* ============================================
     🎃 DATAFRAME
     ============================================ */
@@ -971,7 +903,7 @@ def get_css(variant="malam"):
         border-radius: 10px;
         overflow: hidden;
     }}
-    
+
     /* ============================================
     🎃 SIDEBAR
     ============================================ */
@@ -979,7 +911,7 @@ def get_css(variant="malam"):
         background: linear-gradient(180deg, #0F0A1E 0%, #1A0D2E 100%);
         border-right: 1px solid var(--pumpkin-dark);
     }}
-    
+
     /* ============================================
     🎃 ALERT
     ============================================ */
@@ -988,11 +920,10 @@ def get_css(variant="malam"):
         border: 1px solid var(--pumpkin-dark);
         border-radius: 10px;
     }}
-    /* ============================================
-    🎃 ANIMASI — FOG + STARS + FLYERS + WEB
-    ============================================ */
 
-    /* === FOG BACKGROUND === */
+    /* ============================================
+    🎃 ANIMASI — FOG + STARS + SPIDER WEB
+    ============================================ */
     .hw-fog {{
         position: fixed;
         top: 0;
@@ -1013,7 +944,6 @@ def get_css(variant="malam"):
         50% {{ transform: translate3d(40px, -30px, 0); opacity: 1; }}
     }}
 
-    /* === STARS === */
     .hw-stars {{
         position: fixed;
         top: 0;
@@ -1041,7 +971,6 @@ def get_css(variant="malam"):
         50% {{ opacity: 0.85; }}
     }}
 
-    /* === SPIDER WEB (pojok kanan atas) === */
     .hw-spider-web {{
         position: fixed;
         top: 0;
@@ -1058,8 +987,10 @@ def get_css(variant="malam"):
         opacity: 0.5;
     }}
 
-    /* === FLYER BASE === */
-    .hw-flyer {
+    /* ============================================
+    🎃 FLYER — 6 ANIMASI BEDA ARAH
+    ============================================ */
+    .hw-flyer {{
         position: fixed;
         z-index: 999;
         pointer-events: none;
@@ -1067,156 +998,120 @@ def get_css(variant="malam"):
         will-change: transform, opacity;
         transform: translate3d(0, 0, 0);
         line-height: 1;
-    }
-    
-    /* === FLYER 1: KELELAWAR — kiri→kanan naik === */
-    .hw-flyer-1 {
+    }}
+
+    /* FLYER 1: KELELAWAR — kiri→kanan naik */
+    .hw-flyer-1 {{
         top: 5%;
         left: -60px;
         font-size: 26px;
         animation: hwFlyLeftRightUp 22s infinite linear;
         animation-delay: 0s;
-    }
-    
-    /* === FLYER 2: LABU — kanan→kiri turun === */
-    .hw-flyer-2 {
+    }}
+
+    /* FLYER 2: LABU — kanan→kiri turun */
+    .hw-flyer-2 {{
         top: 15%;
         right: -60px;
         font-size: 24px;
         animation: hwFlyRightLeftDown 28s infinite linear;
         animation-delay: 4s;
-    }
-    
-    /* === FLYER 3: HANTU — atas→bawah zigzag === */
-    .hw-flyer-3 {
+    }}
+
+    /* FLYER 3: HANTU — atas→bawah zigzag */
+    .hw-flyer-3 {{
         top: -60px;
         left: 20%;
         font-size: 28px;
         animation: hwFlyTopBottom 32s infinite linear;
         animation-delay: 8s;
-    }
-    
-    /* === FLYER 4: LABA-LABA — diagonal === */
-    .hw-flyer-4 {
+    }}
+
+    /* FLYER 4: LABA-LABA — diagonal */
+    .hw-flyer-4 {{
         bottom: -60px;
         left: 10%;
         font-size: 20px;
         animation: hwFlyDiagonal 30s infinite linear;
         animation-delay: 12s;
-    }
-    
-    /* === FLYER 5: KELELAWAR 2 — kiri→kanan gelombang === */
-    .hw-flyer-5 {
+    }}
+
+    /* FLYER 5: KELELAWAR 2 — kiri→kanan gelombang */
+    .hw-flyer-5 {{
         top: 65%;
         left: -60px;
         font-size: 22px;
         animation: hwFlyWave 35s infinite linear;
         animation-delay: 16s;
-    }
-    
-    /* === FLYER 6: LABU 2 — kanan→kiri naik === */
-    .hw-flyer-6 {
+    }}
+
+    /* FLYER 6: LABU 2 — kanan→kiri naik */
+    .hw-flyer-6 {{
         bottom: 15%;
         right: -60px;
         font-size: 20px;
         animation: hwFlyRightLeftUp 38s infinite linear;
         animation-delay: 20s;
-    }
-    
-    /* === ANIMASI 1: KIRI → KANAN NAIK === */
-    @keyframes hwFlyLeftRightUp {
-        0% {
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }
-        8% { opacity: 0.9; }
-        50% { transform: translate3d(55vw, -30px, 0); }
-        92% { opacity: 0.9; }
-        100% {
-            transform: translate3d(115vw, -50px, 0);
-            opacity: 0;
-        }
-    }
-    
-    /* === ANIMASI 2: KANAN → KIRI TURUN === */
-    @keyframes hwFlyRightLeftDown {
-        0% {
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }
-        8% { opacity: 0.9; }
-        50% { transform: translate3d(-55vw, 25px, 0); }
-        92% { opacity: 0.9; }
-        100% {
-            transform: translate3d(-115vw, 45px, 0);
-            opacity: 0;
-        }
-    }
-    
-    /* === ANIMASI 3: ATAS → BAWAH (zigzag horizontal tipis) === */
-    @keyframes hwFlyTopBottom {
-        0% {
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }
-        8% { opacity: 0.9; }
-        25% { transform: translate3d(20px, 25vh, 0); }
-        50% { transform: translate3d(-20px, 50vh, 0); }
-        75% { transform: translate3d(20px, 75vh, 0); }
-        92% { opacity: 0.9; }
-        100% {
-            transform: translate3d(0, 105vh, 0);
-            opacity: 0;
-        }
-    }
-    
-    /* === ANIMASI 4: DIAGONAL (kiri bawah → kanan atas) === */
-    @keyframes hwFlyDiagonal {
-        0% {
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }
-        8% { opacity: 0.9; }
-        50% { transform: translate3d(55vw, -50vh, 0); }
-        92% { opacity: 0.9; }
-        100% {
-            transform: translate3d(110vw, -100vh, 0);
-            opacity: 0;
-        }
-    }
-    
-    /* === ANIMASI 5: GELOMBANG (naik-turun kiri→kanan) === */
-    @keyframes hwFlyWave {
-        0% {
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }
-        8% { opacity: 0.9; }
-        20% { transform: translate3d(22vw, -40px, 0); }
-        40% { transform: translate3d(44vw, 40px, 0); }
-        60% { transform: translate3d(66vw, -40px, 0); }
-        80% { transform: translate3d(88vw, 40px, 0); }
-        92% { opacity: 0.9; }
-        100% {
-            transform: translate3d(115vw, 0, 0);
-            opacity: 0;
-        }
-    }
-    
-    /* === ANIMASI 6: KANAN → KIRI NAIK === */
-    @keyframes hwFlyRightLeftUp {
-        0% {
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-        }
-        8% { opacity: 0.9; }
-        50% { transform: translate3d(-55vw, -25px, 0); }
-        92% { opacity: 0.9; }
-        100% {
-            transform: translate3d(-115vw, -45px, 0);
-            opacity: 0;
-        }
-    }
+    }}
+
+    /* ANIMASI 1: KIRI → KANAN NAIK */
+    @keyframes hwFlyLeftRightUp {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        50% {{ transform: translate3d(55vw, -30px, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(115vw, -50px, 0); opacity: 0; }}
+    }}
+
+    /* ANIMASI 2: KANAN → KIRI TURUN */
+    @keyframes hwFlyRightLeftDown {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        50% {{ transform: translate3d(-55vw, 25px, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(-115vw, 45px, 0); opacity: 0; }}
+    }}
+
+    /* ANIMASI 3: ATAS → BAWAH ZIGZAG */
+    @keyframes hwFlyTopBottom {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        25% {{ transform: translate3d(20px, 25vh, 0); }}
+        50% {{ transform: translate3d(-20px, 50vh, 0); }}
+        75% {{ transform: translate3d(20px, 75vh, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(0, 105vh, 0); opacity: 0; }}
+    }}
+
+    /* ANIMASI 4: DIAGONAL (kiri bawah → kanan atas) */
+    @keyframes hwFlyDiagonal {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        50% {{ transform: translate3d(55vw, -50vh, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(110vw, -100vh, 0); opacity: 0; }}
+    }}
+
+    /* ANIMASI 5: GELOMBANG */
+    @keyframes hwFlyWave {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        20% {{ transform: translate3d(22vw, -40px, 0); }}
+        40% {{ transform: translate3d(44vw, 40px, 0); }}
+        60% {{ transform: translate3d(66vw, -40px, 0); }}
+        80% {{ transform: translate3d(88vw, 40px, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(115vw, 0, 0); opacity: 0; }}
+    }}
+
+    /* ANIMASI 6: KANAN → KIRI NAIK */
+    @keyframes hwFlyRightLeftUp {{
+        0% {{ transform: translate3d(0, 0, 0); opacity: 0; }}
+        8% {{ opacity: 0.9; }}
+        50% {{ transform: translate3d(-55vw, -25px, 0); }}
+        92% {{ opacity: 0.9; }}
+        100% {{ transform: translate3d(-115vw, -45px, 0); opacity: 0; }}
+    }}
 
     /* ============================================
     📱 MOBILE OPTIMIZATION
@@ -1254,8 +1149,42 @@ def get_css(variant="malam"):
             font-size: 18px;
         }}
 
+        .profile-header {{
+            padding: 16px 18px;
+            border-radius: 14px;
+        }}
+
+        .profile-title {{
+            font-size: 15px;
+            letter-spacing: 2px;
+        }}
+
+        .profile-sub {{
+            font-size: 9px;
+            letter-spacing: 2px;
+        }}
+
+        .profile-status {{
+            font-size: 9px;
+        }}
+
+        .profile-header-ornament {{
+            font-size: 14px;
+            animation: none;
+        }}
+
         .metric-clean .value {{
             font-size: 20px;
+        }}
+
+        .so-table thead th {{
+            padding: 8px 10px;
+            font-size: 9px;
+        }}
+
+        .so-table tbody td {{
+            padding: 8px 10px;
+            font-size: 11px;
         }}
 
         /* Mobile: cuma 2 flyer */
@@ -1272,13 +1201,11 @@ def get_css(variant="malam"):
             display: none !important;
         }}
 
-        /* Fog lebih subtle */
         .hw-fog {{
             animation-duration: 60s;
             opacity: 0.5;
         }}
 
-        /* Flyer lebih lambat */
         .hw-flyer-1 {{
             animation-duration: 26s;
             font-size: 22px;
@@ -1289,40 +1216,28 @@ def get_css(variant="malam"):
             font-size: 24px;
         }}
 
-        /* Menu float lebih lambat */
         .menu-card-v2 {{
             animation-duration: 6s;
         }}
 
-        /* Metric entrance lebih cepat */
         .metric-clean {{
             animation-duration: 0.4s;
         }}
 
-        /* Title pulse lebih lambat */
         .royal-title {{
             animation-duration: 6s;
         }}
 
-        /* Border pulse lebih lambat */
         .royal-header {{
             animation-duration: 7s;
         }}
 
-        /* Ornament rotate — matikan di mobile (hemat CPU) */
         .royal-ornament {{
             animation: none;
         }}
 
-        /* Footer pulse lebih lambat */
         .copyright-footer {{
             animation-duration: 4s;
-        }}
-
-        .main .block-container {{
-            padding-left: 1rem;
-            padding-right: 1rem;
-            padding-top: 0.5rem;
         }}
 
         div.stButton > button {{
@@ -1330,14 +1245,10 @@ def get_css(variant="malam"):
             font-size: 14px;
         }}
 
-        .so-table thead th {{
-            padding: 8px 10px;
-            font-size: 9px;
-        }}
-
-        .so-table tbody td {{
-            padding: 8px 10px;
-            font-size: 11px;
+        .main .block-container {{
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-top: 0.5rem;
         }}
     }}
 
@@ -1346,7 +1257,6 @@ def get_css(variant="malam"):
             font-size: 18px;
         }}
 
-        /* Mobile kecil: cuma 1 flyer */
         .hw-flyer-3 {{
             display: none !important;
         }}
@@ -1356,9 +1266,12 @@ def get_css(variant="malam"):
             animation-duration: 30s;
         }}
 
-        /* Matikan float di HP kecil (hemat CPU) */
         .menu-card-v2 {{
             animation: none;
+        }}
+
+        .metric-clean .value {{
+            font-size: 18px;
         }}
 
         .main .block-container {{
@@ -1367,7 +1280,9 @@ def get_css(variant="malam"):
         }}
     }}
 
-    /* Accessibility */
+    /* ============================================
+    ♿ ACCESSIBILITY
+    ============================================ */
     @media (prefers-reduced-motion: reduce) {{
         .hw-flyer,
         .hw-stars,
@@ -1382,7 +1297,10 @@ def get_css(variant="malam"):
         .royal-subtitle,
         .copyright-footer,
         .menu-card-v2,
-        .metric-clean {{
+        .metric-clean,
+        .profile-title,
+        .profile-header,
+        .profile-header-ornament {{
             animation: none !important;
         }}
 
@@ -1394,7 +1312,9 @@ def get_css(variant="malam"):
         }}
     }}
 
-    /* iOS: pake GPU layer */
+    /* ============================================
+    🎃 iOS GPU LAYER
+    ============================================ */
     @media (hover: none) and (pointer: coarse) {{
         .hw-flyer {{
             transform: translateZ(0);
@@ -1402,7 +1322,9 @@ def get_css(variant="malam"):
         }}
     }}
 
-    /* Utility */
+    /* ============================================
+    🎃 UTILITY
+    ============================================ */
     .fade-in-up {{
         animation: fadeInUp 0.4s ease-out;
     }}
