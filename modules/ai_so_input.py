@@ -524,13 +524,14 @@ Output HANYA JSON.
     print(f"[Yui] Raw response: {_text[:500]}")
 
     _json = _extract_json(_text)
-
+    
     # ✅ Kalau LLM return JSON valid
     if _json and _json.get("data"):
         _data = _json.get("data", {})
         _items = _data.get("items", [])
-
+    
         if _items:
+            print(f"[Yui] LLM sukses: {len(_items)} items")
             return {
                 "success": _json.get("success", True),
                 "data": _data,
@@ -539,10 +540,10 @@ Output HANYA JSON.
                 "raw": _text,
                 "model": _model,
             }
-
-    # ✅ Fallback kalau JSON invalid / items kosong
-    print("[Yui] LLM return invalid/kosong, coba fallback regex...")
-    _fallback_data = _fallback_regex_extract(file_text)
+    
+    # ✅ Fallback JALAN — prioritas pakai TEXT ASLI (bukan LLM response)
+    print("[Yui] LLM gagal/kosong, coba fallback regex...")
+    _fallback_data = _fallback_regex_extract(file_text)  # ← file_text ASLI (dari OCR)
 
     if _fallback_data and _fallback_data.get("items"):
         print(f"[Yui] ✅ Fallback OK: {len(_fallback_data['items'])} items")
