@@ -3,9 +3,11 @@ SO — Stock Opname (Konsolidasi)
 ================================
 Full replacement pages/input_so.py.
 
+Mode sementara: Multi-Rak + Nominal (tanpa detail per PLU)
+
 Tab:
-1. 📝 Input SO   — SPD + Multi-Produk SO dalam 1 form
-2. 📊 Analisis   — Top produk minus/plus + grafik
+1. 📝 Input SO   — SPD + Multi-Rak nominal (mode simple)
+2. 📊 Analisis   — Top rak + grafik
 3. 📋 Preview    — Preview & hapus SO per rak
 """
 
@@ -40,11 +42,8 @@ render_theme_animations(CURRENT_THEME)
 # =========================================================================
 try:
     from modules.so_handler import (
-        save_so_input,
-        load_so_detail_by_date,
         load_so_summary_by_date,
         delete_so_by_date,
-        get_so_analytics,
     )
     from modules.master_shift_handler import load_personil_master
     from modules.data_loader import load_rak_master
@@ -52,9 +51,16 @@ try:
         save_spd_harian,
         hitung_btsb_harian,
     )
+    from modules.input_handler import (
+        save_input_harian,
+        search_rak,
+        get_rak_by_kode_exact,
+        get_so_rak_detail,
+        get_akumulasi_nominal_bulan,
+    )
 except ImportError as _e:
     st.error(f"❌ Gagal import module: {_e}")
-    st.info("💡 Pastikan `modules/so_handler.py`, `data_loader.py`, `spd_calculator.py`, `master_shift_handler.py` udah ada.")
+    st.info("💡 Pastikan module `so_handler.py`, `input_handler.py`, `spd_calculator.py`, `data_loader.py`, `master_shift_handler.py` udah ada.")
     st.stop()
 
 
@@ -90,28 +96,25 @@ def inject_css():
             color: rgba(245, 230, 211, 0.5) !important;
         }
 
-        /* Summary Card CSS */
-        .summary-card {
-            background: linear-gradient(135deg, rgba(30, 20, 60, 0.85), rgba(76, 29, 149, 0.65));
-            border: 2px solid #E8B189;
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 12px;
-            text-align: center;
+        /* Rak Result Card */
+        .rak-result-card {
+            background: linear-gradient(135deg, rgba(15, 31, 26, 0.95), rgba(10, 22, 18, 0.92));
+            border: 1.5px solid #7FB99B;
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 6px;
         }
-        .summary-card .label {
+        .rak-result-id {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            color: #7FB99B;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-        }
-        .summary-card .value {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 22px;
+            font-size: 14px;
             font-weight: 900;
             color: #E8B189;
-            margin-top: 6px;
+        }
+        .rak-result-name {
+            font-family: 'Quicksand', sans-serif;
+            font-size: 10px;
+            color: #7a9b8e;
+            margin-top: 2px;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -165,10 +168,10 @@ render_header()
 
 
 # =========================================================================
-# SESSION STATE (WAJIB — biar gak ilang pas switch page)
+# SESSION STATE
 # =========================================================================
-if "so_produk_list" not in st.session_state:
-    st.session_state["so_produk_list"] = []
+if "so_rak_list" not in st.session_state:
+    st.session_state["so_rak_list"] = []   # list of dict {rak_id, nominal_adjust}
 
 if "so_last_saved" not in st.session_state:
     st.session_state["so_last_saved"] = None
@@ -178,6 +181,10 @@ if "so_analisis_loaded" not in st.session_state:
 
 if "so_tab" not in st.session_state:
     st.session_state["so_tab"] = "input"
+
+# ✅ Auto-load existing SO saat tanggal berubah (biar bisa edit)
+if "so_last_loaded_date" not in st.session_state:
+    st.session_state["so_last_loaded_date"] = None
 
 
 # =========================================================================
@@ -201,7 +208,6 @@ def _load_master():
 
 
 _rak_df, _personil_df = _load_master()
-_rak_list = _rak_df["rak_id"].tolist() if not _rak_df.empty else []
 _personil_list = _personil_df["nama"].tolist() if not _personil_df.empty else []
 
 
@@ -239,19 +245,19 @@ for _i, (_key, _label) in enumerate(_TABS):
 
 st.markdown("---")
 # =========================================================================
-# TAB 1: INPUT SO (SPD + Multi-Produk — 1 FORM)
+# TAB 1: INPUT SO (SPD + Multi-Rak Nominal)
 # =========================================================================
 def render_input_so():
-    """Input SO: SPD + Multi-Produk dalam 1 form."""
+    """Input SO: SPD + Multi-Rak (nominal per rak) dalam 1 form."""
     st.markdown("### 📝 Input SO")
-    st.caption("Isi SPD (opsional) + produk yang di-SO, lalu klik SIMPAN SEMUA")
+    st.caption("Isi SPD (opsional) + rak yang di-SO, lalu klik SIMPAN SEMUA")
 
     # ============================================================
     # INFO SO
     # ============================================================
     st.markdown("#### 📅 Info SO")
 
-    _col_tgl, _col_rak, _col_pic = st.columns([2, 2, 2])
+    _col_tgl, _col_pic = st.columns([2, 2])
 
     with _col_tgl:
         _tanggal = st.date_input(
@@ -259,18 +265,6 @@ def render_input_so():
             value=datetime.now(ZoneInfo("Asia/Jakarta")).date(),
             key="so_input_tanggal",
         )
-
-    with _col_rak:
-        if _rak_list:
-            _rak_pilih = st.selectbox(
-                "🏪 Kode Rak",
-                options=_rak_list,
-                key="so_input_rak",
-                help="Pilih rak yang di-SO",
-            )
-        else:
-            st.warning("⚠️ Master rak kosong")
-            _rak_pilih = None
 
     with _col_pic:
         if _personil_list:
@@ -286,6 +280,20 @@ def render_input_so():
                 placeholder="Ketik nama PIC",
                 key="so_input_pic_manual",
             )
+
+    # ✅ AUTO-LOAD data existing saat tanggal berubah
+    if st.session_state["so_last_loaded_date"] != _tanggal:
+        with st.spinner("⏳ Load SO existing..."):
+            _existing = load_so_summary_by_date(_tanggal)
+        st.session_state["so_rak_list"] = [
+            {
+                "rak_id": r.get("rak_id"),
+                "nominal_adjust": float(r.get("nominal_adjust", 0)),
+            }
+            for r in (_existing or [])
+        ]
+        st.session_state["so_last_loaded_date"] = _tanggal
+        st.rerun()
 
     st.markdown("---")
 
@@ -313,114 +321,148 @@ def render_input_so():
     st.markdown("---")
 
     # ============================================================
-    # MULTI-PRODUK
+    # MULTI-RAK (SEARCH + ADD)
     # ============================================================
-    st.markdown("#### 📦 Input Produk (Multi-Produk)")
-    st.caption("💡 Input 5 PLU tertinggi + 5 PLU terendah (max 10 produk per rak)")
+    st.markdown("#### 📦 Stock Opname (Multi-Rak)")
+    st.caption("🔍 Cari rak → klik **+ Add** → isi nominal per rak")
 
-    _col_btn_add, _col_info = st.columns([2, 5])
+    _search_query = st.text_input(
+        "🔍 Cari Rak",
+        key="so_search_rak",
+        placeholder="Ketik kode rak (contoh: AT, AU, CHILLER)",
+    )
 
-    with _col_btn_add:
-        if st.button("➕ Tambah Produk", width="stretch", key="btn_add_produk_so"):
-            if len(st.session_state["so_produk_list"]) >= 10:
-                st.warning("⚠️ Max 10 produk per rak")
-            else:
-                st.session_state["so_produk_list"].append({
-                    "plu": "",
-                    "nama_produk": "",
-                    "qty_sistem": 0,
-                    "qty_fisik": 0,
-                    "nominal_adjust": 0,
-                })
-                st.rerun()
+    # === HASIL SEARCH ===
+    if _search_query and len(_search_query.strip()) >= 2:
+        _search_results = search_rak(_search_query, limit=10)
 
-    with _col_info:
-        _count = len(st.session_state["so_produk_list"])
-        st.markdown(
-            f"<div style='padding-top: 8px; color: #7FB99B; font-size: 12px;'>"
-            f"📊 **{_count} / 10** produk terinput</div>",
-            unsafe_allow_html=True,
-        )
+        if _search_results:
+            st.caption(f"💡 {len(_search_results)} rak ditemukan:")
 
-    # === LIST PRODUK ===
-    if st.session_state["so_produk_list"]:
-        st.markdown("")
+            for _idx, _rak in enumerate(_search_results):
+                _rid = _rak.get("rak_id", "-")
+                _rname = _rak.get("rak_name", "-")
+                _status = _rak.get("status_so", "BELUM")
+
+                _already_selected = any(
+                    r["rak_id"] == _rid for r in st.session_state["so_rak_list"]
+                )
+
+                col_r1, col_r2 = st.columns([4, 1])
+                with col_r1:
+                    _status_icon = "✅" if _status == "SELESAI" else "⬜"
+                    st.markdown(
+                        "<div class='rak-result-card'>"
+                        f"<div class='rak-result-id'>{_status_icon} {_rid}</div>"
+                        f"<div class='rak-result-name'>{_rname}</div>"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_r2:
+                    if _already_selected:
+                        st.button("✓ Ada", key=f"btn_add_{_idx}_{_rid}", disabled=True, width="stretch")
+                    else:
+                        if st.button("+ Add", key=f"btn_add_{_idx}_{_rid}", width="stretch"):
+                            st.session_state["so_rak_list"].append({
+                                "rak_id": _rid,
+                                "nominal_adjust": 0.0,
+                            })
+                            st.rerun()
+        else:
+            st.warning(f"⚠️ Rak **'{_search_query}'** tidak ditemukan.")
+    elif _search_query and len(_search_query.strip()) < 2:
+        st.info("💡 Ketik minimal **2 karakter**.")
+
+    st.markdown("---")
+
+    # ============================================================
+    # LIST RAK TERPILIH + INPUT NOMINAL
+    # ============================================================
+    if st.session_state["so_rak_list"]:
+        st.markdown(f"#### 📋 Rak Terpilih ({len(st.session_state['so_rak_list'])})")
+        st.caption("Isi nominal adjustment per rak (bisa +/-)")
+
         _items_to_remove = []
 
-        for _idx, _produk in enumerate(st.session_state["so_produk_list"]):
-            _nama_show = _produk.get("nama_produk") or "(belum diisi)"
-            with st.expander(f"📦 Produk #{_idx+1}: {_nama_show}", expanded=True):
-                _c1, _c2, _c3, _c4, _c5, _c6 = st.columns([2, 3, 1, 1, 2, 0.8])
+        for _idx, _item in enumerate(st.session_state["so_rak_list"]):
+            _rid = _item["rak_id"]
+            _rak_info = get_rak_by_kode_exact(_rid)
+            _rname = _rak_info.get("rak_name", "-") if _rak_info else "-"
 
-                with _c1:
-                    _new_plu = st.text_input(
-                        "PLU",
-                        value=_produk.get("plu", ""),
-                        key=f"so_plu_{_idx}",
-                        placeholder="433288",
-                    )
-                    st.session_state["so_produk_list"][_idx]["plu"] = _new_plu
+            col_d1, col_d2, col_d3 = st.columns([2, 2, 1])
 
-                with _c2:
-                    _new_nama = st.text_input(
-                        "Nama Produk",
-                        value=_produk.get("nama_produk", ""),
-                        key=f"so_nama_{_idx}",
-                        placeholder="Baygon AEO Japan P",
-                    )
-                    st.session_state["so_produk_list"][_idx]["nama_produk"] = _new_nama
+            with col_d1:
+                st.markdown(
+                    "<div style='"
+                    "padding: 12px 14px;"
+                    "background: rgba(15, 138, 114, 0.15);"
+                    "border: 1.5px solid #7FB99B;"
+                    "border-radius: 10px;"
+                    "margin-top: 8px;"
+                    "'>"
+                    f"<div style='font-family: \"JetBrains Mono\", monospace;"
+                    f"font-size: 14px; font-weight: 900; color: #E8B189;'>{_rid}</div>"
+                    f"<div style='font-family: \"Quicksand\", sans-serif;"
+                    f"font-size: 10px; color: #7a9b8e; margin-top: 2px;'>{_rname}</div>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
 
-                with _c3:
-                    _new_qty_sis = st.number_input(
-                        "Qty Sistem",
-                        min_value=0,
-                        max_value=99999,
-                        value=int(_produk.get("qty_sistem", 0)),
-                        key=f"so_qty_sis_{_idx}",
-                        step=1,
-                    )
-                    st.session_state["so_produk_list"][_idx]["qty_sistem"] = int(_new_qty_sis)
+            with col_d2:
+                _new_nominal = st.number_input(
+                    f"Nominal #{_idx+1}",
+                    min_value=-999_999_999,
+                    max_value=999_999_999,
+                    step=1000,
+                    value=int(_item.get("nominal_adjust", 0)),
+                    key=f"nominal_{_rid}_{_idx}",
+                    label_visibility="collapsed",
+                )
+                st.session_state["so_rak_list"][_idx]["nominal_adjust"] = float(_new_nominal)
 
-                with _c4:
-                    _new_qty_fis = st.number_input(
-                        "Qty Fisik",
-                        min_value=0,
-                        max_value=99999,
-                        value=int(_produk.get("qty_fisik", 0)),
-                        key=f"so_qty_fis_{_idx}",
-                        step=1,
-                    )
-                    st.session_state["so_produk_list"][_idx]["qty_fisik"] = int(_new_qty_fis)
+            with col_d3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️", key=f"btn_del_{_rid}_{_idx}"):
+                    _items_to_remove.append(_idx)
 
-                with _c5:
-                    _new_nominal = st.number_input(
-                        "Nominal Adjust (Rp)",
-                        min_value=-999_999_999,
-                        max_value=999_999_999,
-                        value=int(_produk.get("nominal_adjust", 0)),
-                        key=f"so_nom_{_idx}",
-                        step=1000,
-                        help="Nominal selisih dari laporan SO (boleh minus)",
-                    )
-                    st.session_state["so_produk_list"][_idx]["nominal_adjust"] = float(_new_nominal)
-
-                with _c6:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🗑️", key=f"so_del_{_idx}"):
-                        _items_to_remove.append(_idx)
-
-        # Hapus item
         if _items_to_remove:
             for _i in sorted(_items_to_remove, reverse=True):
-                st.session_state["so_produk_list"].pop(_i)
+                st.session_state["so_rak_list"].pop(_i)
             st.rerun()
+
+        # Total nominal
+        _total_nominal_input = sum(
+            item.get("nominal_adjust", 0)
+            for item in st.session_state["so_rak_list"]
+        )
+        _color_total = "#E88B8B" if _total_nominal_input < 0 else "#7FB99B"
+        _sign_total = "+" if _total_nominal_input >= 0 else ""
+
+        st.markdown(
+            "<div style='"
+            "background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.85));"
+            f"border: 2px solid {_color_total};"
+            "border-radius: 12px;"
+            "padding: 14px 20px;"
+            "margin-top: 16px;"
+            "text-align: center;"
+            "'>"
+            "<div style='font-family: monospace; font-size: 10px;"
+            "color: #7a9b8e; letter-spacing: 1.5px;'>💰 TOTAL NOMINAL SO</div>"
+            f"<div style='font-family: \"JetBrains Mono\", monospace;"
+            f"font-size: 22px; font-weight: 900; color: {_color_total};"
+            f"margin-top: 6px;'>{_sign_total}{fmt_rp(_total_nominal_input)}</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     else:
-        st.info("📭 Belum ada produk. Klik ➕ Tambah Produk untuk mulai.")
+        st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
+
+    st.markdown("---")
 
     # ============================================================
     # KETERANGAN
     # ============================================================
-    st.markdown("---")
     _keterangan = st.text_input(
         "📝 Keterangan (opsional)",
         placeholder="Contoh: Pendingan rak FE1 1 item",
@@ -428,104 +470,64 @@ def render_input_so():
     )
 
     # ============================================================
-    # SUMMARY + SIMPAN
+    # SIMPAN
     # ============================================================
-    if st.session_state["so_produk_list"]:
-        st.markdown("---")
-        st.markdown("#### 📊 Summary")
+    st.markdown("---")
 
-        _total_item = len(st.session_state["so_produk_list"])
-        _total_qty_var = sum(
-            int(p.get("qty_fisik", 0)) - int(p.get("qty_sistem", 0))
-            for p in st.session_state["so_produk_list"]
-        )
-        _total_nominal = sum(
-            float(p.get("nominal_adjust", 0))
-            for p in st.session_state["so_produk_list"]
-        )
+    _col_save, _col_cancel = st.columns([2, 1])
 
-        _c1, _c2, _c3 = st.columns(3)
-        with _c1:
-            st.metric("📦 Total Produk", f"{_total_item}")
-        with _c2:
-            st.metric("📊 Total Qty Var", f"{_total_qty_var}")
-        with _c3:
-            st.metric("💰 Total Nominal", fmt_rp(_total_nominal))
+    with _col_save:
+        if st.button(
+            "💾 SIMPAN SEMUA",
+            width="stretch",
+            type="primary",
+            key="btn_save_all_so",
+        ):
+            _has_rak = len(st.session_state["so_rak_list"]) > 0
+            _has_spd = _spd_val > 0
 
-        st.markdown("")
-        _col_save, _col_cancel = st.columns([2, 1])
+            if not _has_rak and not _has_spd:
+                st.error("⚠️ Minimal isi SPD atau tambahkan 1 rak!")
+            elif not _pic_pilih:
+                st.error("⚠️ Pilih/isi PIC dulu")
+            else:
+                with st.spinner("⏳ Menyimpan..."):
+                    _ok, _msg, _detail = save_input_harian(
+                        tanggal=_tanggal,
+                        spd=_spd_val,
+                        rak_items=st.session_state["so_rak_list"],
+                        keterangan=_keterangan,
+                        pic=_pic_pilih,
+                        update_status_rak=True,
+                    )
 
-        with _col_save:
-            if st.button(
-                "💾 SIMPAN SEMUA",
-                width="stretch",
-                type="primary",
-                key="btn_save_all_so",
-            ):
-                # Validasi
-                _produk_valid = [
-                    p for p in st.session_state["so_produk_list"]
-                    if p.get("plu") and p.get("nama_produk")
-                ]
-
-                if not _produk_valid:
-                    st.error("⚠️ Minimal 1 produk harus diisi PLU & Nama")
-                elif not _rak_pilih:
-                    st.error("⚠️ Pilih rak dulu")
-                elif not _pic_pilih:
-                    st.error("⚠️ Pilih/isi PIC dulu")
+                if _ok:
+                    st.session_state["so_last_saved"] = _msg
+                    st.session_state["so_rak_list"] = []
+                    st.session_state["so_last_loaded_date"] = None
+                    st.cache_data.clear()
+                    time.sleep(0.5)
+                    st.rerun()
                 else:
-                    with st.spinner("⏳ Menyimpan..."):
-                        # 1. Simpan SPD kalau > 0
-                        _spd_ok = True
-                        if _spd_val > 0:
-                            _spd_ok, _spd_msg = save_spd_harian(
-                                _tanggal, _spd_val, _keterangan
-                            )
+                    st.error(_msg)
 
-                        # 2. Simpan SO
-                        _so_ok, _so_msg, _detail = save_so_input(
-                            tanggal=_tanggal,
-                            rak_id=_rak_pilih,
-                            pic=_pic_pilih,
-                            produk_list=_produk_valid,
-                            keterangan=_keterangan,
-                        )
-
-                    # Build pesan
-                    _pesan_parts = []
-                    if _spd_val > 0 and _spd_ok:
-                        _pesan_parts.append(f"SPD {fmt_rp(_spd_val)}")
-                    if _so_ok:
-                        _pesan_parts.append(f"{len(_produk_valid)} produk di-SO")
-
-                    if _so_ok:
-                        _pesan = "✅ Tersimpan: " + " • ".join(_pesan_parts)
-                        st.session_state["so_last_saved"] = _pesan
-                        st.session_state["so_produk_list"] = []
-                        st.cache_data.clear()
-                        time.sleep(0.5)
-                        st.rerun()
-                    else:
-                        st.error(_so_msg)
-
-        with _col_cancel:
-            if st.button(
-                "🗑️ Clear Semua",
-                width="stretch",
-                key="btn_clear_so",
-            ):
-                st.session_state["so_produk_list"] = []
-                st.rerun()
+    with _col_cancel:
+        if st.button(
+            "🗑️ Clear Semua",
+            width="stretch",
+            key="btn_clear_so",
+        ):
+            st.session_state["so_rak_list"] = []
+            st.rerun()
 
 
 # =========================================================================
 # TAB 2: ANALISIS SO
 # =========================================================================
 def render_analisis():
-    """Analisis SO: top produk minus/plus + grafik per rak."""
+    """Analisis SO: nominal per rak + summary."""
     st.markdown("### 📊 Analisis SO")
-    st.caption("Analisis selisih produk & rak dalam periode tertentu")
+    st.caption("Analisis nominal SO per rak dalam periode tertentu")
 
     # ============================================================
     # FILTER PERIODE
@@ -559,50 +561,17 @@ def render_analisis():
         _start, _end = st.session_state.get("so_analisis_periode", (_tgl_start, _tgl_end))
 
         with st.spinner("⏳ Load analytics..."):
-            _analytics = get_so_analytics(_start, _end)
+            _akumulasi = get_akumulasi_nominal_bulan()
 
         # === METRIC SUMMARY ===
-        _total_produk = _analytics.get("total_produk", 0)
-
         _c1, _c2, _c3 = st.columns(3)
         with _c1:
-            st.metric("📦 Total Produk di-SO", f"{_total_produk}")
+            st.metric("🏪 Total Rak di-SO", f"{_akumulasi.get('total_rak', 0)}")
         with _c2:
-            _total_minus = sum(
-                float(p.get("nominal", 0)) for p in _analytics.get("top_minus", [])
-            )
-            st.metric("📉 Total Minus (Top 5)", fmt_rp(_total_minus))
+            st.metric("📅 Jumlah Hari", f"{_akumulasi.get('jumlah_hari', 0)}")
         with _c3:
-            _total_plus = sum(
-                float(p.get("nominal", 0)) for p in _analytics.get("top_plus", [])
-            )
-            st.metric("📈 Total Plus (Top 5)", fmt_rp(_total_plus))
-
-        st.markdown("---")
-
-        # === TOP 5 MINUS ===
-        st.markdown("#### 📉 Top 5 Produk Minus Terbesar")
-        _top_minus = _analytics.get("top_minus", [])
-
-        if _top_minus:
-            _df_minus = pd.DataFrame(_top_minus)
-            _df_minus.columns = ["PLU", "Nama Produk", "Qty Var", "Nominal", "Rak", "PIC"][:_df_minus.shape[1]]
-            st.dataframe(_df_minus, width="stretch", hide_index=True)
-        else:
-            st.success("✅ Tidak ada produk minus di periode ini")
-
-        st.markdown("---")
-
-        # === TOP 5 PLUS ===
-        st.markdown("#### 📈 Top 5 Produk Plus Terbesar")
-        _top_plus = _analytics.get("top_plus", [])
-
-        if _top_plus:
-            _df_plus = pd.DataFrame(_top_plus)
-            _df_plus.columns = ["PLU", "Nama Produk", "Qty Var", "Nominal", "Rak", "PIC"][:_df_plus.shape[1]]
-            st.dataframe(_df_plus, width="stretch", hide_index=True)
-        else:
-            st.info("📭 Tidak ada produk plus di periode ini")
+            _total_nom = _akumulasi.get("total_nominal", 0)
+            st.metric("💰 Total Nominal SO", fmt_rp(_total_nom))
 
         st.markdown("---")
 
@@ -610,7 +579,7 @@ def render_analisis():
         st.markdown("#### 📊 Nominal SO per Rak")
 
         try:
-            _so_detail = load_so_detail_by_date(_end)
+            _so_detail = get_so_rak_detail(limit=500)
 
             if _so_detail:
                 _df = pd.DataFrame(_so_detail)
@@ -656,187 +625,9 @@ def render_analisis():
                 else:
                     st.info("📭 Data SO kosong")
             else:
-                st.info(f"📭 Belum ada data SO untuk tanggal **{_end.strftime('%d/%m/%Y')}**")
+                st.info("📭 Belum ada data SO")
 
         except Exception as _e_chart:
             st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
     else:
         st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
-    # =========================================================================
-# TAB 3: PREVIEW & HAPUS
-# =========================================================================
-def render_preview():
-    """Preview SO hari ini + hapus per rak."""
-    st.markdown("### 📋 Preview & Hapus SO")
-    st.caption("Lihat semua SO yang sudah diinput & hapus kalau perlu")
-
-    # ============================================================
-    # PILIH TANGGAL
-    # ============================================================
-    _tanggal = st.date_input(
-        "📅 Pilih Tanggal",
-        value=datetime.now(ZoneInfo("Asia/Jakarta")).date(),
-        key="so_preview_tanggal",
-    )
-
-    with st.spinner("⏳ Load SO..."):
-        _so_summary = load_so_summary_by_date(_tanggal)
-        _so_detail = load_so_detail_by_date(_tanggal)
-
-    # ============================================================
-    # EMPTY STATE
-    # ============================================================
-    if not _so_summary:
-        st.info(f"📭 Belum ada SO untuk tanggal **{_tanggal.strftime('%d/%m/%Y')}**")
-        return
-
-    # ============================================================
-    # SUMMARY METRIC
-    # ============================================================
-    _total_rak = len(_so_summary)
-    _total_item = sum(int(r.get("total_item", 0)) for r in _so_summary)
-    _total_nominal = sum(float(r.get("nominal_adjust", 0)) for r in _so_summary)
-
-    _c1, _c2, _c3 = st.columns(3)
-    with _c1:
-        st.metric("🏪 Total Rak di-SO", f"{_total_rak}")
-    with _c2:
-        st.metric("📦 Total Produk", f"{_total_item}")
-    with _c3:
-        st.metric("💰 Total Nominal", fmt_rp(_total_nominal))
-
-    st.markdown("---")
-
-    # ============================================================
-    # TABEL SUMMARY PER RAK
-    # ============================================================
-    st.markdown("#### 📊 Summary per Rak")
-
-    _df_summary = pd.DataFrame(_so_summary)
-
-    _cols_show = ["rak_id", "pic", "total_item", "total_qty_var", "nominal_adjust", "keterangan"]
-    _cols_show = [c for c in _cols_show if c in _df_summary.columns]
-
-    if _cols_show:
-        _df_show = _df_summary[_cols_show].copy()
-
-        if "nominal_adjust" in _df_show.columns:
-            _df_show["nominal_adjust"] = _df_show["nominal_adjust"].apply(
-                lambda v: f"{float(v):+,.0f}".replace(",", ".")
-            )
-
-        _col_names = ["Rak", "PIC", "Total Item", "Qty Var", "Nominal", "Keterangan"]
-        _df_show.columns = _col_names[:len(_df_show.columns)]
-
-        st.dataframe(_df_show, width="stretch", hide_index=True)
-
-    # ============================================================
-    # DETAIL PRODUK (EXPANDER)
-    # ============================================================
-    if _so_detail:
-        st.markdown("---")
-        with st.expander(f"🔍 Detail Produk ({len(_so_detail)} produk)", expanded=False):
-            _df_detail = pd.DataFrame(_so_detail)
-            _cols_detail = ["rak_id", "plu", "nama_produk", "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust", "pic"]
-            _cols_detail = [c for c in _cols_detail if c in _df_detail.columns]
-
-            _df_detail_show = _df_detail[_cols_detail].copy()
-
-            if "nominal_adjust" in _df_detail_show.columns:
-                _df_detail_show["nominal_adjust"] = _df_detail_show["nominal_adjust"].apply(
-                    lambda v: f"{float(v):+,.0f}".replace(",", ".")
-                )
-
-            _col_names_detail = ["Rak", "PLU", "Nama Produk", "Qty Sistem", "Qty Fisik", "Qty Var", "Nominal", "PIC"]
-            _df_detail_show.columns = _col_names_detail[:len(_df_detail_show.columns)]
-
-            st.dataframe(_df_detail_show, width="stretch", hide_index=True, height=400)
-
-    # ============================================================
-    # HAPUS SO PER RAK
-    # ============================================================
-    st.markdown("---")
-    st.markdown("#### 🗑️ Hapus SO")
-
-    _rak_so_list = [r.get("rak_id") for r in _so_summary if r.get("rak_id")]
-
-    if _rak_so_list:
-        _col_h1, _col_h2 = st.columns([3, 1])
-
-        with _col_h1:
-            _rak_hapus = st.selectbox(
-                "Pilih rak yang mau dihapus:",
-                options=_rak_so_list,
-                key="so_preview_rak_hapus",
-            )
-
-        with _col_h2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️ HAPUS", width="stretch", key="btn_hapus_so"):
-                with st.spinner(f"⏳ Hapus SO rak {_rak_hapus}..."):
-                    _ok, _msg, _detail = delete_so_by_date(_tanggal, rak_id=_rak_hapus)
-
-                if _ok:
-                    st.success(_msg)
-                    st.cache_data.clear()
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error(_msg)
-
-
-# =========================================================================
-# INFO PANEL — CARA INPUT SO
-# =========================================================================
-with st.expander("ℹ️ Cara Input SO", expanded=False):
-    st.markdown("""
-    **📋 Langkah Input SO:**
-    
-    1. **Pilih Tanggal SO** — default hari ini
-    2. **Pilih Rak** — kode rak dari master (contoh: Q51)
-    3. **Pilih PIC** — nama yang ngelakuin SO
-    4. **Isi SPD** (opsional) — kalau ada penjualan hari ini
-    5. **Klik ➕ Tambah Produk** — max 10 produk per rak
-    6. **Isi Detail Produk:**
-       - **PLU**: Kode produk (dari laporan)
-       - **Nama Produk**: Nama barang
-       - **Qty Sistem**: Stok sistem
-       - **Qty Fisik**: Stok fisik (hasil hitung)
-       - **Nominal Adjust**: Nominal selisih (boleh minus)
-    7. **Isi Keterangan** (opsional)
-    8. **Klik 💾 SIMPAN SEMUA**
-    
-    **💡 Tips:**
-    - Input **5 PLU tertinggi** + **5 PLU terendah** per rak
-    - **Qty Var** otomatis dihitung = Qty Fisik - Qty Sistem
-    - **Total Nominal** auto-sum dari semua produk
-    - Data disimpan ke **2 tabel**: `so_hasil` (detail) + `so_rak_harian` (summary)
-    - Status rak otomatis jadi **SELESAI** setelah di-SO
-    - SPD disimpan terpisah ke tabel `spd_harian`
-    """)
-
-
-# =========================================================================
-# ROUTING TAB
-# =========================================================================
-_tab = st.session_state["so_tab"]
-
-if _tab == "input":
-    render_input_so()
-elif _tab == "analisis":
-    render_analisis()
-elif _tab == "preview":
-    render_preview()
-
-
-# =========================================================================
-# FOOTER
-# =========================================================================
-st.markdown(
-    "<div style='text-align: center; padding: 20px 0; "
-    "font-family: Quicksand, sans-serif; font-size: 10px; "
-    "color: #7a9b8e; letter-spacing: 1px;'>"
-    "📝 Stock Opname — Toko C383 🎀"
-    "</div>",
-    unsafe_allow_html=True,
-)
