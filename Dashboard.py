@@ -150,7 +150,6 @@ def render_menu_card(icon, title, desc, accent, accent_glow, key, target_page):
     """, unsafe_allow_html=True)
 
     if st.button("Masuk →", key=key, width="stretch"):
-        # ✅ FIX: Pakai st.switch_page buat multipage
         try:
             if target_page == "so":
                 st.switch_page("pages/so.py")
@@ -158,6 +157,8 @@ def render_menu_card(icon, title, desc, accent, accent_glow, key, target_page):
                 st.switch_page("pages/master_shift.py")
             elif target_page == "chat_kurumi":
                 st.switch_page("pages/ai_chat_kurumi.py")
+            elif target_page == "chat_yui":
+                st.switch_page("pages/ai_chat_yui.py")
             else:
                 st.warning(f"⚠️ Halaman '{target_page}' tidak dikenal")
         except Exception as _e:
@@ -440,7 +441,7 @@ def render_dashboard():
             target_page="master_shift"
         )
 
-    col_menu3, col_menu4 = st.columns(2)
+    col_menu3, col_menu4, col_menu5= st.columns(3)
 
     with col_menu3:
         render_menu_card(
@@ -452,8 +453,19 @@ def render_dashboard():
             key="btn_menu_kurumi",
             target_page="chat_kurumi"
         )
-
+    
     with col_menu4:
+        render_menu_card(
+            icon="📦",
+            title="Chat Yui",
+            desc="Input SO via chat<br>atau upload file",
+            accent="#7FB99B",
+            accent_glow="rgba(127, 185, 155, 0.6)",
+            key="btn_menu_yui",
+            target_page="chat_yui"
+        )
+
+    with col_menu5:
         st.markdown("""
         <div style='
             background: linear-gradient(135deg, rgba(10, 22, 18, 0.98), rgba(15, 31, 26, 0.92));
