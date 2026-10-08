@@ -205,12 +205,16 @@ def render_theme_auto():
 # 🎨 ANIMATION HELPERS
 # =========================================================
 def render_halloween_animations():
-    """Render animasi Halloween."""
+    """Render animasi Halloween — 6 flyer + bintang + jaring."""
     st.markdown("""
-    <div class="bat-animation">🦇</div>
-    <div class="bat-animation">🦇</div>
-    <div class="bat-animation">🦇</div>
-    <div class="spider-web"></div>
+    <div class="hw-flyer hw-flyer-1">🦇</div>
+    <div class="hw-flyer hw-flyer-2">🎃</div>
+    <div class="hw-flyer hw-flyer-3">👻</div>
+    <div class="hw-flyer hw-flyer-4">🕷️</div>
+    <div class="hw-flyer hw-flyer-5">🦇</div>
+    <div class="hw-flyer hw-flyer-6">🎃</div>
+    <div class="hw-stars"></div>
+    <div class="hw-spider-web"></div>
     """, unsafe_allow_html=True)
 
 
