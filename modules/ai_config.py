@@ -74,7 +74,7 @@ AI_CONFIG = {
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["input", "validate", "anomaly"],
-        "api_key_secret": "GROQ_API_KEY_YUI"
+        "api_key_secret": "GROQ_API_KEY_YUI",
         "enabled": True,
     },
 
