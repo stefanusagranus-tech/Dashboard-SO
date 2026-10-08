@@ -226,7 +226,9 @@ def _extract_json(text):
 def _fallback_regex_extract(text):
     """
     Fallback: extract data SO via regex kalau LLM gagal.
-    Support format tabel: No | PLU | Nama | Rak | Stock | Fisik | Qty Var | Selisih
+    Support berbagai format: 
+    - "1 444756 WOW SPAGETI BOLOGNESE 76G 900 51 51 0 5,333.58"
+    - "1 444756 WOW SPAGETI 76G 900 51 51 0 5333.58"
     """
     if not text:
         return None
@@ -234,28 +236,32 @@ def _fallback_regex_extract(text):
     _items = []
     _text = str(text)
 
-    print(f"[Yui] Fallback regex: text len = {len(_text)}")
+    print(f"[Yui Fallback] Text len: {len(_text)}")
+    print(f"[Yui Fallback] Lines: {len(_text.splitlines())}")
 
-    # Pattern 1: "1 444756 WOW SPAGETI BOLOGNESE 76G 900 51 51 0 5,333.58"
+    # Pattern 1: No PLU Nama Rak Stock Fisik QtyVar Nominal
     _pattern = re.compile(
-        r'\b(\d{1,3})\s+'                                    # No
-        r'(\d{6,})\s+'                                       # PLU
-        r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'                    # Nama
-        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'     # Rak
-        r'(-?\d+)\s+'                                        # Stock sistem
-        r'(-?\d+)\s+'                                        # Stock fisik
-        r'([-+]\d+|\d+)\s+'                                  # Qty var (+/-)
-        r'([-+]?[\d,]+\.?\d*)',                              # Nominal
-        re.MULTILINE | re.IGNORECASE
+        r'^\s*(\d{1,3})\s+'                                 # No
+        r'(\d{6,})\s+'                                      # PLU
+        r'([A-Z][A-Z0-9\s\.\-/&\'\(\)]+?)\s{2,}'            # Nama (biar gak greedy)
+        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'    # Rak
+        r'(-?\d+)\s+'                                       # Stock
+        r'(-|\d+)\s+'                                       # Fisik (bisa "-")
+        r'([-+]?\d+)\s+'                                    # Qty Var
+        r'([-+]?[\d,]+\.?\d*)\s*$',                         # Nominal
+        re.MULTILINE
     )
 
     for _match in _pattern.finditer(_text):
         try:
             _plu = _match.group(2).strip()
-            _nama = _match.group(3).strip()[:100]
+            _nama = _match.group(3).strip()[:120]
             _rak = _match.group(4).strip().upper()
             _qty_sistem = int(_match.group(5))
-            _qty_fisik = int(_match.group(6))
+            
+            _fisik_str = _match.group(6).strip()
+            _qty_fisik = int(_fisik_str) if _fisik_str != "-" else 0
+            
             _qty_var = int(_match.group(7))
             _nominal_str = _match.group(8).replace(",", "")
             _nominal = float(_nominal_str)
@@ -271,14 +277,45 @@ def _fallback_regex_extract(text):
                 "pic": None,
             })
         except Exception as _e:
-            print(f"[Yui] Regex item error: {_e}")
+            print(f"[Yui Fallback] Line error: {_e}")
             continue
 
+    # Pattern 2 (fallback): lebih loose
     if not _items:
-        print("[Yui] Fallback regex: 0 items found")
+        print("[Yui Fallback] Pattern 1 gak dapet, coba Pattern 2 (loose)...")
+        
+        _pattern2 = re.compile(
+            r'\b(\d{6,})\s+'                                    # PLU
+            r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'                   # Nama
+            r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'    # Rak
+            r'(-?\d+)\s+'                                       # Stock
+            r'(-|\d+)\s+'                                       # Fisik
+            r'([-+]?\d+)\s+'                                    # Qty Var
+            r'([-+]?[\d,]+\.?\d*)',                             # Nominal
+            re.MULTILINE
+        )
+        
+        for _match in _pattern2.finditer(_text):
+            try:
+                _items.append({
+                    "rak_id": _match.group(3).strip().upper(),
+                    "plu": _match.group(1).strip(),
+                    "nama_produk": _match.group(2).strip()[:120],
+                    "qty_sistem": int(_match.group(4)),
+                    "qty_fisik": int(_match.group(5)) if _match.group(5) != "-" else 0,
+                    "qty_var": int(_match.group(6)),
+                    "nominal_adjust": float(_match.group(7).replace(",", "")),
+                    "pic": None,
+                })
+            except Exception:
+                continue
+
+    if not _items:
+        print("[Yui Fallback] 0 items. Print sample text:")
+        print(_text[:500])
         return None
 
-    print(f"[Yui] Fallback regex: {len(_items)} items")
+    print(f"[Yui Fallback] ✅ {len(_items)} items extracted")
 
     # Detect tanggal
     _tanggal = None
@@ -305,7 +342,6 @@ def _fallback_regex_extract(text):
         "rak_id": None,
         "pic": None,
     }
-
 
 # =========================================================
 # 🎯 PERSONA YUI
