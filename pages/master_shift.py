@@ -1,11 +1,16 @@
 """
-Master Shift Page v2
+Master Shift Page v3
 ====================
-Struktur baru:
-- 🌸 Hana       (all-in-one chat: Q&A + update + delete + konfirmasi)
+Struktur:
+- 🌸 Hana       (chat all-in-one dengan memory chat)
 - 📸 Screenshot (OCR kalender)
-- 📊 Matrix     (sub-tab: tabel master | personil | download)
+- 📊 Matrix     (tabel master | personil | download)
 - 📈 Usage      (monitoring token)
+
+Fitur v3:
+- Memory chat persistent (Supabase) — khusus tab Hana
+- Delete shift dengan konfirmasi
+- Token monitoring
 """
 
 import streamlit as st
@@ -50,8 +55,8 @@ try:
         load_master_shift_matrix,
         get_shift_hari_ini,
         generate_master_shift_excel,
-        delete_shift_by_name,      # ✅ FIX C4: dipake buat hapus per tanggal
-        delete_shift_all_dates,    # ✅ FIX C4: dipake buat hapus semua tanggal
+        delete_shift_by_name,
+        delete_shift_all_dates,
         KODE_SHIFT,
         NAMA_BULAN_ID,
     )
@@ -61,8 +66,17 @@ try:
         ai_suggest_pengganti_text,
         ai_check_conflict_text,
     )
+    from modules.chat_memory import (
+        save_message,
+        load_messages,
+        get_or_create_session_id,
+        clear_session,
+    )
+    _MEMORY_OK = True
 except ImportError as e:
+    _MEMORY_OK = False
     st.error(f"❌ Gagal import module: {e}")
+    st.info("💡 Pastikan `modules/chat_memory.py` udah dibuat.")
     st.stop()
 
 
@@ -81,10 +95,21 @@ def inject_pill_css():
             transition: all 0.2s ease !important;
             border-width: 1.5px !important;
         }
-        
+
         div[data-testid="stHorizontalBlock"] > div > div > div > button[kind="primary"] {
             box-shadow: 0 0 15px rgba(232, 177, 137, 0.5) !important;
             transform: translateY(-1px) !important;
+        }
+
+        .memory-info-hana {
+            background: rgba(20, 12, 35, 0.95);
+            border-left: 3px solid #7FB99B;
+            border-radius: 8px;
+            padding: 8px 14px;
+            margin-bottom: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #A89B8E;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -162,15 +187,32 @@ for _i, (_key, _label) in enumerate(_TABS):
             st.rerun()
 
 st.markdown("---")
+
+
 # =========================================================================
-# TAB 1: HANA (CHAT + UPDATE + DELETE)
+# TAB 1: HANA (CHAT + UPDATE + DELETE + MEMORY)
 # =========================================================================
 def render_hana():
-    """Tab Hana — chat all-in-one."""
+    """Tab Hana — chat all-in-one dengan memory chat."""
 
-    # Init chat history
+    # ✅ SESSION ID (persistent)
+    _session_id = get_or_create_session_id("hana") if _MEMORY_OK else "default"
+
+    # ✅ INIT HISTORY — Load dari Supabase
     if "hana_history" not in st.session_state:
-        st.session_state["hana_history"] = []
+        if _MEMORY_OK:
+            with st.spinner("⏳ Load chat history..."):
+                _saved = load_messages("hana", _session_id, limit=100)
+
+            st.session_state["hana_history"] = [
+                {
+                    "role": _m.get("role", "user"),
+                    "content": _m.get("content", ""),
+                }
+                for _m in _saved
+            ]
+        else:
+            st.session_state["hana_history"] = []
 
     if "hana_pending_update" not in st.session_state:
         st.session_state["hana_pending_update"] = None
@@ -185,10 +227,28 @@ def render_hana():
 
     # Header chat room
     st.markdown("### 🌸 Hana")
-    st.caption("Tanya jadwal, minta update, atau minta rekomendasi pengganti. Hana siap bantu!")
+    st.caption("Tanya jadwal, minta update, atau minta rekomendasi pengganti.")
+
+    # ✅ MEMORY INFO BAR
+    if _MEMORY_OK:
+        _total_msg = len(st.session_state["hana_history"])
+        st.markdown(
+            f"<div class='memory-info-hana'>"
+            f"🧠 <b>Memory Aktif</b> | "
+            f"Session: <code style='color: #E8B189;'>{_session_id[-15:]}</code> | "
+            f"Total: <b style='color: #7FB99B;'>{_total_msg}</b> pesan"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div class='memory-info-hana' style='border-left-color: #E88B8B;'>"
+            "⚠️ <b>Memory Tidak Aktif</b></div>",
+            unsafe_allow_html=True,
+        )
 
     # Contoh perintah (quick action)
-    _c1, _c2, _c3 = st.columns(3)
+    _c1, _c2, _c3, _c4 = st.columns(4)
     with _c1:
         if st.button("📅 Jadwal hari ini?", width="stretch", key="hana_qa1"):
             st.session_state["hana_preset"] = "Jadwal hari ini?"
@@ -196,8 +256,15 @@ def render_hana():
         if st.button("👤 Siapa libur?", width="stretch", key="hana_qa2"):
             st.session_state["hana_preset"] = "Siapa aja yang libur hari ini?"
     with _c3:
-        if st.button("🔄 Atur Reza ke siang", width="stretch", key="hana_qa3"):
+        if st.button("🔄 Atur Reza siang", width="stretch", key="hana_qa3"):
             st.session_state["hana_preset"] = "Atur Reza ke shift siang ya"
+    with _c4:
+        if st.button("🗑️ Reset Chat", width="stretch", key="hana_reset"):
+            if _MEMORY_OK:
+                clear_session("hana", _session_id)
+            st.session_state["hana_history"] = []
+            st.session_state["hana_pending_update"] = None
+            st.rerun()
 
     st.markdown("---")
 
@@ -209,22 +276,19 @@ def render_hana():
             st.markdown(_content)
 
     # =====================================================================
-    # ✅ FIX C4: PENDING UPDATE PREVIEW — Handle UPDATE & DELETE mode
+    # PENDING UPDATE PREVIEW — Handle UPDATE & DELETE
     # =====================================================================
     if st.session_state["hana_pending_update"]:
         _parsed = st.session_state["hana_pending_update"]
         _mode = _parsed.get("mode", "update")
 
-        # -----------------------------------------------------------------
-        # ✅ FIX C4: MODE DELETE (BARU — sebelumnya gak di-handle!)
-        # -----------------------------------------------------------------
+        # === MODE DELETE ===
         if _mode == "delete":
             _delete_targets = _parsed.get("delete_targets", [])
             _delete_all_dates = _parsed.get("delete_all_dates", False)
 
             st.markdown("#### 🗑️ Preview Hapus Shift")
 
-            # Warning info
             if _delete_all_dates:
                 st.warning(
                     f"⚠️ Akan hapus **SEMUA shift** untuk: "
@@ -238,8 +302,8 @@ def render_hana():
                     f"untuk: {_tgl_str}"
                 )
 
-            # Tombol konfirmasi & batal
             _col1, _col2 = st.columns(2)
+
             with _col1:
                 if st.button(
                     "✅ KONFIRMASI HAPUS",
@@ -250,24 +314,27 @@ def render_hana():
                     _total_deleted = 0
 
                     if _delete_all_dates:
-                        # Hapus semua tanggal
                         for _nama in _delete_targets:
                             _ok, _msg = delete_shift_all_dates(_nama)
                             if _ok:
                                 _total_deleted += 1
                     else:
-                        # Hapus per tanggal
                         for _tgl_hapus in _parsed.get("tanggal_list", [_parsed.get("tanggal")]):
                             _ok, _msg, _detail = delete_shift_by_name(_tgl_hapus, _delete_targets)
                             if _ok:
                                 _total_deleted += _detail.get("deleted", 0)
 
                     if _total_deleted > 0:
-                        st.session_state["hana_last_saved"] = f"🗑️ {_total_deleted} shift dihapus!"
+                        _msg_confirm = f"🗑️ {_total_deleted} shift dihapus!"
+
+                        st.session_state["hana_last_saved"] = _msg_confirm
                         st.session_state["hana_history"].append({
                             "role": "assistant",
                             "content": f"🗑️ Sip! **{_total_deleted} shift** udah Hana hapus 🌸",
                         })
+                        if _MEMORY_OK:
+                            save_message("hana", _session_id, "assistant", f"🗑️ Sip! **{_total_deleted} shift** udah Hana hapus 🌸")
+
                         st.session_state["hana_pending_update"] = None
                         st.cache_data.clear()
                         time.sleep(1)
@@ -281,92 +348,102 @@ def render_hana():
                     width="stretch",
                     key="btn_hana_cancel_delete",
                 ):
+                    _batal_msg = "Oke, gak jadi hapus ya! 🌸"
                     st.session_state["hana_history"].append({
                         "role": "assistant",
-                        "content": "Oke, gak jadi hapus ya! 🌸",
+                        "content": _batal_msg,
                     })
+                    if _MEMORY_OK:
+                        save_message("hana", _session_id, "assistant", _batal_msg)
                     st.session_state["hana_pending_update"] = None
                     st.rerun()
 
             st.markdown("---")
-            return  # ← Stop, jangan render preview shift_map di bawah
 
-        # -----------------------------------------------------------------
-        # MODE UPDATE (EXISTING — gak berubah)
-        # -----------------------------------------------------------------
-        _shift_map = _parsed.get("shift_map", {})
-        _tgl_list = _parsed.get("tanggal_list", [_parsed["tanggal"]])
+        # === MODE UPDATE ===
+        elif _mode == "update":
+            _shift_map = _parsed.get("shift_map", {})
+            _tgl_list = _parsed.get("tanggal_list", [_parsed.get("tanggal")])
 
-        if _shift_map:
-            st.markdown("#### 📊 Preview Perubahan")
+            if _shift_map:
+                st.markdown("#### 📊 Preview Perubahan")
 
-            _preview_rows = []
-            for _nama, _kode in _shift_map.items():
-                _info = KODE_SHIFT.get(_kode, {"label": "-", "icon": "❓"})
-                for _tgl in _tgl_list:
-                    _preview_rows.append({
-                        "👤 Nama": _nama,
-                        "📅 Tanggal": _tgl.strftime("%d/%m/%Y"),
-                        "🔄 Kode": _kode,
-                        "📋 Ket.": _info["label"],
-                    })
-            st.dataframe(pd.DataFrame(_preview_rows), width="stretch", hide_index=True)
+                _preview_rows = []
+                for _nama, _kode in _shift_map.items():
+                    _info = KODE_SHIFT.get(_kode, {"label": "-", "icon": "❓"})
+                    for _tgl in _tgl_list:
+                        _preview_rows.append({
+                            "👤 Nama": _nama,
+                            "📅 Tanggal": _tgl.strftime("%d/%m/%Y"),
+                            "🔄 Kode": _kode,
+                            "📋 Ket.": _info["label"],
+                        })
+                st.dataframe(pd.DataFrame(_preview_rows), width="stretch", hide_index=True)
 
-            _catatan = st.text_input(
-                "📝 Catatan (opsional)",
-                placeholder="Contoh: Ganti dadakan",
-                key="hana_catatan",
-            )
+                _catatan = st.text_input(
+                    "📝 Catatan (opsional)",
+                    placeholder="Contoh: Ganti dadakan",
+                    key="hana_catatan",
+                )
 
-            _col1, _col2 = st.columns(2)
-            with _col1:
-                if st.button(
-                    "✅ KONFIRMASI SIMPAN",
-                    width="stretch",
-                    type="primary",
-                    key="btn_hana_save",
-                ):
-                    _total = 0
-                    for _tgl_save in _tgl_list:
-                        _ok, _msg = save_master_shift(
-                            tanggal=_tgl_save,
-                            shift_map=_shift_map,
-                            sumber="hana_chat",
-                            catatan=f"{_catatan} | Chat: {_parsed.get('raw_text', '')[:100]}",
-                        )
-                        if _ok:
-                            _total += len(_shift_map)
+                _col1, _col2 = st.columns(2)
 
-                    if _total > 0:
-                        _nama_updated = ", ".join(_shift_map.keys())
-                        st.session_state["hana_last_saved"] = (
-                            f"✅ **{_total} shift** berhasil disimpan! "
-                            f"({_nama_updated}) — Dashboard bakal update."
-                        )
+                with _col1:
+                    if st.button(
+                        "✅ KONFIRMASI SIMPAN",
+                        width="stretch",
+                        type="primary",
+                        key="btn_hana_save",
+                    ):
+                        _total = 0
+                        for _tgl_save in _tgl_list:
+                            _ok, _msg = save_master_shift(
+                                tanggal=_tgl_save,
+                                shift_map=_shift_map,
+                                sumber="hana_chat",
+                                catatan=f"{_catatan} | Chat: {_parsed.get('raw_text', '')[:100]}",
+                            )
+                            if _ok:
+                                _total += len(_shift_map)
+
+                        if _total > 0:
+                            _nama_updated = ", ".join(_shift_map.keys())
+                            _confirm_msg = (
+                                f"✅ **{_total} shift** berhasil disimpan! "
+                                f"({_nama_updated})"
+                            )
+
+                            st.session_state["hana_last_saved"] = _confirm_msg
+                            st.session_state["hana_history"].append({
+                                "role": "assistant",
+                                "content": f"✅ Sip! **{_total} shift** udah Hana simpan 🌸 "
+                                           f"({_nama_updated}). Cek dashboard ya!",
+                            })
+                            if _MEMORY_OK:
+                                save_message("hana", _session_id, "assistant", f"✅ Sip! **{_total} shift** udah Hana simpan 🌸 ({_nama_updated}).")
+
+                            st.session_state["hana_pending_update"] = None
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("❌ Gagal simpan")
+
+                with _col2:
+                    if st.button(
+                        "❌ BATAL",
+                        width="stretch",
+                        key="btn_hana_cancel",
+                    ):
+                        _batal_msg = "Oke, gak jadi update ya! 🌸"
                         st.session_state["hana_history"].append({
                             "role": "assistant",
-                            "content": f"✅ Sip! **{_total} shift** udah Hana simpan 🌸 "
-                                       f"({_nama_updated}). Cek dashboard ya!",
+                            "content": _batal_msg,
                         })
+                        if _MEMORY_OK:
+                            save_message("hana", _session_id, "assistant", _batal_msg)
                         st.session_state["hana_pending_update"] = None
-                        st.cache_data.clear()
-                        time.sleep(1)
                         st.rerun()
-                    else:
-                        st.error("❌ Gagal simpan")
-
-            with _col2:
-                if st.button(
-                    "❌ BATAL",
-                    width="stretch",
-                    key="btn_hana_cancel",
-                ):
-                    st.session_state["hana_history"].append({
-                        "role": "assistant",
-                        "content": "Oke, gak jadi update ya! 🌸",
-                    })
-                    st.session_state["hana_pending_update"] = None
-                    st.rerun()
 
     # === INPUT CHAT ===
     _preset = st.session_state.pop("hana_preset", "")
@@ -378,6 +455,8 @@ def render_hana():
     if _user_msg:
         # Simpan user message
         st.session_state["hana_history"].append({"role": "user", "content": _user_msg})
+        if _MEMORY_OK:
+            save_message("hana", _session_id, "user", _user_msg)
 
         with st.chat_message("user", avatar="👤"):
             st.markdown(_user_msg)
@@ -392,22 +471,14 @@ def render_hana():
 
         # Simpan AI response
         st.session_state["hana_history"].append({"role": "assistant", "content": _text})
+        if _MEMORY_OK:
+            save_message("hana", _session_id, "assistant", _text)
 
         # Kalau intent UPDATE atau DELETE, set pending
         if _resp.get("parsed"):
             st.session_state["hana_pending_update"] = _resp["parsed"]
 
         st.rerun()
-
-    # === CLEAR ===
-    if st.session_state["hana_history"]:
-        st.markdown("---")
-        _col_clr, _ = st.columns([1, 4])
-        with _col_clr:
-            if st.button("🗑️ Clear Chat", key="btn_clear_hana", width="stretch"):
-                st.session_state["hana_history"] = []
-                st.session_state["hana_pending_update"] = None
-                st.rerun()
 
 
 # =========================================================================
@@ -418,15 +489,13 @@ def render_screenshot():
     st.caption("💡 Upload screenshot dari web absen → AI baca kode shift otomatis")
 
     try:
-        from modules.ocr_handler import (
-            log_ocr_upload,
-        )
+        from modules.ocr_handler import log_ocr_upload
         _ocr_available = True
     except ImportError:
         _ocr_available = False
 
     if not _ocr_available:
-        st.info("💡 Fitur OCR butuh file `modules/ocr_handler.py`. Belum siap.")
+        st.info("💡 Fitur OCR butuh file `modules/ocr_handler.py`.")
         return
 
     try:
@@ -545,7 +614,7 @@ def render_screenshot():
                 st.session_state["ocr_result"] = None
                 st.rerun()
 # =========================================================================
-# TAB 3: MATRIX (SUB-TAB)
+# TAB 3: MATRIX
 # =========================================================================
 def render_matrix():
     st.markdown("### 📊 Matrix & Data")
@@ -559,7 +628,7 @@ def render_matrix():
         ("download", "📥 Download"),
     ]
 
-    _sub_cols = st.columns(len(_subs))  # ✅ Rename biar gak bentrok
+    _sub_cols = st.columns(len(_subs))
     for _i, (_key, _label) in enumerate(_subs):
         with _sub_cols[_i]:
             _is_active = st.session_state["matrix_sub"] == _key
@@ -742,6 +811,6 @@ elif _tab == "usage":
 # FOOTER
 # =========================================================================
 st.markdown(
-    "<div class='copyright-footer'>🌸 Dashboard SO KGS V.2 — Hana Edition 🌸</div>",
+    "<div class='copyright-footer'>🌸 Dashboard SO KGS V.3 — Hana Edition 🌸</div>",
     unsafe_allow_html=True,
 )
