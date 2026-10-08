@@ -1142,7 +1142,7 @@ def render_analisis():
 # HELPER: ANALYTICS SO — TREND, PIC, KATEGORI
 # =========================================================================
 def _render_analisis_trend(_so_detail_raw, _start, _end):
-    """Render trend chart NSB vs BTSB per hari."""
+    """Render trend chart NSB vs BTSB per hari — sinkron sama ringkasan."""
     import plotly.graph_objects as go
 
     if not _so_detail_raw:
@@ -1160,7 +1160,7 @@ def _render_analisis_trend(_so_detail_raw, _start, _end):
         st.info("📭 Belum ada data trend")
         return
 
-    # Ambil SPD per hari
+    # ✅ FIX: Ambil SPD total periode (konsisten sama ringkasan)
     try:
         from modules.supabase_client import get_supabase
         _sb = get_supabase()
@@ -1178,13 +1178,20 @@ def _render_analisis_trend(_so_detail_raw, _start, _end):
 
     _tanggal_list = _per_hari["so_date"].dt.strftime("%d/%m").tolist()
     _nominal_list = _per_hari["nominal_adjust"].abs().tolist()
+
+    # ✅ FIX: BTSB harian = (SPD hari itu) × 0.15%
     _btsb_list = [
         _spd_map.get(_tgl, 0) * 0.0015
         for _tgl in _per_hari["so_date"]
     ]
 
+    # ✅ Total BTSB = SUM semua SPD × 0.15% (konsisten sama ringkasan)
+    _total_spd_periode = sum(_spd_map.values())
+    _total_btsb_periode = _total_spd_periode * 0.0015
+
     _fig = go.Figure()
 
+    # Line 1: Nominal SO (abs per hari)
     _fig.add_trace(go.Scatter(
         x=_tanggal_list,
         y=_nominal_list,
@@ -1197,6 +1204,7 @@ def _render_analisis_trend(_so_detail_raw, _start, _end):
         hovertemplate="<b>%{x}</b><br>Nominal: Rp %{y:,.0f}<extra></extra>",
     ))
 
+    # Line 2: BTSB Harian (per hari)
     if any(_b > 0 for _b in _btsb_list):
         _fig.add_trace(go.Scatter(
             x=_tanggal_list,
@@ -1208,9 +1216,34 @@ def _render_analisis_trend(_so_detail_raw, _start, _end):
             hovertemplate="<b>%{x}</b><br>BTSB: Rp %{y:,.0f}<extra></extra>",
         ))
 
+    # ✅ FIX: Anotasi peak (hari dengan nominal tertinggi)
+    if _nominal_list:
+        _max_val = max(_nominal_list)
+        _max_idx = _nominal_list.index(_max_val)
+        _max_tgl = _tanggal_list[_max_idx]
+        _max_btsb = _btsb_list[_max_idx] if _max_idx < len(_btsb_list) else 0
+
+        _fig.add_annotation(
+            x=_max_tgl,
+            y=_max_val,
+            text=f"⚠️ PEAK: Rp {int(_max_val):,}".replace(",", "."),
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1.5,
+            arrowwidth=2,
+            arrowcolor="#E88B8B",
+            ax=0,
+            ay=-40,
+            bgcolor="rgba(232, 139, 139, 0.9)",
+            bordercolor="#E88B8B",
+            borderwidth=1,
+            borderpad=6,
+            font=dict(color="#0F0A1E", size=10, family="JetBrains Mono"),
+        )
+
     _fig.update_layout(
-        height=380,
-        margin=dict(l=10, r=20, t=40, b=40),
+        height=400,
+        margin=dict(l=10, r=20, t=50, b=40),
         plot_bgcolor="rgba(20, 12, 35, 0.5)",
         paper_bgcolor="rgba(20, 12, 35, 0.95)",
         font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
@@ -1224,6 +1257,8 @@ def _render_analisis_trend(_so_detail_raw, _start, _end):
             gridcolor="rgba(168, 85, 247, 0.1)",
             zeroline=True,
             zerolinecolor="rgba(232, 177, 137, 0.3)",
+            tickformat=",.0f",         # ✅ Full angka (tanpa k)
+            tickprefix="Rp ",           # ✅ Prefix Rp
         ),
         legend=dict(
             orientation="h",
@@ -1238,28 +1273,28 @@ def _render_analisis_trend(_so_detail_raw, _start, _end):
 
     st.plotly_chart(_fig, width="stretch", key="chart_trend_nsb_btsb")
 
+    # ✅ FIX: Insight sinkron sama Ringkasan (pake BTSB periode)
     _total_abs = sum(_nominal_list)
-    _total_btsb = sum(_btsb_list)
-    _pct = (_total_abs / _total_btsb * 100) if _total_btsb > 0 else 0
+    _pct = (_total_abs / _total_btsb_periode * 100) if _total_btsb_periode > 0 else 0
 
     _color = "#7FB99B" if _pct <= 80 else ("#fbbf24" if _pct <= 100 else "#E88B8B")
 
     st.markdown(
         f"<div style='background: rgba(20, 12, 35, 0.95); "
         f"border-left: 3px solid {_color}; border-radius: 8px; "
-        f"padding: 10px 14px; margin-top: 12px; "
+        f"padding: 12px 14px; margin-top: 12px; "
         f"font-family: JetBrains Mono, monospace; font-size: 11px; "
-        f"color: #A89B8E;'>"
-        f"📊 Total: <b style='color: {_color};'>Rp {int(_total_abs):,}</b>".replace(",", ".") +
-        f" | BTSB: <b style='color: #7FB99B;'>Rp {int(_total_btsb):,}</b>".replace(",", ".") +
-        f" | Penggunaan: <b style='color: {_color};'>{_pct:.1f}%</b>"
+        f"color: #A89B8E; line-height: 1.6;'>"
+        f"📊 <b style='color: {_color};'>Total Nominal SO:</b> Rp {int(_total_abs):,}".replace(",", ".") +
+        f"<br>🎯 <b style='color: #7FB99B;'>BTSB Periode:</b> Rp {int(_total_btsb_periode):,}".replace(",", ".") +
+        f"<br>📈 <b style='color: {_color};'>Penggunaan:</b> {_pct:.2f}%"
         f"</div>",
         unsafe_allow_html=True,
     )
 
 
 def _render_analisis_pic(_so_detail_raw):
-    """Render analytics per PIC."""
+    """Render analytics per PIC — dengan normalize + detail rak."""
     import plotly.graph_objects as go
 
     if not _so_detail_raw:
@@ -1268,8 +1303,13 @@ def _render_analisis_pic(_so_detail_raw):
 
     _df = pd.DataFrame(_so_detail_raw)
     _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
-    _df["pic"] = _df["pic"].fillna("(KOSONG)").astype(str).str.upper()
 
+    # ✅ FIX: Normalize PIC
+    _df["pic"] = _df["pic"].fillna("").astype(str).str.strip().str.upper()
+    _df["pic"] = _df["pic"].str.replace(r'\s+', ' ', regex=True)
+    _df["pic"] = _df["pic"].replace("", "(KOSONG)")
+
+    # Group by PIC
     _per_pic = _df.groupby("pic").agg(
         jumlah_rak=("rak_id", "nunique"),
         total_nominal=("nominal_adjust", "sum"),
@@ -1279,6 +1319,7 @@ def _render_analisis_pic(_so_detail_raw):
     _per_pic["rata_rata"] = _per_pic["total_nominal"] / _per_pic["jumlah_rak"].replace(0, 1)
     _per_pic = _per_pic.sort_values("total_nominal", ascending=True)
 
+    # Chart horizontal bar
     _fig = go.Figure()
 
     _colors = ["#E88B8B" if v < 0 else "#7FB99B" for v in _per_pic["total_nominal"]]
@@ -1303,7 +1344,7 @@ def _render_analisis_pic(_so_detail_raw):
 
     _fig.update_layout(
         height=max(280, len(_per_pic) * 40),
-        margin=dict(l=10, r=80, t=20, b=40),
+        margin=dict(l=10, r=100, t=20, b=40),
         plot_bgcolor="rgba(20, 12, 35, 0.5)",
         paper_bgcolor="rgba(20, 12, 35, 0.95)",
         font=dict(color="#A89B8E", family="JetBrains Mono", size=10),
@@ -1312,6 +1353,8 @@ def _render_analisis_pic(_so_detail_raw):
             gridcolor="rgba(168, 85, 247, 0.1)",
             zeroline=True,
             zerolinecolor="rgba(232, 177, 137, 0.5)",
+            tickformat=",.0f",
+            tickprefix="Rp ",
         ),
         yaxis=dict(
             gridcolor="rgba(168, 85, 247, 0.1)",
@@ -1322,6 +1365,7 @@ def _render_analisis_pic(_so_detail_raw):
 
     st.plotly_chart(_fig, width="stretch", key="chart_pic_analytics")
 
+    # Tabel detail
     _per_pic_show = _per_pic.sort_values("total_nominal").copy()
 
     _rows_html = ""
@@ -1355,6 +1399,68 @@ def _render_analisis_pic(_so_detail_raw):
     )
 
     st.markdown(_table_html, unsafe_allow_html=True)
+
+    # ✅ BARU: Detail rak per PIC
+    with st.expander("🔍 Detail Rak per PIC (Klik untuk buka)", expanded=False):
+        _col_filter, _col_count = st.columns([3, 1])
+
+        with _col_filter:
+            _pic_filter = st.selectbox(
+                "Pilih PIC:",
+                options=["(Semua)"] + sorted(_df["pic"].unique().tolist()),
+                key="pic_detail_filter",
+                label_visibility="collapsed",
+            )
+
+        _df_detail = _df.copy()
+        if _pic_filter != "(Semua)":
+            _df_detail = _df_detail[_df_detail["pic"] == _pic_filter]
+
+        _df_detail = _df_detail.sort_values(["so_date", "rak_id"])
+
+        with _col_count:
+            st.markdown(
+                f"<div style='text-align: right; padding-top: 8px; "
+                f"font-family: JetBrains Mono, monospace; font-size: 11px; "
+                f"color: #A89B8E;'>📊 {len(_df_detail)} baris</div>",
+                unsafe_allow_html=True,
+            )
+
+        # Build custom table
+        _rows_detail = ""
+        for _, _r in _df_detail.iterrows():
+            _nom = float(_r.get("nominal_adjust", 0))
+            _nom_class = "neg" if _nom < 0 else "pos"
+            _nom_str = f"{_nom:+,.0f}".replace(",", ".")
+            _tgl = pd.to_datetime(_r.get("so_date")).strftime("%d/%m/%Y") if _r.get("so_date") else "-"
+            _rak = _r.get("rak_id", "-")
+            _pic = _r.get("pic", "-")
+            _ket = (_r.get("keterangan", "") or "")[:40]
+
+            _rows_detail += (
+                f"<tr>"
+                f"<td>{_tgl}</td>"
+                f"<td class='rak-id'>{_rak}</td>"
+                f"<td style='font-family: Quicksand, sans-serif; color: #E8B189;'>{_pic}</td>"
+                f"<td class='nominal {_nom_class}'>{_nom_str}</td>"
+                f"<td style='font-family: Quicksand, sans-serif; font-size: 10px; color: #A89B8E;'>{_ket}</td>"
+                f"</tr>"
+            )
+
+        _table_detail = (
+            "<table class='so-table'>"
+            "<thead><tr>"
+            "<th>Tanggal</th>"
+            "<th>Rak</th>"
+            "<th>PIC</th>"
+            "<th style='text-align: right;'>Nominal</th>"
+            "<th>Keterangan</th>"
+            "</tr></thead>"
+            f"<tbody>{_rows_detail}</tbody>"
+            "</table>"
+        )
+
+        st.markdown(_table_detail, unsafe_allow_html=True)
 
 
 def _render_analisis_kategori(_so_detail_raw, _rak_df):
