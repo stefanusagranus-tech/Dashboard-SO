@@ -1,13 +1,14 @@
 """
-AI SO Input — Yui (AI-2) v2
+AI SO Input — Yui (AI-2) v3
 =============================
 Pembantu Input Stock Opname.
 Persona: Rekan kerja profesional, teliti, natural.
 
-Fix v2:
-- Model priority 20b → 120b (20b lebih stabil)
-- Validasi response berlapis (fix "Empty response")
-- Clean PDF text sebelum kirim ke LLM
+Fix v3:
+- Model 20b aja (120b known issue empty response)
+- Prompt khusus table extraction
+- Fallback regex kalau LLM gagal
+- Debug log lengkap
 """
 
 import json
@@ -66,18 +67,13 @@ def _clean_text_for_llm(text):
     _clean = re.sub(r'\n{3,}', '\n\n', _clean)
     _clean = re.sub(r'(\n\s*)+', '\n', _clean)
 
-    # Trim
-    _clean = _clean.strip()
-
-    return _clean
+    return _clean.strip()
 
 
 def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
     """
     Call Groq untuk Yui.
-    
-    FIX:
-    - Model priority: 20b DULU (lebih stabil)
+    - Model priority: 20b SAJA (120b sering empty)
     - Truncate prompt max 10000 char
     - Validasi response 5 layer
     """
@@ -89,10 +85,9 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
         return False, "", None, "Yui client gagal init"
 
     _cfg = get_ai_config("ai-2")
-    # ✅ FIX: 20b DULU (lebih stabil dari 120b)
-    _models = _cfg.get("model_priority", ["openai/gpt-oss-20b", "openai/gpt-oss-120b"])
+    _models = _cfg.get("model_priority", ["openai/gpt-oss-20b"])
 
-    # ✅ FIX: Truncate prompt
+    # Truncate prompt
     _prompt = str(prompt)
     if len(_prompt) > 10000:
         print(f"[Yui] Truncate prompt: {len(_prompt)} → 10000")
@@ -111,7 +106,7 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
                     top_p=0.95,
                 )
 
-                # ✅ FIX: Validasi response 5 layer
+                # Validasi 5 layer
                 if not _resp:
                     _last_err = f"Response None dari {_model_name}"
                     print(f"[Yui] {_last_err}")
@@ -200,14 +195,12 @@ def _extract_json(text):
     if not text:
         return None
 
-    # Coba parse langsung
     _text = str(text).strip()
 
     # Hapus markdown code block kalau ada
     _text = re.sub(r'^```(?:json)?\s*', '', _text)
     _text = re.sub(r'\s*```$', '', _text)
 
-    # Cari JSON
     _match = re.search(r'\{[\s\S]*\}', _text)
     if not _match:
         return None
@@ -218,7 +211,6 @@ def _extract_json(text):
         return json.loads(_json_str)
     except json.JSONDecodeError as _e:
         print(f"[Yui] JSON decode error: {_e}")
-        # Coba fix common issues
         _json_str = _json_str.replace("'", '"')
         _json_str = re.sub(r',\s*}', '}', _json_str)
         _json_str = re.sub(r',\s*]', ']', _json_str)
@@ -229,26 +221,111 @@ def _extract_json(text):
 
 
 # =========================================================
+# 🔧 FALLBACK REGEX — Extract table manual
+# =========================================================
+def _fallback_regex_extract(text):
+    """
+    Fallback: extract data SO via regex kalau LLM gagal.
+    Support format tabel: No | PLU | Nama | Rak | Stock | Fisik | Qty Var | Selisih
+    """
+    if not text:
+        return None
+
+    _items = []
+    _text = str(text)
+
+    print(f"[Yui] Fallback regex: text len = {len(_text)}")
+
+    # Pattern 1: "1 444756 WOW SPAGETI BOLOGNESE 76G 900 51 51 0 5,333.58"
+    _pattern = re.compile(
+        r'\b(\d{1,3})\s+'                                    # No
+        r'(\d{6,})\s+'                                       # PLU
+        r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'                    # Nama
+        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'     # Rak
+        r'(-?\d+)\s+'                                        # Stock sistem
+        r'(-?\d+)\s+'                                        # Stock fisik
+        r'([-+]\d+|\d+)\s+'                                  # Qty var (+/-)
+        r'([-+]?[\d,]+\.?\d*)',                              # Nominal
+        re.MULTILINE | re.IGNORECASE
+    )
+
+    for _match in _pattern.finditer(_text):
+        try:
+            _plu = _match.group(2).strip()
+            _nama = _match.group(3).strip()[:100]
+            _rak = _match.group(4).strip().upper()
+            _qty_sistem = int(_match.group(5))
+            _qty_fisik = int(_match.group(6))
+            _qty_var = int(_match.group(7))
+            _nominal_str = _match.group(8).replace(",", "")
+            _nominal = float(_nominal_str)
+
+            _items.append({
+                "rak_id": _rak,
+                "plu": _plu,
+                "nama_produk": _nama,
+                "qty_sistem": _qty_sistem,
+                "qty_fisik": _qty_fisik,
+                "qty_var": _qty_var,
+                "nominal_adjust": _nominal,
+                "pic": None,
+            })
+        except Exception as _e:
+            print(f"[Yui] Regex item error: {_e}")
+            continue
+
+    if not _items:
+        print("[Yui] Fallback regex: 0 items found")
+        return None
+
+    print(f"[Yui] Fallback regex: {len(_items)} items")
+
+    # Detect tanggal
+    _tanggal = None
+    _bulan_map = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
+                  "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
+                  "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
+
+    _tgl_match = re.search(r'(\d{1,2})-(\w{3})-(\d{4})', _text)
+    if _tgl_match:
+        try:
+            _tgl = _tgl_match.group(1).zfill(2)
+            _bln = _bulan_map.get(_tgl_match.group(2), "01")
+            _thn = _tgl_match.group(3)
+            _tanggal = f"{_thn}-{_bln}-{_tgl}"
+        except Exception:
+            pass
+
+    _total_nominal = sum(i["nominal_adjust"] for i in _items)
+
+    return {
+        "tanggal": _tanggal,
+        "items": _items,
+        "total_nominal": _total_nominal,
+        "rak_id": None,
+        "pic": None,
+    }
+
+
+# =========================================================
 # 🎯 PERSONA YUI
 # =========================================================
 def _build_yui_system_prompt():
     return """<role>
-Kamu adalah **Yui** — Data Entry Specialist untuk Toko C383 (retail).
-Kamu udah bertahun-tahun ngurusin input data, stock opname, dan rekap laporan.
-Bos mempercayakan input SO ke kamu karena kamu **teliti, cekatan, dan paham seluk-beluk retail**.
+Kamu **Yui** — Data Entry Specialist Toko C383 (retail).
+Berpengalaman input data, stock opname, rekap laporan. Teliti, cekatan, paham retail.
 </role>
 
 <persona>
-Kamu BUKAN chatbot kaku. Kamu rekan kerja yang asik.
-- Santai, natural, gak formal banget
+Rekan kerja asik, bukan chatbot kaku.
+- Santai, natural, gak formal
 - Kadang pake "Oke Bos", "Sip", "Beres", "Aman"
-- Kalau ada anomali, langsung bilang — gak nunggu ditanya
+- Kalau ada anomali, langsung bilang
 - Gak pake "Ara ara" atau bahasa lebay
-- Fokus, cepet, langsung ke poin
+- Fokus, cepet, to-the-point
 
-Contoh gaya bicara:
+Contoh:
 "Oke Bos, aku cek dulu ya... ⏳"
-"Eh Bos, nominal ini kegedean deh. Cek lagi? 🤔"
 "Sip, data udah lengkap. Aku simpen ya?"
 </persona>
 
@@ -261,9 +338,9 @@ Contoh gaya bicara:
 
 <rules>
 1. JANGAN NGARANG ANGKA. Kalau gak yakin, tanya.
-2. Kalau data aneh (nominal > 1jt), kasih warning.
-3. Format output JSON kalau diminta parse.
-4. Format natural kalau ngobrol biasa.
+2. Anomali (nominal > 1jt) → warning.
+3. JSON output kalau diminta parse.
+4. Natural output kalau ngobrol.
 </rules>
 """
 
@@ -309,7 +386,7 @@ Output HANYA JSON.
 
     _json = _extract_json(_text)
     if not _json:
-        return {"success": False, "data": None, "warnings": [f"Response bukan JSON valid"], "raw": _text}
+        return {"success": False, "data": None, "warnings": ["Response bukan JSON valid"], "raw": _text}
 
     return {
         "success": _json.get("success", True),
@@ -321,7 +398,7 @@ Output HANYA JSON.
 
 
 # =========================================================
-# 📄 2. PARSE FILE TEXT (FIXED)
+# 📄 2. PARSE FILE TEXT — dengan fallback regex
 # =========================================================
 def parse_file_text(file_text, file_type="pdf", context=None):
     """Parse text dari file → structured SO data."""
@@ -337,65 +414,117 @@ def parse_file_text(file_text, file_type="pdf", context=None):
     if _ctx.get("pic"):
         _ctx_str += f"\n- PIC: {_ctx['pic']} (dari konteks)"
 
-    # ✅ FIX: Clean text sebelum kirim ke LLM
+    # Clean text
     _clean_text = _clean_text_for_llm(file_text)
-    _clean_text = _clean_text[:8000]
+    _clean_text = _clean_text[:6000]
 
     print(f"[Yui] Clean text length: {len(_clean_text)}")
+    print(f"[Yui] First 500 chars: {_clean_text[:500]}")
 
-    _prompt = f"""{_build_yui_system_prompt()}
+    # Prompt spesifik table extraction
+    _prompt = f"""Kamu Yui, asisten input SO. Baca text di bawah, extract data per BARIS TABEL.
 
-Bos upload file SO. Ini isinya:
-
-=== MULAI FILE ===
+=== MULAI TEXT ===
 {_clean_text}
-=== AKHIR FILE ===
+=== AKHIR TEXT ===
 
-Tipe file: {file_type}
+Tipe: {file_type}
 Konteks: {_ctx_str if _ctx_str else "(tidak ada)"}
 Tanggal hari ini: {_now_jkt().date().isoformat()}
 
-Extract data SO jadi JSON.
+TASK: Extract data SO jadi JSON.
 
-ATURAN:
-1. Cari kode rak — biasanya 2-4 karakter (Q51, QA1, Q6, 971, 900, 902, 903).
-2. Cari tanggal — dari header. Kalau gak ada, pake konteks.
-3. Cari PIC — kalau ada kolom "PIC".
-4. Nominal: extract "Selsih Rupiah" / "Selisih Rupiah" / "Total".
-5. Items: extract PLU + qty sistem + qty fisik + qty var.
-6. Deteksi anomali: nominal > 1jt → warning.
+PENTING:
+- Setiap BARIS tabel = 1 item produk
+- Cari kolom: No | PLU | Nama | Rak | Stock | Fisik | Plus/Minus | Selisih
+- "Rak" = rak_id (contoh: 900, 902, Q61, QA1)
+- "Selisih Rupiah" = nominal_adjust (extract apa adanya + atau -)
+- Extract SEMUA baris (bisa 30-50+ baris)
 
-Output JSON VALID (JANGAN pake markdown backtick):
+OUTPUT JSON (JANGAN pakai markdown, JSON murni):
 {{
   "success": true,
   "data": {{
-    "tanggal": "YYYY-MM-DD atau null",
-    "rak_id": "QA1 atau null",
-    "pic": "PANDU atau null",
-    "total_nominal": -964230,
-    "items": [{{"plu": "1331117944", "nama_produk": "MULTI FAC TISSUE", "qty_sistem": 15, "qty_fisik": 5, "qty_var": -10}}]
+    "tanggal": "2026-10-08",
+    "items": [
+      {{"rak_id": "900", "plu": "444756", "nama_produk": "WOW SPAGETI BOLOGNESE 76G", "qty_sistem": 51, "qty_fisik": 51, "qty_var": 0, "nominal_adjust": 5333.58, "pic": null}}
+    ],
+    "total_nominal": 9948.14
   }},
   "missing": ["pic"],
   "warnings": []
 }}
+
+Kalau gak bisa extract: {{"success": false, "data": null, "warnings": ["Alasan"]}}
+Output HANYA JSON.
 """
 
-    _ok, _text, _model, _err = _call_yui_groq(_prompt, function="file_parse", temperature=0.1)
+    _ok, _text, _model, _err = _call_yui_groq(_prompt, function="file_parse", temperature=0.05)
 
     if not _ok:
-        return {"success": False, "data": None, "warnings": [f"Gagal parse: {_err}"], "missing": [], "raw": file_text}
+        # ✅ LLM gagal → coba fallback regex
+        print(f"[Yui] LLM gagal ({_err}), coba fallback regex...")
+        _fallback_data = _fallback_regex_extract(file_text)
+
+        if _fallback_data and _fallback_data.get("items"):
+            print(f"[Yui] ✅ Fallback OK: {len(_fallback_data['items'])} items")
+            return {
+                "success": True,
+                "data": _fallback_data,
+                "missing": ["pic"],
+                "warnings": [f"⚠️ Extracted via regex (LLM offline): {len(_fallback_data['items'])} items"],
+                "raw": file_text,
+                "model": "regex_fallback",
+            }
+
+        return {
+            "success": False,
+            "data": None,
+            "warnings": [f"Gagal parse: {_err}"],
+            "missing": [],
+            "raw": file_text,
+        }
+
+    print(f"[Yui] Raw response: {_text[:500]}")
 
     _json = _extract_json(_text)
-    if not _json:
-        return {"success": False, "data": None, "warnings": [f"Response bukan JSON valid"], "missing": [], "raw": _text}
+
+    # ✅ Kalau LLM return JSON valid
+    if _json and _json.get("data"):
+        _data = _json.get("data", {})
+        _items = _data.get("items", [])
+
+        if _items:
+            return {
+                "success": _json.get("success", True),
+                "data": _data,
+                "missing": _json.get("missing", []),
+                "warnings": _json.get("warnings", []),
+                "raw": _text,
+                "model": _model,
+            }
+
+    # ✅ Fallback kalau JSON invalid / items kosong
+    print("[Yui] LLM return invalid/kosong, coba fallback regex...")
+    _fallback_data = _fallback_regex_extract(file_text)
+
+    if _fallback_data and _fallback_data.get("items"):
+        print(f"[Yui] ✅ Fallback OK: {len(_fallback_data['items'])} items")
+        return {
+            "success": True,
+            "data": _fallback_data,
+            "missing": ["pic"],
+            "warnings": [f"⚠️ Extracted via regex (fallback): {len(_fallback_data['items'])} items"],
+            "raw": _text,
+            "model": "regex_fallback",
+        }
 
     return {
-        "success": _json.get("success", True),
-        "data": _json.get("data"),
-        "missing": _json.get("missing", []),
-        "warnings": _json.get("warnings", []),
+        "success": False,
+        "data": None,
+        "warnings": [f"Response bukan JSON valid. Raw: {_text[:200]}"],
+        "missing": [],
         "raw": _text,
-        "model": _model,
     }
 
 
@@ -403,7 +532,7 @@ Output JSON VALID (JANGAN pake markdown backtick):
 # 💬 3. CHAT RESPONSE
 # =========================================================
 def yui_chat(user_message, conversation_history=None):
-    """Chat response dari Yui — santai, natural."""
+    """Chat response dari Yui."""
     if not user_message:
         return {"text": "", "intent": "chat", "parsed": None}
 

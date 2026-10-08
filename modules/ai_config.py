@@ -69,7 +69,6 @@ AI_CONFIG = {
         "description": "Stock Opname — input data & validasi SO",
         "model_priority": [
             "openai/gpt-oss-20b",
-            "openai/gpt-oss-120b",
         ],
         "daily_limit": 1000,
         "max_tpm": 8000,
