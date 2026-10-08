@@ -415,7 +415,7 @@ def render_dashboard():
             accent="#7FB99B",
             accent_glow="rgba(127, 185, 155, 0.6)",
             key="btn_menu_so",
-            target_page="so"
+            target_page="input_so"
         )
 
     with col_menu2:
