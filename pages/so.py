@@ -590,7 +590,51 @@ def _render_input_form():
             placeholder="Contoh: Pendingan rak FE1",
             key="so_input_keterangan",
         )
-
+    # ============================================================
+    # 🆕 BANNER CHAT YUI
+    # ============================================================
+    st.markdown(
+        f"<div style='"
+        f"background: linear-gradient(135deg, rgba(127, 185, 155, 0.12), rgba(76, 155, 127, 0.08)); "
+        f"border: 1.5px solid rgba(127, 185, 155, 0.4); "
+        f"border-left: 4px solid #7FB99B; "
+        f"border-radius: 12px; "
+        f"padding: 14px 18px; "
+        f"margin-top: 12px; "
+        f"margin-bottom: 12px; "
+        f"'>"
+        f"<div style='"
+        f"font-family: Cinzel, serif; "
+        f"font-size: 12px; "
+        f"font-weight: 900; "
+        f"color: #7FB99B; "
+        f"letter-spacing: 2px; "
+        f"text-transform: uppercase; "
+        f"margin-bottom: 6px; "
+        f"'>📦 INPUT VIA YUI (AI)</div>"
+        f"<div style='"
+        f"font-family: Quicksand, sans-serif; "
+        f"font-size: 11px; "
+        f"color: #F5E6D3; "
+        f"line-height: 1.5; "
+        f"margin-bottom: 10px; "
+        f"'>Males ketik manual? Suruh Yui aja Bos. "
+        f"Bisa ketik natural, atau upload file PDF/foto/Excel.</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    
+    if st.button(
+        "📦 BUKA CHAT YUI",
+        key="btn_open_chat_yui",
+        width="stretch",
+        type="primary",
+    ):
+        try:
+            st.switch_page("pages/ai_chat_yui.py")
+        except Exception as _e:
+            st.error(f"⚠️ Gagal buka Chat Yui: {_e}")
+            
     # ✅ AUTO-LOAD existing SO saat tanggal berubah
     if st.session_state["so_last_loaded_date"] != _tanggal:
         with st.spinner("⏳ Load..."):
