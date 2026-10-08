@@ -1780,3 +1780,58 @@ def render_preview():
                     st.rerun()
                 else:
                     st.error(_msg)
+# =========================================================================
+# INFO PANEL
+# =========================================================================
+with st.expander("ℹ️ Cara Input SO", expanded=False):
+    st.markdown("""
+    **📋 Alur Input SO (3 Layar):**
+
+    **Layar 1 — Form:**
+    1. Pilih tanggal, isi keterangan (opsional)
+    2. Isi SPD (opsional)
+    3. Cari rak → klik **🔍 Cari**
+    4. Klik **+ Add** untuk menambahkan rak
+    5. Isi nominal & PIC per rak
+    6. Klik **➡️ LANJUT KONFIRMASI**
+
+    **Layar 2 — Konfirmasi:**
+    7. Review data (tanggal, rak, PIC, nominal)
+    8. Klik **✅ SIMPAN SEKARANG** atau **❌ BATAL**
+
+    **Layar 3 — Sukses:**
+    9. Lihat notifikasi + summary
+    10. Klik **📝 Input SO Lagi** atau **🏠 Ke Dashboard**
+
+    **💡 Tips:**
+    - 1x input bisa multi rak
+    - Setiap rak punya PIC sendiri
+    - Cek **Rak Belum SO** di tab **📊 Analisis**
+    """)
+
+
+# =========================================================================
+# ROUTING TAB
+# =========================================================================
+_tab = st.session_state["so_tab"]
+
+if _tab == "input":
+    render_input_so()
+elif _tab == "analisis":
+    render_analisis()
+elif _tab == "preview":
+    render_preview()
+
+
+# =========================================================================
+# FOOTER
+# =========================================================================
+st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+st.markdown(
+    "<div style='text-align: center; padding: 12px 0; "
+    "font-family: 'Quicksand', sans-serif; font-size: 10px; "
+    "color: #7a9b8e; letter-spacing: 1.5px; text-transform: uppercase;'>"
+    "Stock Opname — Toko C383"
+    "</div>",
+    unsafe_allow_html=True,
+)
