@@ -782,56 +782,55 @@ def _render_input_form():
         )
     else:
         st.info("📭 Belum ada rak. Cari & klik **+ Add** untuk menambahkan.")
-        
-        # ============================================================
-        # TOMBOL LANJUT KE KONFIRMASI
-        # ============================================================
-        st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
-        
-        _col_save, _col_cancel = st.columns([3, 1])
-        
-        with _col_save:
-            if st.button(
-                "➡️ LANJUT KONFIRMASI",
-                width="stretch",
-                type="primary",
-                key="btn_ke_konfirmasi",
-            ):
-                _has_rak = len(st.session_state["so_rak_list"]) > 0
-                _has_spd = _spd_val > 0
-        
-                # Validasi: setiap rak harus punya PIC
-                _rak_tanpa_pic = [
-                    r["rak_id"] for r in st.session_state["so_rak_list"]
-                    if not r.get("pic")
-                ]
-        
-                if not _has_rak and not _has_spd:
-                    st.error("⚠️ Minimal isi SPD atau tambahkan 1 rak!")
-                elif _rak_tanpa_pic:
-                    st.error(f"⚠️ Rak berikut belum punya PIC: **{', '.join(_rak_tanpa_pic)}**")
-                else:
-                    # Simpan data ke pending & pindah ke layar konfirmasi
-                    st.session_state["so_pending_data"] = {
-                        "tanggal": _tanggal,
-                        "spd": _spd_val,
-                        "rak_items": list(st.session_state["so_rak_list"]),
-                        "keterangan": _keterangan,
-                    }
-                    st.session_state["so_screen"] = "konfirmasi"
-                    st.rerun()
-        
-        with _col_cancel:
-            if st.button(
-                "🗑️ Clear",
-                width="stretch",
-                key="btn_clear_so",
-            ):
-                st.session_state["so_rak_list"] = []
-                st.session_state["so_search_results"] = []
-                st.session_state["so_search_shown"] = False
+    #tandain
+    # ============================================================
+    # TOMBOL LANJUT KE KONFIRMASI
+    # ============================================================
+    st.markdown("<hr class='section-divider'>", unsafe_allow_html=True)
+    
+    _col_save, _col_cancel = st.columns([3, 1])
+    
+    with _col_save:
+        if st.button(
+            "➡️ LANJUT KONFIRMASI",
+            key="btn_ke_konfirmasi",
+            width="stretch",
+            type="primary",
+        ):
+            _has_rak = len(st.session_state["so_rak_list"]) > 0
+            _has_spd = _spd_val > 0
+    
+            # Validasi: setiap rak harus punya PIC
+            _rak_tanpa_pic = [
+                r["rak_id"] for r in st.session_state["so_rak_list"]
+                if not r.get("pic")
+            ]
+    
+            if not _has_rak and not _has_spd:
+                st.error("⚠️ Minimal isi SPD atau tambahkan 1 rak!")
+            elif _rak_tanpa_pic:
+                st.error(f"⚠️ Rak berikut belum punya PIC: **{', '.join(_rak_tanpa_pic)}**")
+            else:
+                st.session_state["so_pending_data"] = {
+                    "tanggal": _tanggal,
+                    "spd": _spd_val,
+                    "rak_items": list(st.session_state["so_rak_list"]),
+                    "keterangan": _keterangan,
+                }
+                st.session_state["so_screen"] = "konfirmasi"
                 st.rerun()
-                
+    
+    with _col_cancel:
+        if st.button(
+            "🗑️ Clear",
+            key="btn_clear_so",
+            width="stretch",
+        ):
+            st.session_state["so_rak_list"] = []
+            st.session_state["so_search_results"] = []
+            st.session_state["so_search_shown"] = False
+            st.rerun()
+        
 # =========================================================================
 # SCREEN 2: KONFIRMASI
 # =========================================================================
@@ -1532,15 +1531,23 @@ def render_analisis():
                 st.dataframe(_df_show, width="stretch", hide_index=True, height=400)
                 st.caption(f"📊 Total **{len(_df_show)}** rak belum di-SO")
     
-                # Download
-                _list_text = "\n".join([
+                # Download — ✅ FIX: pake data SEBELUM rename
+                # Simpan untuk download SEBELUM rename
+                _download_text = "\n".join([
                     f"{r['rak_id']} — {r['rak_name']}"
                     for r in _df_show.to_dict("records")
                 ])
-    
+                
+                # Rename untuk display
+                _col_names = ["Kode Rak", "Nama Rak"]
+                _df_show.columns = _col_names[:len(_df_show.columns)]
+                
+                st.dataframe(_df_show, width="stretch", hide_index=True, height=400)
+                st.caption(f"📊 Total **{len(_df_show)}** rak belum di-SO")
+                
                 st.download_button(
                     label=f"📥 Download List ({len(_df_show)} rak)",
-                    data=_list_text,
+                    data=_download_text,
                     file_name=f"Rak_Belum_SO_{datetime.now().strftime('%Y%m%d')}.txt",
                     mime="text/plain",
                     width="stretch",
