@@ -345,8 +345,6 @@ def _dialog_konfirmasi_so():
             unsafe_allow_html=True,
         )
 
-    st.markdown("<div style='margin-top: 10px;'>", unsafe_allow_html=True)
-
     # Tabel
     _rows_html = ""
     _total_nom = 0
@@ -386,8 +384,6 @@ def _dialog_konfirmasi_so():
         f"</div>",
         unsafe_allow_html=True,
     )
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # Tombol Aksi
     _col_ok, _col_batal = st.columns(2)
@@ -435,7 +431,6 @@ def _dialog_konfirmasi_so():
                         _msg_list.append(f"❌ {_item['rak_id']}: {str(_e_rak)[:50]}")
 
             if _ok_all:
-                # ✅ Set saved data & clear pending
                 st.session_state["so_saved_data"] = dict(_pending)
                 st.session_state["so_pending_data"] = None
                 st.session_state["so_rak_list"] = []
@@ -453,10 +448,68 @@ def _dialog_konfirmasi_so():
             use_container_width=True,
             key="btn_batal_dialog",
         ):
-            # ✅ Clear pending + tutup dialog
             st.session_state["so_pending_data"] = None
             st.rerun()
 
+
+# =========================================================================
+# DIALOG: SUKSES (POP-UP)
+# =========================================================================
+@st.dialog("🎉 Berhasil Disimpan", width="small")
+def _dialog_sukses_so():
+    _saved = st.session_state.get("so_saved_data")
+    if not _saved:
+        st.session_state["so_saved_data"] = None
+        st.rerun()
+        return
+
+    # Notifikasi sukses
+    st.markdown(
+        "<div style='text-align: center; padding: 10px 0;'>"
+        "<div class='success-icon'>✅</div>"
+        "<div class='success-title'>DATA TERSIMPAN</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Summary
+    _total_rak = len(_saved.get("rak_items", []))
+    _total_nom = sum(float(i.get("nominal_adjust", 0)) for i in _saved.get("rak_items", []))
+    _spd_val = _saved.get("spd", 0)
+
+    st.markdown(
+        f"<div class='metric-clean' style='text-align: center;'>"
+        f"<div class='label'>🏪 RAK DI-SO</div>"
+        f"<div class='value'>{_total_rak}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    _color_nom = "#E88B8B" if _total_nom < 0 else "#7FB99B"
+    st.markdown(
+        f"<div class='metric-clean' style='text-align: center; "
+        f"border-left-color: {_color_nom};'>"
+        f"<div class='label'>💰 TOTAL NOMINAL</div>"
+        f"<div class='value' style='color: {_color_nom};'>{fmt_rp_signed(_total_nom)}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    if _spd_val > 0:
+        st.markdown(
+            f"<div class='metric-clean' style='text-align: center; "
+            f"border-left-color: #7FB99B;'>"
+            f"<div class='label'>💰 SPD</div>"
+            f"<div class='value' style='color: #7FB99B;'>{fmt_rp(_spd_val)}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    # Tombol tutup
+    if st.button("TUTUP & INPUT LAGI", use_container_width=True, key="btn_tutup_sukses"):
+        st.session_state["so_saved_data"] = None
+        st.rerun()
+        
 # =========================================================================
 # TAB 1: INPUT SO (FORM UTAMA)
 # =========================================================================
