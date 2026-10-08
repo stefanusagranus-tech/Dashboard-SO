@@ -761,75 +761,6 @@ def render_analisis():
     """Analisis SO: Filter periode → hitung dari data yang di-filter."""
     st.markdown("### 📊 Analisis SO")
     st.caption("Filter periode → data otomatis update")
-
-    # ============================================================
-    # FILTER PERIODE + RAK + PIC
-    # ============================================================
-    _col_p1, _col_p2 = st.columns(2)
-
-    with _col_p1:
-        _tgl_start = st.date_input(
-            "📅 Dari Tanggal",
-            value=st.session_state["so_analisis_start_val"],
-            key="widget_start_analisis",
-        )
-
-    with _col_p2:
-        _tgl_end = st.date_input(
-            "📅 Sampai Tanggal",
-            value=st.session_state["so_analisis_end_val"],
-            key="widget_end_analisis",
-        )
-
-    _col_f1, _col_f2 = st.columns([2, 2])
-
-    with _col_f1:
-        _filter_rak = st.text_input(
-            "🔍 Filter Kode Rak (opsional)",
-            value=st.session_state["so_analisis_rak_val"],
-            placeholder="Contoh: Q51...",
-            key="widget_rak_analisis",
-        )
-
-    with _col_f2:
-        # Ambil daftar PIC dari data
-        try:
-            _so_all = get_so_rak_detail(limit=1000)
-            _pic_list = sorted(set(
-                str(r.get("pic", "")).strip().upper()
-                for r in (_so_all or [])
-                if r.get("pic")
-            ))
-        except Exception:
-            _pic_list = []
-
-        _pic_options = ["(Semua)"] + _pic_list
-
-        _current_pic = st.session_state["so_analisis_pic_val"]
-        _pic_index = _pic_options.index(_current_pic) if _current_pic in _pic_options else 0
-
-        _filter_pic = st.selectbox(
-            "👤 Filter PIC (opsional)",
-            options=_pic_options,
-            index=_pic_index,
-            key="widget_pic_analisis",
-        )
-
-    _col_btn, _, _ = st.columns([1, 1, 2])
-
-    with _col_btn:
-        if st.button("🔍 Analisis", width="stretch", type="primary", key="btn_analisis_so"):
-            st.session_state["so_analisis_start_val"] = _tgl_start
-            st.session_state["so_analisis_end_val"] = _tgl_end
-            st.session_state["so_analisis_rak_val"] = _filter_rak.strip().upper() if _filter_rak else ""
-            st.session_state["so_analisis_pic_val"] = "" if _filter_pic == "(Semua)" else _filter_pic
-            st.session_state["so_analisis_loaded"] = True
-            st.rerun()
-
-    if not st.session_state.get("so_analisis_loaded"):
-        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
-        return
-
 # =========================================================================
 # HELPER: HEATMAP RAK × TANGGAL
 # =========================================================================
@@ -925,6 +856,74 @@ def _render_analisis_heatmap(_so_detail_raw, _start, _end):
     )
 
     st.plotly_chart(_fig, width="stretch", key="chart_heatmap_rak")
+    
+    # ============================================================
+    # FILTER PERIODE + RAK + PIC
+    # ============================================================
+    _col_p1, _col_p2 = st.columns(2)
+
+    with _col_p1:
+        _tgl_start = st.date_input(
+            "📅 Dari Tanggal",
+            value=st.session_state["so_analisis_start_val"],
+            key="widget_start_analisis",
+        )
+
+    with _col_p2:
+        _tgl_end = st.date_input(
+            "📅 Sampai Tanggal",
+            value=st.session_state["so_analisis_end_val"],
+            key="widget_end_analisis",
+        )
+
+    _col_f1, _col_f2 = st.columns([2, 2])
+
+    with _col_f1:
+        _filter_rak = st.text_input(
+            "🔍 Filter Kode Rak (opsional)",
+            value=st.session_state["so_analisis_rak_val"],
+            placeholder="Contoh: Q51...",
+            key="widget_rak_analisis",
+        )
+
+    with _col_f2:
+        # Ambil daftar PIC dari data
+        try:
+            _so_all = get_so_rak_detail(limit=1000)
+            _pic_list = sorted(set(
+                str(r.get("pic", "")).strip().upper()
+                for r in (_so_all or [])
+                if r.get("pic")
+            ))
+        except Exception:
+            _pic_list = []
+
+        _pic_options = ["(Semua)"] + _pic_list
+
+        _current_pic = st.session_state["so_analisis_pic_val"]
+        _pic_index = _pic_options.index(_current_pic) if _current_pic in _pic_options else 0
+
+        _filter_pic = st.selectbox(
+            "👤 Filter PIC (opsional)",
+            options=_pic_options,
+            index=_pic_index,
+            key="widget_pic_analisis",
+        )
+
+    _col_btn, _, _ = st.columns([1, 1, 2])
+
+    with _col_btn:
+        if st.button("🔍 Analisis", width="stretch", type="primary", key="btn_analisis_so"):
+            st.session_state["so_analisis_start_val"] = _tgl_start
+            st.session_state["so_analisis_end_val"] = _tgl_end
+            st.session_state["so_analisis_rak_val"] = _filter_rak.strip().upper() if _filter_rak else ""
+            st.session_state["so_analisis_pic_val"] = "" if _filter_pic == "(Semua)" else _filter_pic
+            st.session_state["so_analisis_loaded"] = True
+            st.rerun()
+
+    if not st.session_state.get("so_analisis_loaded"):
+        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
+        return
     
     # ============================================================
     # AMBIL FILTER DARI SESSION STATE
