@@ -1,8 +1,14 @@
 """
-AI Chat Kurumi — Chief of Staff (AI-0)
-========================================
+AI Chat Kurumi — Chief of Staff (AI-0) v7
+==========================================
 Halaman chat fullscreen untuk Kurumi.
 Persona: Tokisaki Kurumi (versi ramah kerja).
+
+Fitur v7:
+- Memory chat persistent (Supabase)
+- Aksi cepat: Rangkum, Kirim Laporan
+- File download dari response
+- Clear chat
 """
 
 import streamlit as st
@@ -40,19 +46,26 @@ try:
         kurumi_summarize,
         kurumi_generate_report,
     )
+    from modules.chat_memory import (
+        save_message,
+        load_messages,
+        get_or_create_session_id,
+        clear_session,
+    )
+    _MEMORY_OK = True
+    _AI_OK = True
 except ImportError as e:
-    st.error(f"❌ Gagal import module: {e}")
-    st.info("💡 Pastikan `modules/ai_core.py` udah di-upload.")
-    st.stop()
+    _AI_OK = False
+    _MEMORY_OK = False
+    _import_error = str(e)
 
 
 # =========================================================================
-# CSS — ROOM CHAT (FIX WARNA TEXT)
+# CSS — ROOM CHAT
 # =========================================================================
 def inject_chat_css():
     st.markdown("""
     <style>
-        /* Sembunyiin sidebar default */
         [data-testid="stSidebar"] {
             display: none !important;
         }
@@ -60,7 +73,6 @@ def inject_chat_css():
             display: none !important;
         }
 
-        /* Full width container */
         .main .block-container {
             max-width: 100% !important;
             padding-left: 2rem !important;
@@ -68,17 +80,14 @@ def inject_chat_css():
             padding-top: 1rem !important;
         }
 
-        /* === GLOBAL FORCE TEXT COLOR === */
         .stApp, .stApp * {
             color: #F5E6D3 !important;
         }
 
-        /* Tombol tetep punya warna sendiri */
         .stApp button {
             color: inherit !important;
         }
 
-        /* Text input & chat input */
         .stApp textarea,
         .stApp input,
         .stApp [contenteditable="true"] {
@@ -92,12 +101,10 @@ def inject_chat_css():
             color: rgba(245, 230, 211, 0.5) !important;
         }
 
-        /* === CHAT BUBBLE === */
         [data-testid="stChatMessage"] {
             padding: 0.85rem 1.2rem !important;
             margin-bottom: 0.6rem !important;
             border-radius: 16px !important;
-            backdrop-filter: blur(8px) !important;
         }
 
         [data-testid="stChatMessage"] p,
@@ -109,26 +116,22 @@ def inject_chat_css():
             color: #F5E6D3 !important;
         }
 
-        /* USER BUBBLE (KANAN) */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
             background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(232, 177, 137, 0.20)) !important;
             border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
             margin-left: 20% !important;
         }
 
-        /* ASSISTANT BUBBLE (KIRI) */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
             background: linear-gradient(135deg, rgba(30, 20, 60, 0.85), rgba(76, 29, 149, 0.65)) !important;
             border: 1.5px solid rgba(168, 85, 247, 0.6) !important;
             margin-right: 20% !important;
         }
 
-        /* Avatar */
         [data-testid="chatAvatarIcon-assistant"] {
             background: linear-gradient(135deg, #a855f7, #E8B189) !important;
         }
 
-        /* === CHAT INPUT CONTAINER === */
         [data-testid="stChatInputContainer"] {
             background: rgba(30, 20, 60, 0.6) !important;
             border-radius: 16px !important;
@@ -147,20 +150,43 @@ def inject_chat_css():
             color: rgba(245, 230, 211, 0.5) !important;
         }
 
-        /* Tombol kirim chat */
         [data-testid="stChatInputContainer"] button {
             background: linear-gradient(135deg, #a855f7, #E8B189) !important;
             border: none !important;
             color: #fff !important;
         }
 
-        /* Tombol action */
         div[data-testid="stHorizontalBlock"] button {
             border-radius: 12px !important;
             font-weight: 700 !important;
         }
+
+        /* Memory info bar */
+        .memory-info {
+            background: rgba(20, 12, 35, 0.95);
+            border-left: 3px solid #7FB99B;
+            border-radius: 8px;
+            padding: 8px 14px;
+            margin-bottom: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #A89B8E;
+        }
     </style>
     """, unsafe_allow_html=True)
+
+
+inject_chat_css()
+
+
+# =========================================================================
+# GUARD — Cek import
+# =========================================================================
+if not _AI_OK:
+    st.error(f"❌ Gagal import module: {_import_error}")
+    st.info("💡 Pastikan `modules/ai_core.py` + `modules/chat_memory.py` udah ada.")
+    st.stop()
+
 
 # =========================================================================
 # HEADER
@@ -172,7 +198,7 @@ def render_kurumi_header():
     _col_back, _col_title, _col_status = st.columns([1, 3, 1])
 
     with _col_back:
-        if st.button("← Dashboard", key="btn_back_kurumi", use_container_width=True):
+        if st.button("← Dashboard", key="btn_back_kurumi", width="stretch"):
             try:
                 st.switch_page("Dashboard.py")
             except Exception:
@@ -207,10 +233,26 @@ render_kurumi_header()
 
 
 # =========================================================================
-# SESSION STATE
+# SESSION STATE + MEMORY INIT
 # =========================================================================
+# Get session ID (persistent)
+_session_id = get_or_create_session_id("kurumi") if _MEMORY_OK else "default"
+
+# Init history — LOAD DARI SUPABASE
 if "kurumi_history" not in st.session_state:
-    st.session_state["kurumi_history"] = []
+    if _MEMORY_OK:
+        with st.spinner("⏳ Load chat history..."):
+            _saved = load_messages("kurumi", _session_id, limit=100)
+
+        st.session_state["kurumi_history"] = [
+            {
+                "role": _m.get("role", "user"),
+                "content": _m.get("content", ""),
+            }
+            for _m in _saved
+        ]
+    else:
+        st.session_state["kurumi_history"] = []
 
 if "kurumi_mode" not in st.session_state:
     st.session_state["kurumi_mode"] = "chat"
@@ -223,7 +265,7 @@ if "kurumi_report_choice" not in st.session_state:
 
 
 # =========================================================================
-# WELCOME MESSAGE
+# WELCOME MESSAGE (kalau history kosong)
 # =========================================================================
 if not st.session_state["kurumi_history"]:
     _welcome = (
@@ -233,28 +275,62 @@ if not st.session_state["kurumi_history"]:
         "Fufufu~ Ada yang bisa aku bantu hari ini, Tuan? "
         "Tuan bisa langsung ngobrol santai, atau pilih tombol di bawah~ 🎀"
     )
-    st.session_state["kurumi_history"].append({
-        "role": "assistant",
-        "content": _welcome,
-    })
+
+    _entry = {"role": "assistant", "content": _welcome}
+    st.session_state["kurumi_history"].append(_entry)
+
+    # Save welcome ke DB juga biar persistent
+    if _MEMORY_OK:
+        save_message("kurumi", _session_id, "assistant", _welcome)
+
+
+# =========================================================================
+# MEMORY INFO BAR
+# =========================================================================
+if _MEMORY_OK:
+    _total_msg = len(st.session_state["kurumi_history"])
+    st.markdown(
+        f"<div class='memory-info'>"
+        f"🧠 <b>Memory Aktif</b> | "
+        f"Session: <code style='color: #E8B189;'>{_session_id[-15:]}</code> | "
+        f"Total: <b style='color: #7FB99B;'>{_total_msg}</b> pesan"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        "<div class='memory-info' style='border-left-color: #E88B8B;'>"
+        "⚠️ <b>Memory Tidak Aktif</b> — chat gak tersimpan</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # =========================================================================
 # TOOLBAR — 2 TOMBOL ACTION
 # =========================================================================
 st.markdown("#### 🎯 Aksi Cepat")
-_col_a1, _col_a2 = st.columns(2)
+_col_a1, _col_a2, _col_a3 = st.columns(3)
 
 with _col_a1:
-    if st.button("📊 Rangkum", use_container_width=True, key="btn_kurumi_rangkum"):
+    if st.button("📊 Rangkum", width="stretch", key="btn_kurumi_rangkum"):
         st.session_state["kurumi_mode"] = "rangkum"
         st.session_state["kurumi_rangkum_choice"] = None
         st.rerun()
 
 with _col_a2:
-    if st.button("📤 Kirim Laporan", use_container_width=True, key="btn_kurumi_send"):
+    if st.button("📤 Kirim Laporan", width="stretch", key="btn_kurumi_send"):
         st.session_state["kurumi_mode"] = "report"
         st.session_state["kurumi_report_choice"] = None
+        st.rerun()
+
+with _col_a3:
+    if st.button("🗑️ Reset Chat", width="stretch", key="btn_kurumi_reset"):
+        # Clear DB
+        if _MEMORY_OK:
+            clear_session("kurumi", _session_id)
+        # Clear session state
+        st.session_state["kurumi_history"] = []
+        st.session_state["kurumi_mode"] = "chat"
         st.rerun()
 
 st.markdown("---")
@@ -274,16 +350,16 @@ if st.session_state["kurumi_mode"] == "rangkum":
 
     _col_r1, _col_r2, _col_r3, _col_r4 = st.columns(4)
     with _col_r1:
-        if st.button("📅 Hari Ini", use_container_width=True, key="btn_r_hari"):
+        if st.button("📅 Hari Ini", width="stretch", key="btn_r_hari"):
             st.session_state["kurumi_rangkum_choice"] = "hari"
     with _col_r2:
-        if st.button("🗓️ Minggu Ini", use_container_width=True, key="btn_r_minggu"):
+        if st.button("🗓️ Minggu Ini", width="stretch", key="btn_r_minggu"):
             st.session_state["kurumi_rangkum_choice"] = "minggu"
     with _col_r3:
-        if st.button("📆 Bulan Ini", use_container_width=True, key="btn_r_bulan"):
+        if st.button("📆 Bulan Ini", width="stretch", key="btn_r_bulan"):
             st.session_state["kurumi_rangkum_choice"] = "bulan"
     with _col_r4:
-        if st.button("❌ Batal", use_container_width=True, key="btn_r_batal"):
+        if st.button("❌ Batal", width="stretch", key="btn_r_batal"):
             st.session_state["kurumi_mode"] = "chat"
             st.session_state["kurumi_rangkum_choice"] = None
             st.rerun()
@@ -292,10 +368,14 @@ if st.session_state["kurumi_mode"] == "rangkum":
         _choice = st.session_state["kurumi_rangkum_choice"]
         _label = {"hari": "hari ini", "minggu": "minggu ini", "bulan": "bulan ini"}[_choice]
 
+        _user_msg = f"Rangkum {_label} dong~"
         st.session_state["kurumi_history"].append({
             "role": "user",
-            "content": f"Rangkum {_label} dong~",
+            "content": _user_msg,
         })
+
+        if _MEMORY_OK:
+            save_message("kurumi", _session_id, "user", _user_msg)
 
         with st.spinner(f"🎀 Aku rangkum {_label}..."):
             _summary = kurumi_summarize(period=_choice)
@@ -304,6 +384,9 @@ if st.session_state["kurumi_mode"] == "rangkum":
             "role": "assistant",
             "content": _summary,
         })
+
+        if _MEMORY_OK:
+            save_message("kurumi", _session_id, "assistant", _summary)
 
         st.session_state["kurumi_mode"] = "chat"
         st.session_state["kurumi_rangkum_choice"] = None
@@ -325,16 +408,16 @@ if st.session_state["kurumi_mode"] == "report":
 
     _col_f1, _col_f2, _col_f3, _col_f4 = st.columns(4)
     with _col_f1:
-        if st.button("📄 Text", use_container_width=True, key="btn_f_text"):
+        if st.button("📄 Text", width="stretch", key="btn_f_text"):
             st.session_state["kurumi_report_choice"] = "text"
     with _col_f2:
-        if st.button("📕 PDF", use_container_width=True, key="btn_f_pdf"):
+        if st.button("📕 PDF", width="stretch", key="btn_f_pdf"):
             st.session_state["kurumi_report_choice"] = "pdf"
     with _col_f3:
-        if st.button("📗 Excel", use_container_width=True, key="btn_f_excel"):
+        if st.button("📗 Excel", width="stretch", key="btn_f_excel"):
             st.session_state["kurumi_report_choice"] = "excel"
     with _col_f4:
-        if st.button("❌ Batal", use_container_width=True, key="btn_f_batal"):
+        if st.button("❌ Batal", width="stretch", key="btn_f_batal"):
             st.session_state["kurumi_mode"] = "chat"
             st.session_state["kurumi_report_choice"] = None
             st.rerun()
@@ -353,7 +436,7 @@ if st.session_state["kurumi_mode"] == "report":
                 data=_report["content"],
                 file_name=_report["filename"],
                 mime=_report["mime"],
-                use_container_width=True,
+                width="stretch",
                 type="primary",
                 key=f"dl_{_fmt}",
             )
@@ -376,12 +459,12 @@ st.markdown("#### 💬 Percakapan")
 for _idx, _msg in enumerate(st.session_state["kurumi_history"]):
     _role = _msg.get("role", "user")
     _content = _msg.get("content", "")
-    _file_data = _msg.get("file")   # ← ambil file dari history
-    
+    _file_data = _msg.get("file")
+
     with st.chat_message(_role, avatar="👤" if _role == "user" else "🎀"):
         st.markdown(_content)
-        
-        # ✅ Re-render tombol download kalau ada file di history
+
+        # Re-render tombol download kalau ada file di history
         if _file_data:
             st.markdown("---")
             _col_dl, _ = st.columns([2, 3])
@@ -391,7 +474,7 @@ for _idx, _msg in enumerate(st.session_state["kurumi_history"]):
                     data=_file_data["content"],
                     file_name=_file_data["filename"],
                     mime=_file_data["mime"],
-                    use_container_width=True,
+                    width="stretch",
                     type="primary",
                     key=f"dl_hist_{_idx}",
                 )
@@ -403,7 +486,11 @@ for _idx, _msg in enumerate(st.session_state["kurumi_history"]):
 _user_msg = st.chat_input("Ngobrol dengan Kurumi...", key="kurumi_chat_input")
 
 if _user_msg:
+    # Simpan user message ke history + DB
     st.session_state["kurumi_history"].append({"role": "user", "content": _user_msg})
+
+    if _MEMORY_OK:
+        save_message("kurumi", _session_id, "user", _user_msg)
 
     with st.chat_message("user", avatar="👤"):
         st.markdown(_user_msg)
@@ -412,13 +499,13 @@ if _user_msg:
         with st.spinner("🎀 Aku lagi mikir..."):
             _resp = kurumi_chat_response(_user_msg, st.session_state["kurumi_history"])
 
-        # ✅ Handle dict response
+        # Handle dict response
         _text = _resp.get("text", "") if isinstance(_resp, dict) else _resp
         _file = _resp.get("file") if isinstance(_resp, dict) else None
 
         st.markdown(_text)
 
-        # ✅ Tombol download
+        # Tombol download
         if _file:
             st.markdown("---")
             _col_dl, _ = st.columns([2, 3])
@@ -428,35 +515,25 @@ if _user_msg:
                     data=_file["content"],
                     file_name=_file["filename"],
                     mime=_file["mime"],
-                    use_container_width=True,
+                    width="stretch",
                     type="primary",
                     key=f"dl_chat_{time.time()}",
                 )
 
-    # ✅ Simpan history — TERMASUK FILE
+    # Simpan AI response ke history + DB
     _entry = {
         "role": "assistant",
         "content": _text,
     }
     if _file:
-        _entry["file"] = _file   # ← INI KUNCINYA
-    
+        _entry["file"] = _file
+
     st.session_state["kurumi_history"].append(_entry)
+
+    if _MEMORY_OK:
+        save_message("kurumi", _session_id, "assistant", _text)
+
     st.rerun()
-    
-# =========================================================================
-# CLEAR CHAT
-# =========================================================================
-if len(st.session_state["kurumi_history"]) > 1:
-    st.markdown("---")
-    _col_clr, _ = st.columns([1, 4])
-    with _col_clr:
-        if st.button("🗑️ Clear Chat", key="btn_clear_kurumi"):
-            st.session_state["kurumi_history"] = []
-            st.session_state["kurumi_mode"] = "chat"
-            st.session_state["kurumi_rangkum_choice"] = None
-            st.session_state["kurumi_report_choice"] = None
-            st.rerun()
 
 
 # =========================================================================
