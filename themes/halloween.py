@@ -1,15 +1,13 @@
 """
-🎃 HALLOWEEN THEME v5 — Gothic Atmospheric
-============================================
-- Deep purple + inky black + eerie orange
-- Fog + stars (GPU-friendly: opacity only)
-- Flying icons (transform + opacity)
-- Variant by time (pagi/siang/sore/malam/midnight)
+🎃 HALLOWEEN THEME v6 — Ultimate Atmospheric
+==============================================
+- Cinzel Decorative font (gothic readable)
+- Title pulse + Border pulse + Ornament rotate
+- Footer pulse + Metric entrance + Menu float + Subtitle flicker
+- Flyer, fog, stars
+- Mobile optimized
 """
 
-# =========================================================
-# 🎃 THEME INFO
-# =========================================================
 THEME_INFO = {
     "name": "Halloween",
     "emoji": "🎃",
@@ -20,9 +18,6 @@ THEME_INFO = {
 }
 
 
-# =========================================================
-# 🌅 TIME VARIANTS
-# =========================================================
 THEME_VARIANTS = {
     "pagi": {
         "primary": "#FFA500",
@@ -106,14 +101,14 @@ def get_variant(variant="malam"):
     return THEME_VARIANTS.get(variant, THEME_VARIANTS["malam"])
 
 
-# =========================================================
-# 🎨 GET CSS
-# =========================================================
 def get_css(variant="malam"):
     _v = get_variant(variant)
 
     _css = f"""
 <style>
+    /* IMPORT FONTS */
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@600;700;900&family=Quicksand:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700;900&display=swap');
+
     /* ============================================
     🎃 CSS VARIABLES
     ============================================ */
@@ -132,7 +127,7 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 BASE — DEEP PURPLE + INKY BLACK
+    🎃 BASE
     ============================================ */
     .stApp {{
         background:
@@ -142,7 +137,7 @@ def get_css(variant="malam"):
             linear-gradient(180deg, var(--midnight) 0%, var(--midnight-2) 50%, var(--midnight) 100%);
         background-attachment: fixed;
         color: var(--ghost);
-        font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif;
         min-height: 100vh;
     }}
 
@@ -152,7 +147,6 @@ def get_css(variant="malam"):
         }}
     }}
 
-    /* Scrollbar */
     ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
     ::-webkit-scrollbar-track {{ background: var(--midnight); }}
     ::-webkit-scrollbar-thumb {{
@@ -166,18 +160,31 @@ def get_css(variant="malam"):
     .royal-header {{
         position: relative;
         background: linear-gradient(135deg, #0F0A1E 0%, #2E1065 40%, #4C1D95 70%, #0F0A1E 100%);
-        border: 2px solid var(--pumpkin);
+        border: 2px solid var(--pumpkin-dark);
         border-radius: 18px;
         padding: 28px 24px 24px 24px;
         margin-bottom: 20px;
-        box-shadow:
-            0 0 40px rgba(107, 33, 168, 0.35),
-            0 0 80px rgba(255, 107, 26, 0.15),
-            inset 0 0 60px rgba(0, 0, 0, 0.7);
         overflow: hidden;
+        animation: headerBorderPulse 5s infinite ease-in-out;
     }}
 
-    /* Fog effect pakai radial gradient (GPU-friendly) */
+    @keyframes headerBorderPulse {{
+        0%, 100% {{
+            border-color: var(--pumpkin-dark);
+            box-shadow:
+                0 0 40px rgba(107, 33, 168, 0.35),
+                0 0 80px rgba(255, 107, 26, 0.15),
+                inset 0 0 60px rgba(0, 0, 0, 0.7);
+        }}
+        50% {{
+            border-color: var(--pumpkin);
+            box-shadow:
+                0 0 60px rgba(107, 33, 168, 0.55),
+                0 0 120px rgba(255, 107, 26, 0.35),
+                inset 0 0 60px rgba(0, 0, 0, 0.7);
+        }}
+    }}
+
     .royal-header::before {{
         content: "";
         position: absolute;
@@ -199,50 +206,120 @@ def get_css(variant="malam"):
         50% {{ transform: translate3d(30px, -20px, 0); opacity: 1; }}
     }}
 
-    /* Ornamen pojok */
+    /* Ornamen */
     .royal-ornament {{
         position: absolute;
         color: var(--pumpkin);
         font-size: 22px;
         z-index: 2;
         filter: drop-shadow(0 0 8px var(--pumpkin));
+        animation: ornamentRotate 8s infinite linear;
+    }}
+
+    @keyframes ornamentRotate {{
+        0% {{ transform: rotate(0deg); }}
+        100% {{ transform: rotate(360deg); }}
     }}
 
     .royal-orn-tl {{ top: 10px; left: 14px; }}
-    .royal-orn-tr {{ top: 10px; right: 14px; }}
-    .royal-orn-bl {{ bottom: 10px; left: 14px; }}
+    .royal-orn-tr {{ top: 10px; right: 14px; animation-direction: reverse; }}
+    .royal-orn-bl {{ bottom: 10px; left: 14px; animation-direction: reverse; }}
     .royal-orn-br {{ bottom: 10px; right: 14px; }}
 
+    /* Title */
     .royal-title {{
         position: relative;
-        font-family: 'Creepster', 'Cinzel', -apple-system, serif;
-        font-size: 32px;
+        font-family: 'Cinzel Decorative', 'Cinzel', -apple-system, serif;
+        font-size: 30px;
         font-weight: 900;
         color: var(--pumpkin);
         text-align: center;
         margin: 0;
-        letter-spacing: 4px;
-        text-shadow:
-            0 0 20px var(--pumpkin),
-            0 0 40px rgba(255, 107, 26, 0.6),
-            0 0 60px rgba(255, 107, 26, 0.4),
-            2px 2px 4px rgba(0, 0, 0, 0.95);
+        letter-spacing: 5px;
+        line-height: 1.25;
         z-index: 2;
+        animation: titlePulse 4s infinite ease-in-out;
     }}
 
+    .royal-title-line {{
+        display: block;
+        margin-bottom: 6px;
+    }}
+
+    .royal-title-line:last-child {{
+        margin-bottom: 0;
+        font-size: 0.75em;
+        letter-spacing: 6px;
+    }}
+
+    .royal-title-ornament {{
+        display: inline-block;
+        font-size: 0.85em;
+        margin: 0 10px;
+        vertical-align: middle;
+        filter: drop-shadow(0 0 10px var(--pumpkin));
+    }}
+
+    @keyframes titlePulse {{
+        0%, 100% {{
+            text-shadow:
+                0 0 15px var(--pumpkin),
+                0 0 30px rgba(255, 107, 26, 0.7),
+                0 0 50px rgba(255, 107, 26, 0.4),
+                2px 2px 4px rgba(0, 0, 0, 0.95);
+            filter: brightness(1);
+        }}
+        50% {{
+            text-shadow:
+                0 0 25px var(--pumpkin),
+                0 0 50px rgba(255, 107, 26, 0.9),
+                0 0 80px rgba(255, 107, 26, 0.6),
+                2px 2px 4px rgba(0, 0, 0, 0.95);
+            filter: brightness(1.15);
+        }}
+    }}
+
+    /* Subtitle dengan flicker */
     .royal-subtitle {{
         position: relative;
         font-family: 'Cinzel', -apple-system, serif;
         font-size: 11px;
         color: var(--pumpkin-light);
         text-align: center;
-        margin-top: 8px;
+        margin-top: 10px;
         letter-spacing: 4px;
         text-transform: uppercase;
         z-index: 2;
-        text-shadow: 0 0 8px rgba(255, 107, 26, 0.5);
+        animation: subtitleFlicker 3s infinite ease-in-out;
     }}
 
+    @keyframes subtitleFlicker {{
+        0%, 100% {{
+            opacity: 1;
+            text-shadow: 0 0 8px rgba(255, 107, 26, 0.6);
+        }}
+        40% {{
+            opacity: 0.85;
+            text-shadow: 0 0 12px rgba(255, 107, 26, 0.8);
+        }}
+        45% {{
+            opacity: 0.6;
+            text-shadow: 0 0 5px rgba(255, 107, 26, 0.3);
+        }}
+        50% {{
+            opacity: 0.95;
+            text-shadow: 0 0 10px rgba(255, 107, 26, 0.7);
+        }}
+        55% {{
+            opacity: 0.7;
+        }}
+        60% {{
+            opacity: 1;
+            text-shadow: 0 0 12px rgba(255, 107, 26, 0.8);
+        }}
+    }}
+
+    /* Clock */
     .header-clock {{
         position: relative;
         text-align: center;
@@ -271,7 +348,7 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 PROFILE HEADER (Halaman SO, dll)
+    🎃 PROFILE HEADER (Halaman SO)
     ============================================ */
     .profile-header {{
         display: flex;
@@ -286,7 +363,7 @@ def get_css(variant="malam"):
     }}
 
     .profile-title {{
-        font-family: 'Cinzel', -apple-system, serif;
+        font-family: 'Cinzel Decorative', 'Cinzel', -apple-system, serif;
         font-size: 16px;
         font-weight: 900;
         color: var(--pumpkin);
@@ -295,7 +372,7 @@ def get_css(variant="malam"):
     }}
 
     .profile-sub {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 10px;
         color: var(--secondary);
         letter-spacing: 1px;
@@ -310,7 +387,7 @@ def get_css(variant="malam"):
     }}
 
     /* ============================================
-    🎃 METRIC CARD
+    🎃 METRIC CARD (dengan entrance animation)
     ============================================ */
     .metric-clean,
     .metric-card-v2 {{
@@ -321,13 +398,34 @@ def get_css(variant="malam"):
         padding: 14px 18px;
         margin-bottom: 8px;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
+        animation: metricEntrance 0.6s ease-out backwards;
     }}
-
+    
     .metric-clean:hover {{
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 107, 26, 0.2);
     }}
-
+    
+    /* Entrance: fade + slide up + scale */
+    @keyframes metricEntrance {{
+        0% {{
+            opacity: 0;
+            transform: translateY(15px) scale(0.95);
+        }}
+        100% {{
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }}
+    }}
+    
+    /* Stagger delay via nth-child */
+    .metric-clean:nth-child(1) {{ animation-delay: 0.0s; }}
+    .metric-clean:nth-child(2) {{ animation-delay: 0.1s; }}
+    .metric-clean:nth-child(3) {{ animation-delay: 0.2s; }}
+    .metric-clean:nth-child(4) {{ animation-delay: 0.3s; }}
+    .metric-clean:nth-child(5) {{ animation-delay: 0.4s; }}
+    .metric-clean:nth-child(6) {{ animation-delay: 0.5s; }}
+    
     .metric-clean .label {{
         font-family: 'Cinzel', -apple-system, serif;
         font-size: 10px;
@@ -336,7 +434,7 @@ def get_css(variant="malam"):
         text-transform: uppercase;
         margin-bottom: 6px;
     }}
-
+    
     .metric-clean .value {{
         font-family: 'JetBrains Mono', 'Courier New', monospace;
         font-size: 24px;
@@ -346,15 +444,16 @@ def get_css(variant="malam"):
         word-break: break-all;
         text-shadow: 0 0 10px rgba(255, 107, 26, 0.4);
     }}
-
+    
     .metric-clean .sub {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 10px;
         color: var(--ghost-dim);
         margin-top: 4px;
     }}
+    
     /* ============================================
-    🎃 MENU CARD (Homepage)
+    🎃 MENU CARD (dengan float animation)
     ============================================ */
     .menu-card-v2 {{
         position: relative;
@@ -372,6 +471,17 @@ def get_css(variant="malam"):
         overflow: hidden;
         margin-bottom: 10px;
         box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+        animation: menuFloat 4s ease-in-out infinite;
+    }}
+    
+    /* Float naik-turun halus */
+    @keyframes menuFloat {{
+        0%, 100% {{
+            transform: translateY(0) rotate(0deg);
+        }}
+        50% {{
+            transform: translateY(-5px) rotate(0.5deg);
+        }}
     }}
     
     .menu-card-v2:hover {{
@@ -379,8 +489,15 @@ def get_css(variant="malam"):
         box-shadow:
             0 15px 40px rgba(0, 0, 0, 0.8),
             0 0 30px rgba(255, 107, 26, 0.4);
-        transform: translateY(-4px);
+        animation-play-state: paused;
+        transform: translateY(-8px) scale(1.03);
     }}
+    
+    /* Stagger float delay */
+    .menu-card-v2:nth-child(1) {{ animation-delay: 0s; }}
+    .menu-card-v2:nth-child(2) {{ animation-delay: 0.5s; }}
+    .menu-card-v2:nth-child(3) {{ animation-delay: 1.0s; }}
+    .menu-card-v2:nth-child(4) {{ animation-delay: 1.5s; }}
     
     .menu-icon-v2 {{
         font-size: 48px;
@@ -391,17 +508,18 @@ def get_css(variant="malam"):
     }}
     
     .menu-title-v2 {{
-        font-family: 'Cinzel', -apple-system, serif;
+        font-family: 'Cinzel Decorative', 'Cinzel', -apple-system, serif;
         font-size: 14px;
         font-weight: 900;
         color: var(--pumpkin-light);
         letter-spacing: 2px;
         margin-bottom: 6px;
         text-transform: uppercase;
+        text-shadow: 0 0 8px rgba(255, 107, 26, 0.4);
     }}
     
     .menu-desc-v2 {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 10px;
         color: var(--ghost-dim);
         line-height: 1.5;
@@ -413,7 +531,7 @@ def get_css(variant="malam"):
     .so-table {{
         width: 100%;
         border-collapse: collapse;
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 12px;
         margin-top: 8px;
         background: linear-gradient(135deg, #0F0A1E 0%, #1A0D2E 100%);
@@ -503,7 +621,7 @@ def get_css(variant="malam"):
     }}
     
     .keterangan-panel .panel-sub {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 11px;
         color: var(--ghost-dim);
         margin-top: 6px;
@@ -547,7 +665,7 @@ def get_css(variant="malam"):
     }}
     
     .rak-result-name {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 10px;
         color: var(--ghost-dim);
     }}
@@ -573,7 +691,7 @@ def get_css(variant="malam"):
     }}
     
     .rak-selected-name {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 10px;
         color: var(--ghost-dim);
         flex: 1;
@@ -599,7 +717,7 @@ def get_css(variant="malam"):
     }}
     
     .success-title {{
-        font-family: 'Cinzel', -apple-system, serif;
+        font-family: 'Cinzel Decorative', 'Cinzel', -apple-system, serif;
         font-size: 28px;
         font-weight: 900;
         color: var(--secondary);
@@ -609,7 +727,7 @@ def get_css(variant="malam"):
     }}
     
     .success-sub {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Quicksand', sans-serif;
+        font-family: 'Quicksand', -apple-system, sans-serif;
         font-size: 13px;
         color: var(--ghost-dim);
         margin-top: 12px;
@@ -618,17 +736,31 @@ def get_css(variant="malam"):
     }}
     
     /* ============================================
-    🎃 COPYRIGHT FOOTER
+    🎃 FOOTER (dengan pulse animation)
     ============================================ */
     .copyright-footer {{
         text-align: center;
         margin-top: 40px;
         padding-top: 16px;
         border-top: 1px dashed rgba(255, 107, 26, 0.3);
-        font-family: 'JetBrains Mono', 'Courier New', monospace;
-        font-size: 10px;
-        color: var(--ghost-dim);
-        letter-spacing: 1.5px;
+        font-family: 'Cinzel', -apple-system, serif;
+        font-size: 11px;
+        color: var(--pumpkin-light);
+        letter-spacing: 2px;
+        animation: footerPulse 3s infinite ease-in-out;
+    }}
+    
+    @keyframes footerPulse {{
+        0%, 100% {{
+            opacity: 0.8;
+            text-shadow: 0 0 6px rgba(255, 107, 26, 0.4);
+        }}
+        50% {{
+            opacity: 1;
+            text-shadow:
+                0 0 12px rgba(255, 107, 26, 0.8),
+                0 0 20px rgba(255, 107, 26, 0.5);
+        }}
     }}
     /* ============================================
     🎃 DIALOG / MODAL
@@ -639,17 +771,17 @@ def get_css(variant="malam"):
         border-radius: 16px;
         box-shadow: 0 0 40px rgba(107, 33, 168, 0.5);
     }}
-
+    
     [data-testid="stDialog"] h2 {{
         color: var(--pumpkin);
         font-family: 'Cinzel', -apple-system, serif;
         letter-spacing: 2px;
     }}
-
+    
     [data-testid="stDialogBackdrop"] {{
         background: rgba(10, 5, 20, 0.8);
     }}
-
+    
     /* ============================================
     🎃 BUTTONS
     ============================================ */
@@ -668,7 +800,7 @@ def get_css(variant="malam"):
         min-height: 48px;
         transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
     }}
-
+    
     div.stButton > button:hover {{
         background: linear-gradient(135deg, var(--pumpkin-dark) 0%, var(--pumpkin) 100%);
         color: #FFFFFF;
@@ -676,7 +808,7 @@ def get_css(variant="malam"):
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(255, 107, 26, 0.4);
     }}
-
+    
     /* ============================================
     🎃 INPUT FIELDS
     ============================================ */
@@ -688,7 +820,7 @@ def get_css(variant="malam"):
         border-radius: 10px;
         min-height: 44px;
     }}
-
+    
     div[data-baseweb="input"] input,
     div[data-baseweb="select"] span,
     div[data-baseweb="textarea"] textarea {{
@@ -696,7 +828,7 @@ def get_css(variant="malam"):
         font-family: 'JetBrains Mono', 'Courier New', monospace;
         font-size: 13px;
     }}
-
+    
     label,
     div[data-testid="stWidgetLabel"] label {{
         color: var(--pumpkin-light);
@@ -706,7 +838,7 @@ def get_css(variant="malam"):
         letter-spacing: 1px;
         text-transform: uppercase;
     }}
-
+    
     /* ============================================
     🎃 TABS
     ============================================ */
@@ -717,7 +849,7 @@ def get_css(variant="malam"):
         border: 1px solid var(--pumpkin-dark);
         gap: 4px;
     }}
-
+    
     div[data-baseweb="tab-list"] button {{
         background: transparent;
         color: var(--ghost-dim);
@@ -728,12 +860,12 @@ def get_css(variant="malam"):
         padding: 10px 16px;
         border-radius: 8px;
     }}
-
+    
     div[data-baseweb="tab-list"] button[aria-selected="true"] {{
         background: linear-gradient(135deg, var(--pumpkin-dark) 0%, var(--pumpkin) 100%);
         color: #FFFFFF;
     }}
-
+    
     /* ============================================
     🎃 EXPANDER
     ============================================ */
@@ -744,7 +876,7 @@ def get_css(variant="malam"):
         overflow: hidden;
         margin-bottom: 10px;
     }}
-
+    
     div[data-testid="stExpander"] summary {{
         background: linear-gradient(90deg, #2E1065 0%, rgba(255, 107, 26, 0.1) 100%);
         color: var(--pumpkin-light);
@@ -754,7 +886,7 @@ def get_css(variant="malam"):
         padding: 14px 16px;
         min-height: 48px;
     }}
-
+    
     /* ============================================
     🎃 DATAFRAME
     ============================================ */
@@ -763,7 +895,7 @@ def get_css(variant="malam"):
         border-radius: 10px;
         overflow: hidden;
     }}
-
+    
     /* ============================================
     🎃 SIDEBAR
     ============================================ */
@@ -771,7 +903,7 @@ def get_css(variant="malam"):
         background: linear-gradient(180deg, #0F0A1E 0%, #1A0D2E 100%);
         border-right: 1px solid var(--pumpkin-dark);
     }}
-
+    
     /* ============================================
     🎃 ALERT
     ============================================ */
@@ -780,7 +912,6 @@ def get_css(variant="malam"):
         border: 1px solid var(--pumpkin-dark);
         border-radius: 10px;
     }}
-
     /* ============================================
     🎃 ANIMASI — FOG + STARS + FLYERS + WEB
     ============================================ */
@@ -834,7 +965,7 @@ def get_css(variant="malam"):
         50% {{ opacity: 0.85; }}
     }}
 
-    /* === SPIDER WEB === */
+    /* === SPIDER WEB (pojok kanan atas) === */
     .hw-spider-web {{
         position: fixed;
         top: 0;
@@ -940,7 +1071,12 @@ def get_css(variant="malam"):
 
         .royal-title {{
             font-size: 22px;
-            letter-spacing: 2px;
+            letter-spacing: 3px;
+        }}
+
+        .royal-title-line:last-child {{
+            font-size: 0.7em;
+            letter-spacing: 4px;
         }}
 
         .royal-subtitle {{
@@ -964,19 +1100,19 @@ def get_css(variant="malam"):
             display: none !important;
         }}
 
-        /* Sembunyiin bintang & jaring di mobile */
+        /* Sembunyiin bintang & jaring */
         .hw-stars,
         .hw-spider-web {{
             display: none !important;
         }}
 
-        /* Fog lebih subtle di mobile */
+        /* Fog lebih subtle */
         .hw-fog {{
             animation-duration: 60s;
             opacity: 0.5;
         }}
 
-        /* Flyer lebih lambat di mobile */
+        /* Flyer lebih lambat */
         .hw-flyer-1 {{
             animation-duration: 26s;
             font-size: 22px;
@@ -985,6 +1121,36 @@ def get_css(variant="malam"):
         .hw-flyer-3 {{
             animation-duration: 32s;
             font-size: 24px;
+        }}
+
+        /* Menu float lebih lambat */
+        .menu-card-v2 {{
+            animation-duration: 6s;
+        }}
+
+        /* Metric entrance lebih cepat */
+        .metric-clean {{
+            animation-duration: 0.4s;
+        }}
+
+        /* Title pulse lebih lambat */
+        .royal-title {{
+            animation-duration: 6s;
+        }}
+
+        /* Border pulse lebih lambat */
+        .royal-header {{
+            animation-duration: 7s;
+        }}
+
+        /* Ornament rotate — matikan di mobile (hemat CPU) */
+        .royal-ornament {{
+            animation: none;
+        }}
+
+        /* Footer pulse lebih lambat */
+        .copyright-footer {{
+            animation-duration: 4s;
         }}
 
         .main .block-container {{
@@ -1024,6 +1190,11 @@ def get_css(variant="malam"):
             animation-duration: 30s;
         }}
 
+        /* Matikan float di HP kecil (hemat CPU) */
+        .menu-card-v2 {{
+            animation: none;
+        }}
+
         .main .block-container {{
             padding-left: 0.75rem;
             padding-right: 0.75rem;
@@ -1037,6 +1208,16 @@ def get_css(variant="malam"):
         .hw-fog,
         .hw-spider-web {{
             display: none !important;
+        }}
+
+        .royal-title,
+        .royal-header,
+        .royal-ornament,
+        .royal-subtitle,
+        .copyright-footer,
+        .menu-card-v2,
+        .metric-clean {{
+            animation: none !important;
         }}
 
         *,
