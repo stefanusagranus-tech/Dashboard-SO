@@ -844,6 +844,233 @@ def get_css(variant="malam"):
             transform: translateY(0);
         }}
     }}
+    /* ============================================
+    🎃 ANIMASI HALOWEEN — 6 FLYER + BINTANG + JARING
+    Ringan: cuma transform & opacity (GPU)
+    ============================================ */
+    
+    /* === BASE FLYER === */
+    .hw-flyer {{
+        position: fixed;
+        left: -60px;
+        z-index: 999;
+        pointer-events: none;
+        opacity: 0;
+        will-change: transform, opacity;
+        transform: translate3d(0, 0, 0);
+        line-height: 1;
+    }}
+    
+    /* === FLYER 1: KELELAWAR ATAS (cepat) === */
+    .hw-flyer-1 {{
+        top: 6%;
+        font-size: 26px;
+        animation: hwSweep1 18s infinite linear;
+        animation-delay: 0s;
+    }}
+    
+    /* === FLYER 2: LABU ATAS (sedang) === */
+    .hw-flyer-2 {{
+        top: 10%;
+        font-size: 24px;
+        animation: hwSweep2 24s infinite linear;
+        animation-delay: 3s;
+    }}
+    
+    /* === FLYER 3: HANTU TENGAH (sedang) === */
+    .hw-flyer-3 {{
+        top: 20%;
+        font-size: 28px;
+        animation: hwSweep1 26s infinite linear;
+        animation-delay: 6s;
+    }}
+    
+    /* === FLYER 4: LABA-LABA TENGAH (lambat) === */
+    .hw-flyer-4 {{
+        top: 30%;
+        font-size: 20px;
+        animation: hwSweep2 30s infinite linear;
+        animation-delay: 10s;
+    }}
+    
+    /* === FLYER 5: KELELAWAR BAWAH (sedang) === */
+    .hw-flyer-5 {{
+        top: 70%;
+        font-size: 22px;
+        animation: hwSweep1 28s infinite linear;
+        animation-delay: 14s;
+    }}
+    
+    /* === FLYER 6: LABU BAWAH (lambat) === */
+    .hw-flyer-6 {{
+        top: 82%;
+        font-size: 20px;
+        animation: hwSweep2 34s infinite linear;
+        animation-delay: 18s;
+    }}
+    
+    /* === KEYFRAMES SWEEP 1: horizontal + naik === */
+    @keyframes hwSweep1 {{
+        0% {{
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }}
+        8% {{
+            opacity: 0.9;
+        }}
+        50% {{
+            transform: translate3d(55vw, -25px, 0);
+        }}
+        92% {{
+            opacity: 0.9;
+        }}
+        100% {{
+            transform: translate3d(110vw, -40px, 0);
+            opacity: 0;
+        }}
+    }}
+    
+    /* === KEYFRAMES SWEEP 2: horizontal + turun === */
+    @keyframes hwSweep2 {{
+        0% {{
+            transform: translate3d(0, 0, 0);
+            opacity: 0;
+        }}
+        8% {{
+            opacity: 0.9;
+        }}
+        50% {{
+            transform: translate3d(55vw, 20px, 0);
+        }}
+        92% {{
+            opacity: 0.9;
+        }}
+        100% {{
+            transform: translate3d(110vw, 35px, 0);
+            opacity: 0;
+        }}
+    }}
+    
+    /* === BINTANG BERKEDIP (background) === */
+    .hw-stars {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        background-image:
+            radial-gradient(1.5px 1.5px at 12% 18%, rgba(255, 255, 255, 0.6), transparent),
+            radial-gradient(1px 1px at 35% 42%, rgba(255, 255, 255, 0.5), transparent),
+            radial-gradient(1.5px 1.5px at 58% 28%, rgba(255, 255, 255, 0.6), transparent),
+            radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.4), transparent),
+            radial-gradient(1.5px 1.5px at 88% 15%, rgba(255, 255, 255, 0.5), transparent),
+            radial-gradient(1px 1px at 22% 72%, rgba(255, 255, 255, 0.4), transparent),
+            radial-gradient(1.5px 1.5px at 45% 85%, rgba(255, 255, 255, 0.5), transparent),
+            radial-gradient(1px 1px at 92% 78%, rgba(255, 255, 255, 0.4), transparent);
+        opacity: 0.6;
+        animation: hwStarsTwinkle 6s infinite ease-in-out;
+        will-change: opacity;
+    }}
+    
+    @keyframes hwStarsTwinkle {{
+        0%, 100% {{ opacity: 0.5; }}
+        50% {{ opacity: 0.8; }}
+    }}
+    
+    /* === JARING LABA-LABA (pojok kanan atas, static) === */
+    .hw-spider-web {{
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 120px;
+        height: 120px;
+        pointer-events: none;
+        z-index: 1;
+        background-image:
+            linear-gradient(45deg, transparent 48%, rgba(232, 177, 137, 0.4) 49%, rgba(232, 177, 137, 0.4) 51%, transparent 52%),
+            linear-gradient(-45deg, transparent 48%, rgba(232, 177, 137, 0.4) 49%, rgba(232, 177, 137, 0.4) 51%, transparent 52%),
+            radial-gradient(circle, rgba(232, 177, 137, 0.5) 1px, transparent 1px);
+        background-size: 40px 40px, 40px 40px, 20px 20px;
+        clip-path: polygon(100% 0, 100% 100%, 0 0);
+        opacity: 0.5;
+        animation: hwWebPulse 8s infinite ease-in-out;
+        will-change: opacity;
+    }}
+    
+    @keyframes hwWebPulse {{
+        0%, 100% {{ opacity: 0.4; }}
+        50% {{ opacity: 0.7; }}
+    }}
+    
+    /* ============================================
+    📱 MOBILE OPTIMIZATION — Kurangi animasi
+    ============================================ */
+    
+    /* Tablet & mobile besar: kurangi flyer, hide sebagian */
+    @media (max-width: 1024px) {{
+        .hw-flyer-4,
+        .hw-flyer-5,
+        .hw-flyer-6 {{
+            display: none !important;
+        }}
+        .hw-spider-web {{
+            width: 80px;
+            height: 80px;
+        }}
+    }}
+    
+    /* Mobile & HP: cuma 2 flyer, matikan bintang & jaring */
+    @media (max-width: 768px) {{
+        .hw-flyer-2,
+        .hw-flyer-4,
+        .hw-flyer-5,
+        .hw-flyer-6 {{
+            display: none !important;
+        }}
+        .hw-stars {{
+            display: none !important;
+        }}
+        .hw-spider-web {{
+            display: none !important;
+        }}
+        /* Sisa: flyer-1 (🦇) & flyer-3 (👻) */
+        .hw-flyer-1,
+        .hw-flyer-3 {{
+            font-size: 22px;
+            animation-duration: 26s;
+        }}
+    }}
+    
+    /* HP kecil (iPhone SE): cuma 1 flyer */
+    @media (max-width: 480px) {{
+        .hw-flyer-3 {{
+            display: none !important;
+        }}
+        .hw-flyer-1 {{
+            font-size: 20px;
+            animation-duration: 30s;
+        }}
+    }}
+    
+    /* iOS: hindari render ulang terus-menerus */
+    @media (hover: none) and (pointer: coarse) {{
+        .hw-flyer {{
+            /* Pastikan pake GPU layer */
+            transform: translateZ(0);
+            backface-visibility: hidden;
+        }}
+    }}
+    
+    /* Accessibility: hormati prefers-reduced-motion */
+    @media (prefers-reduced-motion: reduce) {{
+        .hw-flyer,
+        .hw-stars,
+        .hw-spider-web {{
+            display: none !important;
+        }}
+    }}
 </style>
 """
 
