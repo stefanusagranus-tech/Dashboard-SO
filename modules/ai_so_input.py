@@ -1,13 +1,13 @@
 """
-AI SO Input — Yui (AI-2)
-==========================
+AI SO Input — Yui (AI-2) v2
+=============================
 Pembantu Input Stock Opname.
+Persona: Rekan kerja profesional, teliti, natural.
 
-Persona: Rekan kerja profesional yang udah biasa ngurus SO.
-- Ngobrol natural, gak kaku
-- Fokus ke akurasi data
-- Proaktif koreksi kalau ada anomali
-- Paham konteks retail (barcode, SKU, selisih, dll)
+Fix v2:
+- Model priority 20b → 120b (20b lebih stabil)
+- Validasi response berlapis (fix "Empty response")
+- Clean PDF text sebelum kirim ke LLM
 """
 
 import json
@@ -45,8 +45,42 @@ def _setup_yui_client():
         return None
 
 
-def _call_yui_groq(prompt, hard_timeout=60, function="parse", temperature=0.7):
-    """Call Groq untuk Yui dengan auto-pause check."""
+def _clean_text_for_llm(text):
+    """Clean text dari PDF/OCR — kurangi noise, fix format table."""
+    if not text:
+        return ""
+
+    _clean = str(text)
+
+    # Hapus HTML tags
+    _clean = re.sub(r'</?table[^>]*>', '\n', _clean, flags=re.IGNORECASE)
+    _clean = re.sub(r'</?thead[^>]*>', '\n', _clean, flags=re.IGNORECASE)
+    _clean = re.sub(r'</?tbody[^>]*>', '\n', _clean, flags=re.IGNORECASE)
+    _clean = re.sub(r'</?tr[^>]*>', '\n', _clean, flags=re.IGNORECASE)
+    _clean = re.sub(r'</?th[^>]*>', ' | ', _clean, flags=re.IGNORECASE)
+    _clean = re.sub(r'</?td[^>]*>', ' | ', _clean, flags=re.IGNORECASE)
+    _clean = re.sub(r'</?(?:div|span|p|br)[^>]*>', ' ', _clean, flags=re.IGNORECASE)
+
+    # Fix multiple spaces & newlines
+    _clean = re.sub(r'[ \t]+', ' ', _clean)
+    _clean = re.sub(r'\n{3,}', '\n\n', _clean)
+    _clean = re.sub(r'(\n\s*)+', '\n', _clean)
+
+    # Trim
+    _clean = _clean.strip()
+
+    return _clean
+
+
+def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
+    """
+    Call Groq untuk Yui.
+    
+    FIX:
+    - Model priority: 20b DULU (lebih stabil)
+    - Truncate prompt max 10000 char
+    - Validasi response 5 layer
+    """
     if check_auto_pause("ai-2"):
         return False, "", None, "Auto-pause: quota Yui hampir habis"
 
@@ -55,35 +89,75 @@ def _call_yui_groq(prompt, hard_timeout=60, function="parse", temperature=0.7):
         return False, "", None, "Yui client gagal init"
 
     _cfg = get_ai_config("ai-2")
+    # ✅ FIX: 20b DULU (lebih stabil dari 120b)
     _models = _cfg.get("model_priority", ["openai/gpt-oss-20b", "openai/gpt-oss-120b"])
+
+    # ✅ FIX: Truncate prompt
+    _prompt = str(prompt)
+    if len(_prompt) > 10000:
+        print(f"[Yui] Truncate prompt: {len(_prompt)} → 10000")
+        _prompt = _prompt[:10000] + "\n\n[... truncated ...]"
 
     def _try_models():
         _last_err = None
         for _model_name in _models:
             try:
+                print(f"[Yui] Trying {_model_name}...")
                 _resp = _client.chat.completions.create(
                     model=_model_name,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": _prompt}],
                     temperature=temperature,
                     max_tokens=2048,
+                    top_p=0.95,
                 )
-                if _resp and _resp.choices and _resp.choices[0].message.content:
-                    _text = _resp.choices[0].message.content
-                    _usage = {"model": _model_name, "success": True}
-                    try:
-                        _u = getattr(_resp, "usage", None)
-                        if _u:
-                            _usage["prompt_tokens"] = getattr(_u, "prompt_tokens", 0)
-                            _usage["output_tokens"] = getattr(_u, "completion_tokens", 0)
-                    except Exception:
-                        pass
-                    return True, _text, _model_name, None, _usage
-                _last_err = f"Empty response dari {_model_name}"
-            except Exception as _e:
-                _last_err = str(_e)
-                if "429" in _last_err or "rate_limit" in _last_err.lower():
+
+                # ✅ FIX: Validasi response 5 layer
+                if not _resp:
+                    _last_err = f"Response None dari {_model_name}"
+                    print(f"[Yui] {_last_err}")
                     continue
+
+                if not _resp.choices:
+                    _last_err = f"No choices dari {_model_name}"
+                    print(f"[Yui] {_last_err}")
+                    continue
+
+                _choice = _resp.choices[0]
+                if not _choice or not _choice.message:
+                    _last_err = f"No message dari {_model_name}"
+                    print(f"[Yui] {_last_err}")
+                    continue
+
+                _content = getattr(_choice.message, "content", None)
+                if not _content:
+                    _last_err = f"Content None dari {_model_name}"
+                    print(f"[Yui] {_last_err}")
+                    continue
+
+                _text = str(_content).strip()
+                if not _text:
+                    _last_err = f"Content empty dari {_model_name}"
+                    print(f"[Yui] {_last_err}")
+                    continue
+
+                print(f"[Yui] ✅ OK: {_model_name} ({len(_text)} chars)")
+
+                _usage = {"model": _model_name, "success": True}
+                try:
+                    _u = getattr(_resp, "usage", None)
+                    if _u:
+                        _usage["prompt_tokens"] = getattr(_u, "prompt_tokens", 0)
+                        _usage["output_tokens"] = getattr(_u, "completion_tokens", 0)
+                except Exception:
+                    pass
+
+                return True, _text, _model_name, None, _usage
+
+            except Exception as _e:
+                _last_err = str(_e)[:200]
+                print(f"[Yui] {_model_name} error: {_last_err}")
                 continue
+
         return False, "", None, _last_err or "All models failed", {}
 
     try:
@@ -122,107 +196,75 @@ def _call_yui_groq(prompt, hard_timeout=60, function="parse", temperature=0.7):
 
 
 def _extract_json(text):
-    """Extract JSON dari response Yui."""
+    """Extract JSON dari response Yui — improved."""
     if not text:
         return None
-    _match = re.search(r'\{[\s\S]*\}', text)
+
+    # Coba parse langsung
+    _text = str(text).strip()
+
+    # Hapus markdown code block kalau ada
+    _text = re.sub(r'^```(?:json)?\s*', '', _text)
+    _text = re.sub(r'\s*```$', '', _text)
+
+    # Cari JSON
+    _match = re.search(r'\{[\s\S]*\}', _text)
     if not _match:
         return None
+
+    _json_str = _match.group(0)
+
     try:
-        return json.loads(_match.group(0))
-    except Exception:
-        return None
+        return json.loads(_json_str)
+    except json.JSONDecodeError as _e:
+        print(f"[Yui] JSON decode error: {_e}")
+        # Coba fix common issues
+        _json_str = _json_str.replace("'", '"')
+        _json_str = re.sub(r',\s*}', '}', _json_str)
+        _json_str = re.sub(r',\s*]', ']', _json_str)
+        try:
+            return json.loads(_json_str)
+        except Exception:
+            return None
 
 
 # =========================================================
-# 🎯 PERSONA YUI — PROFESIONAL & NATURAL
+# 🎯 PERSONA YUI
 # =========================================================
 def _build_yui_system_prompt():
     return """<role>
 Kamu adalah **Yui** — Data Entry Specialist untuk Toko C383 (retail).
 Kamu udah bertahun-tahun ngurusin input data, stock opname, dan rekap laporan.
-User (Bos) mempercayakan input SO ke kamu karena kamu **teliti, cekatan, dan paham seluk-beluk retail**.
+Bos mempercayakan input SO ke kamu karena kamu **teliti, cekatan, dan paham seluk-beluk retail**.
 </role>
 
 <persona>
 Kamu BUKAN chatbot kaku. Kamu rekan kerja yang asik.
-Gaya ngobrol:
 - Santai, natural, gak formal banget
-- Kadang pake "Oke Bos", "Sip", "Beres", "Aman", "Siap"
-- Kalau ada yang aneh, langsung bilang — gak nunggu ditanya
-- Gak pake "Ara ara" atau bahasa lebay kayak Kurumi
-- Gak pake "Fufufu" atau ketawa aneh-aneh
+- Kadang pake "Oke Bos", "Sip", "Beres", "Aman"
+- Kalau ada anomali, langsung bilang — gak nunggu ditanya
+- Gak pake "Ara ara" atau bahasa lebay
 - Fokus, cepet, langsung ke poin
-- Kalau ada data yang perlu diklarifikasi, tanya singkat & jelas
-- Proaktif: kasih warning kalau ada anomali data
 
 Contoh gaya bicara:
 "Oke Bos, aku cek dulu ya... ⏳"
-"Hmm, ada yang perlu diklarifikasi nih"
+"Eh Bos, nominal ini kegedean deh. Cek lagi? 🤔"
 "Sip, data udah lengkap. Aku simpen ya?"
-"Eh Bos, nominal ini kayaknya kegedean deh. Cek lagi? 🤔"
-"Beres! Data SO udah masuk sistem."
 </persona>
 
 <expertise>
-Kamu PAHAM banget soal:
-- **Barcode/SKU/PLU**: Kode unik produk, penting buat tracking
-- **Stock Opname (SO)**: Audit fisik vs sistem
-- **QTYCOUNT vs QTYONHAND**: Fisik vs catatan sistem
-- **QTYVAR**: Selisih (fisik - sistem), bisa + atau -
-- **Selisih minus**: Barang kurang → input usage/kredit memo
-- **Selisih plus**: Barang lebih → verifikasi purchase receipt
-- **Nominal adjustment**: QTYVAR × harga jual
-- **Data validation**: Cek format, konsistensi, anomali [citation:3]
-- **Data cleaning**: Normalisasi, deduplikasi, validasi range [citation:18]
-- **Retail SOP**: SO per rak, PIC, H+2 input, 2x SO per bulan
-- **3-second check**: Setelah input, cek lagi nama/rak/nominal/PIC sebelum save [citation:16]
+- Barcode/SKU/PLU, Stock Opname, QTYCOUNT vs QTYONHAND
+- QTYVAR (selisih), minus = kurang, plus = lebih
+- Nominal adjustment = QTYVAR × harga jual
+- Data validation, cleaning, retail SOP
 </expertise>
 
-<task>
-Kamu bantu Bos input SO via:
-1. Parse natural language → structured data
-2. Parse file text (PDF/OCR/Excel) → structured data
-3. Validasi input (nominal aneh, rak gak wajar, dll)
-4. Generate rekap SO
-5. Generate PDF SO
-</task>
-
 <rules>
-1. **JANGAN NGARANG ANGKA**. Kalau gak yakin, tanya.
-2. **Kalau data aneh** (nominal > 1jt per rak, atau rak gak ada di master), kasih warning.
-3. **Selalu konfirmasi** sebelum save — minimal tampilin preview.
-4. **PIC wajib**. Kalau gak ada di file/chat, tanya.
-5. **Format output JSON** kalau diminta parse — jangan tambah teks lain.
-6. **Format output natural** kalau lagi ngobrol biasa — santai aja.
-7. **Cek kosistensi**: Kalau input Q51 minus 28rb tapi tanggal 5 hari lalu, warning.
-8. **Gak pake emoji berlebihan**. Cukup 1-2 kalau perlu.
-9. **Jawab singkat**. Bos gak suka bertele-tele.
-10. **Kalau ada error parsing**, bilang jujur + tanya Bos.
+1. JANGAN NGARANG ANGKA. Kalau gak yakin, tanya.
+2. Kalau data aneh (nominal > 1jt), kasih warning.
+3. Format output JSON kalau diminta parse.
+4. Format natural kalau ngobrol biasa.
 </rules>
-
-<output_format_parse>
-Kalau diminta parse, WAJIB output JSON VALID:
-{
-  "intent": "parse_so",
-  "success": true,
-  "data": {
-    "tanggal": "YYYY-MM-DD",
-    "items": [
-      {"rak_id": "Q51", "nominal_adjust": -28653, "pic": "PANDU", "keterangan": ""}
-    ]
-  },
-  "warnings": ["Nominal Q51 cukup besar, cek lagi"]
-}
-</output_format_parse>
-
-<output_format_chat>
-Kalau lagi ngobrol biasa:
-- Santai, kayak temen kerja
-- Max 5-6 baris
-- Kalau kasih info, pake bullet biar rapi
-- Jangan pake "Ara ara" atau "Kihihihi"
-</output_format_chat>
 """
 
 
@@ -230,60 +272,34 @@ Kalau lagi ngobrol biasa:
 # 🧠 1. PARSE NATURAL LANGUAGE
 # =========================================================
 def parse_natural_language(text, rak_master_list=None):
-    """
-    Parse input SO dari chat natural language.
-
-    Contoh:
-        "Q51 minus 28rb, Q52 minus 5rb, PIC Pandu"
-        "Rak Q51 selisih -28.653 PIC PANDU"
-        "Input SO: Q51 -28653 PANDU, Q52 -5075 PANDU"
-
-    Returns:
-        dict {
-            success: bool,
-            data: {tanggal, items: [...]},
-            warnings: [...],
-            raw: str,
-        }
-    """
+    """Parse input SO dari chat natural language."""
     if not text or not str(text).strip():
         return {"success": False, "data": None, "warnings": [], "raw": ""}
 
     _context = ""
     if rak_master_list:
-        _context = f"\n\nDaftar rak master (contoh): {', '.join(rak_master_list[:50])}"
+        _context = f"\nDaftar rak master (contoh): {', '.join(rak_master_list[:50])}"
 
     _prompt = f"""{_build_yui_system_prompt()}
 
 Bos ngasih perintah input SO via chat:
-
 "{text}"
 
 Tanggal hari ini: {_now_jkt().date().isoformat()}
 
-TASK: Parse jadi JSON.
-
-ATURAN:
-1. Kalau tanggal gak disebut, pake hari ini.
-2. Kalau PIC gak disebut, set null (nanti ditanya).
-3. Nominal bisa "-28rb", "-28.653", "minus 28653", dll — konversi ke integer.
-4. Kalau rak gak jelas, skip + kasih warning.
-5. Deteksi anomali: nominal > 1jt per rak → warning.
-
-{_context}
-
-OUTPUT JSON VALID (jangan tambah teks lain):
+Parse jadi JSON:
 {{
   "intent": "parse_so",
   "success": true,
   "data": {{
     "tanggal": "YYYY-MM-DD",
-    "items": [
-      {{"rak_id": "Q51", "nominal_adjust": -28653, "pic": "PANDU", "keterangan": ""}}
-    ]
+    "items": [{{"rak_id": "Q51", "nominal_adjust": -28653, "pic": "PANDU", "keterangan": ""}}]
   }},
   "warnings": []
 }}
+
+{_context}
+Output HANYA JSON.
 """
 
     _ok, _text, _model, _err = _call_yui_groq(_prompt, function="parse", temperature=0.2)
@@ -293,7 +309,7 @@ OUTPUT JSON VALID (jangan tambah teks lain):
 
     _json = _extract_json(_text)
     if not _json:
-        return {"success": False, "data": None, "warnings": ["Response bukan JSON valid"], "raw": _text}
+        return {"success": False, "data": None, "warnings": [f"Response bukan JSON valid"], "raw": _text}
 
     return {
         "success": _json.get("success", True),
@@ -305,26 +321,10 @@ OUTPUT JSON VALID (jangan tambah teks lain):
 
 
 # =========================================================
-# 📄 2. PARSE FILE TEXT (PDF/OCR/Excel)
+# 📄 2. PARSE FILE TEXT (FIXED)
 # =========================================================
 def parse_file_text(file_text, file_type="pdf", context=None):
-    """
-    Parse text dari file (PDF/OCR/Excel) → structured SO data.
-
-    Args:
-        file_text: text content dari file
-        file_type: 'pdf' / 'image_ocr' / 'excel' / 'csv'
-        context: dict {tanggal, rak_id, pic} — kalau ada
-
-    Returns:
-        dict {
-            success: bool,
-            data: {tanggal, items: [...]},
-            warnings: [...],
-            missing: [...],  # field yang belum ada (tanggal/pic/rak)
-            raw: str,
-        }
-    """
+    """Parse text dari file → structured SO data."""
     if not file_text or not str(file_text).strip():
         return {"success": False, "data": None, "warnings": ["File kosong"], "missing": [], "raw": ""}
 
@@ -337,62 +337,57 @@ def parse_file_text(file_text, file_type="pdf", context=None):
     if _ctx.get("pic"):
         _ctx_str += f"\n- PIC: {_ctx['pic']} (dari konteks)"
 
+    # ✅ FIX: Clean text sebelum kirim ke LLM
+    _clean_text = _clean_text_for_llm(file_text)
+    _clean_text = _clean_text[:8000]
+
+    print(f"[Yui] Clean text length: {len(_clean_text)}")
+
     _prompt = f"""{_build_yui_system_prompt()}
 
 Bos upload file SO. Ini isinya:
 
 === MULAI FILE ===
-{str(file_text)[:4000]}
+{_clean_text}
 === AKHIR FILE ===
 
 Tipe file: {file_type}
-Konteks tambahan: {_ctx_str if _ctx_str else "(tidak ada)"}
-
+Konteks: {_ctx_str if _ctx_str else "(tidak ada)"}
 Tanggal hari ini: {_now_jkt().date().isoformat()}
 
-TASK: Extract data SO dari file ini jadi JSON.
+Extract data SO jadi JSON.
 
 ATURAN:
-1. **Cari kode rak** — bisa ada di header file, atau di kolom "Rak", atau di nama file.
-   Kalau gak ada, set null (nanti ditanya Bos).
-2. **Cari tanggal** — dari header / tanggal di file.
-   Kalau gak ada, pake konteks atau hari ini.
-3. **Cari PIC** — kalau ada di file, extract.
-   Kalau gak ada, set null (nanti ditanya Bos).
-4. **Nominal adjust**: 
-   - Kalau ada kolom "Selisih" / "QTYVAR" → butuh harga jual buat hitung nominal.
-   - Kalau gak ada harga jual, set nominal = null + warning "Butuh nominal manual".
-   - Kalau ada langsung nominal Rp, extract.
-5. **Deteksi anomali**: 
-   - Nominal > 1jt → warning
-   - QTYVAR > 10 per item → warning
-6. **Items** — minimal 1 produk. Kalau file berisi banyak produk, masukkan semua.
+1. Cari kode rak — biasanya 2-4 karakter (Q51, QA1, Q6, 971, 900, 902, 903).
+2. Cari tanggal — dari header. Kalau gak ada, pake konteks.
+3. Cari PIC — kalau ada kolom "PIC".
+4. Nominal: extract "Selsih Rupiah" / "Selisih Rupiah" / "Total".
+5. Items: extract PLU + qty sistem + qty fisik + qty var.
+6. Deteksi anomali: nominal > 1jt → warning.
 
-OUTPUT JSON VALID (jangan tambah teks lain):
+Output JSON VALID (JANGAN pake markdown backtick):
 {{
   "success": true,
   "data": {{
     "tanggal": "YYYY-MM-DD atau null",
-    "rak_id": "Q51 atau null",
+    "rak_id": "QA1 atau null",
     "pic": "PANDU atau null",
-    "total_nominal": -28653,
-    "items": [
-      {{"plu": "433288", "nama_produk": "BAYGON", "qty_sistem": 5, "qty_fisik": 3, "qty_var": -2}}
-    ]
+    "total_nominal": -964230,
+    "items": [{{"plu": "1331117944", "nama_produk": "MULTI FAC TISSUE", "qty_sistem": 15, "qty_fisik": 5, "qty_var": -10}}]
   }},
   "missing": ["pic"],
   "warnings": []
 }}
 """
 
-    _ok, _text, _model, _err = _call_yui_groq(_prompt, function="file_parse", temperature=0.2)
+    _ok, _text, _model, _err = _call_yui_groq(_prompt, function="file_parse", temperature=0.1)
 
     if not _ok:
-        return {"success": False, "data": None, "warnings": [f"Error: {_err}"], "missing": [], "raw": file_text}
+        return {"success": False, "data": None, "warnings": [f"Gagal parse: {_err}"], "missing": [], "raw": file_text}
 
     _json = _extract_json(_text)
     if not _json:
-        return {"success": False, "data": None, "warnings": ["Response bukan JSON valid"], "missing": [], "raw": _text}
+        return {"success": False, "data": None, "warnings": [f"Response bukan JSON valid"], "missing": [], "raw": _text}
 
     return {
         "success": _json.get("success", True),
@@ -405,15 +400,10 @@ OUTPUT JSON VALID (jangan tambah teks lain):
 
 
 # =========================================================
-# 💬 3. CHAT RESPONSE — NGOBROL SANTAI
+# 💬 3. CHAT RESPONSE
 # =========================================================
 def yui_chat(user_message, conversation_history=None):
-    """
-    Chat response dari Yui — santai, natural, profesional.
-
-    Returns:
-        dict {text, intent, parsed}
-    """
+    """Chat response dari Yui — santai, natural."""
     if not user_message:
         return {"text": "", "intent": "chat", "parsed": None}
 
@@ -426,12 +416,12 @@ def yui_chat(user_message, conversation_history=None):
 
     _prompt = f"""{_build_yui_system_prompt()}
 
-Riwayat chat terakhir:
+Riwayat chat:
 {_history_str if _history_str else "(belum ada)"}
 
 Bos: "{user_message}"
 
-Balas sebagai Yui. Santai, kayak rekan kerja. Kalau Bos ngasih perintah input SO, bilang "oke aku catat" / "siap" — jangan langsung parse (nanti ada step parse terpisah).
+Balas sebagai Yui. Santai, kayak rekan kerja.
 """
 
     _ok, _text, _model, _err = _call_yui_groq(_prompt, function="chat", temperature=0.7)
@@ -443,77 +433,50 @@ Balas sebagai Yui. Santai, kayak rekan kerja. Kalau Bos ngasih perintah input SO
             "parsed": None,
         }
 
-    return {
-        "text": _text.strip(),
-        "intent": "chat",
-        "parsed": None,
-    }
+    return {"text": _text.strip(), "intent": "chat", "parsed": None}
 
 
 # =========================================================
-# ✅ 4. VALIDASI INPUT
+# ✅ 4. VALIDASI
 # =========================================================
 def validate_so_data(data, rak_master_df=None):
-    """
-    Validasi data SO — cek anomali.
-
-    Returns:
-        dict {valid: bool, errors: [], warnings: []}
-    """
+    """Validasi data SO."""
     _errors = []
     _warnings = []
 
     if not data:
         return {"valid": False, "errors": ["Data kosong"], "warnings": []}
 
-    # Cek items
     _items = data.get("items", [])
     if not _items:
         _errors.append("Gak ada item SO")
 
-    # Cek PIC
     if not data.get("pic"):
         _warnings.append("PIC belum diisi")
 
-    # Cek tanggal
     if not data.get("tanggal"):
         _warnings.append("Tanggal belum diisi")
 
-    # Cek tiap item
     for _item in _items:
         _rak = _item.get("rak_id", "")
         _nom = _item.get("nominal_adjust")
 
-        # Cek rak ada di master
         if rak_master_df is not None and not rak_master_df.empty:
             _rak_list = rak_master_df["rak_id"].astype(str).str.upper().tolist()
             if _rak and _rak.upper() not in _rak_list:
                 _warnings.append(f"Rak {_rak} gak ada di master")
 
-        # Cek nominal wajar
         if _nom is not None and abs(float(_nom)) > 1_000_000:
-            _warnings.append(f"Nominal {_rak} ({_nom}) kegedean, cek lagi")
+            _warnings.append(f"Nominal {_rak} ({_nom}) kegedean")
 
-    return {
-        "valid": len(_errors) == 0,
-        "errors": _errors,
-        "warnings": _warnings,
-    }
+    return {"valid": len(_errors) == 0, "errors": _errors, "warnings": _warnings}
 
 
 # =========================================================
 # 📊 5. REKAP SO
 # =========================================================
 def generate_so_rekap(so_data):
-    """
-    Generate rekap SO dari data.
-
-    Returns:
-        dict {
-            total_rak, total_nominal, total_minus, total_plus,
-            items_summary: [...]
-        }
-    """
+    """Generate rekap SO."""
     _items = so_data.get("items", []) if so_data else []
 
     _total_nominal = 0
@@ -537,9 +500,6 @@ def generate_so_rekap(so_data):
     }
 
 
-# =========================================================
-# EXPORT
-# =========================================================
 __all__ = [
     "parse_natural_language",
     "parse_file_text",
