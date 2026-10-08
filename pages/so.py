@@ -630,7 +630,7 @@ def render_analisis():
         except Exception as _e_chart:
             st.warning(f"⚠️ Chart gagal render: {str(_e_chart)[:150]}")
     else:
-        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai"
+        st.info("💡 Pilih periode & klik **🔍 Analisis** untuk mulai")
 # =========================================================================
 # TAB 3: PREVIEW & HAPUS
 # =========================================================================
