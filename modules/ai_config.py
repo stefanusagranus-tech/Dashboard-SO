@@ -66,13 +66,13 @@ AI_CONFIG = {
         "description": "Stock Opname — input data, rekap, file reader",
         "persona": "yui_professional",
         "model_priority": [
-            "llama-3.1-8b-instant",      # ✅ Non-reasoning, stabil, cepat
-            "openai/gpt-oss-20b",        # Fallback
+            "openai/gpt-oss-20b",        # ✅ Yang works di akun lu
+            "openai/gpt-oss-120b",        # Fallback
         ],
         "daily_limit": 1000,
         "max_tpm": 8000,
         "functions": ["parse", "chat", "file_parse", "validate", "generate_pdf"],
-        "api_key_secret": "GROQ_API_KEY_YUI",
+        "api_key_secret": "GROQ_API_KEY",
         "enabled": True,
     },
 
