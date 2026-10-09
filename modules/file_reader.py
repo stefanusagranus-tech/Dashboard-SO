@@ -249,10 +249,7 @@ def read_excel(file_bytes, filename=""):
 def convert_ocr_to_dataframe(ocr_text, file_type="pdf"):
     """
     Convert OCR text (dari PDF/Screenshot) → DataFrame.
-    FIX v2 — handle:
-    - Kolom Fisik = "-" (kosong)
-    - Qty var = "+27" / "-1" 
-    - Nama nempel angka (SPICYKOREAN60G)
+    FIX v3 — handle unicode minus (−) + dashes.
     """
     import re
     import pandas as pd
@@ -262,22 +259,27 @@ def convert_ocr_to_dataframe(ocr_text, file_type="pdf"):
         return None
 
     _text = str(ocr_text)
+
+    # ✅ FIX: NORMALIZE UNICODE DASH → ASCII DASH
+    _text = _text.replace("−", "-")   # U+2212 minus sign
+    _text = _text.replace("–", "-")   # U+2013 en dash
+    _text = _text.replace("—", "-")   # U+2014 em dash
+    _text = _text.replace("﹣", "-")   # U+FE63 small hyphen
+    _text = _text.replace("－", "-")   # U+FF0D fullwidth hyphen
+
     _rows = []
 
     _log(f"[Convert] Converting OCR text ({len(_text)} chars) → DataFrame")
 
-    # ✅ PATTERN BARU — lebih fleksibel
-    # Format: No PLU Nama... Rak Stock Fisik(+) QtyVar(+/-) Nominal(+/-)
-    # Handle: Fisik bisa "-", QtyVar bisa "+27", Nama bisa nempel angka
     _pattern = re.compile(
-        r'^\s*(\d{1,3})\s+'                              # No
-        r'(\d{5,})\s+'                                   # PLU
-        r'(.+?)\s+'                                      # Nama (non-greedy, ambil apapun)
-        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+' # Rak
-        r'(-?\d+)\s+'                                    # Stock
-        r'(-|\d+)\s+'                                    # Fisik ("-" atau angka)
-        r'([-+]?\d+)\s+'                                 # Qty Var (+ atau -)
-        r'([-+]?[\d,]+\.?\d*)\s*$',                      # Nominal
+        r'^\s*(\d{1,3})\s+'
+        r'(\d{5,})\s+'
+        r'(.+?)\s+'
+        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'
+        r'(-?\d+)\s+'
+        r'(-|\d+)\s+'
+        r'([-+]?\d+)\s+'
+        r'([-+]?[\d,]+\.?\d*)\s*$',
         re.MULTILINE
     )
 
@@ -288,12 +290,12 @@ def convert_ocr_to_dataframe(ocr_text, file_type="pdf"):
             _nama = _match.group(3).strip()[:120]
             _rak = _match.group(4).strip().upper()
             _qty_stock = int(_match.group(5))
-            
+
             _fisik_str = _match.group(6).strip()
             _qty_fisik = int(_fisik_str) if _fisik_str != "-" else 0
-            
+
             _qty_var = int(_match.group(7))
-            
+
             _nominal_str = _match.group(8).replace(",", "")
             _nominal = float(_nominal_str)
 
