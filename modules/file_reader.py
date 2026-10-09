@@ -249,7 +249,10 @@ def read_excel(file_bytes, filename=""):
 def convert_ocr_to_dataframe(ocr_text, file_type="pdf"):
     """
     Convert OCR text (dari PDF/Screenshot) → DataFrame.
-    Pake regex multi-pattern buat detect baris tabel.
+    FIX v2 — handle:
+    - Kolom Fisik = "-" (kosong)
+    - Qty var = "+27" / "-1" 
+    - Nama nempel angka (SPICYKOREAN60G)
     """
     import re
     import pandas as pd
@@ -263,104 +266,53 @@ def convert_ocr_to_dataframe(ocr_text, file_type="pdf"):
 
     _log(f"[Convert] Converting OCR text ({len(_text)} chars) → DataFrame")
 
-    # Pattern 1: Format lengkap "No PLU Nama Rak Stock Fisik QtyVar Nominal"
-    _pattern1 = re.compile(
-        r'^\s*(\d{1,3})\s+'
-        r'(\d{6,})\s+'
-        r'([A-Z][A-Z0-9\s\.\-/&\'\(\)]+?)\s{2,}'
-        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'
-        r'(-?\d+)\s+'
-        r'(-|\d+)\s+'
-        r'([-+]?\d+)\s+'
-        r'([-+]?[\d,]+\.?\d*)\s*$',
+    # ✅ PATTERN BARU — lebih fleksibel
+    # Format: No PLU Nama... Rak Stock Fisik(+) QtyVar(+/-) Nominal(+/-)
+    # Handle: Fisik bisa "-", QtyVar bisa "+27", Nama bisa nempel angka
+    _pattern = re.compile(
+        r'^\s*(\d{1,3})\s+'                              # No
+        r'(\d{5,})\s+'                                   # PLU
+        r'(.+?)\s+'                                      # Nama (non-greedy, ambil apapun)
+        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+' # Rak
+        r'(-?\d+)\s+'                                    # Stock
+        r'(-|\d+)\s+'                                    # Fisik ("-" atau angka)
+        r'([-+]?\d+)\s+'                                 # Qty Var (+ atau -)
+        r'([-+]?[\d,]+\.?\d*)\s*$',                      # Nominal
         re.MULTILINE
     )
 
-    for _match in _pattern1.finditer(_text):
+    for _match in _pattern.finditer(_text):
         try:
+            _no = int(_match.group(1))
+            _plu = _match.group(2).strip()
+            _nama = _match.group(3).strip()[:120]
+            _rak = _match.group(4).strip().upper()
+            _qty_stock = int(_match.group(5))
+            
+            _fisik_str = _match.group(6).strip()
+            _qty_fisik = int(_fisik_str) if _fisik_str != "-" else 0
+            
+            _qty_var = int(_match.group(7))
+            
+            _nominal_str = _match.group(8).replace(",", "")
+            _nominal = float(_nominal_str)
+
             _rows.append({
-                "No": int(_match.group(1)),
-                "PLU": _match.group(2).strip(),
-                "Nama Barang": _match.group(3).strip()[:120],
-                "Rack": _match.group(4).strip().upper(),
-                "Stock Fisik": int(_match.group(5)),
-                "Stock Onhand": int(_match.group(6)) if _match.group(6) != "-" else 0,
-                "Plus/Minus": int(_match.group(7)),
-                "Selisih Rupiah": float(_match.group(8).replace(",", "")),
+                "No": _no,
+                "PLU": _plu,
+                "Nama Barang": _nama,
+                "Rack": _rak,
+                "Stock Fisik": _qty_fisik,
+                "Stock Onhand": _qty_stock,
+                "Plus/Minus": _qty_var,
+                "Selisih Rupiah": _nominal,
             })
         except Exception as _e:
-            _log(f"[Convert] Pattern1 row error: {_e}")
+            _log(f"[Convert] Row error: {_e} | line: {_match.group(0)[:80]}")
             continue
 
-    # Pattern 2: Tanpa No di awal — "PLU Nama Rak Stock Fisik QtyVar Nominal"
     if not _rows:
-        _log("[Convert] Pattern 1 kosong, coba Pattern 2...")
-        _pattern2 = re.compile(
-            r'\b(\d{6,})\s+'
-            r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'
-            r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'
-            r'(-?\d+)\s+'
-            r'(-|\d+)\s+'
-            r'([-+]?\d+)\s+'
-            r'([-+]?[\d,]+\.?\d*)',
-            re.MULTILINE
-        )
-
-        for _match in _pattern2.finditer(_text):
-            try:
-                _rows.append({
-                    "No": len(_rows) + 1,
-                    "PLU": _match.group(1).strip(),
-                    "Nama Barang": _match.group(2).strip()[:120],
-                    "Rack": _match.group(3).strip().upper(),
-                    "Stock Fisik": int(_match.group(4)),
-                    "Stock Onhand": int(_match.group(5)) if _match.group(5) != "-" else 0,
-                    "Plus/Minus": int(_match.group(6)),
-                    "Selisih Rupiah": float(_match.group(7).replace(",", "")),
-                })
-            except Exception:
-                continue
-
-    # Pattern 3: Generic — cari baris dengan PLU + minimal 3 angka
-    if not _rows:
-        _log("[Convert] Pattern 2 kosong, coba Pattern 3 (generic)...")
-        for _line in _text.splitlines():
-            _line = _line.strip()
-            if not _line:
-                continue
-
-            _plu_match = re.search(r'\b(\d{6,})\b', _line)
-            if not _plu_match:
-                continue
-
-            _numbers = re.findall(r'[-+]?\d[\d,]*\.?\d*', _line)
-            if len(_numbers) < 4:
-                continue
-
-            try:
-                _plu = _plu_match.group(1)
-                _after_plu = _line[_plu_match.end():].strip()
-                _name_match = re.match(r'([A-Za-z][A-Za-z0-9\s\.\-/&\']+?)\s+\d', _after_plu)
-                _nama = _name_match.group(1).strip() if _name_match else _after_plu[:60]
-
-                _nominal_str = _numbers[-1].replace(",", "")
-                _nominal = float(_nominal_str)
-
-                _rows.append({
-                    "No": len(_rows) + 1,
-                    "PLU": _plu,
-                    "Nama Barang": _nama[:120],
-                    "Rack": "",
-                    "Stock Fisik": 0,
-                    "Stock Onhand": 0,
-                    "Plus/Minus": 0,
-                    "Selisih Rupiah": _nominal,
-                })
-            except Exception:
-                continue
-
-    if not _rows:
-        _log(f"[Convert] Semua pattern gagal. 0 rows")
+        _log(f"[Convert] Pattern gagal. 0 rows")
         return None
 
     _df = pd.DataFrame(_rows)
