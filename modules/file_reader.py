@@ -6,6 +6,7 @@ Plus logger buffer buat debug UI.
 """
 
 import io
+import re
 import pandas as pd
 from datetime import datetime
 
@@ -242,6 +243,189 @@ def read_excel(file_bytes, filename=""):
             "error": f"Gagal baca Excel: {str(e)[:150]}",
         }
 
+# =========================================================
+# 🔄 CONVERT OCR TEXT → DataFrame (buat PDF/Screenshot)
+# =========================================================
+def convert_ocr_to_dataframe(ocr_text, file_type="pdf"):
+    """
+    Convert OCR text (dari PDF/Screenshot) → DataFrame.
+    Pake regex multi-pattern buat detect baris tabel.
+    """
+    import re
+    import pandas as pd
+
+    if not ocr_text or not str(ocr_text).strip():
+        _log("[Convert] OCR text kosong")
+        return None
+
+    _text = str(ocr_text)
+    _rows = []
+
+    _log(f"[Convert] Converting OCR text ({len(_text)} chars) → DataFrame")
+
+    # Pattern 1: Format lengkap "No PLU Nama Rak Stock Fisik QtyVar Nominal"
+    _pattern1 = re.compile(
+        r'^\s*(\d{1,3})\s+'
+        r'(\d{6,})\s+'
+        r'([A-Z][A-Z0-9\s\.\-/&\'\(\)]+?)\s{2,}'
+        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'
+        r'(-?\d+)\s+'
+        r'(-|\d+)\s+'
+        r'([-+]?\d+)\s+'
+        r'([-+]?[\d,]+\.?\d*)\s*$',
+        re.MULTILINE
+    )
+
+    for _match in _pattern1.finditer(_text):
+        try:
+            _rows.append({
+                "No": int(_match.group(1)),
+                "PLU": _match.group(2).strip(),
+                "Nama Barang": _match.group(3).strip()[:120],
+                "Rack": _match.group(4).strip().upper(),
+                "Stock Fisik": int(_match.group(5)),
+                "Stock Onhand": int(_match.group(6)) if _match.group(6) != "-" else 0,
+                "Plus/Minus": int(_match.group(7)),
+                "Selisih Rupiah": float(_match.group(8).replace(",", "")),
+            })
+        except Exception as _e:
+            _log(f"[Convert] Pattern1 row error: {_e}")
+            continue
+
+    # Pattern 2: Tanpa No di awal — "PLU Nama Rak Stock Fisik QtyVar Nominal"
+    if not _rows:
+        _log("[Convert] Pattern 1 kosong, coba Pattern 2...")
+        _pattern2 = re.compile(
+            r'\b(\d{6,})\s+'
+            r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'
+            r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|\d{2,4})\s+'
+            r'(-?\d+)\s+'
+            r'(-|\d+)\s+'
+            r'([-+]?\d+)\s+'
+            r'([-+]?[\d,]+\.?\d*)',
+            re.MULTILINE
+        )
+
+        for _match in _pattern2.finditer(_text):
+            try:
+                _rows.append({
+                    "No": len(_rows) + 1,
+                    "PLU": _match.group(1).strip(),
+                    "Nama Barang": _match.group(2).strip()[:120],
+                    "Rack": _match.group(3).strip().upper(),
+                    "Stock Fisik": int(_match.group(4)),
+                    "Stock Onhand": int(_match.group(5)) if _match.group(5) != "-" else 0,
+                    "Plus/Minus": int(_match.group(6)),
+                    "Selisih Rupiah": float(_match.group(7).replace(",", "")),
+                })
+            except Exception:
+                continue
+
+    # Pattern 3: Generic — cari baris dengan PLU + minimal 3 angka
+    if not _rows:
+        _log("[Convert] Pattern 2 kosong, coba Pattern 3 (generic)...")
+        for _line in _text.splitlines():
+            _line = _line.strip()
+            if not _line:
+                continue
+
+            _plu_match = re.search(r'\b(\d{6,})\b', _line)
+            if not _plu_match:
+                continue
+
+            _numbers = re.findall(r'[-+]?\d[\d,]*\.?\d*', _line)
+            if len(_numbers) < 4:
+                continue
+
+            try:
+                _plu = _plu_match.group(1)
+                _after_plu = _line[_plu_match.end():].strip()
+                _name_match = re.match(r'([A-Za-z][A-Za-z0-9\s\.\-/&\']+?)\s+\d', _after_plu)
+                _nama = _name_match.group(1).strip() if _name_match else _after_plu[:60]
+
+                _nominal_str = _numbers[-1].replace(",", "")
+                _nominal = float(_nominal_str)
+
+                _rows.append({
+                    "No": len(_rows) + 1,
+                    "PLU": _plu,
+                    "Nama Barang": _nama[:120],
+                    "Rack": "",
+                    "Stock Fisik": 0,
+                    "Stock Onhand": 0,
+                    "Plus/Minus": 0,
+                    "Selisih Rupiah": _nominal,
+                })
+            except Exception:
+                continue
+
+    if not _rows:
+        _log(f"[Convert] Semua pattern gagal. 0 rows")
+        return None
+
+    _df = pd.DataFrame(_rows)
+    _log(f"[Convert] SUCCESS: {len(_df)} rows → DataFrame")
+
+    return _df
+
+
+# =========================================================
+# 🔄 PARSE GEMINI MARKDOWN TABLE
+# =========================================================
+def parse_gemini_markdown_table(markdown_text):
+    """Parse Gemini markdown table output → DataFrame."""
+    import re
+    import pandas as pd
+
+    if not markdown_text:
+        return None
+
+    _text = str(markdown_text)
+    _lines = _text.splitlines()
+
+    _rows = []
+    _in_table = False
+    _header_found = False
+
+    for _line in _lines:
+        _line = _line.strip()
+
+        if _line.startswith("|") and _line.endswith("|"):
+            if re.match(r'^[\|\s\-:]+$', _line):
+                continue
+
+            _cells = [c.strip() for c in _line.split("|")[1:-1]]
+            if not _cells:
+                continue
+
+            if not _header_found:
+                _header_found = True
+                _in_table = True
+                continue
+
+            if _in_table:
+                _rows.append(_cells)
+        else:
+            if _in_table and _rows:
+                break
+
+    if not _rows:
+        return None
+
+    _max_cols = max(len(r) for r in _rows)
+    _normalized = []
+    for _r in _rows:
+        while len(_r) < _max_cols:
+            _r.append("")
+        _normalized.append(_r)
+
+    _col_names = [f"col_{i}" for i in range(_max_cols)]
+
+    _df = pd.DataFrame(_normalized, columns=_col_names)
+
+    _log(f"[Convert] Markdown table parsed: {len(_df)} rows × {_max_cols} cols")
+
+    return _df
 
 # =========================================================
 # UNIVERSAL READER
