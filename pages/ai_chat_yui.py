@@ -525,7 +525,6 @@ if st.session_state.get("yui_file_to_process"):
     yui_log(f"[Yui] === OCR TEXT (full) ===")
     yui_log(_ocr_text)
     yui_log(f"[Yui] === END OCR TEXT ===")
-    
     with st.spinner("📦 Yui olah data file..."):
         _context = {
             "tanggal": _tgl_ctx,
@@ -533,12 +532,15 @@ if st.session_state.get("yui_file_to_process"):
             "pic": None,
         }
 
+        _primary_df = _read_result.get("primary_df", None)
+        yui_log(f"[Yui] primary_df: {_primary_df is not None}, shape: {_primary_df.shape if _primary_df is not None else 'None'}")
+        
         _parse_result = parse_file_text(
             _ocr_text,
             file_type=_read_result.get("type", "unknown"),
             context=_context,
+            primary_df=_primary_df,
         )
-
     yui_log(f"[Yui] Parse result: success={_parse_result.get('success')}, model={_parse_result.get('model', 'unknown')}")
 
     if not _parse_result.get("success"):
