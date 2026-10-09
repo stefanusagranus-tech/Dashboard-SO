@@ -522,7 +522,10 @@ if st.session_state.get("yui_file_to_process"):
 
     _ocr_text = _read_result.get("text", "")
     yui_log(f"[Yui] OCR text length: {len(_ocr_text)}")
-
+    yui_log(f"[Yui] === OCR TEXT (full) ===")
+    yui_log(_ocr_text)
+    yui_log(f"[Yui] === END OCR TEXT ===")
+    
     with st.spinner("📦 Yui olah data file..."):
         _context = {
             "tanggal": _tgl_ctx,

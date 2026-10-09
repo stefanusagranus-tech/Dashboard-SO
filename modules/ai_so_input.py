@@ -543,7 +543,7 @@ def parse_file_text(file_text, file_type="pdf", context=None, primary_df=None):
     if primary_df is not None:
         _log(f"[Yui] DataFrame mode — extract from DataFrame ({primary_df.shape})")
         _df_data = _extract_from_dataframe(primary_df, context=_ctx)
-
+    
         if _df_data and _df_data.get("items"):
             _log(f"[Yui] DataFrame extract OK: {len(_df_data['items'])} items")
             return {
