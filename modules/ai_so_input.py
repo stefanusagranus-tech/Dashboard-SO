@@ -1,8 +1,14 @@
 """
-AI SO Input — Yui (AI-2) v4
+AI SO Input — Yui (AI-2) v5
 =============================
 Pembantu Input Stock Opname.
 Persona: Rekan kerja profesional, teliti, natural.
+
+Fitur:
+- Parse natural language
+- Parse file (PDF/Excel/Screenshot) → DataFrame
+- Logger ke buffer (buat debug UI)
+- Fallback regex multi-pattern
 """
 
 import json
@@ -19,6 +25,8 @@ except ImportError:
 
 from modules.ai_config import get_ai_api_key, get_ai_config
 from modules.token_monitor import record_usage_v2, check_auto_pause
+
+
 # =========================================================
 # LOG BUFFER
 # =========================================================
@@ -37,6 +45,7 @@ def _log(msg):
     except Exception:
         pass
 
+
 # =========================================================
 # 🔧 HELPER
 # =========================================================
@@ -52,12 +61,12 @@ def _setup_yui_client():
     try:
         return Groq(api_key=_key)
     except Exception as _e:
-        print(f"[Yui] Groq setup error: {_e}")
+        _log(f"[Yui] Groq setup error: {_e}")
         return None
 
 
 def _clean_text_for_llm(text):
-    """Clean text dari PDF/OCR — kurangi noise, fix format table."""
+    """Clean text dari PDF/OCR."""
     if not text:
         return ""
 
@@ -92,14 +101,14 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
 
     _prompt = str(prompt)
     if len(_prompt) > 10000:
-        print(f"[Yui] Truncate prompt: {len(_prompt)} → 10000")
+        _log(f"[Yui] Truncate prompt: {len(_prompt)} → 10000")
         _prompt = _prompt[:10000] + "\n\n[... truncated ...]"
 
     def _try_models():
         _last_err = None
         for _model_name in _models:
             try:
-                print(f"[Yui] Trying {_model_name}...")
+                _log(f"[Yui] Trying {_model_name}...")
                 _resp = _client.chat.completions.create(
                     model=_model_name,
                     messages=[{"role": "user", "content": _prompt}],
@@ -110,33 +119,33 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
 
                 if not _resp:
                     _last_err = f"Response None dari {_model_name}"
-                    print(f"[Yui] {_last_err}")
+                    _log(f"[Yui] {_last_err}")
                     continue
 
                 if not _resp.choices:
                     _last_err = f"No choices dari {_model_name}"
-                    print(f"[Yui] {_last_err}")
+                    _log(f"[Yui] {_last_err}")
                     continue
 
                 _choice = _resp.choices[0]
                 if not _choice or not _choice.message:
                     _last_err = f"No message dari {_model_name}"
-                    print(f"[Yui] {_last_err}")
+                    _log(f"[Yui] {_last_err}")
                     continue
 
                 _content = getattr(_choice.message, "content", None)
                 if not _content:
                     _last_err = f"Content None dari {_model_name}"
-                    print(f"[Yui] {_last_err}")
+                    _log(f"[Yui] {_last_err}")
                     continue
 
                 _text = str(_content).strip()
                 if not _text:
                     _last_err = f"Content empty dari {_model_name}"
-                    print(f"[Yui] {_last_err}")
+                    _log(f"[Yui] {_last_err}")
                     continue
 
-                print(f"[Yui] OK: {_model_name} ({len(_text)} chars)")
+                _log(f"[Yui] OK: {_model_name} ({len(_text)} chars)")
 
                 _usage = {"model": _model_name, "success": True}
                 try:
@@ -151,7 +160,7 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
 
             except Exception as _e:
                 _last_err = str(_e)[:200]
-                print(f"[Yui] {_model_name} error: {_last_err}")
+                _log(f"[Yui] {_model_name} error: {_last_err}")
                 continue
 
         return False, "", None, _last_err or "All models failed", {}
@@ -210,7 +219,7 @@ def _extract_json(text):
     try:
         return json.loads(_json_str)
     except json.JSONDecodeError as _e:
-        print(f"[Yui] JSON decode error: {_e}")
+        _log(f"[Yui] JSON decode error: {_e}")
         _json_str = _json_str.replace("'", '"')
         _json_str = re.sub(r',\s*}', '}', _json_str)
         _json_str = re.sub(r',\s*]', ']', _json_str)
@@ -231,10 +240,9 @@ def _fallback_regex_extract(text):
     _items = []
     _text = str(text)
 
-    print(f"[Yui Fallback] Text len: {len(_text)}")
-    print(f"[Yui Fallback] Lines: {len(_text.splitlines())}")
+    _log(f"[Yui Fallback] Text len: {len(_text)}, lines: {len(_text.splitlines())}")
 
-    _pattern = re.compile(
+    _pattern1 = re.compile(
         r'^\s*(\d{1,3})\s+'
         r'(\d{6,})\s+'
         r'([A-Z][A-Z0-9\s\.\-/&\'\(\)]+?)\s{2,}'
@@ -246,37 +254,25 @@ def _fallback_regex_extract(text):
         re.MULTILINE
     )
 
-    for _match in _pattern.finditer(_text):
+    for _match in _pattern1.finditer(_text):
         try:
-            _plu = _match.group(2).strip()
-            _nama = _match.group(3).strip()[:120]
-            _rak = _match.group(4).strip().upper()
-            _qty_sistem = int(_match.group(5))
-
-            _fisik_str = _match.group(6).strip()
-            _qty_fisik = int(_fisik_str) if _fisik_str != "-" else 0
-
-            _qty_var = int(_match.group(7))
-            _nominal_str = _match.group(8).replace(",", "")
-            _nominal = float(_nominal_str)
-
-            _items.append({
-                "rak_id": _rak,
-                "plu": _plu,
-                "nama_produk": _nama,
-                "qty_sistem": _qty_sistem,
-                "qty_fisik": _qty_fisik,
-                "qty_var": _qty_var,
-                "nominal_adjust": _nominal,
+            _rows_data = {
+                "rak_id": _match.group(4).strip().upper(),
+                "plu": _match.group(2).strip(),
+                "nama_produk": _match.group(3).strip()[:120],
+                "qty_sistem": int(_match.group(5)),
+                "qty_fisik": int(_match.group(6)) if _match.group(6) != "-" else 0,
+                "qty_var": int(_match.group(7)),
+                "nominal_adjust": float(_match.group(8).replace(",", "")),
                 "pic": None,
-            })
+            }
+            _items.append(_rows_data)
         except Exception as _e:
-            print(f"[Yui Fallback] Line error: {_e}")
+            _log(f"[Yui Fallback] Pattern1 error: {_e}")
             continue
 
     if not _items:
-        print("[Yui Fallback] Pattern 1 gak dapet, coba Pattern 2...")
-
+        _log("[Yui Fallback] Pattern 1 kosong, coba Pattern 2...")
         _pattern2 = re.compile(
             r'\b(\d{6,})\s+'
             r'([A-Z][A-Z0-9\s\.\-/&\']+?)\s+'
@@ -304,11 +300,10 @@ def _fallback_regex_extract(text):
                 continue
 
     if not _items:
-        print("[Yui Fallback] 0 items. Sample text:")
-        print(_text[:500])
+        _log("[Yui Fallback] 0 items found")
         return None
 
-    print(f"[Yui Fallback] {len(_items)} items extracted")
+    _log(f"[Yui Fallback] {len(_items)} items extracted")
 
     _tanggal = None
     _bulan_map = {
@@ -334,6 +329,116 @@ def _fallback_regex_extract(text):
         "items": _items,
         "total_nominal": _total_nominal,
         "rak_id": None,
+        "pic": None,
+    }
+
+
+# =========================================================
+# 📊 EXTRACT DARI DATAFRAME
+# =========================================================
+def _extract_from_dataframe(df, context=None):
+    """Extract SO data dari DataFrame — handle multi-format kolom."""
+    if df is None or df.empty:
+        return None
+
+    _ctx = context or {}
+    _items = []
+
+    _log(f"[Yui Excel] DataFrame columns: {list(df.columns)}")
+    _log(f"[Yui Excel] DataFrame shape: {df.shape}")
+
+    _df = df.copy()
+    _df.columns = [
+        str(c).strip().lower().replace(" ", "_").replace(".", "").replace("/", "_")
+        for c in _df.columns
+    ]
+
+    def _find_col(candidates):
+        for _cand in candidates:
+            for _col in _df.columns:
+                if _cand in _col:
+                    return _col
+        return None
+
+    _col_plu = _find_col(["plu", "kode", "barcode", "sku", "col_1"])
+    _col_nama = _find_col(["nama", "produk", "barang", "deskripsi", "item", "col_2"])
+    _col_rak = _find_col(["rak", "rack", "kode_rak", "sub_dept", "col_3"])
+    _col_stock = _find_col(["stock_fisik", "stok_fisik", "fisik", "qtycount", "col_4"])
+    _col_onhand = _find_col(["stock_onhand", "onhand", "stok_sistem", "col_5"])
+    _col_var = _find_col(["plus_minus", "var", "selisih_qty", "col_6"])
+    _col_nominal = _find_col(["selisih_rupiah", "nominal", "rupiah", "adjust", "col_7", "col_8"])
+
+    _log(f"[Yui Excel] Mapping: plu={_col_plu}, nama={_col_nama}, rak={_col_rak}, stock={_col_stock}, onhand={_col_onhand}, var={_col_var}, nominal={_col_nominal}")
+
+    def _safe_int(val):
+        try:
+            if val is None:
+                return 0
+            _s = str(val).strip().replace(",", "")
+            if _s in ("", "-", "nan", "none", "total"):
+                return 0
+            return int(float(_s))
+        except Exception:
+            return 0
+
+    def _safe_float(val):
+        try:
+            if val is None:
+                return 0.0
+            _s = str(val).strip()
+            if _s in ("", "-", "nan", "none", "total"):
+                return 0.0
+            _s = re.sub(r'[^\d\.\-+]', '', _s)
+            return float(_s)
+        except Exception:
+            return 0.0
+
+    for _idx, _row in _df.iterrows():
+        try:
+            _plu = str(_row[_col_plu]).strip() if _col_plu else ""
+            _nama = str(_row[_col_nama]).strip()[:120] if _col_nama else ""
+            _rak = str(_row[_col_rak]).strip().upper() if _col_rak else _ctx.get("rak_id", "")
+
+            if not _plu or _plu.lower() in ("nan", "none", "plu", "no", "total", ""):
+                continue
+            if _plu.isdigit() and len(_plu) < 4:
+                continue
+            if not _nama or _nama.lower() in ("nan", "none", "nama", "total"):
+                continue
+            if "total" in _nama.lower() and "selisih" in _nama.lower():
+                continue
+
+            _qty_fisik = _safe_int(_row[_col_stock]) if _col_stock else 0
+            _qty_sistem = _safe_int(_row[_col_onhand]) if _col_onhand else 0
+            _qty_var = _safe_int(_row[_col_var]) if _col_var else (_qty_fisik - _qty_sistem)
+            _nominal = _safe_float(_row[_col_nominal]) if _col_nominal else 0.0
+
+            _items.append({
+                "rak_id": _rak if _rak and _rak != "NAN" else _ctx.get("rak_id", ""),
+                "plu": _plu,
+                "nama_produk": _nama,
+                "qty_sistem": _qty_sistem,
+                "qty_fisik": _qty_fisik,
+                "qty_var": _qty_var,
+                "nominal_adjust": _nominal,
+                "pic": None,
+            })
+        except Exception as _e:
+            _log(f"[Yui Excel] Row error: {_e}")
+            continue
+
+    if not _items:
+        return None
+
+    _log(f"[Yui Excel] Extracted {len(_items)} items")
+
+    _total_nominal = sum(i["nominal_adjust"] for i in _items)
+
+    return {
+        "tanggal": _ctx.get("tanggal"),
+        "items": _items,
+        "total_nominal": _total_nominal,
+        "rak_id": _ctx.get("rak_id"),
         "pic": None,
     }
 
@@ -427,12 +532,32 @@ Output HANYA JSON.
 # =========================================================
 # 📄 2. PARSE FILE TEXT
 # =========================================================
-def parse_file_text(file_text, file_type="pdf", context=None):
+def parse_file_text(file_text, file_type="pdf", context=None, primary_df=None):
     """Parse text dari file → structured SO data."""
     if not file_text or not str(file_text).strip():
         return {"success": False, "data": None, "warnings": ["File kosong"], "missing": [], "raw": ""}
 
     _ctx = context or {}
+
+    # ✅ PRIORITAS 1: Kalau ada DataFrame — extract langsung pake pandas
+    if primary_df is not None:
+        _log(f"[Yui] DataFrame mode — extract from DataFrame ({primary_df.shape})")
+        _df_data = _extract_from_dataframe(primary_df, context=_ctx)
+
+        if _df_data and _df_data.get("items"):
+            _log(f"[Yui] DataFrame extract OK: {len(_df_data['items'])} items")
+            return {
+                "success": True,
+                "data": _df_data,
+                "missing": ["pic"],
+                "warnings": [],
+                "raw": file_text,
+                "model": "dataframe_extract",
+            }
+        else:
+            _log(f"[Yui] DataFrame extract failed, lanjut text-based...")
+
+    # ✅ PRIORITAS 2: Text-based (LLM Groq)
     _ctx_str = ""
     if _ctx.get("rak_id"):
         _ctx_str += f"\n- Rak: {_ctx['rak_id']} (dari konteks)"
@@ -444,8 +569,7 @@ def parse_file_text(file_text, file_type="pdf", context=None):
     _clean_text = _clean_text_for_llm(file_text)
     _clean_text = _clean_text[:6000]
 
-    print(f"[Yui] Clean text length: {len(_clean_text)}")
-    print(f"[Yui] First 500 chars: {_clean_text[:500]}")
+    _log(f"[Yui] Clean text length: {len(_clean_text)}")
 
     _prompt = f"""Kamu Yui, asisten input SO. Baca text di bawah, extract data per BARIS TABEL.
 
@@ -462,17 +586,16 @@ TASK: Extract data SO jadi JSON.
 PENTING:
 - Setiap BARIS tabel = 1 item produk
 - Cari kolom: No | PLU | Nama | Rak | Stock | Fisik | Plus/Minus | Selisih
-- "Rak" = rak_id (contoh: 900, 902, Q61, QA1)
-- "Selisih Rupiah" = nominal_adjust (extract apa adanya + atau -)
+- PERHATIKAN tanda minus (-) — jangan sampai hilang!
 - Extract SEMUA baris (bisa 30-50+ baris)
 
-OUTPUT JSON (JANGAN pakai markdown, JSON murni):
+OUTPUT JSON (JANGAN pakai markdown):
 {{
   "success": true,
   "data": {{
     "tanggal": "2026-10-08",
     "items": [
-      {{"rak_id": "900", "plu": "444756", "nama_produk": "WOW SPAGETI BOLOGNESE 76G", "qty_sistem": 51, "qty_fisik": 51, "qty_var": 0, "nominal_adjust": 5333.58, "pic": null}}
+      {{"rak_id": "900", "plu": "444756", "nama_produk": "WOW SPAGETI", "qty_sistem": 51, "qty_fisik": 51, "qty_var": 0, "nominal_adjust": 5333.58, "pic": null}}
     ],
     "total_nominal": 9948.14
   }},
@@ -480,23 +603,24 @@ OUTPUT JSON (JANGAN pakai markdown, JSON murni):
   "warnings": []
 }}
 
-Kalau gak bisa extract: {{"success": false, "data": null, "warnings": ["Alasan"]}}
 Output HANYA JSON.
 """
 
+    _log(f"[Yui] Calling Groq...")
     _ok, _text, _model, _err = _call_yui_groq(_prompt, function="file_parse", temperature=0.05)
+    _log(f"[Yui] Groq result: ok={_ok}, model={_model}, err={_err}, text_len={len(_text) if _text else 0}")
 
     if not _ok:
-        print(f"[Yui] LLM gagal ({_err}), coba fallback regex...")
+        _log(f"[Yui] LLM gagal, coba fallback regex...")
         _fallback_data = _fallback_regex_extract(file_text)
 
         if _fallback_data and _fallback_data.get("items"):
-            print(f"[Yui] Fallback OK: {len(_fallback_data['items'])} items")
+            _log(f"[Yui] Fallback OK: {len(_fallback_data['items'])} items")
             return {
                 "success": True,
                 "data": _fallback_data,
                 "missing": ["pic"],
-                "warnings": [f"Extracted via regex (LLM offline): {len(_fallback_data['items'])} items"],
+                "warnings": [f"Extracted via regex: {len(_fallback_data['items'])} items"],
                 "raw": file_text,
                 "model": "regex_fallback",
             }
@@ -509,28 +633,15 @@ Output HANYA JSON.
             "raw": file_text,
         }
 
-    print(f"[Yui] Raw response: {_text[:500]}")
-
     _json = _extract_json(_text)
-
-    print(f"[Yui] JSON valid: {bool(_json)}")
-    if _json and isinstance(_json, dict):
-        _data_temp = _json.get('data') or {}
-        if isinstance(_data_temp, dict):
-            _items_temp = _data_temp.get('items', []) or []
-            print(f"[Yui] JSON items count: {len(_items_temp)}")
-        else:
-            print(f"[Yui] Data bukan dict: {type(_data_temp)}")
-    else:
-        print(f"[Yui] JSON None/invalid, skip count")
+    _log(f"[Yui] JSON valid: {bool(_json)}")
 
     if _json and isinstance(_json, dict):
         _data = _json.get("data") or {}
         if isinstance(_data, dict):
             _items = _data.get("items", []) or []
-
             if _items:
-                print(f"[Yui] LLM sukses: {len(_items)} items")
+                _log(f"[Yui] LLM sukses: {len(_items)} items")
                 return {
                     "success": _json.get("success", True),
                     "data": _data,
@@ -540,16 +651,16 @@ Output HANYA JSON.
                     "model": _model,
                 }
 
-    print("[Yui] LLM gagal/kosong, coba fallback regex...")
+    _log(f"[Yui] LLM gagal, coba fallback regex...")
     _fallback_data = _fallback_regex_extract(file_text)
 
     if _fallback_data and _fallback_data.get("items"):
-        print(f"[Yui] Fallback OK: {len(_fallback_data['items'])} items")
+        _log(f"[Yui] Fallback OK: {len(_fallback_data['items'])} items")
         return {
             "success": True,
             "data": _fallback_data,
             "missing": ["pic"],
-            "warnings": [f"Extracted via regex (fallback): {len(_fallback_data['items'])} items"],
+            "warnings": [f"Extracted via regex: {len(_fallback_data['items'])} items"],
             "raw": _text,
             "model": "regex_fallback",
         }
@@ -598,8 +709,6 @@ Balas sebagai Yui. Santai, kayak rekan kerja.
         }
 
     return {"text": _text.strip(), "intent": "chat", "parsed": None}
-
-
 # =========================================================
 # ✅ 4. VALIDASI
 # =========================================================
@@ -670,4 +779,5 @@ __all__ = [
     "yui_chat",
     "validate_so_data",
     "generate_so_rekap",
+    "set_log_buffer",
 ]
