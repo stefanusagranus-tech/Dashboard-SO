@@ -431,29 +431,52 @@ def parse_gemini_markdown_table(markdown_text):
 # UNIVERSAL READER
 # =========================================================
 def read_file(file_bytes, filename, **kwargs):
-    """Universal file reader."""
+    """Universal file reader — auto-convert PDF/Screenshot ke DataFrame."""
     _ftype = detect_file_type(filename)
     _log(f"[FileReader] Type: {_ftype} | File: {filename}")
 
-    if _ftype == "pdf":
-        return read_pdf(file_bytes)
+    # === EXCEL/CSV ===
+    if _ftype in ("excel", "csv"):
+        return read_excel(file_bytes, filename=filename)
 
-    elif _ftype == "image":
-        return read_image(
+    # === PDF ===
+    if _ftype == "pdf":
+        _pdf_result = read_pdf(file_bytes)
+
+        if _pdf_result.get("success") and _pdf_result.get("text"):
+            _df = convert_ocr_to_dataframe(_pdf_result["text"], file_type="pdf")
+            _pdf_result["primary_df"] = _df
+            _pdf_result["converted_df"] = _df is not None
+            _log(f"[FileReader] PDF → DataFrame: {'OK' if _df is not None else 'FAILED'}")
+
+        return _pdf_result
+
+    # === IMAGE ===
+    if _ftype == "image":
+        _img_result = read_image(
             file_bytes,
             nama_personil=kwargs.get("nama_personil", ""),
             bulan=kwargs.get("bulan"),
             tahun=kwargs.get("tahun"),
         )
 
-    elif _ftype in ("excel", "csv"):
-        return read_excel(file_bytes, filename=filename)
+        if _img_result.get("success") and _img_result.get("text"):
+            _df = convert_ocr_to_dataframe(
+                _img_result["text"],
+                file_type=_img_result.get("type", "image_ocr"),
+            )
+            _img_result["primary_df"] = _df
+            _img_result["converted_df"] = _df is not None
+            _log(f"[FileReader] Image → DataFrame: {'OK' if _df is not None else 'FAILED'}")
 
-    else:
-        _log(f"[FileReader] Unknown type: {_ftype}")
-        return {
-            "success": False,
-            "type": "unknown",
-            "text": "",
-            "error": f"Tipe file `{_ftype}` gak didukung. Format: PDF, PNG, JPG, XLSX, CSV.",
-        }
+        return _img_result
+
+    # === UNKNOWN ===
+    _log(f"[FileReader] Unknown type: {_ftype}")
+    return {
+        "success": False,
+        "type": "unknown",
+        "text": "",
+        "primary_df": None,
+        "error": f"Tipe file `{_ftype}` gak didukung.",
+    }
