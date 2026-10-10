@@ -716,19 +716,227 @@ def export_rekap_excel(hasil, net_sales=0):
         return None
 
 def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
-    """Export rekap SO jadi PDF — versi PALING SIMPLE."""
+    """Export rekap SO jadi PDF profesional — 2 halaman (Helvetica)."""
     try:
         from fpdf import FPDF
+
         _pdf = FPDF()
+        _pdf.set_auto_page_break(auto=True, margin=15)
+
+        def _sf(style="", size=10):
+            try:
+                _pdf.set_font("Helvetica", style=style, size=size)
+            except Exception:
+                _pdf.set_font("Helvetica", size=size)
+
+        # =========================================================
+        # HALAMAN 1: ANALISIS GAMBARAN SO
+        # =========================================================
         _pdf.add_page()
-        _pdf.set_font("Helvetica", "B", 20)
-        _pdf.cell(0, 20, "HELLO YUI", ln=True, align="C")
-        _pdf.set_font("Helvetica", "", 12)
-        _pdf.cell(0, 10, "PDF test berhasil", ln=True, align="C")
+
+        # Header band sage
+        _pdf.set_fill_color(151, 179, 174)
+        _pdf.rect(0, 0, 210, 22, style="F")
+        _sf(style="B", size=14)
+        _pdf.set_text_color(255, 255, 255)
+        _pdf.set_xy(12, 4)
+        _pdf.cell(0, 7, "ANALISIS GAMBARAN SO", new_x="LMARGIN", new_y="NEXT")
+        _sf(style="", size=9)
+        _pdf.set_xy(12, 12)
+        _pdf.cell(0, 5, "Toko C383 - Karang Satria", new_x="LMARGIN", new_y="NEXT")
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.set_y(28)
+
+        # KPI Cards
+        _y = _pdf.get_y()
+        _card_w = 58
+        _gap = 4
+        _x_start = (210 - (3 * _card_w + 2 * _gap)) / 2
+
+        _kpi = [
+            ("TOTAL RAK", f"{hasil.get('total_rak', 0)} rak", (210, 224, 211)),
+            ("TOTAL ITEM", f"{hasil.get('total_item', 0)} item", (240, 221, 214)),
+            ("TOTAL NOMINAL", _format_rp(hasil.get("total_nominal", 0)), (242, 195, 185)),
+        ]
+        for _i, (_lbl, _val, _bg) in enumerate(_kpi):
+            _x = _x_start + _i * (_card_w + _gap)
+            _pdf.set_fill_color(*_bg)
+            _pdf.rect(_x, _y, _card_w, 20, style="F")
+            _sf(style="B", size=8)
+            _pdf.set_text_color(60, 60, 60)
+            _pdf.set_xy(_x + 3, _y + 3)
+            _pdf.cell(_card_w - 6, 5, _lbl)
+            _sf(style="B", size=12)
+            _pdf.set_xy(_x + 3, _y + 10)
+            _pdf.cell(_card_w - 6, 7, _val)
+        _pdf.set_y(_y + 24)
+
+        # === RINGKASAN ===
+        _sf(style="B", size=11)
+        _pdf.set_fill_color(151, 179, 174)
+        _pdf.rect(12, _pdf.get_y(), 186, 7, style="F")
+        _pdf.set_text_color(255, 255, 255)
+        _pdf.set_xy(14, _pdf.get_y() + 1.5)
+        _pdf.cell(0, 5, "RINGKASAN PERIODE")
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.ln(10)
+
+        _sales = hasil.get("sales_periode", 0)
+        _btsb = _sales * 0.0015
+        _total_nom = hasil.get("total_nominal", 0)
+        _status = "OVER" if abs(_total_nom) > _btsb else "AMAN"
+
+        _rows = [
+            ("Tanggal", hasil.get("periode", "-")),
+            ("Total Rak di-SO", f"{hasil.get('total_rak', 0)} rak"),
+            ("Nominal SO", _format_rp(_total_nom)),
+            ("Sales Periode", _format_rp_no_sign(_sales)),
+            ("BTSB (0,15%)", _format_rp_no_sign(_btsb)),
+        ]
+        _sf(style="", size=9)
+        for _lbl, _val in _rows:
+            _pdf.set_x(14)
+            _pdf.cell(55, 6, _lbl)
+            _sf(style="B", size=9)
+            _pdf.cell(0, 6, f": {_val}", new_x="LMARGIN", new_y="NEXT")
+            _sf(style="", size=9)
+
+        # Keterangan status
+        _pdf.set_x(14)
+        _pdf.cell(55, 6, "Keterangan")
+        _sf(style="B", size=9)
+        if _status == "OVER":
+            _pdf.set_text_color(200, 50, 50)
+        else:
+            _pdf.set_text_color(50, 150, 50)
+        _pdf.cell(0, 6, f": {_status}", new_x="LMARGIN", new_y="NEXT")
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.ln(4)
+
+        # === DAFTAR RAK ===
+        _sf(style="B", size=11)
+        _pdf.set_fill_color(151, 179, 174)
+        _pdf.rect(12, _pdf.get_y(), 186, 7, style="F")
+        _pdf.set_text_color(255, 255, 255)
+        _pdf.set_xy(14, _pdf.get_y() + 1.5)
+        _pdf.cell(0, 5, "DAFTAR RAK YANG DI-SO")
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.ln(10)
+
+        _sf(style="B", size=8)
+        _pdf.set_fill_color(151, 179, 174)
+        _pdf.set_text_color(255, 255, 255)
+        _col = [22, 65, 35, 30, 34]
+        _pdf.cell(_col[0], 7, "RAK", fill=True, align="C")
+        _pdf.cell(_col[1], 7, "NAMA RAK", fill=True, align="C")
+        _pdf.cell(_col[2], 7, "PIC", fill=True, align="C")
+        _pdf.cell(_col[3], 7, "TANGGAL", fill=True, align="C")
+        _pdf.cell(_col[4], 7, "SELISIH", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+
+        _sf(style="", size=8)
+        _pdf.set_text_color(60, 60, 60)
+        _rak_names = hasil.get("rak_names", {})
+        for _i, _r in enumerate(hasil.get("list_rak", [])):
+            _bg = (240, 238, 234) if _i % 2 == 0 else (255, 255, 255)
+            _pdf.set_fill_color(*_bg)
+            _rak_id = str(_r.get("rak_id", "-"))
+            _rak_name = _rak_names.get(_rak_id, "") or "RAK CUSTOM"
+            _nom = _r.get("total", 0)
+
+            _pdf.cell(_col[0], 6, _rak_id[:12], fill=True, align="C")
+            _pdf.cell(_col[1], 6, _rak_name[:38], fill=True, align="L")
+            _pdf.cell(_col[2], 6, str(_r.get("pic", "-"))[:16], fill=True, align="C")
+            _pdf.cell(_col[3], 6, str(_r.get("tanggal", "-"))[:12], fill=True, align="C")
+
+            if _nom < 0:
+                _pdf.set_text_color(200, 50, 50)
+            else:
+                _pdf.set_text_color(50, 150, 50)
+            _pdf.cell(_col[4], 6, _format_rp(_nom), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+            _pdf.set_text_color(60, 60, 60)
+
+        # =========================================================
+        # HALAMAN 2: LIST ITEM MINUS
+        # =========================================================
+        _pdf.add_page()
+
+        _pdf.set_fill_color(151, 179, 174)
+        _pdf.rect(0, 0, 210, 22, style="F")
+        _sf(style="B", size=14)
+        _pdf.set_text_color(255, 255, 255)
+        _pdf.set_xy(12, 4)
+        _pdf.cell(0, 7, "LIST ITEM YANG MINUS", new_x="LMARGIN", new_y="NEXT")
+        _sf(style="", size=9)
+        _pdf.set_xy(12, 12)
+        _pdf.cell(0, 5, "Toko C383 - Karang Satria", new_x="LMARGIN", new_y="NEXT")
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.set_y(28)
+
+        _items_by_rak = hasil.get("items_by_rak", {})
+        _mode = hasil.get("mode", "hari_ini")
+        _limit = None if _mode == "hari_ini" else (10 if _mode == "minggu_ini" else 20)
+
+        if _items_by_rak:
+            _rak_sorted = sorted(
+                _items_by_rak.items(),
+                key=lambda x: sum(float(i.get("nominal_adjust", 0) or 0) for i in x[1]),
+            )
+
+            for _rak_id, _items in _rak_sorted:
+                _items_minus = [i for i in _items if float(i.get("nominal_adjust", 0) or 0) < 0]
+                if not _items_minus:
+                    continue
+                _items_minus.sort(key=lambda x: float(x.get("nominal_adjust", 0) or 0))
+                if _limit:
+                    _items_minus = _items_minus[:_limit]
+
+                _total_rak = sum(float(i.get("nominal_adjust", 0) or 0) for i in _items_minus)
+                _rak_name = _rak_names.get(_rak_id, "") or "RAK CUSTOM"
+
+                _sf(style="B", size=10)
+                _pdf.set_fill_color(242, 195, 185)
+                _pdf.rect(12, _pdf.get_y(), 186, 7, style="F")
+                _pdf.set_text_color(255, 255, 255)
+                _pdf.set_xy(14, _pdf.get_y() + 1.5)
+                _pdf.cell(0, 5, f"RAK {_rak_id} - {_rak_name[:30]}")
+                _pdf.set_text_color(60, 60, 60)
+                _pdf.ln(9)
+
+                _sf(style="B", size=8)
+                _pdf.set_fill_color(242, 195, 185)
+                _pdf.set_text_color(255, 255, 255)
+                _c = [22, 75, 15, 20, 54]
+                _pdf.cell(_c[0], 6, "PLU", fill=True, align="C")
+                _pdf.cell(_c[1], 6, "NAMA PRODUK", fill=True, align="C")
+                _pdf.cell(_c[2], 6, "QTY VAR", fill=True, align="C")
+                _pdf.cell(_c[3], 6, "PIC", fill=True, align="C")
+                _pdf.cell(_c[4], 6, "NOMINAL", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+
+                _sf(style="", size=8)
+                _pdf.set_text_color(60, 60, 60)
+                for _idx, _it in enumerate(_items_minus):
+                    _bg = (240, 238, 234) if _idx % 2 == 0 else (255, 255, 255)
+                    _pdf.set_fill_color(*_bg)
+                    _pdf.cell(_c[0], 5.5, str(_it.get("plu", "-"))[:12], fill=True, align="C")
+                    _pdf.cell(_c[1], 5.5, str(_it.get("nama_produk", "-"))[:42], fill=True, align="L")
+                    _pdf.cell(_c[2], 5.5, str(_it.get("qty_var", 0)), fill=True, align="C")
+                    _pdf.cell(_c[3], 5.5, str(_it.get("pic", "-"))[:12], fill=True, align="C")
+                    _pdf.set_text_color(200, 50, 50)
+                    _pdf.cell(_c[4], 5.5, _format_rp(_it.get("nominal_adjust", 0)), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+                    _pdf.set_text_color(60, 60, 60)
+
+                _pdf.set_fill_color(214, 203, 191)
+                _sf(style="B", size=9)
+                _pdf.cell(sum(_c[:4]), 6.5, f"TOTAL RAK {_rak_id}", fill=True, align="R")
+                _pdf.set_text_color(200, 50, 50)
+                _pdf.cell(_c[4], 6.5, _format_rp(_total_rak), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+                _pdf.set_text_color(60, 60, 60)
+                _pdf.ln(4)
+
         _output = _pdf.output()
         return bytes(_output) if isinstance(_output, bytearray) else _output
     except Exception as e:
         import traceback
-        _err = f"ERROR: {str(e)}\n\n{traceback.format_exc()}"
+        _err = f"ERROR: {str(e)}\n\nTRACEBACK:\n{traceback.format_exc()}"
         print(_err)
         return _err.encode("utf-8")
