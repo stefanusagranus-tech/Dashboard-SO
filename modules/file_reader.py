@@ -55,7 +55,7 @@ def detect_file_type(filename):
 # 📊 LAYER 1: EXCEL/CSV → pandas
 # =========================================================
 def read_excel(file_bytes, filename=""):
-    """Baca Excel/CSV — auto-detect header row (fleksibel, gak dipaksa posisi)."""
+    """Baca Excel/CSV — auto-detect header row, tanpa filter agresif."""
     try:
         _is_csv = str(filename).lower().endswith(".csv")
 
@@ -76,7 +76,7 @@ def read_excel(file_bytes, filename=""):
         _sheets = {}
         _primary_df = None
 
-        # ✅ Keyword buat deteksi row header
+        # ✅ Keyword buat deteksi row header (minimal 3 match)
         _header_keywords = [
             "plu", "nama barang", "nama produk", "rack", "rak",
             "stock fisik", "stok fisik", "stock onhand", "onhand",
@@ -84,7 +84,7 @@ def read_excel(file_bytes, filename=""):
         ]
 
         for _sheet_name in _xls.sheet_names:
-            # Baca tanpa header dulu — biar bisa "lihat" semua row
+            # Baca tanpa header dulu
             _df_raw = pd.read_excel(_xls, sheet_name=_sheet_name, header=None)
 
             # Cari row header (scan 30 row pertama)
@@ -99,23 +99,16 @@ def read_excel(file_bytes, filename=""):
                     _log(f"[Excel] Header row detected: row {_i} (match={_match_count})")
                     break
 
-            # Kalau ketemu header row → re-read pakai row itu
+            # Re-read pakai header row yang ketemu
             if _header_row is not None:
                 _df = pd.read_excel(_xls, sheet_name=_sheet_name, header=_header_row)
             else:
                 _log(f"[Excel] Header row gak ketemu, fallback ke header=0")
                 _df = pd.read_excel(_xls, sheet_name=_sheet_name)
 
-            # Drop kolom/row yang all-NaN
+            # ✅ Drop kolom/row yang SEMUA-nya NaN doang
+            # JANGAN drop row "TOTAL" — biarkan user audit manual
             _df = _df.dropna(axis=1, how="all").dropna(axis=0, how="all")
-
-            # Drop row yang isinya cuma "TOTAL ..." atau kosong
-            _df = _df[~_df.apply(
-                lambda r: any(
-                    "total" in str(v).lower() and len(str(v)) < 40
-                    for v in r.values if pd.notna(v)
-                ), axis=1
-            )]
 
             _sheets[_sheet_name] = _df
 
