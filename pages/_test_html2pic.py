@@ -1,5 +1,5 @@
 """
-Test html2pic — Cek apakah html2pic works di Streamlit Cloud.
+Test html2pic — Eksperimen CSS layout infografis.
 """
 import streamlit as st
 import io
@@ -8,35 +8,152 @@ import tempfile
 
 
 st.set_page_config(page_title="Test html2pic", page_icon="🧪")
-st.title("Test html2pic")
+st.title("Test html2pic - Eksperimen Infografis")
 
 
+# =========================================================
+# HTML INFOGRAFIS
+# =========================================================
 _html = """
 <html>
-<body style="font-family: Arial; padding: 20px; background: #F0EEEA; margin: 0;">
-    <div style="background: #97B3AE; color: white; padding: 20px; border-radius: 12px;">
-        <h1 style="margin: 0; font-size: 24px;">TEST HEADER</h1>
-        <p style="margin: 5px 0 0; font-size: 14px;">Toko C383 - 10/10/2026</p>
+<head>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: Arial, sans-serif;
+        background: #F0EEEA;
+        width: 1080px;
+        padding: 40px;
+    }
+    .header {
+        background: #97B3AE;
+        color: #FFFFFF;
+        padding: 30px 40px;
+        border-radius: 16px;
+        margin-bottom: 30px;
+    }
+    .header h1 {
+        font-size: 36px;
+        margin-bottom: 8px;
+        color: #FFFFFF;
+    }
+    .header p {
+        font-size: 18px;
+        color: #F0EEEA;
+    }
+    .kpi-row {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    .kpi-card {
+        flex: 1;
+        padding: 25px;
+        border-radius: 12px;
+    }
+    .kpi-label {
+        font-size: 14px;
+        color: #3C3C3C;
+        margin-bottom: 10px;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+    .kpi-value {
+        font-size: 32px;
+        color: #3C3C3C;
+        font-weight: bold;
+    }
+    .kpi-1 { background: #D2E0D3; }
+    .kpi-2 { background: #F0DDD6; }
+    .kpi-3 { background: #F2C3B9; }
+    .section {
+        background: #FFFFFF;
+        padding: 25px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    .section-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #3C3C3C;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #97B3AE;
+    }
+    .section-content {
+        font-size: 16px;
+        color: #3C3C3C;
+        line-height: 1.6;
+    }
+    .footer {
+        text-align: center;
+        font-size: 12px;
+        color: #A89B8E;
+        margin-top: 30px;
+        font-style: italic;
+    }
+</style>
+</head>
+<body>
+
+    <!-- HEADER -->
+    <div class="header">
+        <h1>ANALISIS GAMBARAN SO</h1>
+        <p>Toko C383 - Karang Satria - 10/10/2026</p>
     </div>
-    <div style="display: flex; gap: 12px; margin-top: 20px;">
-        <div style="flex: 1; background: #D2E0D3; padding: 15px; border-radius: 10px;">
-            <small style="color: #3C3C3C;">TOTAL RAK</small>
-            <h2 style="margin: 5px 0; color: #3C3C3C; font-size: 20px;">3 rak</h2>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-row">
+        <div class="kpi-card kpi-1">
+            <div class="kpi-label">TOTAL RAK</div>
+            <div class="kpi-value">3 rak</div>
         </div>
-        <div style="flex: 1; background: #F0DDD6; padding: 15px; border-radius: 10px;">
-            <small style="color: #3C3C3C;">TOTAL ITEM</small>
-            <h2 style="margin: 5px 0; color: #3C3C3C; font-size: 20px;">21 item</h2>
+        <div class="kpi-card kpi-2">
+            <div class="kpi-label">TOTAL ITEM</div>
+            <div class="kpi-value">21 item</div>
         </div>
-        <div style="flex: 1; background: #F2C3B9; padding: 15px; border-radius: 10px;">
-            <small style="color: #3C3C3C;">TOTAL NOMINAL</small>
-            <h2 style="margin: 5px 0; color: #3C3C3C; font-size: 20px;">-Rp 34.556</h2>
+        <div class="kpi-card kpi-3">
+            <div class="kpi-label">TOTAL NOMINAL</div>
+            <div class="kpi-value">-Rp 34.556</div>
         </div>
     </div>
+
+    <!-- RINGKASAN -->
+    <div class="section">
+        <div class="section-title">RINGKASAN PERIODE</div>
+        <div class="section-content">
+            Tanggal: 2026-10-10<br>
+            Total Rak di-SO: 3 rak<br>
+            Nominal SO: -Rp 34.556<br>
+            Sales Periode: Rp 10<br>
+            BTSB (0,15%): Rp 0<br>
+            Keterangan: <b style="color: #C83232;">OVER</b>
+        </div>
+    </div>
+
+    <!-- INSIGHT -->
+    <div class="section">
+        <div class="section-title">INSIGHT</div>
+        <div class="section-content" style="font-style: italic;">
+            Total SO: 3 rak dengan nominal -Rp 34.556. Sales periode: Rp 10.
+            BTSB (0,15%): Rp 0. Rak penyumbang minus terbesar: S14 (-Rp 24.785)
+            oleh PIC REZA. Status: OVER - selisih melebihi batas BTSB, perlu perhatian.
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        Dokumen ini di-generate otomatis oleh Yui - Dashboard SO Toko C383
+    </div>
+
 </body>
 </html>
 """
 
 
+# =========================================================
+# RENDER
+# =========================================================
 if st.button("Test Render", type="primary"):
     try:
         from html2pic import Html2Pic
@@ -44,85 +161,20 @@ if st.button("Test Render", type="primary"):
         _render = Html2Pic(_html)
         _image = _render.render()
         
-        st.info(f"✅ Render berhasil! Tipe objek: `{type(_image)}`")
+        st.info(f"✅ Render berhasil! Tipe: `{type(_image)}`")
         
-        # === COBA SAVE DENGAN BERBAGAI CARA ===
-        _saved = False
-        _img_bytes = None
-        _last_err = None
+        _tmp_path = os.path.join(tempfile.gettempdir(), "test_infografis.png")
+        _image.save(_tmp_path)
         
-        # Cara 1: save ke temp file (paling umum)
-        try:
-            _tmp_path = os.path.join(tempfile.gettempdir(), "test_html2pic.png")
-            _image.save(_tmp_path)
-            with open(_tmp_path, "rb") as _f:
-                _img_bytes = _f.read()
-            if _img_bytes and len(_img_bytes) > 100:
-                _saved = True
-                st.success("✅ Save berhasil (Cara 1: `_image.save(path)`)")
-        except Exception as _e1:
-            _last_err = f"Cara 1 gagal: {_e1}"
-            st.warning(_last_err)
+        with open(_tmp_path, "rb") as _f:
+            _img_bytes = _f.read()
         
-        # Cara 2: save dengan format arg
-        if not _saved:
-            try:
-                _tmp_path2 = os.path.join(tempfile.gettempdir(), "test_html2pic_2.png")
-                _image.save(_tmp_path2, "PNG")
-                with open(_tmp_path2, "rb") as _f:
-                    _img_bytes = _f.read()
-                if _img_bytes and len(_img_bytes) > 100:
-                    _saved = True
-                    st.success("✅ Save berhasil (Cara 2: `_image.save(path, 'PNG')`)")
-            except Exception as _e2:
-                _last_err = f"Cara 2 gagal: {_e2}"
-                st.warning(_last_err)
+        st.success(f"✅ Save berhasil! Ukuran: {len(_img_bytes):,} bytes")
         
-        # Cara 3: encodeToData + PIL
-        if not _saved:
-            try:
-                from PIL import Image as PILImage
-                _data = _image.encodeToData()
-                _bytes = _data.bytes() if hasattr(_data, "bytes") else bytes(_data)
-                _pil = PILImage.open(io.BytesIO(_bytes))
-                _buf = io.BytesIO()
-                _pil.save(_buf, format="PNG")
-                _img_bytes = _buf.getvalue()
-                if _img_bytes and len(_img_bytes) > 100:
-                    _saved = True
-                    st.success("✅ Save berhasil (Cara 3: `encodeToData` + PIL)")
-            except Exception as _e3:
-                _last_err = f"Cara 3 gagal: {_e3}"
-                st.warning(_last_err)
-        
-        # Cara 4: toarray + PIL
-        if not _saved:
-            try:
-                from PIL import Image as PILImage
-                import numpy as np
-                _arr = _image.toarray()
-                _pil = PILImage.fromarray(np.array(_arr))
-                _buf = io.BytesIO()
-                _pil.save(_buf, format="PNG")
-                _img_bytes = _buf.getvalue()
-                if _img_bytes and len(_img_bytes) > 100:
-                    _saved = True
-                    st.success("✅ Save berhasil (Cara 4: `toarray` + PIL)")
-            except Exception as _e4:
-                _last_err = f"Cara 4 gagal: {_e4}"
-                st.warning(_last_err)
-        
-        # === HASIL ===
-        if _saved and _img_bytes:
-            st.markdown("---")
-            st.markdown("### 📸 Hasil")
-            st.image(_img_bytes, caption="Hasil html2pic")
-            st.success("🎉 **html2pic WORKS!** Siap dipakai buat infografis.")
-        else:
-            st.error(f"❌ Semua cara save gagal. Error terakhir: {_last_err}")
-            st.markdown("**Detail objek `_image`:**")
-            st.code(f"Tipe: {type(_image)}\nDir: {[m for m in dir(_image) if not m.startswith('_')]}")
+        st.markdown("---")
+        st.markdown("### 📸 Hasil")
+        st.image(_img_bytes, caption="Hasil html2pic")
     
     except Exception as e:
         import traceback
-        st.error(f"❌ html2pic GAGAL:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
+        st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
