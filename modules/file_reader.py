@@ -199,34 +199,51 @@ def read_pdf_pypdf2(file_bytes):
 # 📄 READ PDF — multi-layer
 # =========================================================
 def read_pdf(file_bytes):
-    """Baca PDF — coba pdfplumber dulu, fallback PyPDF2."""
-    # Layer 1: pdfplumber
-    _result = read_pdf_plumber(file_bytes)
-    if _result.get("success"):
-        _log(f"[PDF] ✅ pdfplumber SUCCESS")
-        return _result
+    """Baca PDF — extract text aja, jangan jadi DataFrame."""
+    # Layer 1: pdfplumber text only
+    try:
+        import pdfplumber
+        _all_text = []
+        with pdfplumber.open(io.BytesIO(file_bytes)) as _pdf:
+            for _page in _pdf.pages:
+                _page_text = _page.extract_text() or ""
+                _all_text.append(_page_text)
 
-    _log(f"[PDF] pdfplumber gagal, coba PyPDF2...")
+        _full_text = "\n".join(_all_text)
+        _log(f"[PDF] pdfplumber text: {len(_full_text)} chars")
 
-    # Layer 2: PyPDF2
-    _result2 = read_pdf_pypdf2(file_bytes)
-    if _result2.get("success"):
-        _log(f"[PDF] ✅ PyPDF2 SUCCESS")
+        if _full_text.strip():
+            return {
+                "success": True,
+                "type": "pdf",
+                "text": _full_text,
+                "primary_df": None,
+                "error": None,
+            }
+    except Exception as _e:
+        _log(f"[PDF] pdfplumber error: {_e}")
+
+    # Layer 2: PyPDF2 fallback
+    try:
+        import PyPDF2
+        _pdf = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+        _text = ""
+        for _page in _pdf.pages:
+            _text += _page.extract_text() + "\n"
+
+        _log(f"[PDF] PyPDF2: {len(_text)} chars")
         return {
             "success": True,
             "type": "pdf",
-            "text": _result2.get("text", ""),
+            "text": _text.strip(),
             "primary_df": None,
             "error": None,
         }
-
-    return {
-        "success": False,
-        "type": "pdf",
-        "text": "",
-        "primary_df": None,
-        "error": f"Semua metode PDF gagal: {_result.get('error', '')}",
-    }
+    except Exception as _e:
+        return {
+            "success": False, "type": "pdf", "text": "",
+            "primary_df": None, "error": str(_e)[:150],
+        }
 
 
 # =========================================================

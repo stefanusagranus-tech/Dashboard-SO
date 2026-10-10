@@ -59,6 +59,7 @@ def _setup_yui_client():
 
 
 def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
+    """Call Groq — pake reasoning_effort=low biar gak Content None."""
     if check_auto_pause("ai-2"):
         return False, "", None, "Auto-pause"
 
@@ -78,12 +79,15 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
         for _model_name in _models:
             try:
                 _log(f"[Yui] Trying {_model_name}...")
+                
+                # ✅ FIX: reasoning_effort=low biar budget gak abis buat "mikir"
                 _resp = _client.chat.completions.create(
                     model=_model_name,
                     messages=[{"role": "user", "content": _prompt}],
                     temperature=temperature,
-                    max_tokens=2048,
+                    max_tokens=4096,
                     top_p=0.95,
+                    extra_body={"reasoning_effort": "low"},
                 )
 
                 if not _resp or not _resp.choices:
@@ -91,13 +95,22 @@ def _call_yui_groq(prompt, hard_timeout=90, function="parse", temperature=0.5):
                     continue
 
                 _choice = _resp.choices[0]
-                if not _choice or not _choice.message:
+                _msg = _choice.message if _choice else None
+                if not _msg:
                     _last_err = f"No message dari {_model_name}"
                     continue
 
-                _content = getattr(_choice.message, "content", None)
+                _content = getattr(_msg, "content", None)
+                
+                # ✅ FIX: Fallback ke reasoning_content kalau content None
                 if not _content:
-                    _last_err = f"Content None dari {_model_name}"
+                    _reasoning = getattr(_msg, "reasoning_content", None)
+                    if _reasoning:
+                        _log(f"[Yui] Fallback ke reasoning_content dari {_model_name}")
+                        _content = _reasoning
+                
+                if not _content:
+                    _last_err = f"Content & reasoning kosong dari {_model_name}"
                     continue
 
                 _text = str(_content).strip()
@@ -207,7 +220,85 @@ def _safe_float(val):
     except Exception:
         return 0.0
 
+def _parse_via_gemini(file_text, context=None):
+    """Parse PDF text pake Gemini."""
+    import streamlit as st
+    
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+    except ImportError:
+        _log("[Yui] Gemini SDK gak ada")
+        return None
 
+    _ctx = context or {}
+
+    try:
+        _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        if not _api_key:
+            _log("[Yui] GEMINI_API_KEY kosong")
+            return None
+
+        _client = genai.Client(api_key=_api_key)
+
+        _prompt = f"""Kamu Yui, extract data SO jadi JSON.
+
+TEXT:
+{file_text[:6000]}
+
+Konteks: {_ctx}
+
+Output JSON:
+{{
+  "success": true,
+  "data": {{
+    "tanggal": "YYYY-MM-DD atau null",
+    "items": [
+      {{"rak_id": "900", "plu": "444756", "nama_produk": "WOW SPAGETI", "qty_sistem": 51, "qty_fisik": 51, "qty_var": 0, "nominal_adjust": 5333.58}}
+    ],
+    "total_nominal": 9948.14
+  }},
+  "warnings": []
+}}
+
+Output HANYA JSON.
+"""
+
+        _models = ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
+
+        for _model_name in _models:
+            try:
+                _log(f"[Yui] Trying Gemini {_model_name}...")
+                _resp = _client.models.generate_content(
+                    model=_model_name,
+                    contents=[_prompt],
+                    config=genai_types.GenerateContentConfig(
+                        temperature=0.05,
+                        max_output_tokens=4096,
+                    ),
+                )
+
+                if _resp and hasattr(_resp, "text") and _resp.text:
+                    _text = _resp.text.strip()
+                    _json = _extract_json(_text)
+                    if _json and isinstance(_json, dict):
+                        _data = _json.get("data") or {}
+                        _items = _data.get("items", []) if isinstance(_data, dict) else []
+                        if _items:
+                            _log(f"[Yui] Gemini {_model_name}: {len(_items)} items")
+                            return _data
+                else:
+                    _log(f"[Yui] Gemini {_model_name} empty")
+            except Exception as _e:
+                _log(f"[Yui] Gemini {_model_name} error: {str(_e)[:150]}")
+                continue
+
+        return None
+
+    except Exception as e:
+        _log(f"[Yui] Gemini error: {str(e)[:200]}")
+        return None
+        
 # =========================================================
 # 📊 LAYER 1: EXTRACT DARI DATAFRAME
 # =========================================================
@@ -291,33 +382,58 @@ def parse_file_text(file_text, file_type="pdf", context=None, primary_df=None):
 
     _ctx = context or {}
 
-    # ✅ CLEAN HTML ENTITIES
+    # Clean HTML entities
     if file_text:
         file_text = str(file_text)
         file_text = file_text.replace("&#39;", "'").replace("&amp;", "&")
         file_text = file_text.replace("&quot;", '"').replace("&nbsp;", " ")
 
     # ============================================================
-    # PRIORITAS 1: DataFrame (Excel / PDF via pdfplumber)
+    # PRIORITAS 1: DataFrame (Excel)
     # ============================================================
     if primary_df is not None and not primary_df.empty:
         _log(f"[Yui] DataFrame mode ({primary_df.shape})")
         _df_data = _extract_from_dataframe(primary_df, context=_ctx)
 
         if _df_data and _df_data.get("items"):
-            _log(f"[Yui] ✅ DataFrame extract: {len(_df_data['items'])} items")
+            _items_count = len(_df_data['items'])
+            _df_rows = len(primary_df)
+            _ratio = _items_count / _df_rows if _df_rows > 0 else 0
+            _log(f"[Yui] DataFrame: {_items_count}/{_df_rows} rows (ratio: {_ratio:.2f})")
+
+            if _ratio >= 0.7:
+                _log(f"[Yui] ✅ DataFrame extract OK")
+                return {
+                    "success": True,
+                    "data": _df_data,
+                    "missing": ["pic"],
+                    "warnings": [],
+                    "raw": file_text,
+                    "model": "dataframe_extract",
+                }
+
+        _log(f"[Yui] DataFrame gagal/skip, lanjut...")
+
+    # ============================================================
+    # PRIORITAS 2: PDF → Gemini (bukan Groq, biar stabil)
+    # ============================================================
+    if file_type == "pdf":
+        _log(f"[Yui] PDF mode — coba Gemini...")
+        _gemini_data = _parse_via_gemini(file_text, context=_ctx)
+
+        if _gemini_data and _gemini_data.get("items"):
+            _log(f"[Yui] ✅ Gemini extract: {len(_gemini_data['items'])} items")
             return {
                 "success": True,
-                "data": _df_data,
+                "data": _gemini_data,
                 "missing": ["pic"],
                 "warnings": [],
                 "raw": file_text,
-                "model": "dataframe_extract",
+                "model": "gemini_parse",
             }
-        _log(f"[Yui] DataFrame gagal, lanjut LLM...")
 
     # ============================================================
-    # PRIORITAS 2: LLM (Groq)
+    # PRIORITAS 3: Screenshot / general → Groq
     # ============================================================
     _clean_text = re.sub(r'</?(?:table|tr|td|th|div|span|p|br)[^>]*>', ' ', file_text, flags=re.IGNORECASE)
     _clean_text = re.sub(r'[ \t]+', ' ', _clean_text)
@@ -358,7 +474,7 @@ Output HANYA JSON.
             _data = _json.get("data") or {}
             _items = _data.get("items", []) if isinstance(_data, dict) else []
             if _items:
-                _log(f"[Yui] ✅ LLM extract: {len(_items)} items")
+                _log(f"[Yui] ✅ Groq extract: {len(_items)} items")
                 return {
                     "success": True,
                     "data": _data,
@@ -369,9 +485,9 @@ Output HANYA JSON.
                 }
 
     # ============================================================
-    # PRIORITAS 3: Regex Fallback
+    # PRIORITAS 4: Regex Fallback
     # ============================================================
-    _log(f"[Yui] LLM gagal, coba regex...")
+    _log(f"[Yui] Semua gagal, coba regex...")
     _regex_data = _regex_fallback(file_text)
 
     if _regex_data and _regex_data.get("items"):
@@ -380,7 +496,7 @@ Output HANYA JSON.
             "success": True,
             "data": _regex_data,
             "missing": ["pic"],
-            "warnings": [f"Extracted via regex"],
+            "warnings": ["Extracted via regex"],
             "raw": file_text,
             "model": "regex_fallback",
         }
@@ -388,58 +504,10 @@ Output HANYA JSON.
     return {
         "success": False,
         "data": None,
-        "warnings": ["Semua metode gagal extract"],
+        "warnings": ["Semua metode gagal"],
         "missing": [],
         "raw": file_text,
     }
-
-
-def _regex_fallback(text):
-    """Regex fallback terakhir."""
-    if not text:
-        return None
-
-    _text = str(text).replace("−", "-").replace("–", "-").replace("—", "-")
-    _items = []
-
-    _pattern = re.compile(
-        r'^\s*(\d{1,3})\s+'
-        r'(\d{5,})\s+'
-        r'(.+?)\s+'
-        r'(Q\d{1,3}|QA\d{1,3}|O[A-Z]\d{1,2}|S\d{1,2}|\d{2,4})\s+'
-        r'(-?\d+)\s+'
-        r'(-|\d+)\s+'
-        r'([-+]?\d+)\s+'
-        r'([-+]?[\d,]+\.?\d*)\s*$',
-        re.MULTILINE
-    )
-
-    for _match in _pattern.finditer(_text):
-        try:
-            _items.append({
-                "rak_id": _match.group(4).strip().upper(),
-                "plu": _match.group(2).strip(),
-                "nama_produk": _match.group(3).strip()[:120],
-                "qty_sistem": int(_match.group(5)),
-                "qty_fisik": int(_match.group(6)) if _match.group(6) != "-" else 0,
-                "qty_var": int(_match.group(7)),
-                "nominal_adjust": float(_match.group(8).replace(",", "")),
-                "pic": None,
-            })
-        except Exception:
-            continue
-
-    if not _items:
-        return None
-
-    return {
-        "tanggal": None,
-        "items": _items,
-        "total_nominal": sum(i["nominal_adjust"] for i in _items),
-        "rak_id": None,
-        "pic": None,
-    }
-
 
 # =========================================================
 # 💬 CHAT

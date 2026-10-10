@@ -692,8 +692,9 @@ if st.session_state.get("yui_pending_data"):
                 st.rerun()
 
     else:
-        st.markdown("#### 📋 Preview Data SO")
-
+        st.markdown("#### 📋 Konfirmasi Data SO")
+    
+        # Info summary
         _preview_html = (
             f"<div class='preview-card'>"
             f"<div class='preview-title'>📦 DATA SIAP DISIMPAN</div>"
@@ -707,13 +708,83 @@ if st.session_state.get("yui_pending_data"):
             f"<td style='text-align: right;'>{_pending.get('rak_id', '-')}</td></tr>"
             f"<tr><td class='rak-id'>👤 PIC</td>"
             f"<td style='text-align: right;'>{_pending.get('pic', '-')}</td></tr>"
-            f"<tr><td class='rak-id'>📦 Jumlah Item</td>"
-            f"<td style='text-align: right;'>{len(_pending.get('items', []))}</td></tr>"
             f"</tbody></table>"
             f"</div>"
         )
         st.markdown(_preview_html, unsafe_allow_html=True)
-
+    
+        # ✅ TABEL ITEM KONFIRMASI
+        st.markdown("##### 📦 Detail Item")
+    
+        _items_list = _pending.get("items", [])
+        
+        if _items_list:
+            _df_items = pd.DataFrame(_items_list)
+            
+            # Kolom yang ditampilkan
+            _cols_show = ["rak_id", "plu", "nama_produk", "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust"]
+            _cols_show = [c for c in _cols_show if c in _df_items.columns]
+            _df_items = _df_items[_cols_show]
+            
+            # Rename
+            _df_items = _df_items.rename(columns={
+                "rak_id": "Rak",
+                "plu": "PLU",
+                "nama_produk": "Nama Produk",
+                "qty_sistem": "Qty Sistem",
+                "qty_fisik": "Qty Fisik",
+                "qty_var": "Qty Var",
+                "nominal_adjust": "Nominal",
+            })
+    
+            # ✅ Editable table
+            _edited_items = st.data_editor(
+                _df_items,
+                use_container_width=True,
+                hide_index=True,
+                height=min(400, 60 + len(_df_items) * 40),
+                column_config={
+                    "Rak": st.column_config.TextColumn("Rak", width="small", disabled=True),
+                    "PLU": st.column_config.TextColumn("PLU", width="small", disabled=True),
+                    "Nama Produk": st.column_config.TextColumn("Nama Produk", width="large"),
+                    "Qty Sistem": st.column_config.NumberColumn("Qty Sistem", width="small"),
+                    "Qty Fisik": st.column_config.NumberColumn("Qty Fisik", width="small"),
+                    "Qty Var": st.column_config.NumberColumn("Qty Var", width="small"),
+                    "Nominal": st.column_config.NumberColumn("Nominal", format="Rp %d", width="medium"),
+                },
+                key="yui_confirm_items",
+            )
+    
+            # Detect perubahan
+            _has_changes = not _df_items.equals(_edited_items)
+    
+            if _has_changes:
+                _log(f"[Yui] User edit item di konfirmasi")
+    
+            # Update pending data dengan edited items
+            _updated_items = []
+            for _, _row in _edited_items.iterrows():
+                _updated_items.append({
+                    "rak_id": _row.get("Rak", ""),
+                    "plu": _row.get("PLU", ""),
+                    "nama_produk": _row.get("Nama Produk", ""),
+                    "qty_sistem": int(_row.get("Qty Sistem", 0) or 0),
+                    "qty_fisik": int(_row.get("Qty Fisik", 0) or 0),
+                    "qty_var": int(_row.get("Qty Var", 0) or 0),
+                    "nominal_adjust": float(_row.get("Nominal", 0) or 0),
+                    "pic": _pending.get("pic"),
+                })
+            st.session_state["yui_pending_data"]["items"] = _updated_items
+            
+            # Update total nominal
+            _new_total = sum(i["nominal_adjust"] for i in _updated_items)
+            st.session_state["yui_pending_data"]["total_nominal"] = _new_total
+    
+            st.caption(f"📊 **{len(_edited_items)}** item • Total: **Rp {int(_new_total):,}**".replace(",", "."))
+        else:
+            st.warning("⚠️ Gak ada item yang berhasil di-extract")
+    
+        # Warnings
         _warnings_pending = _pending.get("warnings", [])
         if _warnings_pending:
             for _w in _warnings_pending:
@@ -721,10 +792,10 @@ if st.session_state.get("yui_pending_data"):
                     f"<div class='warning-card'>⚠️ {_w}</div>",
                     unsafe_allow_html=True,
                 )
-
+    
         _total_nom = _pending.get("total_nominal", 0)
         _color_total = "#E88B8B" if _total_nom < 0 else "#7FB99B"
-
+    
         st.markdown(
             f"<div style='background: rgba(20, 12, 35, 0.95); "
             f"border-left: 3px solid {_color_total}; border-radius: 10px; "
@@ -737,7 +808,8 @@ if st.session_state.get("yui_pending_data"):
             f"</div>",
             unsafe_allow_html=True,
         )
-
+    
+        # Tombol
         _col_save, _col_cancel = st.columns([2, 1])
 
         with _col_save:
