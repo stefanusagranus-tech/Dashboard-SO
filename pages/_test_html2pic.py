@@ -1,6 +1,6 @@
 """
-Test pictex — Background Cream (No White Cards)
-==================================================
+Test pictex — Cream BG + Stretch
+===================================
 """
 import streamlit as st
 import os
@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-st.set_page_config(page_title="Cream BG", page_icon="🎨", layout="wide")
-st.title("🎨 Cream Background — No White Cards")
+st.set_page_config(page_title="Cream BG + Stretch", page_icon="🎨", layout="wide")
+st.title("🎨 Cream BG + Stretch")
 
 
 # =========================================================
@@ -303,7 +303,7 @@ def _build_infografis(data, tmp_dir):
         ).size(width=_W).gap(8)
 
     # =========================================================
-    # SECTION 01 — DONUT + RINGKASAN (BG CREAM)
+    # SECTION 01 — DONUT + RINGKASAN (BG CREAM + STRETCH)
     # =========================================================
     _title_01 = _section_title("01", "DISTRIBUSI & RINGKASAN")
 
@@ -315,7 +315,7 @@ def _build_infografis(data, tmp_dir):
         )
         .size(width=_CARD_W)
         .padding(20)
-        .background_color(WARNA["bg"])   # ← CREAM
+        .background_color(WARNA["bg"])
         .border_radius(12)
         .gap(10)
     )
@@ -365,15 +365,15 @@ def _build_infografis(data, tmp_dir):
         )
         .size(width=_CARD_W)
         .padding(20)
-        .background_color(WARNA["bg"])   # ← CREAM
+        .background_color(WARNA["bg"])
         .border_radius(12)
         .gap(8)
     )
 
-    _row_01 = Row(_donut_col, _ringkasan_col).gap(_GAP).size(width=_W).align_items("start")
+    _row_01 = Row(_donut_col, _ringkasan_col).gap(_GAP).size(width=_W).align_items("stretch")
 
     # =========================================================
-    # SECTION 02 — TABEL + TREND (BG CREAM)
+    # SECTION 02 — TABEL + TREND (BG CREAM + STRETCH)
     # =========================================================
     _title_02 = _section_title("02", "DETAIL & TREND")
 
@@ -417,12 +417,12 @@ def _build_infografis(data, tmp_dir):
         )
         .size(width=_TREND2_W)
         .padding(20)
-        .background_color(WARNA["bg"])   # ← CREAM
+        .background_color(WARNA["bg"])
         .border_radius(12)
         .gap(10)
     )
 
-    _row_02 = Row(_tabel_col, _trend2_col).gap(_GAP).size(width=_W).align_items("start")
+    _row_02 = Row(_tabel_col, _trend2_col).gap(_GAP).size(width=_W).align_items("stretch")
 
     # =========================================================
     # FOOTER
@@ -456,7 +456,7 @@ def _build_infografis(data, tmp_dir):
 # =========================================================
 # RENDER
 # =========================================================
-if st.button("🎨 Render Cream BG", type="primary"):
+if st.button("🎨 Render Cream + Stretch", type="primary"):
     try:
         _tmp_dir = tempfile.mkdtemp()
         with st.spinner("Bikin infografis..."):
@@ -468,11 +468,11 @@ if st.button("🎨 Render Cream BG", type="primary"):
         st.success(f"✅ Berhasil! Ukuran: {len(_img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(_img_bytes, caption="Cream BG")
+        st.image(_img_bytes, caption="Cream BG + Stretch")
         st.download_button(
             "📥 Download PNG", data=_img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-            mime="image/png", key="dl_cream", type="primary",
+            mime="image/png", key="dl_cream_stretch", type="primary",
         )
         try:
             import shutil
