@@ -1,7 +1,6 @@
 """
-Test pictex — Premium Report FINAL v2
-========================================
-Ringkasan Opsi B: Divider + Badge
+Test pictex — Premium Report FINAL (Bener Secara Teknis)
+==========================================================
 """
 import streamlit as st
 import os
@@ -15,7 +14,7 @@ import numpy as np
 
 
 st.set_page_config(page_title="Test pictex", page_icon="🎨", layout="wide")
-st.title("🎨 Premium Report — Final v2")
+st.title("🎨 Premium Report — Final")
 
 
 # =========================================================
@@ -47,7 +46,6 @@ WARNA = {
 # =========================================================
 _data = {
     "periode": "2026-10-10 s/d 2026-10-10",
-    "tanggal": "10 Oktober 2026",
     "total_rak": 3,
     "total_item": 21,
     "total_nominal": -34556,
@@ -107,12 +105,8 @@ def _chart_donut(list_rak, output_path, size_px=460):
     ax.set_facecolor(WARNA["cream"])
 
     wedges, texts, autotexts = ax.pie(
-        _sizes,
-        labels=None,
-        colors=_colors[:len(_sizes)],
-        autopct=lambda p: f"{p:.0f}%",
-        pctdistance=0.78,
-        startangle=90,
+        _sizes, labels=None, colors=_colors[:len(_sizes)],
+        autopct=lambda p: f"{p:.0f}%", pctdistance=0.78, startangle=90,
         wedgeprops=dict(width=0.40, edgecolor=WARNA["cream"], linewidth=3),
     )
 
@@ -126,21 +120,13 @@ def _chart_donut(list_rak, output_path, size_px=460):
         x = np.cos(np.radians(angle))
         y = np.sin(np.radians(angle))
         ha = "right" if x < 0 else "left"
-        ax.annotate(
-            label,
-            xy=(x * 0.85, y * 0.85),
-            xytext=(x * 1.28, y * 1.28),
-            ha=ha, va="center",
-            fontsize=11, fontweight="bold",
-            color=WARNA["text_primary"],
-        )
+        ax.annotate(label, xy=(x * 0.85, y * 0.85), xytext=(x * 1.28, y * 1.28),
+                    ha=ha, va="center", fontsize=11, fontweight="bold", color=WARNA["text_primary"])
 
     _total = sum(_sizes)
-    ax.text(0, 0.05, _fmt_rp_no_sign(_total),
-            ha="center", va="center",
+    ax.text(0, 0.05, _fmt_rp_no_sign(_total), ha="center", va="center",
             fontsize=14, fontweight="bold", color=WARNA["accent_deep"])
-    ax.text(0, -0.10, "TOTAL",
-            ha="center", va="center",
+    ax.text(0, -0.10, "TOTAL", ha="center", va="center",
             fontsize=9, fontweight="bold", color=WARNA["text_muted"])
 
     plt.tight_layout()
@@ -189,7 +175,6 @@ def _chart_double(trend_data, output_path, width_px=940, height_px=280):
     ax.set_xticklabels(_labels)
     ax.tick_params(axis="x", labelsize=11, colors=WARNA["text_secondary"])
     ax.tick_params(axis="y", labelsize=10, colors=WARNA["text_muted"])
-
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
@@ -233,13 +218,21 @@ def _build_infografis(data, tmp_dir):
     )
 
     # =========================================================
+    # HELPER: DIVIDER (wajib pakai size eksplisit)
+    # =========================================================
+    def _divider(w=1000, h=1, color=None):
+        if color is None:
+            color = WARNA["divider"]
+        return (
+            Column(Text("").font_size(1))
+            .size(width=w, height=h)
+            .background_color(color)
+        )
+
+    # =========================================================
     # HEADER
     # =========================================================
-    header_bar = (
-        Column(Text("").font_size(1))
-        .width(8)
-        .background_color(WARNA["accent_deep"])
-    )
+    header_bar = _divider(w=8, h=100, color=WARNA["accent_deep"])
 
     header_text = (
         Column(
@@ -253,8 +246,7 @@ def _build_infografis(data, tmp_dir):
 
     header = Row(header_bar, header_text).gap(20).width(_W)
 
-    # Divider pakai karakter ─
-    divider_top = Text("─" * 95).font_size(8).color(WARNA["divider"])
+    divider_top = _divider(w=_W, h=1)
 
     # =========================================================
     # KPI CARDS
@@ -306,15 +298,10 @@ def _build_infografis(data, tmp_dir):
     )
 
     # =========================================================
-    # KANAN: RINGKASAN + INSIGHT (Divider pakai karakter)
+    # KANAN: RINGKASAN + INSIGHT
     # =========================================================
     _status_color = WARNA["red"] if data["status"] == "OVER" else WARNA["green"]
 
-    # Helper divider pakai karakter
-    def _div_line():
-        return Text("─" * 42).font_size(7).color(WARNA["divider"])
-
-    # Helper metric row
     def _metric_row(label, value, value_color=None):
         if value_color is None:
             value_color = WARNA["text_primary"]
@@ -323,39 +310,44 @@ def _build_infografis(data, tmp_dir):
             Text(value).font_size(14).color(value_color).font_weight("bold"),
         ).gap(12).width(428)
 
+    # Baris status dengan badge bulat (pakai size eksplisit)
+    _status_badge = (
+        Row(
+            Column(Text("").font_size(1))
+            .size(width=12, height=12)
+            .background_color(_status_color)
+            .border_radius(6),
+            Text(f" {data['status']}").font_size(14).color(_status_color).font_weight("bold"),
+        ).gap(8)
+    )
+
     _ringkasan_col = (
         Column(
-            # Judul
             Text("RINGKASAN PERIODE").font_size(15).color(WARNA["accent_deep"]).font_weight("bold"),
-            Text("─" * 42).font_size(8).color(WARNA["accent_deep"]),
+            _divider(w=428, h=2, color=WARNA["accent_deep"]),
 
-            # Row 1
             _metric_row("Tanggal", data["periode"]),
-            _div_line(),
+            _divider(w=428, h=1),
             _metric_row("Total Rak", f"{data['total_rak']} rak"),
-            _div_line(),
+            _divider(w=428, h=1),
             _metric_row("Nominal SO", _fmt_rp(data["total_nominal"]), WARNA["red"]),
-            _div_line(),
+            _divider(w=428, h=1),
             _metric_row("Sales Periode", _fmt_rp_no_sign(data["sales_periode"])),
-            _div_line(),
+            _divider(w=428, h=1),
             _metric_row("BTSB (0,15%)", _fmt_rp_no_sign(data["btsb"])),
-            _div_line(),
+            _divider(w=428, h=1),
 
             # Status row
             Row(
                 Text("Status").font_size(13).color(WARNA["text_muted"]).width(150),
-                Row(
-                    Text("●").font_size(16).color(_status_color),
-                    Text(f" {data['status']}").font_size(14).color(_status_color).font_weight("bold"),
-                ).gap(6),
+                _status_badge,
             ).gap(12).width(428),
 
-            # Spacer
-            Text("").font_size(8).padding(6),
+            Column(Text("").font_size(1)).size(width=1, height=12),
 
             # Insight
             Text("INSIGHT").font_size(15).color(WARNA["accent_deep"]).font_weight("bold"),
-            Text("─" * 42).font_size(8).color(WARNA["accent_deep"]),
+            _divider(w=428, h=2, color=WARNA["accent_deep"]),
             Column(
                 Text(data["insight"]).font_size(14).color(WARNA["text_primary"]).font_weight("bold"),
             ).padding(20).background_color(WARNA["terracotta_light"]).border_radius(10).gap(0),
@@ -368,7 +360,7 @@ def _build_infografis(data, tmp_dir):
     )
 
     _mid_row = Row(_donut_col, _ringkasan_col).gap(40).width(_W)
-
+    
     # =========================================================
     # SECTION 02 — DETAIL PER RAK
     # =========================================================
@@ -426,7 +418,7 @@ def _build_infografis(data, tmp_dir):
     # =========================================================
     # FOOTER
     # =========================================================
-    footer_line = Text("─" * 95).font_size(8).color(WARNA["divider"])
+    footer_line = _divider(w=_W, h=1)
 
     footer = (
         Column(
@@ -459,6 +451,7 @@ def _build_infografis(data, tmp_dir):
 
     return canvas.render(layout)
 
+
 # =========================================================
 # RENDER UTAMA
 # =========================================================
@@ -479,14 +472,14 @@ if st.button("🎨 Render Premium Report", type="primary"):
 
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(_img_bytes, caption="Premium Report — Final v2")
+        st.image(_img_bytes, caption="Premium Report — Final")
 
         st.download_button(
             "📥 Download PNG",
             data=_img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
             mime="image/png",
-            key="dl_premium_final_v3",
+            key="dl_premium_final_v4",
             type="primary",
         )
 
@@ -504,19 +497,11 @@ if st.button("🎨 Render Premium Report", type="primary"):
 st.markdown("---")
 with st.expander("ℹ️ Info", expanded=False):
     st.markdown("""
-    **Premium Report — Final v2**
+    **Premium Report — Final (Fix Divider)**
 
-    **Ringkasan Opsi B:**
-    - Divider tipis antar row metric
-    - Badge bulat warna untuk Status
-    - Insight box padding 20 (lega)
-
-    **Yang diperbaiki:**
-    - Header: accent bar 8px + judul 32pt
-    - KPI: angka 52pt
-    - Ringkasan + Insight: 14pt bold
-    - Tabel: header 13pt, body 14pt bold
-    - Total: 14pt + 16pt
-    - Trend: offset 2800, padding 40%
-    - Canvas: 1650px
+    **Perbaikan teknis:**
+    - Divider pakai `Column().size(width=, height=).background_color()` — bukan Text
+    - Badge status pakai `Column().size(12,12).border_radius(6)` — bulat sempurna
+    - Semua element visual punya size eksplisit
+    - Canvas 1700px height
     """)
