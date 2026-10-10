@@ -12,3 +12,5 @@ groq>=0.9.0
 matplotlib>=3.7.0
 PyPDF2>=3.0.0
 pdfplumber>=0.11.0
+df2img
+kaleido==0.2.1

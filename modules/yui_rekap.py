@@ -196,3 +196,45 @@ def cek_duplikat(tanggal=None, rak_id=None):
     except Exception as e:
         print(f"[CEK_DUPLIKAT ERROR] {e}")
         return []
+
+def export_rekap_image(hasil, filename="rekap_so.png"):
+    """Export rekap SO jadi gambar PNG pakai df2img."""
+    try:
+        import df2img
+        
+        _df = pd.DataFrame(hasil.get("list_rak", []))
+        if _df.empty:
+            return None
+        
+        _df = _df.rename(columns={
+            "rak_id": "Rak",
+            "total": "Nominal",
+            "pic": "PIC",
+        })
+        
+        # Format nominal
+        _df["Nominal"] = _df["Nominal"].apply(
+            lambda x: f"Rp {int(x):,}".replace(",", ".")
+        )
+        
+        _fig = df2img.plot_dataframe(
+            _df,
+            title={
+                "text": f"Rekap SO — {hasil['periode']}",
+                "font_color": "#7FB99B",
+                "font_size": 16,
+            },
+            tbl_header=dict(
+                fill_color="#7FB99B",
+                font_color="white",
+                font_size=12,
+            ),
+            row_fill_color=("#ffffff", "#f0f0f0"),
+            fig_size=(600, 80 + len(_df) * 30),
+        )
+        
+        df2img.save_dataframe(fig=_fig, filename=filename)
+        return filename
+    except Exception as e:
+        print(f"[EXPORT_IMG ERROR] {e}")
+        return None
