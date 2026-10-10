@@ -383,69 +383,69 @@ def _build_infografis(data, tmp_dir):
     
     return canvas.render(layout)
     
-    
-    # =========================================================
-    # RENDER UTAMA
-    # =========================================================
-    if st.button("🎨 Render Infografis", type="primary"):
+
+# =========================================================
+# RENDER UTAMA
+# =========================================================
+if st.button("🎨 Render Infografis", type="primary"):
+    try:
+        # Bikin temp dir
+        _tmp_dir = tempfile.mkdtemp()
+
+        with st.spinner("Bikin infografis..."):
+            _image = _build_infografis(_data, _tmp_dir)
+
+        # Save hasil
+        _output_path = os.path.join(_tmp_dir, "infografis_so.png")
+        _image.save(_output_path)
+
+        # Baca file
+        with open(_output_path, "rb") as _f:
+            _img_bytes = _f.read()
+
+        st.success(f"✅ Infografis berhasil! Ukuran: {len(_img_bytes):,} bytes")
+
+        # Tampilkan preview
+        st.markdown("---")
+        st.markdown("### 📸 Preview")
+        st.image(_img_bytes, caption="Infografis SO — Next Level")
+
+        # Download button
+        st.download_button(
+            "📥 Download PNG",
+            data=_img_bytes,
+            file_name=f"infografis_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
+            mime="image/png",
+            key="dl_infografis_test",
+            type="primary",
+        )
+
+        # Cleanup temp
         try:
-            # Bikin temp dir
-            _tmp_dir = tempfile.mkdtemp()
-    
-            with st.spinner("Bikin infografis..."):
-                _image = _build_infografis(_data, _tmp_dir)
-    
-            # Save hasil
-            _output_path = os.path.join(_tmp_dir, "infografis_so.png")
-            _image.save(_output_path)
-    
-            # Baca file
-            with open(_output_path, "rb") as _f:
-                _img_bytes = _f.read()
-    
-            st.success(f"✅ Infografis berhasil! Ukuran: {len(_img_bytes):,} bytes")
-    
-            # Tampilkan preview
-            st.markdown("---")
-            st.markdown("### 📸 Preview")
-            st.image(_img_bytes, caption="Infografis SO — Next Level")
-    
-            # Download button
-            st.download_button(
-                "📥 Download PNG",
-                data=_img_bytes,
-                file_name=f"infografis_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-                mime="image/png",
-                key="dl_infografis_test",
-                type="primary",
-            )
-    
-            # Cleanup temp
-            try:
-                import shutil
-                shutil.rmtree(_tmp_dir, ignore_errors=True)
-            except Exception:
-                pass
-    
-        except Exception as e:
-            import traceback
-            st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
-    
-    
-    # =========================================================
-    # INFO
-    # =========================================================
-    st.markdown("---")
-    with st.expander("ℹ️ Info", expanded=False):
-        st.markdown("""
-        **Layout infografis:**
-        1. Header band sage
-        2. 3 KPI cards (icon + value)
-        3. Donut chart + Ringkasan periode (2 kolom)
-        4. Insight (quote style)
-        5. Tabel rak + Total Selisih
-        6. Trend chart 5 hari
-        7. Watermark footer
-    
-        **Ukuran:** 1080 × 1350 px (portrait, cocok WA/IG)
-        """)
+            import shutil
+            shutil.rmtree(_tmp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    except Exception as e:
+        import traceback
+        st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
+
+
+# =========================================================
+# INFO
+# =========================================================
+st.markdown("---")
+with st.expander("ℹ️ Info", expanded=False):
+    st.markdown("""
+    **Layout infografis:**
+    1. Header band sage
+    2. 3 KPI cards (icon + value)
+    3. Donut chart + Ringkasan periode (2 kolom)
+    4. Insight (quote style)
+    5. Tabel rak + Total Selisih
+    6. Trend chart 5 hari
+    7. Watermark footer
+
+    **Ukuran:** 1080 × 1350 px (portrait, cocok WA/IG)
+    """)
