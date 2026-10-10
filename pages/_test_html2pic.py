@@ -1,9 +1,7 @@
 """
-Test pictex — Final (Semua Pelajaran Diterapkan)
-==================================================
-Section 1: Trend (kiri) + Ringkasan (kanan) — 470×470
-Section 2: Tabel (kiri) + Donut (kanan) — auto-grow
-Canvas: Dynamic height
+Test pictex — Final v2 (Auto-Height Cards)
+============================================
+Fix: Card auto-height, no fixed height, no whitespace
 """
 import streamlit as st
 import os
@@ -16,8 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-st.set_page_config(page_title="Final", page_icon="🎨", layout="wide")
-st.title("🎨 Final — Semua Fix")
+st.set_page_config(page_title="Final v2", page_icon="🎨", layout="wide")
+st.title("🎨 Final v2 — Auto-Height")
 
 
 # =========================================================
@@ -206,9 +204,8 @@ def _build_infografis(data, tmp_dir):
     # Section 1
     _GAP_S1 = 40
     _CARD_W = int((_W - _GAP_S1) / 2)   # 470
-    _CARD_H = _CARD_W                    # 470
     _CHART_W = _CARD_W - 40              # 430
-    _CHART_H = _CHART_W - 42             # 388
+    _CHART_H = 388
 
     # Section 2
     _GAP_S2 = 40
@@ -228,16 +225,16 @@ def _build_infografis(data, tmp_dir):
     _DONUT_CARD_MIN = _DONUT_PNG + 100
     _SECTION_02_H = max(_TABEL_H, _DONUT_CARD_MIN)
 
-    # Canvas
-    _BASE = 80 + 1 + 110 + 30 + 50   # header + divider + kpi + title + footer
+    # Canvas — estimasi (auto-height)
+    _BASE = 80 + 1 + 110 + 30 + 50
     _GAP_TOTAL = 22 * 6
-    _H = _BASE + _CARD_H + 30 + _SECTION_02_H + _GAP_TOTAL + 100
+    _H = _BASE + 600 + 30 + _SECTION_02_H + _GAP_TOTAL + 150
 
     print(f"[INFO] Canvas: {_CANVAS_W} × {_H}px")
-    print(f"[INFO] Card S1: {_CARD_W} × {_CARD_H}px")
+    print(f"[INFO] Card W: {_CARD_W}px")
     print(f"[INFO] Chart: {_CHART_W} × {_CHART_H}px")
     print(f"[INFO] Tabel: {_TABEL_W} × {_TABEL_H}px ({_n_rak} rak)")
-    print(f"[INFO] Donut card: {_DONUT_W} × {_SECTION_02_H}px")
+    print(f"[INFO] Donut: {_DONUT_W} × {_SECTION_02_H}px")
 
     # === CHART PNG ===
     _trend_path = os.path.join(tmp_dir, "chart_trend.png")
@@ -309,17 +306,17 @@ def _build_infografis(data, tmp_dir):
         ).size(width=_W).gap(8)
 
     # =========================================================
-    # SECTION 01 — TREND (KIRI) + RINGKASAN (KANAN)
+    # SECTION 01 — TREND + RINGKASAN (AUTO-HEIGHT)
     # =========================================================
     _title_01 = _section_title("01", "TREND & RINGKASAN")
 
     _trend_col = (
         Column(
-            Text("TREND SELISIH HARIAN").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
+            Text("TREND SELISIH HARIAN").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=_CHART_W, h=2, color=WARNA["accent_deep"]),
             Image(_trend_path).size(width=_CHART_W),
         )
-        .size(width=_CARD_W, height=_CARD_H)
+        .size(width=_CARD_W)   # ← AUTO-HEIGHT
         .padding(20)
         .background_color(WARNA["white"])
         .border_radius(12)
@@ -332,8 +329,8 @@ def _build_infografis(data, tmp_dir):
         if value_color is None:
             value_color = WARNA["text_primary"]
         return Row(
-            Text(label).font_size(11).color(WARNA["text_muted"]).width(120),
-            Text(value).font_size(12).color(value_color).font_weight("bold"),
+            Text(label).font_size(12).color(WARNA["text_muted"]).width(120),
+            Text(value).font_size(13).color(value_color).font_weight("bold"),
         ).gap(8).size(width=_CARD_W - 40)
 
     _status_badge = Row(
@@ -346,7 +343,7 @@ def _build_infografis(data, tmp_dir):
 
     _ringkasan_col = (
         Column(
-            Text("RINGKASAN PERIODE").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
+            Text("RINGKASAN PERIODE").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=_CARD_W - 40, h=2, color=WARNA["accent_deep"]),
             _metric_row("Tanggal", data["periode"]),
             _divider(w=_CARD_W - 40, h=1),
@@ -359,27 +356,27 @@ def _build_infografis(data, tmp_dir):
             _metric_row("BTSB (0,15%)", _fmt_rp_no_sign(data["btsb"])),
             _divider(w=_CARD_W - 40, h=1),
             Row(
-                Text("Status").font_size(11).color(WARNA["text_muted"]).width(120),
+                Text("Status").font_size(12).color(WARNA["text_muted"]).width(120),
                 _status_badge,
             ).gap(8).size(width=_CARD_W - 40),
-            Column(Text("").font_size(1)).size(width=1, height=8),
-            Text("INSIGHT").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
+            Column(Text("").font_size(1)).size(width=1, height=10),
+            Text("INSIGHT").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=_CARD_W - 40, h=2, color=WARNA["accent_deep"]),
             Column(
-                Text(data["insight"]).font_size(11).color(WARNA["text_primary"]).font_weight("bold"),
-            ).padding(14).background_color(WARNA["terracotta_light"]).border_radius(8).gap(0),
+                Text(data["insight"]).font_size(12).color(WARNA["text_primary"]).font_weight("bold"),
+            ).padding(16).background_color(WARNA["terracotta_light"]).border_radius(8).gap(0),
         )
-        .size(width=_CARD_W, height=_CARD_H)
+        .size(width=_CARD_W)   # ← AUTO-HEIGHT
         .padding(20)
         .background_color(WARNA["white"])
         .border_radius(12)
-        .gap(6)
+        .gap(8)
     )
 
-    _row_01 = Row(_trend_col, _ringkasan_col).gap(_GAP_S1).size(width=_W)
+    _row_01 = Row(_trend_col, _ringkasan_col).gap(_GAP_S1).size(width=_W).align_items("start")
 
     # =========================================================
-    # SECTION 02 — TABEL (KIRI) + DONUT (KANAN)
+    # SECTION 02 — TABEL + DONUT (AUTO-HEIGHT)
     # =========================================================
     _title_02 = _section_title("02", "DETAIL PER RAK & KONTRIBUSI")
 
@@ -424,18 +421,18 @@ def _build_infografis(data, tmp_dir):
 
     _donut_col = (
         Column(
-            Text("KONTRIBUSI PER RAK").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
+            Text("KONTRIBUSI PER RAK").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=_DONUT_W - 40, h=2, color=WARNA["accent_deep"]),
             Image(_donut_path).size(width=_DONUT_PNG),
         )
-        .size(width=_DONUT_W, height=_SECTION_02_H)
+        .size(width=_DONUT_W)   # ← AUTO-HEIGHT
         .padding(20)
         .background_color(WARNA["white"])
         .border_radius(12)
         .gap(10)
     )
 
-    _row_02 = Row(_tabel_col, _donut_col).gap(_GAP_S2).size(width=_W)
+    _row_02 = Row(_tabel_col, _donut_col).gap(_GAP_S2).size(width=_W).align_items("start")
 
     # =========================================================
     # FOOTER
@@ -470,7 +467,7 @@ def _build_infografis(data, tmp_dir):
 # =========================================================
 # RENDER
 # =========================================================
-if st.button("🎨 Render Final", type="primary"):
+if st.button("🎨 Render Final v2", type="primary"):
     try:
         _tmp_dir = tempfile.mkdtemp()
         with st.spinner("Bikin infografis..."):
@@ -482,11 +479,11 @@ if st.button("🎨 Render Final", type="primary"):
         st.success(f"✅ Berhasil! Ukuran: {len(_img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(_img_bytes, caption="Final")
+        st.image(_img_bytes, caption="Final v2")
         st.download_button(
             "📥 Download PNG", data=_img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-            mime="image/png", key="dl_final", type="primary",
+            mime="image/png", key="dl_final_v2", type="primary",
         )
         try:
             import shutil
