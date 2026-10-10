@@ -1,8 +1,10 @@
 """
-Test pictex — Cream BG + Stretch
-===================================
+Infografis SO — Matplotlib Murni
+==================================
+1 canvas, 1 savefig(), no pictex, no card embed
 """
 import streamlit as st
+import io
 import os
 import tempfile
 from datetime import datetime
@@ -10,41 +12,43 @@ from datetime import datetime
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import FancyBboxPatch, Rectangle
 import numpy as np
+import pandas as pd
 
 
-st.set_page_config(page_title="Cream BG + Stretch", page_icon="🎨", layout="wide")
-st.title("🎨 Cream BG + Stretch")
+st.set_page_config(page_title="Infografis SO", page_icon="🎨", layout="wide")
+st.title("🎨 Infografis SO — Matplotlib Murni")
 
 
 # =========================================================
-# PALET
+# PALET WARNA
 # =========================================================
-WARNA = {
+W = {
     "bg": "#F5F1EA",
-    "accent": "#5E7A75",
-    "accent_deep": "#3D5A55",
-    "accent_light": "#D9E4E0",
+    "sage": "#5E7A75",
+    "sage_deep": "#3D5A55",
+    "sage_light": "#D9E4E0",
     "terracotta": "#B5745E",
     "terracotta_light": "#E8D5C9",
-    "cream": "#F5F1EA",
     "highlight": "#EDE8DE",
-    "text_primary": "#2D2A26",
-    "text_secondary": "#6B6560",
+    "text": "#2D2A26",
+    "text_sec": "#6B6560",
     "text_muted": "#9C9488",
     "divider": "#DDD5C8",
     "white": "#FFFFFF",
     "red": "#B8383A",
     "green": "#4A7C59",
-    "bar_pos": "#7B9B95",
     "bar_neg": "#C9907E",
+    "bar_pos": "#7B9B95",
 }
 
 
 # =========================================================
-# DATA
+# DATA DUMMY
 # =========================================================
-_data = {
+DATA = {
     "periode": "2026-10-10 s/d 2026-10-10",
     "total_rak": 3,
     "total_item": 21,
@@ -72,413 +76,425 @@ _data = {
 
 
 # =========================================================
-# HELPER
+# HELPER FORMAT
 # =========================================================
-def _fmt_rp(val):
-    _n = int(round(float(val)))
-    _sign = "+" if _n >= 0 else "-"
-    return f"{_sign}Rp {abs(_n):,}".replace(",", ".")
+def _rp(val):
+    n = int(round(float(val)))
+    sign = "+" if n >= 0 else "-"
+    return f"{sign}Rp {abs(n):,}".replace(",", ".")
 
 
-def _fmt_rp_no_sign(val):
-    _n = int(round(float(val)))
-    return f"Rp {abs(_n):,}".replace(",", ".")
+def _rp_no_sign(val):
+    n = int(round(float(val)))
+    return f"Rp {abs(n):,}".replace(",", ".")
+
+
+def _rp_short(val):
+    n = int(round(float(val)))
+    if abs(n) >= 1_000_000:
+        return f"{n/1_000_000:+.1f}jt"
+    if abs(n) >= 1_000:
+        return f"{n/1_000:+.0f}rb"
+    return f"{n:+d}"
 
 
 # =========================================================
-# CHART: DONUT
+# HELPER DRAW: CARD (rounded rectangle)
 # =========================================================
-def _chart_donut(list_rak, output_path, size_px=300):
-    _sorted = sorted(list_rak, key=lambda x: abs(x["nominal"]), reverse=True)
-    _labels = [f"Rak {r['rak_id']}" for r in _sorted if abs(r["nominal"]) > 0]
-    _sizes = [abs(r["nominal"]) for r in _sorted if abs(r["nominal"]) > 0]
+def _draw_card(ax, x, y, w, h, color, radius=0.02):
+    """Gambar card rounded di axes (koordinat 0-1)."""
+    card = FancyBboxPatch(
+        (x, y), w, h,
+        boxstyle=f"round,pad=0,rounding_size={radius}",
+        facecolor=color, edgecolor="none",
+        transform=ax.transAxes, zorder=1,
+    )
+    ax.add_patch(card)
 
-    if not _sizes:
-        return None
 
-    _colors = ["#5E7A75", "#B5745E", "#7B9B95", "#D9C4B5", "#A8B5AE", "#E8D5C9"]
-    _dpi = 100
-    _fig_size = size_px / _dpi
-
-    fig, ax = plt.subplots(figsize=(_fig_size, _fig_size), dpi=_dpi)
-    fig.patch.set_facecolor(WARNA["cream"])
-    ax.set_facecolor(WARNA["cream"])
-
-    wedges, texts, autotexts = ax.pie(
-        _sizes, labels=None, colors=_colors[:len(_sizes)],
-        autopct=lambda p: f"{p:.0f}%", pctdistance=0.78, startangle=90,
-        wedgeprops=dict(width=0.40, edgecolor=WARNA["cream"], linewidth=3),
+# =========================================================
+# HELPER DRAW: TEXT
+# =========================================================
+def _text(ax, x, y, s, size=10, color=None, weight="normal",
+          ha="left", va="center"):
+    if color is None:
+        color = W["text"]
+    return ax.text(
+        x, y, s, fontsize=size, color=color, fontweight=weight,
+        ha=ha, va=va, transform=ax.transAxes, zorder=10,
     )
 
-    for at in autotexts:
-        at.set_color("white")
-        at.set_fontsize(10)
-        at.set_fontweight("bold")
-
-    for i, (wedge, label) in enumerate(zip(wedges, _labels)):
-        angle = (wedge.theta2 + wedge.theta1) / 2.0
-        x = np.cos(np.radians(angle))
-        y = np.sin(np.radians(angle))
-        ha = "right" if x < 0 else "left"
-        ax.annotate(label, xy=(x * 0.85, y * 0.85), xytext=(x * 1.20, y * 1.20),
-                    ha=ha, va="center", fontsize=9, fontweight="bold", color=WARNA["text_primary"])
-
-    _total = sum(_sizes)
-    ax.text(0, 0.05, _fmt_rp_no_sign(_total), ha="center", va="center",
-            fontsize=11, fontweight="bold", color=WARNA["accent_deep"])
-    ax.text(0, -0.10, "TOTAL", ha="center", va="center",
-            fontsize=7, fontweight="bold", color=WARNA["text_muted"])
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=_dpi, bbox_inches="tight", facecolor=WARNA["cream"])
-    plt.close(fig)
-    return output_path
-
 
 # =========================================================
-# CHART: TREND
+# HELPER DRAW: DIVIDER
 # =========================================================
-def _chart_trend(trend_data, output_path, width_px=400, height_px=300):
-    if not trend_data:
-        return None
-
-    _labels = [t["tanggal"] for t in trend_data]
-    _values = [t["nominal"] for t in trend_data]
-
-    _dpi = 100
-    _fig_size = (width_px / _dpi, height_px / _dpi)
-
-    fig, ax = plt.subplots(figsize=_fig_size, dpi=_dpi)
-    fig.patch.set_facecolor(WARNA["cream"])
-    ax.set_facecolor(WARNA["cream"])
-
-    _x = np.arange(len(_labels))
-
-    _bar_colors = [WARNA["bar_neg"] if v < 0 else WARNA["bar_pos"] for v in _values]
-    ax.bar(_x, _values, color=_bar_colors, width=0.55, alpha=0.75, edgecolor="white", linewidth=1.5)
-
-    ax.plot(_x, _values, color=WARNA["accent_deep"], linewidth=2.5,
-            marker="o", markersize=7, markerfacecolor="white",
-            markeredgecolor=WARNA["accent_deep"], markeredgewidth=2, zorder=5)
-
-    for i, v in enumerate(_values):
-        _color = WARNA["red"] if v < 0 else WARNA["green"]
-        if v >= 0:
-            ax.text(i, v + 3000, f"+Rp {abs(int(v)):,}".replace(",", "."),
-                    ha="center", va="bottom", fontsize=8, fontweight="bold", color=_color)
-        else:
-            ax.text(i, v - 3000, f"-Rp {abs(int(v)):,}".replace(",", "."),
-                    ha="center", va="top", fontsize=8, fontweight="bold", color=_color)
-
-    ax.axhline(0, color=WARNA["text_muted"], linewidth=0.8, alpha=0.5)
-    ax.set_xticks(_x)
-    ax.set_xticklabels(_labels)
-    ax.tick_params(axis="x", labelsize=9, colors=WARNA["text_secondary"])
-    ax.tick_params(axis="y", labelsize=8, colors=WARNA["text_muted"])
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    ax.spines["bottom"].set_color(WARNA["divider"])
-    ax.grid(axis="y", linestyle=":", alpha=0.3, color=WARNA["divider"])
-    ax.set_axisbelow(True)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{int(x):,}".replace(",", ".")))
-
-    _min_v = min(_values)
-    _max_v = max(_values)
-    _pad = abs(_max_v - _min_v) * 0.40 if _max_v != _min_v else 8000
-    ax.set_ylim(_min_v - _pad, _max_v + _pad)
-
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=_dpi, bbox_inches="tight", facecolor=WARNA["cream"])
-    plt.close(fig)
-    return output_path
+def _divider(ax, x, y, w, color=None, thickness=0.002):
+    if color is None:
+        color = W["divider"]
+    line = Rectangle(
+        (x, y), w, thickness,
+        facecolor=color, edgecolor="none",
+        transform=ax.transAxes, zorder=5,
+    )
+    ax.add_patch(line)
     
 
 # =========================================================
-# KONSTRUKSI
+# FUNGSI UTAMA: RENDER INFOGRAFIS
 # =========================================================
-def _build_infografis(data, tmp_dir):
-    from pictex import Canvas, Row, Column, Text, Image
+def render_infografis(data, output_path):
+    """Render infografis SO — 1 canvas matplotlib."""
+
+    # === FIGURE SIZE ===
+    # A4 portrait: 8.27 x 11.69 inch → kita pakai 8.27 x 10.5
+    FIG_W, FIG_H = 8.27, 11.0
+    DPI = 130
+
+    fig = plt.figure(figsize=(FIG_W, FIG_H), dpi=DPI, facecolor=W["bg"])
+
+    # === AXES UTAMA (full canvas) ===
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    ax.set_facecolor(W["bg"])
 
     # =========================================================
-    # UKURAN
+    # LAYOUT KOORDINAT (semua 0-1, dari ATAS ke BAWAH)
     # =========================================================
-    _CANVAS_W = 1080
-    _PADDING = 50
-    _W = _CANVAS_W - (_PADDING * 2)   # 980
+    PAD = 0.04           # padding kiri/kanan
+    W_CONTENT = 1 - 2 * PAD
+    X_LEFT = PAD
+    X_RIGHT = 1 - PAD
 
-    _GAP = 40
-    _CARD_W = int((_W - _GAP) / 2)   # 470
+    # Y positions (dari atas, konversi ke 0-1 bawah)
+    Y_HEADER_TOP = 1.00
+    Y_HEADER_BOT = 0.90
+    Y_KPI_TOP = 0.885
+    Y_KPI_BOT = 0.80
+    Y_S1_TOP = 0.785
+    Y_S1_BOT = 0.46
+    Y_S2_TOP = 0.445
+    Y_S2_BOT = 0.10
+    Y_FOOTER = 0.04
 
-    _CHART_DONUT_PNG = 340
-    _CHART_TREND_W = 400
-    _CHART_TREND_H = 300
+    # =========================================================
+    # 1. HEADER BAND
+    # =========================================================
+    _draw_card(ax, X_LEFT, Y_HEADER_BOT, W_CONTENT, Y_HEADER_TOP - Y_HEADER_BOT,
+               W["sage_deep"], radius=0.015)
 
-    _TABEL_W = 540
-    _TREND2_W = _W - _TABEL_W - _GAP   # 400
+    _text(ax, X_LEFT + 0.02, Y_HEADER_TOP - 0.035,
+          "LAPORAN STOCK OPNAME", size=17, color=W["white"], weight="bold")
+    _text(ax, X_LEFT + 0.02, Y_HEADER_TOP - 0.058,
+          "Toko C383 — Karang Satria", size=9, color=W["sage_light"])
+    _text(ax, X_LEFT + 0.02, Y_HEADER_TOP - 0.075,
+          data["periode"], size=8, color=W["sage_light"])
 
-    _ROW_H = 48
-    _HEADER_H = 42
-    _TOTAL_H = 48
-    _PAD_TABEL = 40
+    # =========================================================
+    # 2. KPI CARDS (3 kolom)
+    # =========================================================
+    GAP = 0.015
+    KPI_W = (W_CONTENT - 2 * GAP) / 3
+    KPI_H = Y_KPI_TOP - Y_KPI_BOT
 
-    _rak_tabel = data["list_rak"]
-    _n_rak = len(_rak_tabel)
+    kpi_data = [
+        ("TOTAL RAK", f"{data['total_rak']}", "rak ter-SO", W["sage_light"]),
+        ("TOTAL ITEM", f"{data['total_item']}", "item tercatat", W["terracotta_light"]),
+        ("TOTAL NOMINAL", _rp(data["total_nominal"]), "selisih periode", W["highlight"]),
+    ]
 
-    _TABEL_H = (_n_rak * _ROW_H) + _HEADER_H + _TOTAL_H + _PAD_TABEL
+    for i, (label, value, sub, bg) in enumerate(kpi_data):
+        x = X_LEFT + i * (KPI_W + GAP)
+        _draw_card(ax, x, Y_KPI_BOT, KPI_W, KPI_H, bg, radius=0.012)
 
-    _BASE = 80 + 1 + 110 + 30 + 50
-    _GAP_TOTAL = 22 * 6
-    _H = _BASE + 500 + 30 + max(_TABEL_H, 400) + _GAP_TOTAL + 150
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.018,
+              label, size=7.5, color=W["text_muted"], weight="bold")
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.043,
+              value, size=22, color=W["text"], weight="bold")
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.062,
+              sub, size=8, color=W["text_sec"])
 
-    print(f"[INFO] Canvas: {_CANVAS_W} × {_H}px")
+    # =========================================================
+    # 3. SECTION TITLE 01
+    # =========================================================
+    _text(ax, X_LEFT, Y_S1_TOP + 0.012, "▌", size=14, color=W["sage_deep"], weight="bold")
+    _text(ax, X_LEFT + 0.02, Y_S1_TOP + 0.012, "01", size=9, color=W["terracotta"], weight="bold")
+    _text(ax, X_LEFT + 0.045, Y_S1_TOP + 0.012,
+          "DISTRIBUSI & RINGKASAN", size=10, color=W["text"], weight="bold")
 
-    # === CHART PNG ===
-    _donut_path = os.path.join(tmp_dir, "chart_donut.png")
-    _trend_path = os.path.join(tmp_dir, "chart_trend.png")
-    _chart_donut(data["list_rak"], _donut_path, size_px=_CHART_DONUT_PNG)
-    _chart_trend(data["trend_data"], _trend_path, width_px=_CHART_TREND_W, height_px=_CHART_TREND_H)
+    # =========================================================
+    # 4. SECTION 01: DONUT (kiri) + RINGKASAN + INSIGHT (kanan)
+    # =========================================================
+    S1_H = Y_S1_TOP - Y_S1_BOT
+    LEFT_W = (W_CONTENT - 0.02) * 0.48
+    RIGHT_W = (W_CONTENT - 0.02) * 0.52
+    LEFT_X = X_LEFT
+    RIGHT_X = X_LEFT + LEFT_W + 0.02
 
-    # === CANVAS ===
-    canvas = (
-        Canvas()
-        .size(width=_CANVAS_W, height=_H)
-        .background_color(WARNA["bg"])
-        .padding(_PADDING)
+    # --- KIRI: DONUT ---
+    _draw_card(ax, LEFT_X, Y_S1_BOT, LEFT_W, S1_H, W["white"], radius=0.012)
+
+    _text(ax, LEFT_X + 0.015, Y_S1_TOP - 0.018,
+          "KONTRIBUSI PER RAK", size=9, color=W["sage_deep"], weight="bold")
+    _divider(ax, LEFT_X + 0.015, Y_S1_TOP - 0.028, LEFT_W - 0.03, W["sage_deep"], 0.0015)
+
+    # Sub-axes buat donut (dalam section 1 kiri)
+    donut_ax = fig.add_axes([
+        LEFT_X + 0.03, Y_S1_BOT + 0.01,
+        LEFT_W - 0.06, S1_H - 0.055
+    ])
+    donut_ax.set_facecolor(W["white"])
+
+    list_sorted = sorted(data["list_rak"], key=lambda x: abs(x["nominal"]), reverse=True)
+    sizes = [abs(r["nominal"]) for r in list_sorted if abs(r["nominal"]) > 0]
+    labels = [f"Rak {r['rak_id']}" for r in list_sorted if abs(r["nominal"]) > 0]
+    colors = ["#5E7A75", "#B5745E", "#7B9B95", "#D9C4B5", "#A8B5AE", "#E8D5C9"][:len(sizes)]
+
+    wedges, texts, autotexts = donut_ax.pie(
+        sizes, labels=None, colors=colors,
+        autopct=lambda p: f"{p:.0f}%", pctdistance=0.78, startangle=90,
+        wedgeprops=dict(width=0.40, edgecolor=W["white"], linewidth=2.5),
     )
+    for at in autotexts:
+        at.set_color("white")
+        at.set_fontsize(9)
+        at.set_fontweight("bold")
 
-    def _divider(w=980, h=1, color=None):
-        if color is None:
-            color = WARNA["divider"]
-        return (
-            Column(Text("").font_size(1))
-            .size(width=w, height=h)
-            .background_color(color)
+    # Label di luar
+    for i, (wedge, label) in enumerate(zip(wedges, labels)):
+        ang = (wedge.theta2 + wedge.theta1) / 2
+        x = np.cos(np.radians(ang))
+        y = np.sin(np.radians(ang))
+        ha = "right" if x < 0 else "left"
+        donut_ax.annotate(
+            label, xy=(x * 0.85, y * 0.85), xytext=(x * 1.18, y * 1.18),
+            ha=ha, va="center", fontsize=7.5, fontweight="bold", color=W["text"],
         )
 
-    # =========================================================
-    # HEADER BAND
-    # =========================================================
-    _header_band = (
-        Column(
-            Text("LAPORAN STOCK OPNAME").font_size(28).color(WARNA["white"]).font_weight("bold"),
-            Text("Toko C383 — Karang Satria").font_size(12).color(WARNA["accent_light"]),
-            Text(data["periode"]).font_size(10).color(WARNA["accent_light"]),
-        )
-        .size(width=_W, height=110)
-        .padding(24)
-        .background_color(WARNA["accent_deep"])
-        .border_radius(12)
-        .gap(4)
-    )
+    # Nilai total di tengah
+    total_nom = sum(sizes)
+    donut_ax.text(0, 0.05, _rp_no_sign(total_nom), ha="center", va="center",
+                  fontsize=10, fontweight="bold", color=W["sage_deep"])
+    donut_ax.text(0, -0.12, "TOTAL", ha="center", va="center",
+                  fontsize=7, fontweight="bold", color=W["text_muted"])
+    donut_ax.set_aspect("equal")
+
+    # --- KANAN: RINGKASAN + INSIGHT ---
+    _draw_card(ax, RIGHT_X, Y_S1_BOT, RIGHT_W, S1_H, W["white"], radius=0.012)
+
+    _text(ax, RIGHT_X + 0.015, Y_S1_TOP - 0.018,
+          "RINGKASAN PERIODE", size=9, color=W["sage_deep"], weight="bold")
+    _divider(ax, RIGHT_X + 0.015, Y_S1_TOP - 0.028, RIGHT_W - 0.03, W["sage_deep"], 0.0015)
+
+    # Metrics
+    status_color = W["red"] if data["status"] == "OVER" else W["green"]
+
+    metrics = [
+        ("Tanggal", data["periode"], W["text"]),
+        ("Total Rak", f"{data['total_rak']} rak", W["text"]),
+        ("Nominal SO", _rp(data["total_nominal"]), W["red"]),
+        ("Sales Periode", _rp_no_sign(data["sales_periode"]), W["text"]),
+        ("BTSB (0,15%)", _rp_no_sign(data["btsb"]), W["text"]),
+        ("Status", data["status"], status_color),
+    ]
+
+    y_metric = Y_S1_TOP - 0.05
+    for label, val, color in metrics:
+        _text(ax, RIGHT_X + 0.015, y_metric, label, size=8, color=W["text_muted"])
+        _text(ax, RIGHT_X + 0.13, y_metric, val, size=9, color=color, weight="bold")
+        y_metric -= 0.022
+        _divider(ax, RIGHT_X + 0.015, y_metric + 0.008, RIGHT_W - 0.03, W["divider"], 0.0008)
+
+    # --- INSIGHT ---
+    y_insight = y_metric - 0.02
+
+    _text(ax, RIGHT_X + 0.015, y_insight,
+          "INSIGHT", size=9, color=W["sage_deep"], weight="bold")
+    _divider(ax, RIGHT_X + 0.015, y_insight - 0.012, RIGHT_W - 0.03, W["sage_deep"], 0.0015)
+
+    # Insight box
+    insight_y = y_insight - 0.035
+    insight_h = 0.055
+    _draw_card(ax, RIGHT_X + 0.015, insight_y - insight_h, RIGHT_W - 0.03, insight_h,
+               W["terracotta_light"], radius=0.008)
+    _text(ax, RIGHT_X + 0.025, insight_y - insight_h / 2,
+          data["insight"], size=7.5, color=W["text"], weight="bold")
 
     # =========================================================
-    # KPI CARDS
+    # 5. SECTION TITLE 02
     # =========================================================
-    def _kpi_card(label, value, sublabel, bg_color):
-        return (
-            Column(
-                Text(label).font_size(10).color(WARNA["text_muted"]).font_weight("bold"),
-                Text(value).font_size(40).color(WARNA["text_primary"]).font_weight("bold"),
-                Text(sublabel).font_size(10).color(WARNA["text_secondary"]),
-            )
-            .padding(20)
-            .background_color(bg_color)
-            .border_radius(12)
-            .gap(3)
-            .flex_grow(1)
-        )
-
-    kpi_row = Row(
-        _kpi_card("TOTAL RAK", str(data["total_rak"]), "rak ter-SO", WARNA["accent_light"]),
-        _kpi_card("TOTAL ITEM", str(data["total_item"]), "item tercatat", WARNA["terracotta_light"]),
-        _kpi_card("TOTAL NOMINAL", _fmt_rp(data["total_nominal"]), "selisih periode", WARNA["highlight"]),
-    ).gap(20).size(width=_W)
-
-    def _section_title(num, title):
-        return Row(
-            Text("▌").font_size(18).color(WARNA["accent_deep"]).font_weight("bold"),
-            Text(f"{num}").font_size(12).color(WARNA["terracotta"]).font_weight("bold").width(30),
-            Text(title).font_size(14).color(WARNA["text_primary"]).font_weight("bold"),
-        ).size(width=_W).gap(8)
+    _text(ax, X_LEFT, Y_S2_TOP + 0.012, "▌", size=14, color=W["sage_deep"], weight="bold")
+    _text(ax, X_LEFT + 0.02, Y_S2_TOP + 0.012, "02", size=9, color=W["terracotta"], weight="bold")
+    _text(ax, X_LEFT + 0.045, Y_S2_TOP + 0.012,
+          "DETAIL & TREND", size=10, color=W["text"], weight="bold")
 
     # =========================================================
-    # SECTION 01 — DONUT + RINGKASAN (BG CREAM + STRETCH)
+    # 6. SECTION 02: TABEL (kiri) + TREND (kanan)
     # =========================================================
-    _title_01 = _section_title("01", "DISTRIBUSI & RINGKASAN")
+    S2_H = Y_S2_TOP - Y_S2_BOT
+    TBL_W = (W_CONTENT - 0.02) * 0.55
+    TRD_W = (W_CONTENT - 0.02) * 0.45
+    TBL_X = X_LEFT
+    TRD_X = X_LEFT + TBL_W + 0.02
 
-    _donut_col = (
-        Column(
-            Text("KONTRIBUSI PER RAK").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
-            _divider(w=_CARD_W - 40, h=2, color=WARNA["accent_deep"]),
-            Image(_donut_path).size(width=_CHART_DONUT_PNG),
-        )
-        .size(width=_CARD_W)
-        .padding(20)
-        .background_color(WARNA["bg"])
-        .border_radius(12)
-        .gap(10)
-    )
+    # --- KIRI: TABEL ---
+    _draw_card(ax, TBL_X, Y_S2_BOT, TBL_W, S2_H, W["white"], radius=0.012)
 
-    _status_color = WARNA["red"] if data["status"] == "OVER" else WARNA["green"]
+    # Sub-axes buat tabel
+    tbl_ax = fig.add_axes([
+        TBL_X + 0.015, Y_S2_BOT + 0.01,
+        TBL_W - 0.03, S2_H - 0.02
+    ])
+    tbl_ax.axis("off")
 
-    def _metric_row(label, value, value_color=None):
-        if value_color is None:
-            value_color = WARNA["text_primary"]
-        return Row(
-            Text(label).font_size(11).color(WARNA["text_muted"]).width(110),
-            Text(value).font_size(12).color(value_color).font_weight("bold"),
-        ).gap(8).size(width=_CARD_W - 40)
+    # Header tabel
+    col_labels = ["RAK", "NAMA RAK", "PIC", "SELISIH"]
+    col_w = [0.10, 0.45, 0.18, 0.27]
 
-    _status_badge = Row(
-        Column(Text("").font_size(1))
-        .size(width=10, height=10)
-        .background_color(_status_color)
-        .border_radius(5),
-        Text(f" {data['status']}").font_size(12).color(_status_color).font_weight("bold"),
-    ).gap(6)
+    # Header bg
+    tbl_ax.add_patch(Rectangle((0, 0.88), 1, 0.10,
+                                facecolor=W["sage_deep"], edgecolor="none",
+                                transform=tbl_ax.transAxes))
 
-    _ringkasan_col = (
-        Column(
-            Text("RINGKASAN PERIODE").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
-            _divider(w=_CARD_W - 40, h=2, color=WARNA["accent_deep"]),
-            _metric_row("Tanggal", data["periode"]),
-            _divider(w=_CARD_W - 40, h=1),
-            _metric_row("Total Rak", f"{data['total_rak']} rak"),
-            _divider(w=_CARD_W - 40, h=1),
-            _metric_row("Nominal SO", _fmt_rp(data["total_nominal"]), WARNA["red"]),
-            _divider(w=_CARD_W - 40, h=1),
-            _metric_row("Sales Periode", _fmt_rp_no_sign(data["sales_periode"])),
-            _divider(w=_CARD_W - 40, h=1),
-            _metric_row("BTSB (0,15%)", _fmt_rp_no_sign(data["btsb"])),
-            _divider(w=_CARD_W - 40, h=1),
-            Row(
-                Text("Status").font_size(11).color(WARNA["text_muted"]).width(110),
-                _status_badge,
-            ).gap(8).size(width=_CARD_W - 40),
-            Column(Text("").font_size(1)).size(width=1, height=10),
-            Text("INSIGHT").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
-            _divider(w=_CARD_W - 40, h=2, color=WARNA["accent_deep"]),
-            Column(
-                Text(data["insight"]).font_size(11).color(WARNA["text_primary"]).font_weight("bold"),
-            ).padding(14).background_color(WARNA["terracotta_light"]).border_radius(8).gap(0),
-        )
-        .size(width=_CARD_W)
-        .padding(20)
-        .background_color(WARNA["bg"])
-        .border_radius(12)
-        .gap(8)
-    )
+    x_pos = 0
+    for i, lbl in enumerate(col_labels):
+        tbl_ax.text(x_pos + 0.01, 0.93, lbl, fontsize=7.5, color=W["white"],
+                    fontweight="bold", va="center", transform=tbl_ax.transAxes)
+        x_pos += col_w[i]
 
-    _row_01 = Row(_donut_col, _ringkasan_col).gap(_GAP).size(width=_W).align_items("stretch")
+    # Body tabel
+    y_pos = 0.82
+    row_h = 0.14
+    for idx, r in enumerate(data["list_rak"]):
+        bg = W["bg"] if idx % 2 == 0 else W["white"]
+        tbl_ax.add_patch(Rectangle((0, y_pos - row_h + 0.02), 1, row_h,
+                                    facecolor=bg, edgecolor="none",
+                                    transform=tbl_ax.transAxes))
+        color = W["red"] if r["nominal"] < 0 else W["green"]
 
-    # =========================================================
-    # SECTION 02 — TABEL + TREND (BG CREAM + STRETCH)
-    # =========================================================
-    _title_02 = _section_title("02", "DETAIL & TREND")
+        x_pos = 0
+        vals = [r["rak_id"], r["nama"][:22], r["pic"], _rp(r["nominal"])]
+        for i, v in enumerate(vals):
+            tbl_ax.text(x_pos + 0.01, y_pos - row_h / 2 + 0.02, v,
+                        fontsize=7, color=color if i == 3 else W["text"],
+                        fontweight="bold" if i in (0, 2, 3) else "normal",
+                        va="center", transform=tbl_ax.transAxes)
+            x_pos += col_w[i]
 
-    _col_w = [70, 250, 100, 120]
+        y_pos -= row_h
 
-    _header_cells = Row(
-        Text("RAK").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[0]),
-        Text("NAMA RAK").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[1]),
-        Text("PIC").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[2]),
-        Text("SELISIH").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[3]),
-    ).size(width=_TABEL_W).background_color(WARNA["accent_deep"]).gap(0)
+    # Total row
+    tbl_ax.add_patch(Rectangle((0, y_pos - row_h + 0.02), 1, row_h,
+                                facecolor=W["terracotta_light"], edgecolor="none",
+                                transform=tbl_ax.transAxes))
+    total_color = W["red"] if data["total_nominal"] < 0 else W["green"]
+    tbl_ax.text(0.60, y_pos - row_h / 2 + 0.02, "TOTAL",
+                fontsize=8, color=W["text"], fontweight="bold",
+                va="center", transform=tbl_ax.transAxes)
+    tbl_ax.text(0.74, y_pos - row_h / 2 + 0.02, _rp(data["total_nominal"]),
+                fontsize=8, color=total_color, fontweight="bold",
+                va="center", transform=tbl_ax.transAxes)
 
-    _rows = [_header_cells]
-    for _i, _r in enumerate(_rak_tabel):
-        _bg = WARNA["cream"] if _i % 2 == 0 else WARNA["bg"]
-        _color = WARNA["red"] if _r["nominal"] < 0 else WARNA["green"]
-        _rows.append(
-            Row(
-                Text(_r["rak_id"]).font_size(12).color(WARNA["text_primary"]).font_weight("bold").padding(12).width(_col_w[0]),
-                Text(_r["nama"][:22]).font_size(11).color(WARNA["text_primary"]).padding(12).width(_col_w[1]),
-                Text(_r["pic"]).font_size(12).color(WARNA["text_primary"]).font_weight("bold").padding(12).width(_col_w[2]),
-                Text(_fmt_rp(_r["nominal"])).font_size(12).color(_color).font_weight("bold").padding(12).width(_col_w[3]),
-            ).size(width=_TABEL_W).background_color(_bg).gap(0)
-        )
+    # --- KANAN: TREND ---
+    _draw_card(ax, TRD_X, Y_S2_BOT, TRD_W, S2_H, W["white"], radius=0.012)
 
-    tabel_rak = Column(*_rows).size(width=_TABEL_W).gap(0)
+    _text(ax, TRD_X + 0.015, Y_S2_TOP - 0.018,
+          "TREND SELISIH HARIAN", size=9, color=W["sage_deep"], weight="bold")
+    _divider(ax, TRD_X + 0.015, Y_S2_TOP - 0.028, TRD_W - 0.03, W["sage_deep"], 0.0015)
 
-    _total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
-    _total_row = Row(
-        Text("TOTAL").font_size(12).color(WARNA["text_primary"]).font_weight("bold").padding(14).width(420),
-        Text(_fmt_rp(data["total_nominal"])).font_size(13).color(_total_color).font_weight("bold").padding(14).width(120),
-    ).size(width=_TABEL_W).background_color(WARNA["terracotta_light"])
+    # Sub-axes buat trend chart
+    trend_ax = fig.add_axes([
+        TRD_X + 0.03, Y_S2_BOT + 0.02,
+        TRD_W - 0.06, S2_H - 0.06
+    ])
+    trend_ax.set_facecolor(W["white"])
 
-    _tabel_col = Column(tabel_rak, _total_row).gap(0)
+    trend_labels = [t["tanggal"] for t in data["trend_data"]]
+    trend_values = [t["nominal"] for t in data["trend_data"]]
+    x_idx = np.arange(len(trend_labels))
 
-    _trend2_col = (
-        Column(
-            Text("TREND SELISIH HARIAN").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
-            _divider(w=_TREND2_W - 40, h=2, color=WARNA["accent_deep"]),
-            Image(_trend_path).size(width=_TREND2_W - 40),
-        )
-        .size(width=_TREND2_W)
-        .padding(20)
-        .background_color(WARNA["bg"])
-        .border_radius(12)
-        .gap(10)
-    )
+    bar_colors = [W["bar_neg"] if v < 0 else W["bar_pos"] for v in trend_values]
+    trend_ax.bar(x_idx, trend_values, color=bar_colors, width=0.55,
+                 alpha=0.75, edgecolor="white", linewidth=1)
 
-    _row_02 = Row(_tabel_col, _trend2_col).gap(_GAP).size(width=_W).align_items("stretch")
+    trend_ax.plot(x_idx, trend_values, color=W["sage_deep"], linewidth=2,
+                  marker="o", markersize=5, markerfacecolor="white",
+                  markeredgecolor=W["sage_deep"], markeredgewidth=1.5, zorder=5)
+
+    for i, v in enumerate(trend_values):
+        c = W["red"] if v < 0 else W["green"]
+        off = 2500 if v >= 0 else -2500
+        trend_ax.text(i, v + off, _rp_short(v),
+                      ha="center", va="bottom" if v >= 0 else "top",
+                      fontsize=6.5, fontweight="bold", color=c)
+
+    trend_ax.axhline(0, color=W["text_muted"], linewidth=0.6, alpha=0.5)
+    trend_ax.set_xticks(x_idx)
+    trend_ax.set_xticklabels(trend_labels)
+    trend_ax.tick_params(axis="x", labelsize=7, colors=W["text_sec"])
+    trend_ax.tick_params(axis="y", labelsize=6.5, colors=W["text_muted"])
+    trend_ax.spines["top"].set_visible(False)
+    trend_ax.spines["right"].set_visible(False)
+    trend_ax.spines["left"].set_visible(False)
+    trend_ax.spines["bottom"].set_color(W["divider"])
+    trend_ax.grid(axis="y", linestyle=":", alpha=0.3, color=W["divider"])
+    trend_ax.set_axisbelow(True)
+
+    min_v, max_v = min(trend_values), max(trend_values)
+    pad = abs(max_v - min_v) * 0.40 if max_v != min_v else 8000
+    trend_ax.set_ylim(min_v - pad, max_v + pad)
 
     # =========================================================
-    # FOOTER
+    # 7. FOOTER
     # =========================================================
-    footer_line = _divider(w=_W, h=1)
-    footer = (
-        Column(
-            Text("Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383")
-            .font_size(10).color(WARNA["text_muted"]),
-        )
-        .size(width=_W).padding(10).gap(0)
-    )
+    _divider(ax, X_LEFT, Y_FOOTER + 0.015, W_CONTENT, W["divider"], 0.001)
+    _text(ax, X_LEFT, Y_FOOTER,
+          "Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383",
+          size=7, color=W["text_muted"])
 
     # =========================================================
-    # LAYOUT
+    # SAVE
     # =========================================================
-    layout = Column(
-        _header_band,
-        kpi_row,
-        _title_01,
-        _row_01,
-        _title_02,
-        _row_02,
-        footer_line,
-        footer,
-    ).size(width=_W).gap(22)
-
-    return canvas.render(layout)
+    fig.savefig(output_path, dpi=DPI, facecolor=W["bg"], bbox_inches="tight", pad_inches=0.15)
+    plt.close(fig)
+    return output_path
 
 
 # =========================================================
-# RENDER
+# STREAMLIT APP
 # =========================================================
-if st.button("🎨 Render Cream + Stretch", type="primary"):
+if st.button("🎨 Render Infografis", type="primary"):
     try:
-        _tmp_dir = tempfile.mkdtemp()
+        tmp_dir = tempfile.mkdtemp()
+        output_path = os.path.join(tmp_dir, "infografis_so.png")
+
         with st.spinner("Bikin infografis..."):
-            _image = _build_infografis(_data, _tmp_dir)
-        _output_path = os.path.join(_tmp_dir, "infografis_so.png")
-        _image.save(_output_path)
-        with open(_output_path, "rb") as _f:
-            _img_bytes = _f.read()
-        st.success(f"✅ Berhasil! Ukuran: {len(_img_bytes):,} bytes")
+            render_infografis(DATA, output_path)
+
+        with open(output_path, "rb") as f:
+            img_bytes = f.read()
+
+        st.success(f"✅ Berhasil! Ukuran: {len(img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(_img_bytes, caption="Cream BG + Stretch")
+        st.image(img_bytes, caption="Infografis SO — Matplotlib Murni")
+
         st.download_button(
-            "📥 Download PNG", data=_img_bytes,
+            "📥 Download PNG",
+            data=img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-            mime="image/png", key="dl_cream_stretch", type="primary",
+            mime="image/png",
+            key="dl_mpl",
+            type="primary",
         )
+
         try:
             import shutil
-            shutil.rmtree(_tmp_dir, ignore_errors=True)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         except Exception:
             pass
+
     except Exception as e:
         import traceback
         st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
