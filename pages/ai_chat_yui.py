@@ -1,17 +1,10 @@
 """
-AI Chat Yui — Pembantu Input SO (AI-2) v10
-===========================================
-Prinsip: Scanner baca semua → UI audit → user hapus manual.
-
-Changelog v10:
-- Qty Var AUTO = Qty Fisik − Qty Sistem (Opsi B, match Plus/Minus Alfamart)
-- Qty Var locked (disabled di editor)
-- Qty Sistem & Qty Fisik editable
-- Nominal editable
-- Save multi-rak via _edited_by_rak per rak
-- Tombol 🗑️ hapus rak + dialog konfirmasi
-- data_editor num_rows="dynamic"
-- Fallback grouping kalau items_by_rak kosong
+AI Chat Yui — Pembantu Input SO (AI-2) v10 Final
+==================================================
+Fix:
+- Save multi-rak pakai st.session_state per rak
+- Qty Var = Qty Fisik - Qty Sistem (dihitung di backend saat save)
+- Tampilan sukses pakai st.success + st.toast
 """
 
 import streamlit as st
@@ -273,6 +266,9 @@ if "yui_last_saved" not in st.session_state:
 if "yui_rak_to_delete" not in st.session_state:
     st.session_state["yui_rak_to_delete"] = None
 
+if "yui_edited_data" not in st.session_state:
+    st.session_state["yui_edited_data"] = {}
+
 
 if not st.session_state["yui_history"]:
     _welcome = (
@@ -320,6 +316,7 @@ with _col_t3:
         st.session_state["yui_history"] = []
         st.session_state["yui_pending_data"] = None
         st.session_state["yui_rak_to_delete"] = None
+        st.session_state["yui_edited_data"] = {}
         st.session_state["yui_debug_log"] = []
         st.rerun()
 
@@ -395,6 +392,20 @@ def _dialog_upload_file():
 if st.session_state.get("yui_show_upload"):
     _dialog_upload_file()
 
+# =========================================================
+# HELPER: Ambil data editor dari session state
+# =========================================================
+def _get_editor_data(rak_id, default_df):
+    """Ambil data dari st.data_editor yang tersimpan di session_state."""
+    _key = f"editor_rak_{rak_id}"
+    _state = st.session_state.get(_key)
+    if _state is None:
+        return default_df
+    # st.data_editor simpan dict dengan key 'edited_rows', 'added_rows', 'deleted_rows'
+    # Tapi versi terbaru simpan DataFrame langsung
+    if isinstance(_state, pd.DataFrame):
+        return _state
+    return default_df
 
 # =========================================================
 # RENDER CHAT HISTORY
@@ -404,6 +415,7 @@ for _msg in st.session_state["yui_history"]:
     _role = _msg.get("role", "user")
     with st.chat_message(_role, avatar="👤" if _role == "user" else "📦"):
         st.markdown(_msg.get("content", ""))
+
 
 # =========================================================
 # PROCESS FILE
@@ -550,258 +562,251 @@ if st.session_state.get("yui_rak_to_delete"):
 
 
 # =========================================================
-# KONFIRMASI MULTI-RAK + MULTI-PIC
+# KONFIRMASI MULTI-RAK + MULTI-PIC (pakai st.dialog)
 # =========================================================
 if st.session_state.get("yui_pending_data"):
     _pending = st.session_state["yui_pending_data"]
     _items_by_rak = _pending.get("items_by_rak", {})
 
-    st.markdown("---")
-    st.markdown("#### 📋 Konfirmasi Data SO")
-    st.caption("Koreksi item, isi PIC per rak, atau tambah item manual")
+    @st.dialog("📋 Konfirmasi Data SO", width="large")
+    def _dialog_konfirmasi():
+        _pending_inner = st.session_state["yui_pending_data"]
+        _items_by_rak_inner = _pending_inner.get("items_by_rak", {})
 
-    _c1, _c2, _c3 = st.columns(3)
-    with _c1:
+        st.caption("Koreksi item, isi PIC per rak, atau tambah item manual")
+
+        _c1, _c2, _c3 = st.columns(3)
+        with _c1:
+            st.metric("📅 Tanggal", _pending_inner.get("tanggal", "-"))
+        with _c2:
+            st.metric("🏪 Total Rak", len(_items_by_rak_inner))
+        with _c3:
+            st.metric("📦 Total Item", len(_pending_inner.get("items", [])))
+
+        st.markdown("---")
+
+        _edited_by_rak = {}
+        _pics_per_rak = _pending_inner.get("pics", {})
+
+        # Tab per rak biar rapi
+        _rak_ids = list(_items_by_rak_inner.keys())
+        if _rak_ids:
+            _tabs = st.tabs([f"🏪 {_r}" for _r in _rak_ids])
+
+            for _tab, _rak_id in zip(_tabs, _rak_ids):
+                with _tab:
+                    _rak_items = _items_by_rak_inner[_rak_id]
+
+                    _c_pic, _c_del = st.columns([3, 1])
+                    with _c_pic:
+                        if _personil_list:
+                            _current_pic = _pics_per_rak.get(_rak_id, "")
+                            _pic_options = [""] + _personil_list
+                            _pic_idx = _pic_options.index(_current_pic) if _current_pic in _pic_options else 0
+                            _new_pic = st.selectbox(
+                                f"👤 PIC untuk {_rak_id}",
+                                options=_pic_options,
+                                index=_pic_idx,
+                                key=f"pic_rak_{_rak_id}",
+                            )
+                            if _new_pic:
+                                _pics_per_rak[_rak_id] = _new_pic
+                        else:
+                            _new_pic = st.text_input(
+                                f"👤 PIC untuk {_rak_id}",
+                                placeholder="Nama PIC",
+                                key=f"pic_rak_{_rak_id}",
+                            )
+                            if _new_pic:
+                                _pics_per_rak[_rak_id] = _new_pic
+
+                    with _c_del:
+                        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                        if st.button("🗑️ Hapus", key=f"btn_del_rak_{_rak_id}", width="stretch"):
+                            st.session_state["yui_rak_to_delete"] = _rak_id
+                            st.rerun()
+
+                    _df_rak = pd.DataFrame(_rak_items)
+                    _rename_map = {
+                        "plu": "PLU",
+                        "nama_produk": "Nama Produk",
+                        "qty_sistem": "Qty Sistem",
+                        "qty_fisik": "Qty Fisik",
+                        "qty_var": "Qty Var",
+                        "nominal_adjust": "Nominal",
+                    }
+                    _cols_show_src = ["plu", "nama_produk", "qty_sistem", "qty_fisik", "nominal_adjust"]
+                    _cols_show_src = [c for c in _cols_show_src if c in _df_rak.columns]
+                    _df_rak = _df_rak[_cols_show_src].rename(columns=_rename_map)
+
+                    # Qty Var auto-preview
+                    if "Qty Sistem" in _df_rak.columns and "Qty Fisik" in _df_rak.columns:
+                        _df_rak["Qty Var"] = (
+                            pd.to_numeric(_df_rak["Qty Fisik"], errors="coerce").fillna(0).astype(int)
+                            - pd.to_numeric(_df_rak["Qty Sistem"], errors="coerce").fillna(0).astype(int)
+                        )
+
+                    _col_order = ["PLU", "Nama Produk", "Qty Sistem", "Qty Fisik", "Qty Var", "Nominal"]
+                    _col_order = [c for c in _col_order if c in _df_rak.columns]
+                    _df_rak = _df_rak[_col_order]
+
+                    _edited_rak = st.data_editor(
+                        _df_rak,
+                        use_container_width=True,
+                        hide_index=True,
+                        num_rows="dynamic",
+                        height=min(400, 80 + len(_df_rak) * 38),
+                        column_config={
+                            "PLU": st.column_config.TextColumn("PLU", width="small"),
+                            "Nama Produk": st.column_config.TextColumn("Nama Produk", width="large"),
+                            "Qty Sistem": st.column_config.NumberColumn("Qty Sistem", width="small"),
+                            "Qty Fisik": st.column_config.NumberColumn("Qty Fisik", width="small"),
+                            "Qty Var": st.column_config.NumberColumn(
+                                "Qty Var", width="small", disabled=True,
+                                help="Auto: Qty Fisik − Qty Sistem"
+                            ),
+                            "Nominal": st.column_config.NumberColumn("Nominal", format="Rp %d", width="medium"),
+                        },
+                        key=f"editor_rak_{_rak_id}",
+                    )
+
+                    # Hitung Qty Var di backend (jaga-jaga)
+                    _items_this_rak = []
+                    for _, _r in _edited_rak.iterrows():
+                        _plu = str(_r.get("PLU", "") or "").strip()
+                        _nama = str(_r.get("Nama Produk", "") or "").strip()
+                        if not _plu and not _nama:
+                            continue
+                        _qty_sist = int(_r.get("Qty Sistem", 0) or 0)
+                        _qty_fis = int(_r.get("Qty Fisik", 0) or 0)
+                        _items_this_rak.append({
+                            "rak_id": _rak_id,
+                            "plu": _plu,
+                            "nama_produk": _nama,
+                            "qty_sistem": _qty_sist,
+                            "qty_fisik": _qty_fis,
+                            "qty_var": _qty_fis - _qty_sist,  # ✅ Qty Var = Fisik - Sistem
+                            "nominal_adjust": float(_r.get("Nominal", 0) or 0),
+                            "pic": _pics_per_rak.get(_rak_id),
+                        })
+
+                    _edited_by_rak[_rak_id] = _items_this_rak
+
+                    _rak_total = sum(float(i["nominal_adjust"]) for i in _items_this_rak)
+                    _total_color = "#E88B8B" if _rak_total < 0 else "#7FB99B"
+                    st.markdown(
+                        f"<div class='rak-group-total'>💰 Total {_rak_id}: "
+                        f"<b style='color: {_total_color};'>{fmt_rp_signed(_rak_total)}</b></div>",
+                        unsafe_allow_html=True,
+                    )
+
+        # Update pending
+        _updated_items_all = []
+        for _r, _items_list in _edited_by_rak.items():
+            _updated_items_all.extend(_items_list)
+
+        _pending_inner["items"] = _updated_items_all
+        _pending_inner["items_by_rak"] = _edited_by_rak
+        _pending_inner["pics"] = _pics_per_rak
+        _new_total = sum(i["nominal_adjust"] for i in _updated_items_all)
+        _pending_inner["total_nominal"] = _new_total
+        st.session_state["yui_pending_data"] = _pending_inner
+
+        _rak_tanpa_pic = [r for r in _edited_by_rak.keys() if not _pics_per_rak.get(r)]
+        if _rak_tanpa_pic:
+            st.warning(f"⚠️ Rak belum ada PIC: **{', '.join(_rak_tanpa_pic)}**")
+
+        _total_color = "#E88B8B" if _new_total < 0 else "#7FB99B"
         st.markdown(
-            f"<div class='metric-clean'>"
-            f"<div class='label'>📅 TANGGAL</div>"
-            f"<div class='value' style='font-size: 16px;'>{_pending.get('tanggal', '-')}</div>"
+            f"<div class='metric-clean' style='border-left-color: {_total_color}; text-align: right; margin-top: 16px;'>"
+            f"<div class='label'>💰 TOTAL SEMUA</div>"
+            f"<div class='value' style='color: {_total_color};'>{fmt_rp_signed(_new_total)}</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
-    with _c2:
-        st.markdown(
-            f"<div class='metric-clean'>"
-            f"<div class='label'>🏪 TOTAL RAK</div>"
-            f"<div class='value' style='font-size: 16px;'>{len(_items_by_rak)}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-    with _c3:
-        st.markdown(
-            f"<div class='metric-clean'>"
-            f"<div class='label'>📦 TOTAL ITEM</div>"
-            f"<div class='value' style='font-size: 16px;'>{len(_pending.get('items', []))}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
 
-    st.markdown("")
+        st.markdown("---")
+        _c_save, _c_cancel = st.columns(2)
 
-    _edited_by_rak = {}
-    _pics_per_rak = _pending.get("pics", {})
+        with _c_save:
+            if st.button("💾 SIMPAN SEMUA", width="stretch", type="primary",
+                         key="btn_yui_save_so",
+                         disabled=(bool(_rak_tanpa_pic) or not _edited_by_rak)):
+                _save_and_close(_edited_by_rak, _pics_per_rak, _pending_inner)
 
-    for _rak_id, _rak_items in _items_by_rak.items():
-        _col_h1, _col_h2, _col_h3 = st.columns([2, 2, 0.6])
-
-        with _col_h1:
-            st.markdown(
-                f"<div class='rak-group-header'>🏪 RAK: {_rak_id}</div>",
-                unsafe_allow_html=True,
-            )
-
-        with _col_h2:
-            if _personil_list:
-                _current_pic = _pics_per_rak.get(_rak_id, "")
-                _pic_options = [""] + _personil_list
-                _pic_idx = _pic_options.index(_current_pic) if _current_pic in _pic_options else 0
-                _new_pic = st.selectbox(
-                    f"👤 PIC untuk {_rak_id}",
-                    options=_pic_options,
-                    index=_pic_idx,
-                    key=f"pic_rak_{_rak_id}",
-                    label_visibility="collapsed",
-                )
-                if _new_pic:
-                    _pics_per_rak[_rak_id] = _new_pic
-            else:
-                _new_pic = st.text_input(
-                    f"👤 PIC untuk {_rak_id}",
-                    placeholder="Nama PIC",
-                    key=f"pic_rak_{_rak_id}",
-                    label_visibility="collapsed",
-                )
-                if _new_pic:
-                    _pics_per_rak[_rak_id] = _new_pic
-
-        with _col_h3:
-            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            if st.button(
-                "🗑️",
-                key=f"btn_del_rak_{_rak_id}",
-                help=f"Hapus rak {_rak_id}",
-                width="stretch",
-            ):
-                st.session_state["yui_rak_to_delete"] = _rak_id
+        with _c_cancel:
+            if st.button("❌ BATAL", width="stretch", key="btn_yui_cancel_pending"):
+                _cancel = "Oke Bos, aku batalkan."
+                st.session_state["yui_history"].append({"role": "assistant", "content": _cancel})
+                save_message("yui", _session_id, "assistant", _cancel)
+                st.session_state["yui_pending_data"] = None
                 st.rerun()
 
-        _df_rak = pd.DataFrame(_rak_items)
+    _dialog_konfirmasi()
 
-        _rename_map = {
-            "plu": "PLU",
-            "nama_produk": "Nama Produk",
-            "qty_sistem": "Qty Sistem",
-            "qty_fisik": "Qty Fisik",
-            "qty_var": "Qty Var",
-            "nominal_adjust": "Nominal",
-        }
-        _cols_show_src = ["plu", "nama_produk", "qty_sistem", "qty_fisik", "nominal_adjust"]
-        _cols_show_src = [c for c in _cols_show_src if c in _df_rak.columns]
-        _df_rak = _df_rak[_cols_show_src].rename(columns=_rename_map)
 
-        # ✅ Auto-hitung Qty Var = Qty Fisik − Qty Sistem (Opsi B)
-        if "Qty Sistem" in _df_rak.columns and "Qty Fisik" in _df_rak.columns:
-            _df_rak["Qty Var"] = (
-                pd.to_numeric(_df_rak["Qty Fisik"], errors="coerce").fillna(0).astype(int)
-                - pd.to_numeric(_df_rak["Qty Sistem"], errors="coerce").fillna(0).astype(int)
-            )
-
-        _col_order = ["PLU", "Nama Produk", "Qty Sistem", "Qty Fisik", "Qty Var", "Nominal"]
-        _col_order = [c for c in _col_order if c in _df_rak.columns]
-        _df_rak = _df_rak[_col_order]
-
-        _edited_rak = st.data_editor(
-            _df_rak,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="dynamic",
-            height=min(300, 60 + len(_df_rak) * 40),
-            column_config={
-                "PLU": st.column_config.TextColumn("PLU", width="small"),
-                "Nama Produk": st.column_config.TextColumn("Nama Produk", width="large"),
-                "Qty Sistem": st.column_config.NumberColumn("Qty Sistem", width="small"),
-                "Qty Fisik": st.column_config.NumberColumn("Qty Fisik", width="small"),
-                "Qty Var": st.column_config.NumberColumn(
-                    "Qty Var", width="small", disabled=True,
-                    help="Auto: Qty Fisik − Qty Sistem"
-                ),
-                "Nominal": st.column_config.NumberColumn("Nominal", format="Rp %d", width="medium"),
-            },
-            key=f"editor_rak_{_rak_id}",
-        )
-
-        _items_this_rak = []
-        for _, _r in _edited_rak.iterrows():
-            _plu = str(_r.get("PLU", "") or "").strip()
-            _nama = str(_r.get("Nama Produk", "") or "").strip()
-            if not _plu and not _nama:
-                continue
-            _items_this_rak.append({
-                "rak_id": _rak_id,
-                "plu": _plu,
-                "nama_produk": _nama,
-                "qty_sistem": int(_r.get("Qty Sistem", 0) or 0),
-                "qty_fisik": int(_r.get("Qty Fisik", 0) or 0),
-                "qty_var": int(_r.get("Qty Var", 0) or 0),
-                "nominal_adjust": float(_r.get("Nominal", 0) or 0),
-                "pic": _pics_per_rak.get(_rak_id),
-            })
-
-        _edited_by_rak[_rak_id] = _items_this_rak
-
-        _rak_total = sum(float(i["nominal_adjust"]) for i in _items_this_rak)
-        _total_color = "#E88B8B" if _rak_total < 0 else "#7FB99B"
-        st.markdown(
-            f"<div class='rak-group-total'>💰 Total {_rak_id}: "
-            f"<b style='color: {_total_color};'>{fmt_rp_signed(_rak_total)}</b></div>",
-            unsafe_allow_html=True,
-        )
-
-    _updated_items_all = []
-    for _r, _items_list in _edited_by_rak.items():
-        _updated_items_all.extend(_items_list)
-
-    st.session_state["yui_pending_data"]["items"] = _updated_items_all
-    st.session_state["yui_pending_data"]["items_by_rak"] = _edited_by_rak
-    st.session_state["yui_pending_data"]["pics"] = _pics_per_rak
-    _new_total = sum(i["nominal_adjust"] for i in _updated_items_all)
-    st.session_state["yui_pending_data"]["total_nominal"] = _new_total
-
-    _total_color = "#E88B8B" if _new_total < 0 else "#7FB99B"
-    st.markdown(
-        f"<div class='metric-clean' style='border-left-color: {_total_color}; "
-        f"text-align: right; margin-top: 16px;'>"
-        f"<div class='label'>💰 TOTAL SEMUA</div>"
-        f"<div class='value' style='color: {_total_color};'>"
-        f"{fmt_rp_signed(_new_total)}</div>"
-        f"</div>",
-        unsafe_allow_html=True,
+# =========================================================
+# HELPER: SAVE + TUTUP DIALOG
+# =========================================================
+def _save_and_close(edited_by_rak, pics_per_rak, pending_inner):
+    """Simpan semua rak ke DB, tutup dialog, tampil sukses."""
+    _saved_count = 0
+    _error_count = 0
+    _new_total = sum(
+        float(i.get("nominal_adjust", 0) or 0)
+        for _items in edited_by_rak.values()
+        for i in _items
     )
 
-    _rak_tanpa_pic = [r for r in _edited_by_rak.keys() if not _pics_per_rak.get(r)]
+    yui_log(f"[Yui] === SAVE START: {len(edited_by_rak)} rak ===")
 
-    if _rak_tanpa_pic:
-        st.warning(f"⚠️ Rak belum ada PIC: **{', '.join(_rak_tanpa_pic)}**")
+    for _rak_id, _rak_items_final in edited_by_rak.items():
+        _rak_pic = pics_per_rak.get(_rak_id, "")
+        if not _rak_pic:
+            yui_log(f"[Yui] Skip rak {_rak_id}: PIC kosong")
+            continue
+        if not _rak_items_final:
+            yui_log(f"[Yui] Skip rak {_rak_id}: item kosong")
+            continue
 
-    if not _edited_by_rak:
-        st.info("📭 Semua rak udah dihapus. Upload file baru atau batal.")
+        yui_log(f"[Yui] Saving rak {_rak_id}: {len(_rak_items_final)} items, PIC={_rak_pic}")
 
-    st.markdown("")
-    _col_save, _col_cancel = st.columns([2, 1])
+        try:
+            _ok, _msg, _detail = save_input_harian(
+                tanggal=datetime.strptime(pending_inner["tanggal"], "%Y-%m-%d").date(),
+                spd=0,
+                rak_items=_rak_items_final,
+                keterangan=f"Input via Yui ({pending_inner.get('file_name', '')})",
+                pic=_rak_pic,
+                update_status_rak=True,
+            )
+            if _ok:
+                _saved_count += 1
+                yui_log(f"[Yui] ✅ Saved rak {_rak_id}: {len(_rak_items_final)} items")
+            else:
+                _error_count += 1
+                yui_log(f"[Yui] ❌ Save fail rak {_rak_id}: {_msg}")
+        except Exception as _e:
+            yui_log(f"[Yui] Save error {_rak_id}: {_e}")
+            _error_count += 1
 
-    with _col_save:
-        if st.button("💾 SIMPAN SEMUA", width="stretch", type="primary",
-                     key="btn_yui_save_so",
-                     disabled=(bool(_rak_tanpa_pic) or not _edited_by_rak)):
-            with st.spinner("📦 Menyimpan..."):
-                _saved_count = 0
-                _error_count = 0
-                yui_log(f"[Yui] === SAVE START: {len(_edited_by_rak)} rak ===")
+    yui_log(f"[Yui] === SAVE DONE: {_saved_count} OK, {_error_count} error ===")
 
-                for _rak_id, _rak_items_final in _edited_by_rak.items():
-                    _rak_pic = _pics_per_rak.get(_rak_id, "")
-                    if not _rak_pic:
-                        yui_log(f"[Yui] Skip rak {_rak_id}: PIC kosong")
-                        continue
-                    if not _rak_items_final:
-                        yui_log(f"[Yui] Skip rak {_rak_id}: item kosong")
-                        continue
-
-                    yui_log(f"[Yui] Saving rak {_rak_id}: {len(_rak_items_final)} items, PIC={_rak_pic}")
-
-                    try:
-                        _ok, _msg, _detail = save_input_harian(
-                            tanggal=datetime.strptime(_pending["tanggal"], "%Y-%m-%d").date(),
-                            spd=0,
-                            rak_items=_rak_items_final,
-                            keterangan=f"Input via Yui ({_pending.get('file_name', '')})",
-                            pic=_rak_pic,
-                            update_status_rak=True,
-                        )
-                        if _ok:
-                            _saved_count += 1
-                            yui_log(f"[Yui] ✅ Saved rak {_rak_id}: {len(_rak_items_final)} items")
-                        else:
-                            _error_count += 1
-                            yui_log(f"[Yui] ❌ Save fail rak {_rak_id}: {_msg}")
-                    except Exception as _e:
-                        yui_log(f"[Yui] Save error {_rak_id}: {_e}")
-                        _error_count += 1
-
-                yui_log(f"[Yui] === SAVE DONE: {_saved_count} OK, {_error_count} error ===")
-
-                if _saved_count > 0:
-                    _success = (
-                        f"🎉 **Beres Bos!** {_saved_count} rak tersimpan.\n"
-                        f"Total: **{fmt_rp_signed(_new_total)}**"
-                    )
-                    st.session_state["yui_last_saved"] = _success
-                    st.session_state["yui_history"].append({"role": "assistant", "content": _success})
-                    save_message("yui", _session_id, "assistant", _success)
-                    st.session_state["yui_pending_data"] = None
-                    st.cache_data.clear()
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error(f"❌ Gagal simpan. Error: {_error_count}")
-
-    with _col_cancel:
-        if st.button("❌ BATAL", width="stretch", key="btn_yui_cancel_pending"):
-            _cancel = "Oke Bos, aku batalkan."
-            st.session_state["yui_history"].append({"role": "assistant", "content": _cancel})
-            save_message("yui", _session_id, "assistant", _cancel)
-            st.session_state["yui_pending_data"] = None
-            st.rerun()
+    if _saved_count > 0:
+        _success = (
+            f"🎉 **Beres Bos!** {_saved_count} rak tersimpan.\n"
+            f"Total: **{fmt_rp_signed(_new_total)}**"
+        )
+        st.session_state["yui_last_saved"] = _success
+        st.session_state["yui_history"].append({"role": "assistant", "content": _success})
+        save_message("yui", _session_id, "assistant", _success)
+        st.session_state["yui_pending_data"] = None
+        st.cache_data.clear()
+        st.toast(f"✅ {_saved_count} rak tersimpan!", icon="🎉")
+        time.sleep(1)
+        st.rerun()
+    else:
+        st.error(f"❌ Gagal simpan. Error: {_error_count}")
 
 
 # =========================================================
