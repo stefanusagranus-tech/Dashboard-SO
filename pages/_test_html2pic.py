@@ -1,8 +1,7 @@
 """
-Test pictex — Layout Eksperimen
+Test pictex — Halaman 1 Fix v2
 =================================
-Section 01: Kiri Trend | Kanan Ringkasan+Insight
-Section 02: Kiri Tabel | Kanan Donut
+Strategi: size() eksplisit + no stretch
 """
 import streamlit as st
 import os
@@ -16,7 +15,7 @@ import numpy as np
 
 
 st.set_page_config(page_title="Test pictex", page_icon="🎨", layout="wide")
-st.title("🎨 Layout Eksperimen")
+st.title("🎨 Halaman 1 — Fix v2")
 
 
 # =========================================================
@@ -56,7 +55,7 @@ _data = {
     "status": "OVER",
     "insight": (
         "Rak S14 menyumbang minus terbesar (-Rp 24.785) oleh PIC REZA. "
-        "Total selisih periode melebihi batas BTSB — perlu perhatian."
+        "Total selisih periode melebihi batas BTSB."
     ),
     "list_rak": [
         {"rak_id": "S14", "nama": "PERSONAL & TOOTH CARE 4", "pic": "REZA", "nominal": -24785},
@@ -88,9 +87,9 @@ def _fmt_rp_no_sign(val):
 
 
 # =========================================================
-# CHART 1: TREND
+# CHART: TREND
 # =========================================================
-def _chart_trend(trend_data, output_path, width_px=520, height_px=320):
+def _chart_trend(trend_data, output_path, width_px=520, height_px=300):
     if not trend_data:
         return None
 
@@ -110,23 +109,23 @@ def _chart_trend(trend_data, output_path, width_px=520, height_px=320):
     ax.bar(_x, _values, color=_bar_colors, width=0.55, alpha=0.75, edgecolor="white", linewidth=1.5)
 
     ax.plot(_x, _values, color=WARNA["accent_deep"], linewidth=2.5,
-            marker="o", markersize=8, markerfacecolor="white",
-            markeredgecolor=WARNA["accent_deep"], markeredgewidth=2.5, zorder=5)
+            marker="o", markersize=7, markerfacecolor="white",
+            markeredgecolor=WARNA["accent_deep"], markeredgewidth=2, zorder=5)
 
     for i, v in enumerate(_values):
         _color = WARNA["red"] if v < 0 else WARNA["green"]
         if v >= 0:
             ax.text(i, v + 3000, f"+Rp {abs(int(v)):,}".replace(",", "."),
-                    ha="center", va="bottom", fontsize=9, fontweight="bold", color=_color)
+                    ha="center", va="bottom", fontsize=8, fontweight="bold", color=_color)
         else:
             ax.text(i, v - 3000, f"-Rp {abs(int(v)):,}".replace(",", "."),
-                    ha="center", va="top", fontsize=9, fontweight="bold", color=_color)
+                    ha="center", va="top", fontsize=8, fontweight="bold", color=_color)
 
     ax.axhline(0, color=WARNA["text_muted"], linewidth=0.8, alpha=0.5)
     ax.set_xticks(_x)
     ax.set_xticklabels(_labels)
-    ax.tick_params(axis="x", labelsize=10, colors=WARNA["text_secondary"])
-    ax.tick_params(axis="y", labelsize=9, colors=WARNA["text_muted"])
+    ax.tick_params(axis="x", labelsize=9, colors=WARNA["text_secondary"])
+    ax.tick_params(axis="y", labelsize=8, colors=WARNA["text_muted"])
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
@@ -147,9 +146,9 @@ def _chart_trend(trend_data, output_path, width_px=520, height_px=320):
 
 
 # =========================================================
-# CHART 2: DONUT
+# CHART: DONUT
 # =========================================================
-def _chart_donut(list_rak, output_path, size_px=380):
+def _chart_donut(list_rak, output_path, size_px=360):
     _sorted = sorted(list_rak, key=lambda x: abs(x["nominal"]), reverse=True)
     _labels = [f"Rak {r['rak_id']}" for r in _sorted if abs(r["nominal"]) > 0]
     _sizes = [abs(r["nominal"]) for r in _sorted if abs(r["nominal"]) > 0]
@@ -181,7 +180,7 @@ def _chart_donut(list_rak, output_path, size_px=380):
         x = np.cos(np.radians(angle))
         y = np.sin(np.radians(angle))
         ha = "right" if x < 0 else "left"
-        ax.annotate(label, xy=(x * 0.85, y * 0.85), xytext=(x * 1.28, y * 1.28),
+        ax.annotate(label, xy=(x * 0.85, y * 0.85), xytext=(x * 1.30, y * 1.30),
                     ha=ha, va="center", fontsize=10, fontweight="bold", color=WARNA["text_primary"])
 
     _total = sum(_sizes)
@@ -208,8 +207,8 @@ def _build_infografis(data, tmp_dir):
     # === GENERATE CHART PNG ===
     _trend_path = os.path.join(tmp_dir, "chart_trend.png")
     _donut_path = os.path.join(tmp_dir, "chart_donut.png")
-    _chart_trend(data["trend_data"], _trend_path, width_px=520, height_px=320)
-    _chart_donut(data["list_rak"], _donut_path, size_px=380)
+    _chart_trend(data["trend_data"], _trend_path, width_px=520, height_px=300)
+    _chart_donut(data["list_rak"], _donut_path, size_px=360)
 
     # === CANVAS ===
     canvas = (
@@ -257,7 +256,7 @@ def _build_infografis(data, tmp_dir):
         return (
             Column(
                 Text(label).font_size(11).color(WARNA["text_muted"]).font_weight("bold"),
-                Text(value).font_size(48).color(WARNA["text_primary"]).font_weight("bold"),
+                Text(value).font_size(46).color(WARNA["text_primary"]).font_weight("bold"),
                 Text(sublabel).font_size(11).color(WARNA["text_secondary"]),
             )
             .padding(22)
@@ -287,45 +286,47 @@ def _build_infografis(data, tmp_dir):
     # SECTION 01 — KIRI: TREND | KANAN: RINGKASAN + INSIGHT
     # =========================================================
     _title_01 = _section_title("01", "TREND & RINGKASAN")
-    
-    # --- KIRI: TREND CHART ---
+
+    # --- KIRI: TREND CHART — height fixed 480 ---
     _trend_col = (
         Column(
+            Text("TREND SELISIH HARIAN").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
+            _divider(w=520, h=2, color=WARNA["accent_deep"]),
             Image(_trend_path).size(width=520),
         )
+        .size(width=520, height=480)   # ✅ HEIGHT FIXED
         .padding(20)
         .background_color(WARNA["white"])
         .border_radius(12)
-        .gap(0)
-        # Hapus flex_grow(1) karena kita akan pakai stretch
+        .gap(8)
     )
-    
-    # --- KANAN: RINGKASAN + INSIGHT ---
+
+    # --- KANAN: RINGKASAN + INSIGHT — height fixed 480 ---
     _status_color = WARNA["red"] if data["status"] == "OVER" else WARNA["green"]
-    
+
     def _metric_row(label, value, value_color=None):
         if value_color is None:
             value_color = WARNA["text_primary"]
         return Row(
-            Text(label).font_size(12).color(WARNA["text_muted"]).width(130),
-            Text(value).font_size(13).color(value_color).font_weight("bold"),
-        ).gap(10).size(width=400)
-    
+            Text(label).font_size(11).color(WARNA["text_muted"]).width(120),
+            Text(value).font_size(12).color(value_color).font_weight("bold"),
+        ).gap(8).size(width=400)
+
     _status_badge = (
         Row(
             Column(Text("").font_size(1))
             .size(width=10, height=10)
             .background_color(_status_color)
             .border_radius(5),
-            Text(f" {data['status']}").font_size(13).color(_status_color).font_weight("bold"),
+            Text(f" {data['status']}").font_size(12).color(_status_color).font_weight("bold"),
         ).gap(6)
     )
-    
+
     _ringkasan_col = (
         Column(
-            # Konten Ringkasan
-            Text("RINGKASAN PERIODE").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
+            Text("RINGKASAN PERIODE").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=400, h=2, color=WARNA["accent_deep"]),
+
             _metric_row("Tanggal", data["periode"]),
             _divider(w=400, h=1),
             _metric_row("Total Rak", f"{data['total_rak']} rak"),
@@ -337,26 +338,27 @@ def _build_infografis(data, tmp_dir):
             _metric_row("BTSB (0,15%)", _fmt_rp_no_sign(data["btsb"])),
             _divider(w=400, h=1),
             Row(
-                Text("Status").font_size(12).color(WARNA["text_muted"]).width(130),
+                Text("Status").font_size(11).color(WARNA["text_muted"]).width(120),
                 _status_badge,
-            ).gap(10).size(width=400),
-            Column(Text("").font_size(1)).size(width=1, height=10),
-            Text("INSIGHT").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
+            ).gap(8).size(width=400),
+
+            Column(Text("").font_size(1)).size(width=1, height=8),
+
+            Text("INSIGHT").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=400, h=2, color=WARNA["accent_deep"]),
             Column(
-                Text(data["insight"]).font_size(12).color(WARNA["text_primary"]).font_weight("bold"),
-            ).padding(16).background_color(WARNA["terracotta_light"]).border_radius(8).gap(0),
+                Text(data["insight"]).font_size(11).color(WARNA["text_primary"]).font_weight("bold"),
+            ).padding(14).background_color(WARNA["terracotta_light"]).border_radius(8).gap(0),
         )
-        .padding(24)
+        .size(width=450, height=480)   # ✅ HEIGHT FIXED, SAMA
+        .padding(20)
         .background_color(WARNA["white"])
         .border_radius(12)
-        .gap(8)
-        # Hapus flex_grow(1)
+        .gap(6)
     )
-    
-    # --- ROW UTAMA SECTION 01 ---
-    # Kunci perbaikannya ada di sini: align_items("stretch")
-    _row_01 = Row(_trend_col, _ringkasan_col).gap(30).size(width=_W).align_items("stretch")
+
+    # ✅ Row tanpa stretch — biar size(height) ke-apply
+    _row_01 = Row(_trend_col, _ringkasan_col).gap(30).size(width=_W)
 
     # =========================================================
     # SECTION 02 — KIRI: TABEL | KANAN: DONUT
@@ -364,14 +366,14 @@ def _build_infografis(data, tmp_dir):
     _title_02 = _section_title("02", "DETAIL PER RAK & KONTRIBUSI")
 
     # --- KIRI: TABEL ---
-    _col_w = [80, 300, 120, 150]  # total 650
+    _col_w = [80, 280, 120, 150]
 
     _header_cells = Row(
         Text("RAK").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[0]),
         Text("NAMA RAK").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[1]),
         Text("PIC").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[2]),
         Text("SELISIH").font_size(11).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[3]),
-    ).size(width=650).background_color(WARNA["accent_deep"]).gap(0)
+    ).size(width=630).background_color(WARNA["accent_deep"]).gap(0)
 
     _rows = [_header_cells]
     for _i, _r in enumerate(data["list_rak"]):
@@ -380,22 +382,21 @@ def _build_infografis(data, tmp_dir):
         _rows.append(
             Row(
                 Text(_r["rak_id"]).font_size(12).color(WARNA["text_primary"]).font_weight("bold").padding(12).width(_col_w[0]),
-                Text(_r["nama"][:25]).font_size(11).color(WARNA["text_primary"]).padding(12).width(_col_w[1]),
+                Text(_r["nama"][:22]).font_size(11).color(WARNA["text_primary"]).padding(12).width(_col_w[1]),
                 Text(_r["pic"]).font_size(12).color(WARNA["text_primary"]).font_weight("bold").padding(12).width(_col_w[2]),
                 Text(_fmt_rp(_r["nominal"])).font_size(12).color(_color).font_weight("bold").padding(12).width(_col_w[3]),
-            ).size(width=650).background_color(_bg).gap(0)
+            ).size(width=630).background_color(_bg).gap(0)
         )
 
-    tabel_rak = Column(*_rows).size(width=650).gap(0)
+    tabel_rak = Column(*_rows).size(width=630).gap(0)
 
-    # TOTAL SELISIH
     _total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
     _total_row = (
         Row(
-            Text("TOTAL").font_size(12).color(WARNA["text_primary"]).font_weight("bold").padding(14).width(500),
+            Text("TOTAL").font_size(12).color(WARNA["text_primary"]).font_weight("bold").padding(14).width(480),
             Text(_fmt_rp(data["total_nominal"])).font_size(13).color(_total_color).font_weight("bold").padding(14).width(150),
         )
-        .size(width=650)
+        .size(width=630)
         .background_color(WARNA["terracotta_light"])
     )
 
@@ -412,8 +413,8 @@ def _build_infografis(data, tmp_dir):
     _donut_col = (
         Column(
             Text("KONTRIBUSI PER RAK").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
-            _divider(w=300, h=2, color=WARNA["accent_deep"]),
-            Image(_donut_path).size(width=300),
+            _divider(w=310, h=2, color=WARNA["accent_deep"]),
+            Image(_donut_path).size(width=310),
         )
         .padding(18)
         .background_color(WARNA["white"])
@@ -422,8 +423,8 @@ def _build_infografis(data, tmp_dir):
         .flex_grow(1)
     )
 
-    _row_02 = Row(_tabel_col, _donut_col).gap(30).size(width=_W).align_items("start")
-    
+    _row_02 = Row(_tabel_col, _donut_col).gap(30).size(width=_W)
+
     # =========================================================
     # FOOTER
     # =========================================================
@@ -461,7 +462,7 @@ def _build_infografis(data, tmp_dir):
 # =========================================================
 # RENDER UTAMA
 # =========================================================
-if st.button("🎨 Render Layout Eksperimen", type="primary"):
+if st.button("🎨 Render Halaman 1", type="primary"):
     try:
         _tmp_dir = tempfile.mkdtemp()
 
@@ -478,14 +479,14 @@ if st.button("🎨 Render Layout Eksperimen", type="primary"):
 
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(_img_bytes, caption="Layout Eksperimen")
+        st.image(_img_bytes, caption="Halaman 1 Fix v2")
 
         st.download_button(
             "📥 Download PNG",
             data=_img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
             mime="image/png",
-            key="dl_layout_exp",
+            key="dl_fix_v2",
             type="primary",
         )
 
@@ -503,19 +504,11 @@ if st.button("🎨 Render Layout Eksperimen", type="primary"):
 st.markdown("---")
 with st.expander("ℹ️ Info", expanded=False):
     st.markdown("""
-    **Layout Eksperimen:**
+    **Halaman 1 — Fix v2**
 
-    **Section 01 — Trend & Ringkasan:**
-    - Kiri: Trend chart (bar + line)
-    - Kanan: Ringkasan periode + Insight
-
-    **Section 02 — Detail & Kontribusi:**
-    - Kiri: Tabel rak
-    - Kanan: Donut chart
-
-    **Prinsip:**
-    - Semua pakai `.size(width=, height=)` — API pictex v2
-    - Divider `Column().size(w, h).background_color()`
-    - Badge status `Column().size(10,10).border_radius(5)`
-    - `flex_grow(1)` untuk proporsi kolom
+    **Strategi:**
+    - `_trend_col`: `.size(width=520, height=480)` — height fixed
+    - `_ringkasan_col`: `.size(width=450, height=480)` — height sama
+    - `_row_01`: **tanpa `align_items("stretch")`** — biar size(height) ke-apply
+    - Section 02 tetap pakai `flex_grow` — tabel & donut proporsional
     """)
