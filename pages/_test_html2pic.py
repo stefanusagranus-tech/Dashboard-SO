@@ -216,7 +216,7 @@ def _build_infografis(data, tmp_dir):
     from pictex import Canvas, Row, Column, Text, Image
 
     _W = 1000
-    _H = 1650
+    _H = 1700
 
     # === GENERATE CHART PNG ===
     _donut_path = os.path.join(tmp_dir, "chart_donut.png")
@@ -253,11 +253,8 @@ def _build_infografis(data, tmp_dir):
 
     header = Row(header_bar, header_text).gap(20).width(_W)
 
-    divider_top = (
-        Column(Text("").font_size(1))
-        .width(_W)
-        .background_color(WARNA["divider"])
-    )
+    # Divider pakai karakter ─
+    divider_top = Text("─" * 95).font_size(8).color(WARNA["divider"])
 
     # =========================================================
     # KPI CARDS
@@ -309,15 +306,15 @@ def _build_infografis(data, tmp_dir):
     )
 
     # =========================================================
-    # KANAN: RINGKASAN + INSIGHT (OPSI B — Divider + Badge)
+    # KANAN: RINGKASAN + INSIGHT (Divider pakai karakter)
     # =========================================================
     _status_color = WARNA["red"] if data["status"] == "OVER" else WARNA["green"]
 
-    # Helper: divider tipis 428px
-    def _div_thin():
-        return Column(Text("").font_size(1)).width(428).background_color(WARNA["divider"])
+    # Helper divider pakai karakter
+    def _div_line():
+        return Text("─" * 42).font_size(7).color(WARNA["divider"])
 
-    # Helper: metric row
+    # Helper metric row
     def _metric_row(label, value, value_color=None):
         if value_color is None:
             value_color = WARNA["text_primary"]
@@ -330,40 +327,35 @@ def _build_infografis(data, tmp_dir):
         Column(
             # Judul
             Text("RINGKASAN PERIODE").font_size(15).color(WARNA["accent_deep"]).font_weight("bold"),
-
-            # Divider header tebal
-            Column(Text("").font_size(1)).width(428).background_color(WARNA["accent_deep"]),
-            Column(Text("").font_size(1)).padding(4),
+            Text("─" * 42).font_size(8).color(WARNA["accent_deep"]),
 
             # Row 1
             _metric_row("Tanggal", data["periode"]),
-            _div_thin(),
-            # Row 2
+            _div_line(),
             _metric_row("Total Rak", f"{data['total_rak']} rak"),
-            _div_thin(),
-            # Row 3
+            _div_line(),
             _metric_row("Nominal SO", _fmt_rp(data["total_nominal"]), WARNA["red"]),
-            _div_thin(),
-            # Row 4
+            _div_line(),
             _metric_row("Sales Periode", _fmt_rp_no_sign(data["sales_periode"])),
-            _div_thin(),
-            # Row 5
+            _div_line(),
             _metric_row("BTSB (0,15%)", _fmt_rp_no_sign(data["btsb"])),
-            _div_thin(),
-            # Row 6 — Status + Badge
+            _div_line(),
+
+            # Status row
             Row(
                 Text("Status").font_size(13).color(WARNA["text_muted"]).width(150),
                 Row(
-                    Column(Text("").font_size(1)).width(12).background_color(_status_color).border_radius(6),
+                    Text("●").font_size(16).color(_status_color),
                     Text(f" {data['status']}").font_size(14).color(_status_color).font_weight("bold"),
-                ).gap(8),
+                ).gap(6),
             ).gap(12).width(428),
 
             # Spacer
-            Column(Text("").font_size(1)).padding(10),
+            Text("").font_size(8).padding(6),
 
             # Insight
             Text("INSIGHT").font_size(15).color(WARNA["accent_deep"]).font_weight("bold"),
+            Text("─" * 42).font_size(8).color(WARNA["accent_deep"]),
             Column(
                 Text(data["insight"]).font_size(14).color(WARNA["text_primary"]).font_weight("bold"),
             ).padding(20).background_color(WARNA["terracotta_light"]).border_radius(10).gap(0),
@@ -376,7 +368,7 @@ def _build_infografis(data, tmp_dir):
     )
 
     _mid_row = Row(_donut_col, _ringkasan_col).gap(40).width(_W)
-    
+
     # =========================================================
     # SECTION 02 — DETAIL PER RAK
     # =========================================================
@@ -384,7 +376,6 @@ def _build_infografis(data, tmp_dir):
 
     _col_w = [110, 420, 170, 300]
 
-    # Header tabel — 13pt
     _header_cells = Row(
         Text("RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[0]),
         Text("NAMA RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[1]),
@@ -392,7 +383,6 @@ def _build_infografis(data, tmp_dir):
         Text("SELISIH").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[3]),
     ).width(_W).background_color(WARNA["accent_deep"]).gap(0)
 
-    # Body rows — 14pt bold
     _rows = [_header_cells]
     for _i, _r in enumerate(data["list_rak"]):
         _bg = WARNA["cream"] if _i % 2 == 0 else WARNA["white"]
@@ -408,9 +398,7 @@ def _build_infografis(data, tmp_dir):
 
     tabel_rak = Column(*_rows).width(_W).gap(0)
 
-    # =========================================================
     # TOTAL SELISIH
-    # =========================================================
     _total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
     _total_row = (
         Row(
@@ -438,17 +426,7 @@ def _build_infografis(data, tmp_dir):
     # =========================================================
     # FOOTER
     # =========================================================
-    spacer_footer = (
-        Column(Text("").font_size(1))
-        .width(_W)
-        .padding(10)
-    )
-
-    footer_divider = (
-        Column(Text("").font_size(1))
-        .width(_W)
-        .background_color(WARNA["divider"])
-    )
+    footer_line = Text("─" * 95).font_size(8).color(WARNA["divider"])
 
     footer = (
         Column(
@@ -475,13 +453,11 @@ def _build_infografis(data, tmp_dir):
         _total_row,
         _title_03,
         _chart_section,
-        spacer_footer,
-        footer_divider,
+        footer_line,
         footer,
     ).width(_W).gap(24)
 
     return canvas.render(layout)
-
 
 # =========================================================
 # RENDER UTAMA
