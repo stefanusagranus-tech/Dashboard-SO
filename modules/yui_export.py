@@ -430,15 +430,11 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         
         _donut_buf = _generate_donut_per_rak(hasil)
         if _donut_buf:
-            # Chart tinggi = total tinggi kanan - header 7mm - margin 3mm
-            _donut_h = _TOTAL_TINGGI - 10
-            _pdf.image(
-                _donut_buf,
-                x=_x_kiri + 4,
-                y=_y_top + 9,
-                w=_w_kiri - 8,
-                h=_donut_h,
-            )
+            # Donut lebih kecil + center di kolom kiri
+            _donut_size = 68  # 68mm — bulat & gak melar
+            _donut_x = _x_kiri + (_w_kiri - _donut_size) / 2  # center horizontal
+            _donut_y = _y_top + 12  # agak turun dikit
+            _pdf.image(_donut_buf, x=_donut_x, y=_donut_y, w=_donut_size, h=_donut_size)
             _donut_buf.close()
         
         # =========================================================
@@ -488,7 +484,7 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         _pdf.set_text_color(*WARNA["dark"])
         
         # --- Blok 2: INSIGHT ---
-        _y_k = _y_row + 4
+        _y_k = _y_row + 6
         
         _pdf.set_fill_color(*WARNA["beige"])
         _pdf.rect(_x_kanan, _y_k, _w_kanan, 7, style="F")
@@ -504,7 +500,7 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         
         # --- Blok 3: TREND ---
         # Hitung Y akhir insight — kira-kira ~30mm dari header
-        _y_k = _y_k + 30
+        _y_k = _y_k + 28
         
         _pdf.set_fill_color(*WARNA["sage"])
         _pdf.rect(_x_kanan, _y_k, _w_kanan, 7, style="F")
