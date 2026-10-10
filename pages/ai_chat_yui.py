@@ -845,24 +845,29 @@ if st.session_state.get("yui_rekap_hasil"):
     
     with _c_exp1:
         if st.button("📄 PDF", width="stretch", key="btn_exp_pdf"):
-            _hasil_for_export = st.session_state.get("_last_hasil_rekap") or st.session_state.get("yui_rekap_hasil")
-            if not _hasil_for_export:
-                st.error("❌ Data rekap hilang. Coba rekap ulang.")
-            elif not _EXPORT_OK:
-                st.error("❌ Module yui_export gak ada")
+        _hasil_for_export = st.session_state.get("_last_hasil_rekap") or st.session_state.get("yui_rekap_hasil")
+        if not _hasil_for_export:
+            st.error("❌ Data rekap hilang. Coba rekap ulang.")
+        elif not _EXPORT_OK:
+            st.error("❌ Module yui_export gak ada")
+        else:
+            with st.spinner("Bikin PDF..."):
+                _pdf_bytes = export_rekap_pdf(_hasil_for_export)
+    
+            # ✅ Cek kalau hasilnya error string (bukan PDF beneran)
+            if _pdf_bytes and _pdf_bytes.startswith(b"ERROR:"):
+                _err_text = _pdf_bytes.decode("utf-8", errors="replace")
+                st.error(f"❌ PDF Error:\n\n```\n{_err_text[:1500]}\n```")
+            elif _pdf_bytes and len(_pdf_bytes) > 500:
+                st.session_state["yui_export_result"] = {
+                    "type": "pdf",
+                    "bytes": _pdf_bytes,
+                    "filename": f"laporan_so_{_hasil_for_export['periode'].replace(' ', '_')}.pdf",
+                }
+                st.rerun()
             else:
-                with st.spinner("Bikin PDF..."):
-                    _pdf_bytes = export_rekap_pdf(_hasil_for_export)
-                if _pdf_bytes:
-                    st.session_state["yui_export_result"] = {
-                        "type": "pdf",
-                        "bytes": _pdf_bytes,
-                        "filename": f"laporan_so_{_hasil_for_export['periode'].replace(' ', '_')}.pdf",
-                    }
-                    st.rerun()
-                else:
-                    st.error("❌ Gagal bikin PDF. Cek log.")
-        
+                st.error("❌ Gagal bikin PDF. Hasil kosong.")
+            
     with _c_exp2:
         if st.button("📊 Excel", width="stretch", key="btn_exp_xlsx"):
             _xlsx_bytes = None

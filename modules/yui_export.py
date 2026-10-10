@@ -714,3 +714,27 @@ def export_rekap_excel(hasil, net_sales=0):
     except Exception as e:
         print(f"[EXPORT_EXCEL ERROR] {e}")
         return None
+
+def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
+    """Export rekap SO jadi PDF — versi DEBUG (return error string)."""
+    try:
+        from fpdf import FPDF
+
+        # ✅ TEST PALING SIMPLE — cek fpdf2 works apa enggak
+        _pdf = FPDF()
+        _pdf.add_page()
+        _pdf.set_font("Helvetica", "", 12)
+        _pdf.cell(0, 10, "TEST PDF", ln=True)
+        _pdf.cell(0, 10, f"Total Rak: {hasil.get('total_rak', 0)}", ln=True)
+
+        _output = _pdf.output()
+        _bytes = bytes(_output) if isinstance(_output, bytearray) else _output
+
+        # Kalau sukses, return bytes
+        return _bytes
+    except Exception as e:
+        import traceback
+        _err = f"ERROR: {str(e)}\n\nTRACEBACK:\n{traceback.format_exc()}"
+        print(_err)
+        # ✅ Return error string sebagai bytes biar keliatan di UI
+        return _err.encode("utf-8")
