@@ -68,103 +68,77 @@ class PDFLaporan(FPDF):
 
 
 def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
-    """Export rekap SO jadi PDF profesional."""
+    """Export rekap SO jadi PDF — versi paling simple."""
     try:
-        _pdf = PDFLaporan()
+        from fpdf import FPDF
+        import pandas as pd
+
+        _pdf = FPDF()
         _pdf.add_page()
-        _pdf.set_auto_page_break(auto=True, margin=20)
+        _pdf.set_auto_page_break(auto=True, margin=15)
 
-        # =========================================================
-        # RINGKASAN
-        # =========================================================
-        try:
-            _pdf.set_font("Helvetica", "B", 12)
-            _pdf.set_text_color(30, 20, 60)
-            _pdf.cell(0, 8, "RINGKASAN", ln=True)
-            _pdf.set_text_color(0, 0, 0)
-            _pdf.set_font("Helvetica", "", 10)
+        # Header
+        _pdf.set_font("Helvetica", "B", 14)
+        _pdf.cell(0, 10, "LAPORAN STOCK OPNAME", ln=True, align="C")
+        _pdf.set_font("Helvetica", "", 10)
+        _pdf.cell(0, 6, f"Toko C383 - {hasil.get('periode', '-')}", ln=True, align="C")
+        _pdf.ln(5)
 
-            _pdf.cell(60, 6, "Periode", border=0)
-            _pdf.cell(0, 6, f": {hasil.get('periode', '-')}", ln=True)
-            _pdf.cell(60, 6, "Total Rak", border=0)
-            _pdf.cell(0, 6, f": {hasil.get('total_rak', 0)}", ln=True)
-            _pdf.cell(60, 6, "Total Item", border=0)
-            _pdf.cell(0, 6, f": {hasil.get('total_item', 0)}", ln=True)
-            _pdf.cell(60, 6, "Total Nominal", border=0)
-            _pdf.cell(0, 6, f": {_format_rp(hasil.get('total_nominal', 0))}", ln=True)
-            _pdf.ln(5)
-            print("[PDF] Ringkasan OK")
-        except Exception as _e:
-            print(f"[PDF ERROR Ringkasan] {_e}")
+        # Ringkasan
+        _pdf.set_font("Helvetica", "B", 12)
+        _pdf.cell(0, 8, "RINGKASAN", ln=True)
+        _pdf.set_font("Helvetica", "", 10)
+        _pdf.cell(70, 6, "Total Rak")
+        _pdf.cell(0, 6, f": {hasil.get('total_rak', 0)}", ln=True)
+        _pdf.cell(70, 6, "Total Item")
+        _pdf.cell(0, 6, f": {hasil.get('total_item', 0)}", ln=True)
+        _pdf.cell(70, 6, "Total Nominal")
+        _pdf.cell(0, 6, f": {_format_rp(hasil.get('total_nominal', 0))}", ln=True)
+        _pdf.ln(5)
 
-        # =========================================================
-        # SALES, BTSB, NSB
-        # =========================================================
+        # BTSB/NSB
         if net_sales > 0:
             try:
                 _total_selisih = hasil.get("_total_selisih_bulan", 0)
-                _total_rak = hasil.get("_total_rak_bulan", 0)
+                _total_rak_bulan = hasil.get("_total_rak_bulan", 0)
                 _calc = _hitung_btsb_nsb(net_sales, _total_selisih)
 
                 _pdf.set_font("Helvetica", "B", 12)
-                _pdf.set_text_color(30, 20, 60)
-                _pdf.cell(0, 8, "ANALISIS BTSB & NSB (BULAN INI)", ln=True)
-                _pdf.set_text_color(0, 0, 0)
+                _pdf.cell(0, 8, "ANALISIS BTSB & NSB", ln=True)
                 _pdf.set_font("Helvetica", "", 10)
-
                 _pdf.cell(70, 6, "Net Sales Bulan Ini")
                 _pdf.cell(0, 6, f": {_format_rp(net_sales)}", ln=True)
                 _pdf.cell(70, 6, "BTSB (0,15%)")
                 _pdf.cell(0, 6, f": {_format_rp(_calc['btsb'])}", ln=True)
                 _pdf.cell(70, 6, "Total Selisih Bulan")
                 _pdf.cell(0, 6, f": {_format_rp(_calc['selisih'])}", ln=True)
-                _pdf.cell(70, 6, "NSB (beban personil)")
+                _pdf.cell(70, 6, "NSB")
                 _pdf.cell(0, 6, f": {_format_rp(_calc['nsb'])}", ln=True)
-                _pdf.cell(70, 6, "Total Rak di-SO Bulan Ini")
-                _pdf.cell(0, 6, f": {_total_rak} rak", ln=True)
+                _pdf.cell(70, 6, "Total Rak di-SO")
+                _pdf.cell(0, 6, f": {_total_rak_bulan} rak", ln=True)
                 _pdf.cell(70, 6, "Status")
-                _pdf.set_font("Helvetica", "B", 10)
-                if _calc["status"] == "OVER":
-                    _pdf.set_text_color(200, 50, 50)
-                else:
-                    _pdf.set_text_color(50, 150, 50)
                 _pdf.cell(0, 6, f": {_calc['status']}", ln=True)
-                _pdf.set_text_color(0, 0, 0)
-                _pdf.set_font("Helvetica", "", 10)
                 _pdf.ln(5)
-                print("[PDF] BTSB/NSB OK")
-            except Exception as _e:
-                print(f"[PDF ERROR BTSB] {_e}")
+            except Exception as _e_btsb:
+                print(f"[PDF BTSB ERROR] {_e_btsb}")
 
-        # =========================================================
-        # TOP 5 MINUS & PLUS
-        # =========================================================
+        # Top 5 Minus
         _list_rak = hasil.get("list_rak", [])
         if _list_rak:
             try:
                 _df = pd.DataFrame(_list_rak)
                 _df["total"] = pd.to_numeric(_df["total"], errors="coerce").fillna(0)
 
-                _top_minus = _df.nsmallest(5, "total")
-                _top_plus = _df.nlargest(5, "total")
-
-                # Top 5 Minus
                 _pdf.set_font("Helvetica", "B", 12)
-                _pdf.set_text_color(30, 20, 60)
                 _pdf.cell(0, 8, "TOP 5 MINUS TERTINGGI", ln=True)
-                _pdf.set_text_color(0, 0, 0)
-
                 _pdf.set_font("Helvetica", "B", 9)
-                _pdf.set_fill_color(200, 50, 50)
-                _pdf.set_text_color(255, 255, 255)
-                _pdf.cell(40, 7, "RAK", border=1, fill=True, align="C")
-                _pdf.cell(60, 7, "NOMINAL", border=1, fill=True, align="C")
-                _pdf.cell(50, 7, "PIC", border=1, fill=True, align="C")
-                _pdf.cell(40, 7, "TANGGAL", border=1, fill=True, align="C", ln=True)
+                _pdf.cell(40, 7, "RAK", border=1, align="C")
+                _pdf.cell(60, 7, "NOMINAL", border=1, align="C")
+                _pdf.cell(50, 7, "PIC", border=1, align="C")
+                _pdf.cell(40, 7, "TGL", border=1, align="C", ln=True)
 
                 _pdf.set_font("Helvetica", "", 9)
-                _pdf.set_text_color(0, 0, 0)
-                for _, _r in _top_minus.iterrows():
+                for _, _r in _df.nsmallest(5, "total").iterrows():
                     _pdf.cell(40, 6, str(_r.get("rak_id", "-"))[:15], border=1, align="C")
                     _pdf.cell(60, 6, _format_rp(_r.get("total", 0)), border=1, align="R")
                     _pdf.cell(50, 6, str(_r.get("pic", "-"))[:20], border=1, align="C")
@@ -173,39 +147,29 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
 
                 # Top 5 Plus
                 _pdf.set_font("Helvetica", "B", 12)
-                _pdf.set_text_color(30, 20, 60)
                 _pdf.cell(0, 8, "TOP 5 PLUS TERTINGGI", ln=True)
-                _pdf.set_text_color(0, 0, 0)
-
                 _pdf.set_font("Helvetica", "B", 9)
-                _pdf.set_fill_color(50, 150, 50)
-                _pdf.set_text_color(255, 255, 255)
-                _pdf.cell(40, 7, "RAK", border=1, fill=True, align="C")
-                _pdf.cell(60, 7, "NOMINAL", border=1, fill=True, align="C")
-                _pdf.cell(50, 7, "PIC", border=1, fill=True, align="C")
-                _pdf.cell(40, 7, "TANGGAL", border=1, fill=True, align="C", ln=True)
+                _pdf.cell(40, 7, "RAK", border=1, align="C")
+                _pdf.cell(60, 7, "NOMINAL", border=1, align="C")
+                _pdf.cell(50, 7, "PIC", border=1, align="C")
+                _pdf.cell(40, 7, "TGL", border=1, align="C", ln=True)
 
                 _pdf.set_font("Helvetica", "", 9)
-                _pdf.set_text_color(0, 0, 0)
-                for _, _r in _top_plus.iterrows():
+                for _, _r in _df.nlargest(5, "total").iterrows():
                     _pdf.cell(40, 6, str(_r.get("rak_id", "-"))[:15], border=1, align="C")
                     _pdf.cell(60, 6, _format_rp(_r.get("total", 0)), border=1, align="R")
                     _pdf.cell(50, 6, str(_r.get("pic", "-"))[:20], border=1, align="C")
                     _pdf.cell(40, 6, str(_r.get("tanggal", "-"))[:10], border=1, align="C", ln=True)
-                _pdf.ln(4)
-                print("[PDF] Top 5 OK")
-            except Exception as _e:
-                print(f"[PDF ERROR Top5] {_e}")
+            except Exception as _e_top:
+                print(f"[PDF TOP5 ERROR] {_e_top}")
 
         _output = _pdf.output()
-        print(f"[PDF] Output OK: {len(_output) if _output else 0} bytes")
         return bytes(_output) if isinstance(_output, bytearray) else _output
     except Exception as e:
-        print(f"[EXPORT_PDF ERROR] {e}")
         import traceback
+        print(f"[EXPORT_PDF ERROR] {e}")
         print(traceback.format_exc())
         return None
-
 
 # =========================================================
 # EXCEL — SEMUA ITEM
