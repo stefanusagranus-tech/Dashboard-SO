@@ -312,13 +312,13 @@ def _extract_from_dataframe(df, context=None):
 
     _log(f"[Yui DF] Shape: {df.shape}, cols: {list(df.columns)[:8]}")
 
-    _col_plu = _find_col(df.columns, ["plu", "kode", "barcode", "sku"])
-    _col_nama = _find_col(df.columns, ["nama", "produk", "barang", "deskripsi", "item"])
-    _col_rak = _find_col(df.columns, ["rak", "rack", "sub_dept"])
-    _col_stock = _find_col(df.columns, ["stock_fisik", "stok_fisik", "fisik", "qtycount"])
-    _col_onhand = _find_col(df.columns, ["stock_onhand", "onhand", "stok_sistem"])
-    _col_var = _find_col(df.columns, ["plus_minus", "var", "selisih_qty", "plus"])
-    _col_nominal = _find_col(df.columns, ["selisih_rupiah", "nominal", "rupiah", "adjust"])
+    _col_plu = _find_col(df.columns, ["plu", "kode_barang", "barcode", "sku"])
+    _col_nama = _find_col(df.columns, ["nama barang", "nama produk", "nama", "produk", "deskripsi"])
+    _col_rak = _find_col(df.columns, ["rack", "rak", "sub_dept"])
+    _col_stock = _find_col(df.columns, ["stock fisik", "stok fisik", "fisik", "qtycount"])
+    _col_onhand = _find_col(df.columns, ["onhand", "stok sistem", "stock sistem", "stock onhand"])
+    _col_var = _find_col(df.columns, ["plus/minus", "plus minus", "plusminus", "selisih qty", "qty var"])
+    _col_nominal = _find_col(df.columns, ["selisih rupiah", "selisih_rupiah", "nominal", "rupiah", "adjust"])
 
     for _idx, _row in df.iterrows():
         try:

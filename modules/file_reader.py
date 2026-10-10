@@ -55,7 +55,7 @@ def detect_file_type(filename):
 # 📊 LAYER 1: EXCEL/CSV → pandas
 # =========================================================
 def read_excel(file_bytes, filename=""):
-    """Baca Excel/CSV."""
+    """Baca Excel/CSV — auto-detect header row (fleksibel, gak dipaksa posisi)."""
     try:
         _is_csv = str(filename).lower().endswith(".csv")
 
@@ -76,8 +76,47 @@ def read_excel(file_bytes, filename=""):
         _sheets = {}
         _primary_df = None
 
+        # ✅ Keyword buat deteksi row header
+        _header_keywords = [
+            "plu", "nama barang", "nama produk", "rack", "rak",
+            "stock fisik", "stok fisik", "stock onhand", "onhand",
+            "plus/minus", "plus minus", "selisih rupiah", "nominal",
+        ]
+
         for _sheet_name in _xls.sheet_names:
-            _df = pd.read_excel(_xls, sheet_name=_sheet_name)
+            # Baca tanpa header dulu — biar bisa "lihat" semua row
+            _df_raw = pd.read_excel(_xls, sheet_name=_sheet_name, header=None)
+
+            # Cari row header (scan 30 row pertama)
+            _header_row = None
+            _scan_limit = min(30, len(_df_raw))
+            for _i in range(_scan_limit):
+                _row_vals = [str(v).strip().lower() for v in _df_raw.iloc[_i].tolist() if pd.notna(v)]
+                _row_str = " | ".join(_row_vals)
+                _match_count = sum(1 for kw in _header_keywords if kw in _row_str)
+                if _match_count >= 3:
+                    _header_row = _i
+                    _log(f"[Excel] Header row detected: row {_i} (match={_match_count})")
+                    break
+
+            # Kalau ketemu header row → re-read pakai row itu
+            if _header_row is not None:
+                _df = pd.read_excel(_xls, sheet_name=_sheet_name, header=_header_row)
+            else:
+                _log(f"[Excel] Header row gak ketemu, fallback ke header=0")
+                _df = pd.read_excel(_xls, sheet_name=_sheet_name)
+
+            # Drop kolom/row yang all-NaN
+            _df = _df.dropna(axis=1, how="all").dropna(axis=0, how="all")
+
+            # Drop row yang isinya cuma "TOTAL ..." atau kosong
+            _df = _df[~_df.apply(
+                lambda r: any(
+                    "total" in str(v).lower() and len(str(v)) < 40
+                    for v in r.values if pd.notna(v)
+                ), axis=1
+            )]
+
             _sheets[_sheet_name] = _df
 
             if _primary_df is None and len(_df) > 0:
@@ -87,7 +126,7 @@ def read_excel(file_bytes, filename=""):
             _all_text.append(_df.to_string(index=False, max_rows=100))
             _all_text.append("")
 
-        _log(f"[Excel] Loaded {len(_xls.sheet_names)} sheets")
+        _log(f"[Excel] Loaded {len(_xls.sheet_names)} sheets, primary shape={_primary_df.shape if _primary_df is not None else 'None'}")
 
         return {
             "success": True,
@@ -105,7 +144,7 @@ def read_excel(file_bytes, filename=""):
             "primary_df": None,
             "error": f"Gagal baca Excel: {str(e)[:150]}",
         }
-
+        
 
 # =========================================================
 # 📄 LAYER 2: PDF → pdfplumber
