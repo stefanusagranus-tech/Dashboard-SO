@@ -303,16 +303,15 @@ Output HANYA JSON.
 # 📊 LAYER 1: EXTRACT DARI DATAFRAME
 # =========================================================
 def _extract_from_dataframe(df, context=None):
-    """Extract dari DataFrame (Excel/PDF via pdfplumber)."""
+    """Extract SO dari DataFrame — return grouped per rak."""
     if df is None or df.empty:
         return None
 
     _ctx = context or {}
-    _items = []
+    _all_items = []
 
     _log(f"[Yui DF] Shape: {df.shape}, cols: {list(df.columns)[:8]}")
 
-    # Mapping kolom
     _col_plu = _find_col(df.columns, ["plu", "kode", "barcode", "sku"])
     _col_nama = _find_col(df.columns, ["nama", "produk", "barang", "deskripsi", "item"])
     _col_rak = _find_col(df.columns, ["rak", "rack", "sub_dept"])
@@ -321,22 +320,17 @@ def _extract_from_dataframe(df, context=None):
     _col_var = _find_col(df.columns, ["plus_minus", "var", "selisih_qty", "plus"])
     _col_nominal = _find_col(df.columns, ["selisih_rupiah", "nominal", "rupiah", "adjust"])
 
-    _log(f"[Yui DF] Map: plu={_col_plu}, nama={_col_nama}, rak={_col_rak}, stock={_col_stock}, onhand={_col_onhand}, var={_col_var}, nom={_col_nominal}")
-
     for _idx, _row in df.iterrows():
         try:
             _plu = str(_row[_col_plu]).strip() if _col_plu else ""
             _nama = str(_row[_col_nama]).strip()[:120] if _col_nama else ""
             _rak = str(_row[_col_rak]).strip().upper() if _col_rak else _ctx.get("rak_id", "")
 
-            # Skip header/total/invalid
             if not _plu or _plu.lower() in ("nan", "none", "plu", "no", "total", ""):
                 continue
             if _plu.isdigit() and len(_plu) < 4:
                 continue
             if not _nama or _nama.lower() in ("nan", "none", "nama", "total"):
-                continue
-            if "total" in _nama.lower() and "selisih" in _nama.lower():
                 continue
 
             _qty_fisik = _safe_int(_row[_col_stock]) if _col_stock else 0
@@ -344,8 +338,8 @@ def _extract_from_dataframe(df, context=None):
             _qty_var = _safe_int(_row[_col_var]) if _col_var else (_qty_fisik - _qty_sistem)
             _nominal = _safe_float(_row[_col_nominal]) if _col_nominal else 0.0
 
-            _items.append({
-                "rak_id": _rak if _rak and _rak != "NAN" else _ctx.get("rak_id", ""),
+            _all_items.append({
+                "rak_id": _rak if _rak and _rak != "NAN" else _ctx.get("rak_id", "UNKNOWN"),
                 "plu": _plu,
                 "nama_produk": _nama,
                 "qty_sistem": _qty_sistem,
@@ -358,20 +352,28 @@ def _extract_from_dataframe(df, context=None):
             _log(f"[Yui DF] Row error: {_e}")
             continue
 
-    if not _items:
+    if not _all_items:
         return None
 
-    _log(f"[Yui DF] Extracted {len(_items)} items")
+    # ✅ Grouping per rak
+    _grouped = {}
+    for _item in _all_items:
+        _rak = _item["rak_id"] or "UNKNOWN"
+        if _rak not in _grouped:
+            _grouped[_rak] = []
+        _grouped[_rak].append(_item)
+
+    _log(f"[Yui DF] Extracted {len(_all_items)} items in {len(_grouped)} rak(s)")
 
     return {
         "tanggal": _ctx.get("tanggal"),
-        "items": _items,
-        "total_nominal": sum(i["nominal_adjust"] for i in _items),
-        "rak_id": _ctx.get("rak_id"),
+        "items": _all_items,
+        "items_by_rak": _grouped,  # ✅ Baru
+        "total_nominal": sum(i["nominal_adjust"] for i in _all_items),
+        "rak_id": None,
         "pic": None,
     }
-
-
+    
 # =========================================================
 # 📄 LAYER 2: PARSE FILE (PDF text / Screenshot OCR)
 # =========================================================
