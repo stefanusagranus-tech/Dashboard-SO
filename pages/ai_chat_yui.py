@@ -334,7 +334,14 @@ def _dialog_upload_file():
             st.session_state["yui_show_upload"] = False
             st.rerun()
 
-if st.session_state.get("yui_show_upload"):
+_dialog_lain_untuk_upload = (
+    st.session_state.get("yui_rak_to_delete") or
+    st.session_state.get("yui_pending_data") or
+    st.session_state.get("yui_save_result") or
+    st.session_state.get("yui_show_rekap") or
+    st.session_state.get("yui_show_spd")
+)
+if st.session_state.get("yui_show_upload") and not _dialog_lain_untuk_upload:
     _dialog_upload_file()
 
 # =========================================================
@@ -696,7 +703,16 @@ def _dialog_rekap_so():
             st.session_state["yui_show_rekap"] = False
             st.rerun()
 
-if st.session_state.get("yui_show_rekap"):
+# Cek dialog lain yang mungkin kebuka
+_dialog_lain_kebuka = (
+    st.session_state.get("yui_rak_to_delete") or
+    st.session_state.get("yui_pending_data") or
+    st.session_state.get("yui_save_result") or
+    st.session_state.get("yui_show_upload") or
+    st.session_state.get("yui_show_spd")
+)
+
+if st.session_state.get("yui_show_rekap") and not _dialog_lain_kebuka:
     _dialog_rekap_so()
 
 
@@ -757,9 +773,15 @@ def _dialog_input_spd():
             st.session_state["yui_show_spd"] = False
             st.rerun()
 
-if st.session_state.get("yui_show_spd"):
+_dialog_lain_untuk_spd = (
+    st.session_state.get("yui_rak_to_delete") or
+    st.session_state.get("yui_pending_data") or
+    st.session_state.get("yui_save_result") or
+    st.session_state.get("yui_show_rekap") or
+    st.session_state.get("yui_show_upload")
+)
+if st.session_state.get("yui_show_spd") and not _dialog_lain_untuk_spd:
     _dialog_input_spd()
-
 
 # =========================================================
 # RENDER HASIL REKAP DI HALAMAN UTAMA

@@ -240,7 +240,11 @@ def export_rekap_image(hasil, filename="rekap_so.png"):
         return None
         
 def _get_net_sales_bulan(bulan=None, tahun=None):
-    """Ambil total net sales bulan ini dari tabel net_sales."""
+    """
+    Hitung net sales bulanan.
+    Prioritas: SUM(spd_harian) bulan ini.
+    Fallback: tabel net_sales (kolom 'net_sales').
+    """
     try:
         _sb = get_supabase()
         if _sb is None:
@@ -250,16 +254,46 @@ def _get_net_sales_bulan(bulan=None, tahun=None):
         _bulan = bulan or _now.month
         _tahun = tahun or _now.year
 
-        _res = (
-            _sb.table("net_sales")
-            .select("nominal")
-            .eq("bulan", _bulan)
-            .eq("tahun", _tahun)
-            .execute()
-        )
+        # Range tanggal
+        _start = date(_tahun, _bulan, 1)
+        if _bulan == 12:
+            _end = date(_tahun + 1, 1, 1) - timedelta(days=1)
+        else:
+            _end = date(_tahun, _bulan + 1, 1) - timedelta(days=1)
 
-        if _res.data:
-            return sum(float(r.get("nominal", 0) or 0) for r in _res.data)
+        # Prioritas: SUM dari spd_harian
+        try:
+            _res = (
+                _sb.table("spd_harian")
+                .select("spd")
+                .gte("tanggal", _start.isoformat())
+                .lte("tanggal", _end.isoformat())
+                .execute()
+            )
+            if _res.data:
+                _total = sum(float(r.get("spd", 0) or 0) for r in _res.data)
+                if _total > 0:
+                    print(f"[NET_SALES] Dari spd_harian: {_total} ({len(_res.data)} hari)")
+                    return _total
+        except Exception as _e:
+            print(f"[NET_SALES] spd_harian error: {_e}")
+
+        # Fallback: tabel net_sales (kolom 'net_sales')
+        try:
+            _res2 = (
+                _sb.table("net_sales")
+                .select("net_sales")
+                .eq("bulan", _bulan)
+                .eq("tahun", _tahun)
+                .execute()
+            )
+            if _res2.data:
+                _total2 = sum(float(r.get("net_sales", 0) or 0) for r in _res2.data)
+                print(f"[NET_SALES] Fallback ke tabel net_sales: {_total2}")
+                return _total2
+        except Exception as _e2:
+            print(f"[NET_SALES] net_sales error: {_e2}")
+
         return 0
     except Exception as e:
         print(f"[NET_SALES ERROR] {e}")
