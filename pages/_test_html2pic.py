@@ -1,7 +1,6 @@
 """
-Test pictex — Layout Quarterly Style
-=====================================
-Ngikutin Contoh 1: Header + KPI + Chart + Tabel
+Test pictex — Background Cream (No White Cards)
+==================================================
 """
 import streamlit as st
 import os
@@ -14,12 +13,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-st.set_page_config(page_title="Quarterly Style", page_icon="🎨", layout="wide")
-st.title("🎨 Quarterly Style — Data SO")
+st.set_page_config(page_title="Cream BG", page_icon="🎨", layout="wide")
+st.title("🎨 Cream Background — No White Cards")
 
 
 # =========================================================
-# PALET WARNA
+# PALET
 # =========================================================
 WARNA = {
     "bg": "#F5F1EA",
@@ -43,7 +42,7 @@ WARNA = {
 
 
 # =========================================================
-# DATA DUMMY
+# DATA
 # =========================================================
 _data = {
     "periode": "2026-10-10 s/d 2026-10-10",
@@ -211,15 +210,12 @@ def _build_infografis(data, tmp_dir):
     _GAP = 40
     _CARD_W = int((_W - _GAP) / 2)   # 470
 
-    # Section 1: Chart kiri, Ringkasan kanan
     _CHART_DONUT_PNG = 340
-    _CHART_TREND_W = 430
-    _CHART_TREND_H = 340
+    _CHART_TREND_W = 400
+    _CHART_TREND_H = 300
 
-    # Section 2: Tabel + Trend
     _TABEL_W = 540
     _TREND2_W = _W - _TABEL_W - _GAP   # 400
-    _TREND2_H = 300
 
     _ROW_H = 48
     _HEADER_H = 42
@@ -231,14 +227,11 @@ def _build_infografis(data, tmp_dir):
 
     _TABEL_H = (_n_rak * _ROW_H) + _HEADER_H + _TOTAL_H + _PAD_TABEL
 
-    # Canvas — estimasi
     _BASE = 80 + 1 + 110 + 30 + 50
     _GAP_TOTAL = 22 * 6
-    _H = _BASE + 400 + 30 + max(_TABEL_H, 400) + _GAP_TOTAL + 150
+    _H = _BASE + 500 + 30 + max(_TABEL_H, 400) + _GAP_TOTAL + 150
 
     print(f"[INFO] Canvas: {_CANVAS_W} × {_H}px")
-    print(f"[INFO] Card W: {_CARD_W}px")
-    print(f"[INFO] Tabel: {_TABEL_W} × {_TABEL_H}px ({_n_rak} rak)")
 
     # === CHART PNG ===
     _donut_path = os.path.join(tmp_dir, "chart_donut.png")
@@ -264,7 +257,7 @@ def _build_infografis(data, tmp_dir):
         )
 
     # =========================================================
-    # HEADER BAND (warna sage penuh)
+    # HEADER BAND
     # =========================================================
     _header_band = (
         Column(
@@ -310,11 +303,10 @@ def _build_infografis(data, tmp_dir):
         ).size(width=_W).gap(8)
 
     # =========================================================
-    # SECTION 01 — CHART KIRI (DONUT) + RINGKASAN KANAN
+    # SECTION 01 — DONUT + RINGKASAN (BG CREAM)
     # =========================================================
     _title_01 = _section_title("01", "DISTRIBUSI & RINGKASAN")
 
-    # KIRI: DONUT
     _donut_col = (
         Column(
             Text("KONTRIBUSI PER RAK").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
@@ -323,12 +315,11 @@ def _build_infografis(data, tmp_dir):
         )
         .size(width=_CARD_W)
         .padding(20)
-        .background_color(WARNA["white"])
+        .background_color(WARNA["bg"])   # ← CREAM
         .border_radius(12)
         .gap(10)
     )
 
-    # KANAN: RINGKASAN + INSIGHT
     _status_color = WARNA["red"] if data["status"] == "OVER" else WARNA["green"]
 
     def _metric_row(label, value, value_color=None):
@@ -374,7 +365,7 @@ def _build_infografis(data, tmp_dir):
         )
         .size(width=_CARD_W)
         .padding(20)
-        .background_color(WARNA["white"])
+        .background_color(WARNA["bg"])   # ← CREAM
         .border_radius(12)
         .gap(8)
     )
@@ -382,11 +373,10 @@ def _build_infografis(data, tmp_dir):
     _row_01 = Row(_donut_col, _ringkasan_col).gap(_GAP).size(width=_W).align_items("start")
 
     # =========================================================
-    # SECTION 02 — TABEL + TREND
+    # SECTION 02 — TABEL + TREND (BG CREAM)
     # =========================================================
     _title_02 = _section_title("02", "DETAIL & TREND")
 
-    # KIRI: TABEL
     _col_w = [70, 250, 100, 120]
 
     _header_cells = Row(
@@ -398,7 +388,7 @@ def _build_infografis(data, tmp_dir):
 
     _rows = [_header_cells]
     for _i, _r in enumerate(_rak_tabel):
-        _bg = WARNA["cream"] if _i % 2 == 0 else WARNA["white"]
+        _bg = WARNA["cream"] if _i % 2 == 0 else WARNA["bg"]
         _color = WARNA["red"] if _r["nominal"] < 0 else WARNA["green"]
         _rows.append(
             Row(
@@ -419,7 +409,6 @@ def _build_infografis(data, tmp_dir):
 
     _tabel_col = Column(tabel_rak, _total_row).gap(0)
 
-    # KANAN: TREND
     _trend2_col = (
         Column(
             Text("TREND SELISIH HARIAN").font_size(13).color(WARNA["accent_deep"]).font_weight("bold"),
@@ -428,7 +417,7 @@ def _build_infografis(data, tmp_dir):
         )
         .size(width=_TREND2_W)
         .padding(20)
-        .background_color(WARNA["white"])
+        .background_color(WARNA["bg"])   # ← CREAM
         .border_radius(12)
         .gap(10)
     )
@@ -467,7 +456,7 @@ def _build_infografis(data, tmp_dir):
 # =========================================================
 # RENDER
 # =========================================================
-if st.button("🎨 Render Quarterly Style", type="primary"):
+if st.button("🎨 Render Cream BG", type="primary"):
     try:
         _tmp_dir = tempfile.mkdtemp()
         with st.spinner("Bikin infografis..."):
@@ -479,11 +468,11 @@ if st.button("🎨 Render Quarterly Style", type="primary"):
         st.success(f"✅ Berhasil! Ukuran: {len(_img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(_img_bytes, caption="Quarterly Style")
+        st.image(_img_bytes, caption="Cream BG")
         st.download_button(
             "📥 Download PNG", data=_img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-            mime="image/png", key="dl_quarterly", type="primary",
+            mime="image/png", key="dl_cream", type="primary",
         )
         try:
             import shutil
