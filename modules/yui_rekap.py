@@ -6,6 +6,7 @@ Semua fungsi di sini cuma baca data (read-only).
 import pandas as pd
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+
 from modules.supabase_client import get_supabase
 
 
@@ -13,6 +14,18 @@ def _now_jkt():
     return datetime.now(ZoneInfo("Asia/Jakarta"))
 
 
+def _get_supabase_safe():
+    """Ambil Supabase client, return None kalau gagal."""
+    try:
+        return get_supabase()
+    except Exception as e:
+        print(f"[YUI_REKAP] Gagal ambil Supabase: {e}")
+        return None
+
+
+# =========================================================
+# PERIODE
+# =========================================================
 def get_periode_range(mode="hari_ini", tgl_start=None, tgl_end=None):
     """Hitung rentang tanggal berdasarkan mode."""
     _today = _now_jkt().date()
@@ -39,10 +52,13 @@ def get_periode_range(mode="hari_ini", tgl_start=None, tgl_end=None):
     return _today, _today
 
 
+# =========================================================
+# REKAP SO — Fungsi Utama
+# =========================================================
 def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
     """Rekap SO: summary + detail per rak + items per rak."""
     try:
-        _sb = get_supabase()
+        _sb = _get_supabase_safe()
         if _sb is None:
             return {"success": False, "error": "Supabase gak konek"}
 
@@ -57,8 +73,8 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
         )
         if pic_filter:
             _q = _q.eq("pic", pic_filter.upper())
-        _res = _q.order("so_date").execute()
 
+        _res = _q.order("so_date").execute()
         _rows = _res.data if _res.data else []
 
         if not _rows:
@@ -85,13 +101,13 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
         _total_nominal = float(_df["nominal_adjust"].sum())
 
         # === QUERY so_hasil (untuk total item + items by rak) ===
-        _q2 = (
+        _res2 = (
             _sb.table("so_hasil")
             .select("*")
             .gte("so_date", _start.isoformat())
             .lte("so_date", _end.isoformat())
+            .execute()
         )
-        _res2 = _q2.execute()
         _hasil_rows = _res2.data if _res2.data else []
         _total_item = len(_hasil_rows)
 
@@ -151,10 +167,13 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
         return {"success": False, "error": str(e)[:200]}
 
 
+# =========================================================
+# SALES PERIODE
+# =========================================================
 def _get_sales_periode(tgl_start, tgl_end):
     """Ambil total SPD (sales) pada rentang tanggal."""
     try:
-        _sb = get_supabase()
+        _sb = _get_supabase_safe()
         if _sb is None:
             return 0
 
@@ -176,10 +195,13 @@ def _get_sales_periode(tgl_start, tgl_end):
         return 0
 
 
+# =========================================================
+# RAK NAMES
+# =========================================================
 def _get_rak_names():
     """Ambil mapping rak_id -> rak_name dari rak_master."""
     try:
-        _sb = get_supabase()
+        _sb = _get_supabase_safe()
         if _sb is None:
             return {}
 
@@ -192,6 +214,9 @@ def _get_rak_names():
         return {}
 
 
+# =========================================================
+# BULANAN (legacy, dipakai Dashboard)
+# =========================================================
 def _get_net_sales_bulan(bulan=None, tahun=None):
     """Hitung net sales bulanan dari spd_harian."""
     try:
@@ -214,7 +239,7 @@ def _get_net_sales_bulan(bulan=None, tahun=None):
 def _get_total_selisih_bulan(bulan=None, tahun=None):
     """Hitung total selisih (abs) 1 bulan dari so_rak_harian."""
     try:
-        _sb = get_supabase()
+        _sb = _get_supabase_safe()
         if _sb is None:
             return 0
 
@@ -248,7 +273,7 @@ def _get_total_selisih_bulan(bulan=None, tahun=None):
 def _get_total_rak_bulan(bulan=None, tahun=None):
     """Hitung jumlah rak unik yang di-SO bulan ini."""
     try:
-        _sb = get_supabase()
+        _sb = _get_supabase_safe()
         if _sb is None:
             return 0
 
@@ -278,50 +303,13 @@ def _get_total_rak_bulan(bulan=None, tahun=None):
         return 0
 
 
-def get_top_items(bulan=None, tahun=None, limit=5):
-    """Ambil top N item minus & plus dari so_hasil."""
-    try:
-        _sb = get_supabase()
-        if _sb is None:
-            return {"top_minus": [], "top_plus": []}
-
-        _now = _now_jkt()
-        _bulan = bulan or _now.month
-        _tahun = tahun or _now.year
-
-        _start = date(_tahun, _bulan, 1)
-        if _bulan == 12:
-            _end = date(_tahun + 1, 1, 1) - timedelta(days=1)
-        else:
-            _end = date(_tahun, _bulan + 1, 1) - timedelta(days=1)
-
-        _res = (
-            _sb.table("so_hasil")
-            .select("rak_id, plu, nama_produk, qty_var, nominal_adjust, pic, so_date")
-            .gte("so_date", _start.isoformat())
-            .lte("so_date", _end.isoformat())
-            .execute()
-        )
-
-        if not _res.data:
-            return {"top_minus": [], "top_plus": []}
-
-        _df = pd.DataFrame(_res.data)
-        _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
-
-        _top_minus = _df.nsmallest(limit, "nominal_adjust").to_dict("records")
-        _top_plus = _df.nlargest(limit, "nominal_adjust").to_dict("records")
-
-        return {"top_minus": _top_minus, "top_plus": _top_plus}
-    except Exception as e:
-        print(f"[TOP_ITEMS ERROR] {e}")
-        return {"top_minus": [], "top_plus": []}
-
-
+# =========================================================
+# CEK RAK BELUM SO
+# =========================================================
 def cek_rak_belum_so(tanggal=None):
     """List rak yang belum di-SO pada tanggal tertentu."""
     try:
-        _sb = get_supabase()
+        _sb = _get_supabase_safe()
         if _sb is None:
             return []
 
@@ -348,4 +336,3 @@ def cek_rak_belum_so(tanggal=None):
     except Exception as e:
         print(f"[CEK_RAK_BELUM ERROR] {e}")
         return []
-        
