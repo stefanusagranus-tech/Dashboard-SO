@@ -298,3 +298,72 @@ def _get_net_sales_bulan(bulan=None, tahun=None):
     except Exception as e:
         print(f"[NET_SALES ERROR] {e}")
         return 0
+
+def _get_total_selisih_bulan(bulan=None, tahun=None):
+    """Hitung total selisih (abs) 1 bulan dari so_rak_harian."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return 0
+
+        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _bulan = bulan or _now.month
+        _tahun = tahun or _now.year
+
+        _start = date(_tahun, _bulan, 1)
+        if _bulan == 12:
+            _end = date(_tahun + 1, 1, 1) - timedelta(days=1)
+        else:
+            _end = date(_tahun, _bulan + 1, 1) - timedelta(days=1)
+
+        _res = (
+            _sb.table("so_rak_harian")
+            .select("nominal_adjust")
+            .gte("so_date", _start.isoformat())
+            .lte("so_date", _end.isoformat())
+            .execute()
+        )
+
+        if _res.data:
+            _total = sum(abs(float(r.get("nominal_adjust", 0) or 0)) for r in _res.data)
+            print(f"[SELISIH_BULAN] {_total} ({len(_res.data)} rows)")
+            return _total
+        return 0
+    except Exception as e:
+        print(f"[SELISIH_BULAN ERROR] {e}")
+        return 0
+
+
+def _get_total_rak_bulan(bulan=None, tahun=None):
+    """Hitung jumlah rak unik yang di-SO bulan ini."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return 0
+
+        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _bulan = bulan or _now.month
+        _tahun = tahun or _now.year
+
+        _start = date(_tahun, _bulan, 1)
+        if _bulan == 12:
+            _end = date(_tahun + 1, 1, 1) - timedelta(days=1)
+        else:
+            _end = date(_tahun, _bulan + 1, 1) - timedelta(days=1)
+
+        _res = (
+            _sb.table("so_rak_harian")
+            .select("rak_id")
+            .gte("so_date", _start.isoformat())
+            .lte("so_date", _end.isoformat())
+            .execute()
+        )
+
+        if _res.data:
+            _unique = len(set(r.get("rak_id", "") for r in _res.data))
+            print(f"[RAK_BULAN] {_unique} rak unik dari {len(_res.data)} rows")
+            return _unique
+        return 0
+    except Exception as e:
+        print(f"[RAK_BULAN ERROR] {e}")
+        return 0

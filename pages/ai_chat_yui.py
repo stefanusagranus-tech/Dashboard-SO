@@ -334,14 +334,7 @@ def _dialog_upload_file():
             st.session_state["yui_show_upload"] = False
             st.rerun()
 
-_dialog_lain_untuk_upload = (
-    st.session_state.get("yui_rak_to_delete") or
-    st.session_state.get("yui_pending_data") or
-    st.session_state.get("yui_save_result") or
-    st.session_state.get("yui_show_rekap") or
-    st.session_state.get("yui_show_spd")
-)
-if st.session_state.get("yui_show_upload") and not _dialog_lain_untuk_upload:
+if st.session_state.get("yui_show_upload"):
     _dialog_upload_file()
 
 # =========================================================
@@ -358,36 +351,40 @@ for _msg in st.session_state["yui_history"]:
 # =========================================================
 def _build_rekap_text_profesional(hasil, net_sales=0):
     """Build text rekap: sales, BTSB, NSB, keterangan."""
-    _nom = hasil.get("total_nominal", 0)
+    _nom_hari = hasil.get("total_nominal", 0)
+    _total_selisih_bulan = hasil.get("_total_selisih_bulan", 0)
+    _total_rak_bulan = hasil.get("_total_rak_bulan", 0)
+
     _lines = [
         "=" * 50,
         "  LAPORAN STOCK OPNAME — TOKO C383",
         "=" * 50,
         f"Periode     : {hasil.get('periode', '-')}",
-        f"Total Rak   : {hasil.get('total_rak', 0)}",
-        f"Total Nominal: {fmt_rp_signed(_nom)}",
+        f"Total Rak   : {hasil.get('total_rak', 0)} (periode ini)",
+        f"Total Nominal: {fmt_rp_signed(_nom_hari)} (periode ini)",
         "",
     ]
 
-    # BTSB & NSB
+    # BTSB & NSB — pakai angka BULANAN
     if net_sales > 0:
         from modules.yui_export import _hitung_btsb_nsb
-        _calc = _hitung_btsb_nsb(net_sales, _nom)
+        _calc = _hitung_btsb_nsb(net_sales, _total_selisih_bulan)
         _lines.extend([
             "-" * 50,
-            "  ANALISIS BTSB & NSB",
+            "  ANALISIS BTSB & NSB (BULAN INI)",
             "-" * 50,
             f"Net Sales Bulan Ini : {fmt_rp(net_sales)}",
             f"BTSB (0,15%)        : {fmt_rp(_calc['btsb'])}",
-            f"Total Selisih       : {fmt_rp(_calc['selisih'])}",
+            f"Total Selisih Bulan : {fmt_rp(_calc['selisih'])}",
             f"NSB (beban personil): {fmt_rp(_calc['nsb'])}",
             f"Status              : {_calc['status']}",
+            f"Total Rak di-SO     : {_total_rak_bulan} rak",
             "",
         ])
 
     _lines.extend([
         "-" * 50,
-        "  DETAIL PER RAK",
+        "  DETAIL PER RAK (PERIODE INI)",
         "-" * 50,
     ])
 
@@ -400,7 +397,7 @@ def _build_rekap_text_profesional(hasil, net_sales=0):
         "",
         "=" * 50,
         "Keterangan:",
-        "- NSB = (Net Sales x BTSB) - Total Selisih Barang",
+        "- NSB = (Net Sales x BTSB) - Total Selisih Barang (1 bulan)",
         "- BTSB = 0,15% dari Net Sales",
         "- Status OVER = selisih melebihi BTSB",
         "=" * 50,
@@ -825,83 +822,94 @@ if st.session_state.get("yui_rekap_hasil"):
     # EXPORT BUTTONS
     # =========================================================
     st.markdown("#### 📥 Export Laporan")
-_c_exp1, _c_exp2, _c_exp3, _c_exp4 = st.columns(4)
-
-# Ambil net sales bulan ini (dari query)
-_net_sales_bulan = 0
-try:
-    from modules.yui_rekap import _get_net_sales_bulan
-    _net_sales_bulan = _get_net_sales_bulan()
-except Exception:
-    pass
-
-with _c_exp1:
-    if st.button("📄 PDF", width="stretch", key="btn_exp_pdf"):
-        if not _EXPORT_OK:
-            st.error("❌ Module yui_export gak ada")
-        else:
-            with st.spinner("Bikin PDF profesional..."):
-                _pdf_bytes = export_rekap_pdf(_hasil_rekap, net_sales=_net_sales_bulan)
-            if _pdf_bytes:
+    _c_exp1, _c_exp2, _c_exp3, _c_exp4 = st.columns(4)
+    
+    # Ambil net sales & total selisih BULAN INI
+    _net_sales_bulan = 0
+    _total_selisih_bulan = 0
+    _total_rak_bulan = 0
+    
+    try:
+        from modules.yui_rekap import (
+            _get_net_sales_bulan, _get_total_selisih_bulan, _get_total_rak_bulan
+        )
+        _net_sales_bulan = _get_net_sales_bulan()
+        _total_selisih_bulan = _get_total_selisih_bulan()
+        _total_rak_bulan = _get_total_rak_bulan()
+    except Exception:
+        pass
+    
+    _hasil_rekap["_net_sales_bulan"] = _net_sales_bulan
+    _hasil_rekap["_total_selisih_bulan"] = _total_selisih_bulan
+    _hasil_rekap["_total_rak_bulan"] = _total_rak_bulan
+    
+    with _c_exp1:
+        if st.button("📄 PDF", width="stretch", key="btn_exp_pdf"):
+            if not _EXPORT_OK:
+                st.error("❌ Module yui_export gak ada")
+            else:
+                with st.spinner("Bikin PDF profesional..."):
+                    _pdf_bytes = export_rekap_pdf(_hasil_rekap, net_sales=_net_sales_bulan)
+                if _pdf_bytes:
+                    st.session_state["yui_export_result"] = {
+                        "type": "pdf",
+                        "bytes": _pdf_bytes,
+                        "filename": f"laporan_so_{_hasil_rekap['periode'].replace(' ', '_')}.pdf",
+                    }
+                    st.rerun()
+                else:
+                    st.error("❌ Gagal bikin PDF")
+    
+    with _c_exp2:
+        if st.button("📊 Excel", width="stretch", key="btn_exp_xlsx"):
+            _xlsx_bytes = None
+            try:
+                from modules.yui_export import export_rekap_excel
+                _xlsx_bytes = export_rekap_excel(_hasil_rekap, net_sales=_net_sales_bulan)
+            except Exception as _e:
+                st.error(f"❌ {str(_e)[:100]}")
+            if _xlsx_bytes:
                 st.session_state["yui_export_result"] = {
-                    "type": "pdf",
-                    "bytes": _pdf_bytes,
-                    "filename": f"laporan_so_{_hasil_rekap['periode'].replace(' ', '_')}.pdf",
+                    "type": "xlsx",
+                    "bytes": _xlsx_bytes,
+                    "filename": f"laporan_so_{_hasil_rekap['periode'].replace(' ', '_')}.xlsx",
                 }
                 st.rerun()
             else:
-                st.error("❌ Gagal bikin PDF")
-
-with _c_exp2:
-    if st.button("📊 Excel", width="stretch", key="btn_exp_xlsx"):
-        _xlsx_bytes = None
-        try:
-            from modules.yui_export import export_rekap_excel
-            _xlsx_bytes = export_rekap_excel(_hasil_rekap, net_sales=_net_sales_bulan)
-        except Exception as _e:
-            st.error(f"❌ {str(_e)[:100]}")
-        if _xlsx_bytes:
+                st.error("❌ Gagal bikin Excel")
+    
+    with _c_exp3:
+        if st.button("📋 Text", width="stretch", key="btn_exp_text"):
+            _text = _build_rekap_text_profesional(_hasil_rekap, net_sales=_net_sales_bulan)
             st.session_state["yui_export_result"] = {
-                "type": "xlsx",
-                "bytes": _xlsx_bytes,
-                "filename": f"laporan_so_{_hasil_rekap['periode'].replace(' ', '_')}.xlsx",
+                "type": "text",
+                "text": _text,
+                "filename": "laporan_so.txt",
             }
             st.rerun()
-        else:
-            st.error("❌ Gagal bikin Excel")
-
-with _c_exp3:
-    if st.button("📋 Text", width="stretch", key="btn_exp_text"):
-        _text = _build_rekap_text_profesional(_hasil_rekap, net_sales=_net_sales_bulan)
-        st.session_state["yui_export_result"] = {
-            "type": "text",
-            "text": _text,
-            "filename": "laporan_so.txt",
-        }
-        st.rerun()
-
-with _c_exp4:
-    if st.button("📸 Gambar", width="stretch", key="btn_exp_img"):
-        if not _EXPORT_OK:
-            st.error("❌ Module yui_export gak ada")
-        else:
-            with st.spinner("Bikin gambar..."):
-                _img_path = export_rekap_image(_hasil_rekap, net_sales=_net_sales_bulan)
-            if _img_path:
-                try:
-                    with open(_img_path, "rb") as _f:
-                        _img_bytes = _f.read()
-                    st.session_state["yui_export_result"] = {
-                        "type": "png",
-                        "bytes": _img_bytes,
-                        "filename": f"laporan_so_{_hasil_rekap['periode'].replace(' ', '_')}.png",
-                    }
-                    st.rerun()
-                except Exception as _e:
-                    st.error(f"❌ {str(_e)[:80]}")
+    
+    with _c_exp4:
+        if st.button("📸 Gambar", width="stretch", key="btn_exp_img"):
+            if not _EXPORT_OK:
+                st.error("❌ Module yui_export gak ada")
             else:
-                st.error("❌ Gagal bikin gambar. Cek `html2pic` di requirements.")
-                
+                with st.spinner("Bikin gambar..."):
+                    _img_path = export_rekap_image(_hasil_rekap, net_sales=_net_sales_bulan)
+                if _img_path:
+                    try:
+                        with open(_img_path, "rb") as _f:
+                            _img_bytes = _f.read()
+                        st.session_state["yui_export_result"] = {
+                            "type": "png",
+                            "bytes": _img_bytes,
+                            "filename": f"laporan_so_{_hasil_rekap['periode'].replace(' ', '_')}.png",
+                        }
+                        st.rerun()
+                    except Exception as _e:
+                        st.error(f"❌ {str(_e)[:80]}")
+                else:
+                    st.error("❌ Gagal bikin gambar. Cek `html2pic` di requirements.")
+                    
     # =========================================================
     # TAMPILKAN HASIL EXPORT
     # =========================================================
