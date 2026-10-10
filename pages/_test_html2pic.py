@@ -1,13 +1,12 @@
 """
-Test pictex Canvas — Infografis NEXT LEVEL
-============================================
-Chart embed dari matplotlib + layout pictex.
+Test pictex Canvas — Infografis NEXT LEVEL (v2 RAPIH)
+======================================================
 """
 import streamlit as st
 import io
 import os
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import matplotlib
@@ -16,8 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-st.set_page_config(page_title="Test pictex", page_icon="🧪")
-st.title("Test pictex — Infografis Next Level")
+st.set_page_config(page_title="Test pictex", page_icon="🎨", layout="wide")
+st.title("🎨 Test pictex — Infografis Next Level")
 
 
 # =========================================================
@@ -30,7 +29,8 @@ WARNA = {
     "salmon": "#F2C3B9",
     "beige": "#D6CBBF",
     "offwhite": "#F0EEEA",
-    "dark": "#3C3C3C",
+    "dark": "#2E2E2E",
+    "grey": "#666666",
     "white": "#FFFFFF",
     "red": "#C83232",
     "green": "#329632",
@@ -38,7 +38,7 @@ WARNA = {
 
 
 # =========================================================
-# DATA DUMMY (nanti ganti dari hasil rekap)
+# DATA DUMMY
 # =========================================================
 _data = {
     "periode": "2026-10-10 s/d 2026-10-10",
@@ -52,7 +52,7 @@ _data = {
     "insight": (
         "Total SO: 3 rak dengan nominal -Rp 34.556. Sales periode: Rp 10. "
         "BTSB (0,15%): Rp 0. Rak penyumbang minus terbesar: S14 (-Rp 24.785) "
-        "oleh PIC REZA. Status: OVER - selisih melebihi batas BTSB, perlu perhatian."
+        "oleh PIC REZA. Status: OVER."
     ),
     "list_rak": [
         {"rak_id": "S14", "nama": "PERSONAL & TOOTH CARE 4", "pic": "REZA", "nominal": -24785},
@@ -70,7 +70,7 @@ _data = {
 
 
 # =========================================================
-# HELPER FORMAT
+# HELPER
 # =========================================================
 def _fmt_rp(val):
     _n = int(round(float(val)))
@@ -87,7 +87,6 @@ def _fmt_rp_no_sign(val):
 # CHART 1: DONUT
 # =========================================================
 def _chart_donut(list_rak, output_path, size_px=400):
-    """Donut chart kontribusi per rak."""
     _sorted = sorted(list_rak, key=lambda x: abs(x["nominal"]), reverse=True)
     _labels = [f"Rak {r['rak_id']}" for r in _sorted if abs(r["nominal"]) > 0]
     _sizes = [abs(r["nominal"]) for r in _sorted if abs(r["nominal"]) > 0]
@@ -96,7 +95,6 @@ def _chart_donut(list_rak, output_path, size_px=400):
         return None
 
     _colors = ["#97B3AE", "#F2C3B9", "#D2E0D3", "#F0DDD6", "#D6CBBF", "#B5C9C3"]
-
     _dpi = 100
     _fig_size = size_px / _dpi
 
@@ -115,12 +113,12 @@ def _chart_donut(list_rak, output_path, size_px=400):
     )
     for at in autotexts:
         at.set_color("white")
-        at.set_fontsize(10)
+        at.set_fontsize(11)
         at.set_fontweight("bold")
 
     ax.set_title(
         "KONTRIBUSI PER RAK",
-        fontsize=12, fontweight="bold", color=WARNA["dark"], pad=10,
+        fontsize=12, fontweight="bold", color=WARNA["dark"], pad=15,
     )
 
     plt.tight_layout()
@@ -132,8 +130,7 @@ def _chart_donut(list_rak, output_path, size_px=400):
 # =========================================================
 # CHART 2: TREND LINE
 # =========================================================
-def _chart_trend(trend_data, output_path, width_px=800, height_px=250):
-    """Line chart trend selisih."""
+def _chart_trend(trend_data, output_path, width_px=900, height_px=220):
     if not trend_data:
         return None
 
@@ -174,7 +171,7 @@ def _chart_trend(trend_data, output_path, width_px=800, height_px=250):
     plt.savefig(output_path, dpi=_dpi, bbox_inches="tight", facecolor=WARNA["white"])
     plt.close(fig)
     return output_path
-
+    
 
 # =========================================================
 # KONSTRUKSI INFOGRAFIS
@@ -182,14 +179,14 @@ def _chart_trend(trend_data, output_path, width_px=800, height_px=250):
 def _build_infografis(data, tmp_dir):
     from pictex import Canvas, Row, Column, Text, Image
 
-    _W = 1000       # lebar konten (1080 - 2*40 padding)
-    _H = 1350       # tinggi canvas
+    _W = 1000
+    _H = 1500
 
     # === GENERATE CHART PNG ===
     _donut_path = os.path.join(tmp_dir, "chart_donut.png")
     _trend_path = os.path.join(tmp_dir, "chart_trend.png")
     _chart_donut(data["list_rak"], _donut_path, size_px=380)
-    _chart_trend(data["trend_data"], _trend_path, width_px=960, height_px=250)
+    _chart_trend(data["trend_data"], _trend_path, width_px=960, height_px=220)
 
     # === CANVAS ===
     canvas = (
@@ -204,38 +201,38 @@ def _build_infografis(data, tmp_dir):
     # =========================================================
     header = (
         Column(
-            Text("LAPORAN STOCK OPNAME").font_size(32).color(WARNA["white"]).font_weight("bold"),
-            Text("Toko C383 — Karang Satria").font_size(16).color(WARNA["offwhite"]),
-            Text(f"Periode: {data['periode']}").font_size(14).color(WARNA["sage_light"]),
+            Text("LAPORAN STOCK OPNAME").font_size(30).color(WARNA["white"]).font_weight("bold"),
+            Text("Toko C383 — Karang Satria").font_size(15).color(WARNA["offwhite"]),
+            Text(f"Periode: {data['periode']}").font_size(13).color(WARNA["sage_light"]),
         )
         .width(_W)
-        .padding(28)
+        .padding(26)
         .background_color(WARNA["sage"])
         .border_radius(16)
-        .gap(6)
+        .gap(5)
     )
 
     # =========================================================
-    # KPI CARDS (3 kolom)
+    # KPI CARDS — 3 kolom, gak pakai emoji
     # =========================================================
     kpi_row = Row(
         Column(
-            Text("📦").font_size(28),
-            Text("TOTAL RAK").font_size(12).color(WARNA["dark"]).font_weight("bold"),
-            Text(f"{data['total_rak']} rak").font_size(28).color(WARNA["dark"]).font_weight("bold"),
-        ).width(320).padding(22).background_color(WARNA["sage_light"]).border_radius(14).gap(4),
+            Text("TOTAL RAK").font_size(11).color(WARNA["grey"]).font_weight("bold"),
+            Text(f"{data['total_rak']}").font_size(38).color(WARNA["dark"]).font_weight("bold"),
+            Text("rak").font_size(13).color(WARNA["grey"]),
+        ).width(320).padding(20).background_color(WARNA["sage_light"]).border_radius(14).gap(2),
 
         Column(
-            Text("📊").font_size(28),
-            Text("TOTAL ITEM").font_size(12).color(WARNA["dark"]).font_weight("bold"),
-            Text(f"{data['total_item']} item").font_size(28).color(WARNA["dark"]).font_weight("bold"),
-        ).width(320).padding(22).background_color(WARNA["peach"]).border_radius(14).gap(4),
+            Text("TOTAL ITEM").font_size(11).color(WARNA["grey"]).font_weight("bold"),
+            Text(f"{data['total_item']}").font_size(38).color(WARNA["dark"]).font_weight("bold"),
+            Text("item").font_size(13).color(WARNA["grey"]),
+        ).width(320).padding(20).background_color(WARNA["peach"]).border_radius(14).gap(2),
 
         Column(
-            Text("💰").font_size(28),
-            Text("TOTAL NOMINAL").font_size(12).color(WARNA["dark"]).font_weight("bold"),
-            Text(_fmt_rp(data['total_nominal'])).font_size(24).color(WARNA["red"]).font_weight("bold"),
-        ).width(320).padding(22).background_color(WARNA["salmon"]).border_radius(14).gap(4),
+            Text("TOTAL NOMINAL").font_size(11).color(WARNA["grey"]).font_weight("bold"),
+            Text(_fmt_rp(data['total_nominal'])).font_size(26).color(WARNA["red"]).font_weight("bold"),
+            Text("periode ini").font_size(13).color(WARNA["grey"]),
+        ).width(320).padding(20).background_color(WARNA["salmon"]).border_radius(14).gap(2),
     ).gap(20)
 
     # =========================================================
@@ -243,40 +240,40 @@ def _build_infografis(data, tmp_dir):
     # =========================================================
     _donut_col = (
         Column(
-            Image(_donut_path).width(400),
+            Image(_donut_path).width(380),
         )
         .width(460)
-        .padding(10)
+        .padding(18)
         .background_color(WARNA["white"])
         .border_radius(14)
     )
 
     _ringkasan_col = (
         Column(
-            Text("RINGKASAN PERIODE").font_size(16).color(WARNA["dark"]).font_weight("bold"),
+            Text("RINGKASAN PERIODE").font_size(15).color(WARNA["dark"]).font_weight("bold"),
             Row(
-                Text("Tanggal").font_size(13).color("#666666").width(180),
-                Text(data["periode"]).font_size(13).color(WARNA["dark"]).font_weight("bold"),
+                Text("Tanggal").font_size(12).color(WARNA["grey"]).width(160),
+                Text(data["periode"]).font_size(12).color(WARNA["dark"]).font_weight("bold"),
             ),
             Row(
-                Text("Total Rak di-SO").font_size(13).color("#666666").width(180),
-                Text(f"{data['total_rak']} rak").font_size(13).color(WARNA["dark"]).font_weight("bold"),
+                Text("Total Rak di-SO").font_size(12).color(WARNA["grey"]).width(160),
+                Text(f"{data['total_rak']} rak").font_size(12).color(WARNA["dark"]).font_weight("bold"),
             ),
             Row(
-                Text("Nominal SO").font_size(13).color("#666666").width(180),
-                Text(_fmt_rp(data["total_nominal"])).font_size(13).color(WARNA["dark"]).font_weight("bold"),
+                Text("Nominal SO").font_size(12).color(WARNA["grey"]).width(160),
+                Text(_fmt_rp(data["total_nominal"])).font_size(12).color(WARNA["dark"]).font_weight("bold"),
             ),
             Row(
-                Text("Sales Periode").font_size(13).color("#666666").width(180),
-                Text(_fmt_rp_no_sign(data["sales_periode"])).font_size(13).color(WARNA["dark"]).font_weight("bold"),
+                Text("Sales Periode").font_size(12).color(WARNA["grey"]).width(160),
+                Text(_fmt_rp_no_sign(data["sales_periode"])).font_size(12).color(WARNA["dark"]).font_weight("bold"),
             ),
             Row(
-                Text("BTSB (0,15%)").font_size(13).color("#666666").width(180),
-                Text(_fmt_rp_no_sign(data["btsb"])).font_size(13).color(WARNA["dark"]).font_weight("bold"),
+                Text("BTSB (0,15%)").font_size(12).color(WARNA["grey"]).width(160),
+                Text(_fmt_rp_no_sign(data["btsb"])).font_size(12).color(WARNA["dark"]).font_weight("bold"),
             ),
             Row(
-                Text("Status").font_size(13).color("#666666").width(180),
-                Text(data["status"]).font_size(13).color(WARNA["red"]).font_weight("bold"),
+                Text("Status").font_size(12).color(WARNA["grey"]).width(160),
+                Text(data["status"]).font_size(12).color(WARNA["red"]).font_weight("bold"),
             ),
         )
         .width(520)
@@ -289,128 +286,122 @@ def _build_infografis(data, tmp_dir):
     _mid_row = Row(_donut_col, _ringkasan_col).gap(20)
 
     # =========================================================
-    # INSIGHT (quote style)
+    # INSIGHT
     # =========================================================
     insight = (
         Column(
-            Text("💡 INSIGHT").font_size(16).color(WARNA["dark"]).font_weight("bold"),
-            Text(data["insight"]).font_size(13).color(WARNA["dark"]),
+            Text("INSIGHT").font_size(15).color(WARNA["dark"]).font_weight("bold"),
+            Text(data["insight"]).font_size(12).color(WARNA["dark"]),
         )
-        .width(_W - 20)
+        .width(_W)
         .padding(20)
         .background_color(WARNA["white"])
         .border_radius(14)
-        .gap(8)
+        .gap(6)
     )
     
     # =========================================================
     # TABEL RAK
     # =========================================================
-    _col_w = [110, 400, 190, 260]  # total 960
-    
+    _col_w = [100, 380, 180, 260]  # total 920
+
     _header_cells = Row(
-        Text("RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[0]),
-        Text("NAMA RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[1]),
-        Text("PIC").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[2]),
-        Text("SELISIH").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[3]),
+        Text("RAK").font_size(12).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[0]),
+        Text("NAMA RAK").font_size(12).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[1]),
+        Text("PIC").font_size(12).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[2]),
+        Text("SELISIH").font_size(12).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[3]),
     ).background_color(WARNA["sage"])
-    
+
     _rows = [_header_cells]
     for _i, _r in enumerate(data["list_rak"]):
         _bg = WARNA["offwhite"] if _i % 2 == 0 else WARNA["white"]
         _color = WARNA["red"] if _r["nominal"] < 0 else WARNA["green"]
         _rows.append(
             Row(
-                Text(_r["rak_id"]).font_size(13).color(WARNA["dark"]).font_weight("bold").padding(12).width(_col_w[0]),
-                Text(_r["nama"]).font_size(12).color(WARNA["dark"]).padding(12).width(_col_w[1]),
-                Text(_r["pic"]).font_size(13).color(WARNA["dark"]).padding(12).width(_col_w[2]),
-                Text(_fmt_rp(_r["nominal"])).font_size(13).color(_color).font_weight("bold").padding(12).width(_col_w[3]),
+                Text(_r["rak_id"]).font_size(12).color(WARNA["dark"]).font_weight("bold").padding(12).width(_col_w[0]),
+                Text(_r["nama"]).font_size(11).color(WARNA["dark"]).padding(12).width(_col_w[1]),
+                Text(_r["pic"]).font_size(12).color(WARNA["dark"]).padding(12).width(_col_w[2]),
+                Text(_fmt_rp(_r["nominal"])).font_size(12).color(_color).font_weight("bold").padding(12).width(_col_w[3]),
             ).background_color(_bg)
         )
-    
-    # Footer tabel: TOTAL SELISIH
+
+    # Footer: TOTAL SELISIH
     _total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
     _rows.append(
         Row(
-            Text("").padding(12).width(sum(_col_w[:3])),
-            Text("TOTAL SELISIH").font_size(13).color(WARNA["dark"]).font_weight("bold").padding(12).width(200),
-            Text(_fmt_rp(data["total_nominal"])).font_size(14).color(_total_color).font_weight("bold").padding(12).width(60),
+            Text("TOTAL SELISIH").font_size(13).color(WARNA["dark"]).font_weight("bold").padding(12).width(_col_w[0] + _col_w[1] + _col_w[2]),
+            Text(_fmt_rp(data["total_nominal"])).font_size(14).color(_total_color).font_weight("bold").padding(12).width(_col_w[3]),
         ).background_color(WARNA["beige"])
     )
-    
+
     tabel_rak = Column(*_rows).background_color(WARNA["white"]).border_radius(14)
-    
+
     # =========================================================
     # TREND CHART
     # =========================================================
     _trend_section = (
         Column(
-            Image(_trend_path).width(_W - 40),
+            Image(_trend_path).width(_W - 60),
         )
         .width(_W)
         .padding(20)
         .background_color(WARNA["white"])
         .border_radius(14)
+        .gap(0)
     )
-    
+
     # =========================================================
     # FOOTER WATERMARK
     # =========================================================
     footer = (
         Column(
             Text("Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383")
-            .font_size(11)
-            .color("#A89B8E")
-            .font_weight("normal"),
+            .font_size(10)
+            .color(WARNA["grey"]),
         )
         .width(_W)
-        .padding(10)
+        .padding(14)
         .gap(0)
     )
-    
+
     # =========================================================
-    # SUSUN LAYOUT UTAMA
+    # SUSUN LAYOUT
     # =========================================================
     layout = Column(
-        header,         # 1. Header band
-        kpi_row,        # 2. KPI cards
-        _mid_row,       # 3. Donut + Ringkasan
-        insight,        # 4. Insight
-        tabel_rak,      # 5. Tabel rak + total
-        _trend_section, # 6. Trend chart
-        footer,         # 7. Watermark
-    ).width(_W).gap(18)
-    
+        header,
+        kpi_row,
+        _mid_row,
+        insight,
+        tabel_rak,
+        _trend_section,
+        footer,
+    ).width(_W).gap(16)
+
     return canvas.render(layout)
-    
+
 
 # =========================================================
 # RENDER UTAMA
 # =========================================================
 if st.button("🎨 Render Infografis", type="primary"):
     try:
-        # Bikin temp dir
         _tmp_dir = tempfile.mkdtemp()
 
         with st.spinner("Bikin infografis..."):
             _image = _build_infografis(_data, _tmp_dir)
 
-        # Save hasil
         _output_path = os.path.join(_tmp_dir, "infografis_so.png")
         _image.save(_output_path)
 
-        # Baca file
         with open(_output_path, "rb") as _f:
             _img_bytes = _f.read()
 
         st.success(f"✅ Infografis berhasil! Ukuran: {len(_img_bytes):,} bytes")
 
-        # Tampilkan preview
         st.markdown("---")
         st.markdown("### 📸 Preview")
         st.image(_img_bytes, caption="Infografis SO — Next Level")
 
-        # Download button
         st.download_button(
             "📥 Download PNG",
             data=_img_bytes,
@@ -420,7 +411,6 @@ if st.button("🎨 Render Infografis", type="primary"):
             type="primary",
         )
 
-        # Cleanup temp
         try:
             import shutil
             shutil.rmtree(_tmp_dir, ignore_errors=True)
@@ -432,20 +422,17 @@ if st.button("🎨 Render Infografis", type="primary"):
         st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
 
 
-# =========================================================
-# INFO
-# =========================================================
 st.markdown("---")
 with st.expander("ℹ️ Info", expanded=False):
     st.markdown("""
     **Layout infografis:**
     1. Header band sage
-    2. 3 KPI cards (icon + value)
+    2. 3 KPI cards
     3. Donut chart + Ringkasan periode (2 kolom)
-    4. Insight (quote style)
+    4. Insight
     5. Tabel rak + Total Selisih
     6. Trend chart 5 hari
     7. Watermark footer
 
-    **Ukuran:** 1080 × 1350 px (portrait, cocok WA/IG)
+    **Ukuran:** 1080 × 1500 px
     """)
