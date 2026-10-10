@@ -229,6 +229,9 @@ if "yui_show_export" not in st.session_state:
 if "yui_show_spd" not in st.session_state:
     st.session_state["yui_show_spd"] = False
 
+if "yui_rekap_hasil" not in st.session_state:
+    st.session_state["yui_rekap_hasil"] = None
+    
 # ✅ Auto-clear pending kalau kosong
 if st.session_state.get("yui_pending_data"):
     _p_check = st.session_state["yui_pending_data"]
@@ -499,136 +502,137 @@ def _dialog_rekap_so():
         st.error("❌ Module yui_rekap gak ada")
         return
 
-    _col_m1, _col_m2 = st.columns([2, 2])
-    with _col_m1:
-        _mode = st.selectbox(
-            "Periode",
-            ["hari_ini", "minggu_ini", "bulan_ini", "custom"],
-            format_func=lambda x: {
-                "hari_ini": "📅 Hari Ini",
-                "minggu_ini": "📆 Minggu Ini",
-                "bulan_ini": "🗓️ Bulan Ini",
-                "custom": "🔧 Custom Range",
-            }[x],
-            key="rekap_mode",
+    _mode = st.selectbox(
+        "Periode",
+        ["hari_ini", "minggu_ini", "bulan_ini", "custom"],
+        format_func=lambda x: {
+            "hari_ini": "📅 Hari Ini",
+            "minggu_ini": "📆 Minggu Ini",
+            "bulan_ini": "🗓️ Bulan Ini",
+            "custom": "🔧 Custom Range",
+        }[x],
+        key="rekap_mode",
+    )
+
+    _tgl_range = None
+    if _mode == "custom":
+        _tgl_range = st.date_input(
+            "Rentang Tanggal",
+            value=(datetime.now(ZoneInfo("Asia/Jakarta")).date(),
+                   datetime.now(ZoneInfo("Asia/Jakarta")).date()),
+            key="rekap_range",
         )
-    with _col_m2:
-        if _mode == "custom":
-            _tgl_range = st.date_input(
-                "Rentang Tanggal",
-                value=(datetime.now(ZoneInfo("Asia/Jakarta")).date(),
-                       datetime.now(ZoneInfo("Asia/Jakarta")).date()),
-                key="rekap_range",
-            )
-        else:
-            _tgl_range = None
 
-    if st.button("🔍 TAMPILKAN", width="stretch", type="primary", key="btn_do_rekap"):
-        _start = _end = None
-        if _mode == "custom" and _tgl_range and len(_tgl_range) == 2:
-            _start, _end = _tgl_range
+    _col_ok, _col_no = st.columns(2)
+    with _col_ok:
+        if st.button("🔍 TAMPILKAN", width="stretch", type="primary", key="btn_do_rekap"):
+            _start = _end = None
+            if _mode == "custom" and _tgl_range and len(_tgl_range) == 2:
+                _start, _end = _tgl_range
 
-        with st.spinner("📊 Yui rekap data..."):
-            _hasil = rekap_so(mode=_mode, tgl_start=_start, tgl_end=_end)
+            with st.spinner("📊 Yui rekap data..."):
+                _hasil = rekap_so(mode=_mode, tgl_start=_start, tgl_end=_end)
 
-        if not _hasil.get("success"):
-            st.error(f"❌ {_hasil.get('error', 'Gagal rekap')}")
-            return
-
-        st.markdown(f"**Periode:** {_hasil['periode']}")
-
-        _m1, _m2, _m3 = st.columns(3)
-        with _m1:
-            st.metric("🏪 Total Rak", _hasil["total_rak"])
-        with _m2:
-            st.metric("📦 Total Item", _hasil["total_item"])
-        with _m3:
-            _nom = _hasil["total_nominal"]
-            st.metric("💰 Total Nominal", fmt_rp_signed(_nom))
-
-        st.markdown("---")
-
-        _list_rak = _hasil.get("list_rak", [])
-        if _list_rak:
-            with st.expander(f"📋 Detail {len(_list_rak)} Rak", expanded=True):
-                _df_rak = pd.DataFrame(_list_rak)
-                _df_rak = _df_rak.rename(columns={
-                    "rak_id": "Rak", "total": "Nominal",
-                    "pic": "PIC", "tanggal": "Tanggal",
-                })
-                st.dataframe(_df_rak, use_container_width=True, hide_index=True)
-
-        _chart = _hasil.get("chart_data", [])
-        if len(_chart) > 1:
-            with st.expander("📈 Trend Per Hari", expanded=True):
-                _df_chart = pd.DataFrame(_chart)
-                st.bar_chart(_df_chart.set_index("tanggal")[["nominal"]],
-                             use_container_width=True)
-        elif len(_chart) == 1:
-            st.caption(f"📊 Cuma 1 hari data: {_chart[0]['tanggal']}")
-
-        # Simpan hasil rekap untuk export
-        st.session_state["yui_last_rekap"] = _hasil
-
-        st.markdown("---")
-        st.markdown("#### 📥 Export Laporan")
-        _c_exp1, _c_exp2, _c_exp3, _c_exp4 = st.columns(4)
-        
-        with _c_exp1:
-            if st.button("📄 PDF", width="stretch", key="btn_export_pdf_rekap"):
-                from modules.yui_export import export_rekap_pdf
-                _pdf_bytes = export_rekap_pdf(_hasil)
-                if _pdf_bytes:
-                    st.download_button(
-                        "📥 Download PDF",
-                        data=_pdf_bytes,
-                        file_name=f"rekap_so_{_hasil['periode'].replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        key="dl_pdf_rekap",
-                    )
-                else:
-                    st.error("❌ Gagal bikin PDF")
-        
-        with _c_exp2:
-            if st.button("📊 Excel", width="stretch", key="btn_export_xlsx_rekap"):
-                _export_excel_rekap(_hasil)
-        
-        with _c_exp3:
-            if st.button("📋 Text", width="stretch", key="btn_export_text_rekap"):
-                _text = _build_rekap_text(_hasil)
-                st.code(_text, language="text")
-        
-        with _c_exp4:
-            if st.button("📸 Gambar", width="stretch", key="btn_export_img_rekap"):
-                from modules.yui_export import export_rekap_image
-                _img_path = export_rekap_image(_hasil)
-                if _img_path:
-                    with open(_img_path, "rb") as _f:
-                        st.download_button(
-                            "📥 Download Gambar",
-                            data=_f,
-                            file_name=f"rekap_so_{_hasil['periode'].replace(' ', '_')}.png",
-                            mime="image/png",
-                            key="dl_img_rekap",
-                        )
-                else:
-                    st.error("❌ Gagal bikin gambar. Cek requirements `table-to-image`")
-
-    # Cek rak belum SO
-    st.markdown("---")
-    with st.expander("🔍 Cek Rak Belum SO Hari Ini", expanded=False):
-        if st.button("Cek Sekarang", key="btn_cek_belum_so"):
-            _belum = cek_rak_belum_so()
-            if _belum:
-                st.warning(f"⚠️ **{len(_belum)} rak** belum di-SO hari ini")
-                st.dataframe(pd.DataFrame(_belum), use_container_width=True, hide_index=True)
+            if _hasil.get("success"):
+                st.session_state["yui_rekap_hasil"] = _hasil
+                st.session_state["yui_show_rekap"] = False
+                st.rerun()
             else:
-                st.success("✅ Semua rak udah di-SO hari ini!")
+                st.error(f"❌ {_hasil.get('error', 'Gagal rekap')}")
+    with _col_no:
+        if st.button("❌ BATAL", width="stretch", key="btn_cancel_rekap"):
+            st.session_state["yui_show_rekap"] = False
+            st.rerun()
 
-if st.session_state.get("yui_show_rekap"):
-    _dialog_rekap_so()
+# =========================================================
+# RENDER HASIL REKAP DI HALAMAN UTAMA
+# =========================================================
+if st.session_state.get("yui_rekap_hasil"):
+    _hasil_rekap = st.session_state["yui_rekap_hasil"]
 
+    st.markdown("---")
+    st.markdown("### 📊 Hasil Rekap SO")
+    st.caption(f"Periode: {_hasil_rekap['periode']}")
 
+    _m1, _m2, _m3 = st.columns(3)
+    with _m1:
+        st.metric("🏪 Total Rak", _hasil_rekap["total_rak"])
+    with _m2:
+        st.metric("📦 Total Item", _hasil_rekap["total_item"])
+    with _m3:
+        _nom = _hasil_rekap["total_nominal"]
+        st.metric("💰 Total Nominal", fmt_rp_signed(_nom))
+
+    # List rak
+    _list_rak = _hasil_rekap.get("list_rak", [])
+    if _list_rak:
+        with st.expander(f"📋 Detail {len(_list_rak)} Rak", expanded=True):
+            _df_rak = pd.DataFrame(_list_rak)
+            _df_rak = _df_rak.rename(columns={
+                "rak_id": "Rak", "total": "Nominal",
+                "pic": "PIC", "tanggal": "Tanggal",
+            })
+            st.dataframe(_df_rak, use_container_width=True, hide_index=True)
+
+    # Chart
+    _chart = _hasil_rekap.get("chart_data", [])
+    if len(_chart) > 1:
+        with st.expander("📈 Trend Per Hari", expanded=True):
+            _df_chart = pd.DataFrame(_chart)
+            st.bar_chart(_df_chart.set_index("tanggal")[["nominal"]],
+                         use_container_width=True)
+    elif len(_chart) == 1:
+        st.caption(f"📊 Cuma 1 hari data: {_chart[0]['tanggal']}")
+
+    # Export
+    st.markdown("#### 📥 Export Laporan")
+    _c_exp1, _c_exp2, _c_exp3, _c_exp4 = st.columns(4)
+
+    with _c_exp1:
+        if st.button("📄 PDF", width="stretch", key="btn_export_pdf_rekap"):
+            from modules.yui_export import export_rekap_pdf
+            _pdf_bytes = export_rekap_pdf(_hasil_rekap)
+            if _pdf_bytes:
+                st.download_button(
+                    "📥 Download PDF",
+                    data=_pdf_bytes,
+                    file_name=f"rekap_so_{_hasil_rekap['periode'].replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    key="dl_pdf_rekap",
+                )
+            else:
+                st.error("❌ Gagal bikin PDF")
+
+    with _c_exp2:
+        if st.button("📊 Excel", width="stretch", key="btn_export_xlsx_rekap"):
+            _export_excel_rekap(_hasil_rekap)
+
+    with _c_exp3:
+        if st.button("📋 Text", width="stretch", key="btn_export_text_rekap"):
+            _text = _build_rekap_text(_hasil_rekap)
+            st.code(_text, language="text")
+
+    with _c_exp4:
+        if st.button("📸 Gambar", width="stretch", key="btn_export_img_rekap"):
+            from modules.yui_export import export_rekap_image
+            _img_path = export_rekap_image(_hasil_rekap)
+            if _img_path:
+                with open(_img_path, "rb") as _f:
+                    st.download_button(
+                        "📥 Download Gambar",
+                        data=_f,
+                        file_name=f"rekap_so_{_hasil_rekap['periode'].replace(' ', '_')}.png",
+                        mime="image/png",
+                        key="dl_img_rekap",
+                    )
+            else:
+                st.error("❌ Gagal bikin gambar")
+
+    # Tombol tutup
+    if st.button("❌ Tutup Rekap", key="btn_close_rekap"):
+        st.session_state["yui_rekap_hasil"] = None
+        st.rerun()
+        
 # =========================================================
 # DIALOG INPUT SPD (Fase 5)
 # =========================================================
@@ -828,6 +832,7 @@ def _save_and_close(edited_by_rak, pics_per_rak, pending_inner):
         save_message("yui", _session_id, "assistant", _fail_msg)
 
     st.rerun()
+
 
 # =========================================================
 # KONFIRMASI MULTI-RAK + MULTI-PIC
