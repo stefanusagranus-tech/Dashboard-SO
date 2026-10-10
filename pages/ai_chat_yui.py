@@ -1,10 +1,9 @@
 """
-AI Chat Yui — Pembantu Input SO (AI-2) v10 Final
+AI Chat Yui — Pembantu Input SO (AI-2) v11 FINAL
 ==================================================
-Fix:
-- Save multi-rak pakai st.session_state per rak
-- Qty Var = Qty Fisik - Qty Sistem (dihitung di backend saat save)
-- Tampilan sukses pakai st.success + st.toast
+- Tampilan sukses via st.dialog
+- Save ke 2 tabel (so_rak_harian + so_hasil)
+- Konfirmasi multi-rak per tab
 """
 
 import streamlit as st
@@ -26,13 +25,11 @@ CURRENT_THEME = get_theme_by_month()
 render_theme(CURRENT_THEME)
 render_theme_animations(CURRENT_THEME)
 
-
 # =========================================================
 # DEBUG LOG
 # =========================================================
 if "yui_debug_log" not in st.session_state:
     st.session_state["yui_debug_log"] = []
-
 
 def yui_log(msg):
     print(msg)
@@ -42,7 +39,6 @@ def yui_log(msg):
             st.session_state["yui_debug_log"] = st.session_state["yui_debug_log"][-200:]
     except Exception:
         pass
-
 
 # =========================================================
 # IMPORT MODULES
@@ -63,7 +59,6 @@ except ImportError as e:
     _YUI_OK = False
     _import_error = str(e)
 
-
 try:
     from modules.file_reader import set_log_buffer as set_file_buffer
     from modules.ai_so_input import set_log_buffer as set_ai_buffer
@@ -71,7 +66,6 @@ try:
     set_ai_buffer(st.session_state["yui_debug_log"])
 except Exception:
     pass
-
 
 def fmt_rp_signed(value):
     try:
@@ -81,13 +75,11 @@ def fmt_rp_signed(value):
     except Exception:
         return "Rp 0"
 
-
 def fmt_rp(value):
     try:
         return f"Rp {int(float(value)):,}".replace(",", ".")
     except Exception:
         return "Rp 0"
-
 
 # =========================================================
 # CSS
@@ -179,14 +171,11 @@ def inject_yui_css():
     </style>
     """, unsafe_allow_html=True)
 
-
 inject_yui_css()
-
 
 if not _YUI_OK:
     st.error(f"❌ Gagal import: {_import_error}")
     st.stop()
-
 
 # =========================================================
 # LOAD MASTER
@@ -195,11 +184,9 @@ if not _YUI_OK:
 def _load_master():
     return load_rak_master(), load_personil_master(only_active=True)
 
-
 _rak_df, _personil_df = _load_master()
 _personil_list = _personil_df["nama"].tolist() if not _personil_df.empty else []
 _rak_list = _rak_df["rak_id"].tolist() if not _rak_df.empty else []
-
 
 # =========================================================
 # HEADER
@@ -240,9 +227,7 @@ def render_header():
 
     st.markdown("---")
 
-
 render_header()
-
 
 # =========================================================
 # SESSION STATE
@@ -260,15 +245,11 @@ if "yui_history" not in st.session_state:
 if "yui_pending_data" not in st.session_state:
     st.session_state["yui_pending_data"] = None
 
-if "yui_last_saved" not in st.session_state:
-    st.session_state["yui_last_saved"] = None
-
 if "yui_rak_to_delete" not in st.session_state:
     st.session_state["yui_rak_to_delete"] = None
 
-if "yui_edited_data" not in st.session_state:
-    st.session_state["yui_edited_data"] = {}
-
+if "yui_save_result" not in st.session_state:
+    st.session_state["yui_save_result"] = None
 
 if not st.session_state["yui_history"]:
     _welcome = (
@@ -280,12 +261,6 @@ if not st.session_state["yui_history"]:
     st.session_state["yui_history"].append({"role": "assistant", "content": _welcome})
     save_message("yui", _session_id, "assistant", _welcome)
 
-
-if st.session_state["yui_last_saved"]:
-    st.success(st.session_state["yui_last_saved"])
-    st.session_state["yui_last_saved"] = None
-
-
 _total_msg = len(st.session_state["yui_history"])
 st.markdown(
     f"<div class='memory-info'>"
@@ -294,7 +269,6 @@ st.markdown(
     f"</div>",
     unsafe_allow_html=True,
 )
-
 
 # =========================================================
 # TOOLBAR
@@ -316,12 +290,11 @@ with _col_t3:
         st.session_state["yui_history"] = []
         st.session_state["yui_pending_data"] = None
         st.session_state["yui_rak_to_delete"] = None
-        st.session_state["yui_edited_data"] = {}
+        st.session_state["yui_save_result"] = None
         st.session_state["yui_debug_log"] = []
         st.rerun()
 
-
-with st.expander("🐛 Debug Log (klik untuk buka)", expanded=False):
+with st.expander("🐛 Debug Log", expanded=False):
     _debug_log = st.session_state.get("yui_debug_log", [])
     if _debug_log:
         st.code("\n".join(_debug_log[-50:]), language="log")
@@ -333,18 +306,11 @@ with st.expander("🐛 Debug Log (klik untuk buka)", expanded=False):
 
 st.markdown("---")
 
-
 # =========================================================
 # DIALOG UPLOAD
 # =========================================================
 @st.dialog("📎 Upload File SO", width="large")
 def _dialog_upload_file():
-    st.markdown(
-        "<div style='font-family: Quicksand; font-size: 12px; color: #A89B8E; "
-        "margin-bottom: 12px;'>Upload file laporan SO (PDF, foto, Excel, CSV).</div>",
-        unsafe_allow_html=True,
-    )
-
     _uploaded = st.file_uploader(
         "Pilih file",
         type=["pdf", "png", "jpg", "jpeg", "webp", "xlsx", "xls", "csv"],
@@ -388,24 +354,8 @@ def _dialog_upload_file():
             st.session_state["yui_show_upload"] = False
             st.rerun()
 
-
 if st.session_state.get("yui_show_upload"):
     _dialog_upload_file()
-
-# =========================================================
-# HELPER: Ambil data editor dari session state
-# =========================================================
-def _get_editor_data(rak_id, default_df):
-    """Ambil data dari st.data_editor yang tersimpan di session_state."""
-    _key = f"editor_rak_{rak_id}"
-    _state = st.session_state.get(_key)
-    if _state is None:
-        return default_df
-    # st.data_editor simpan dict dengan key 'edited_rows', 'added_rows', 'deleted_rows'
-    # Tapi versi terbaru simpan DataFrame langsung
-    if isinstance(_state, pd.DataFrame):
-        return _state
-    return default_df
 
 # =========================================================
 # RENDER CHAT HISTORY
@@ -415,7 +365,6 @@ for _msg in st.session_state["yui_history"]:
     _role = _msg.get("role", "user")
     with st.chat_message(_role, avatar="👤" if _role == "user" else "📦"):
         st.markdown(_msg.get("content", ""))
-
 
 # =========================================================
 # PROCESS FILE
@@ -560,9 +509,94 @@ if st.session_state.get("yui_rak_to_delete"):
 
     _dialog_confirm_delete()
 
+# =========================================================
+# HELPER: SAVE & CLOSE
+# =========================================================
+def _save_and_close(edited_by_rak, pics_per_rak, pending_inner):
+    """Simpan semua rak ke DB, set result buat dialog sukses."""
+    _saved_count = 0
+    _error_count = 0
+    _errors = []
+    _total_nominal = 0
+    _total_items = 0
+
+    yui_log(f"[Yui] === SAVE START: {len(edited_by_rak)} rak ===")
+
+    for _rak_id, _rak_items_final in edited_by_rak.items():
+        _rak_pic = pics_per_rak.get(_rak_id, "")
+        if not _rak_pic:
+            yui_log(f"[Yui] Skip rak {_rak_id}: PIC kosong")
+            _errors.append(f"Rak {_rak_id}: PIC kosong")
+            _error_count += 1
+            continue
+        if not _rak_items_final:
+            yui_log(f"[Yui] Skip rak {_rak_id}: item kosong")
+            _errors.append(f"Rak {_rak_id}: item kosong")
+            _error_count += 1
+            continue
+
+        yui_log(f"[Yui] Saving rak {_rak_id}: {len(_rak_items_final)} items, PIC={_rak_pic}")
+
+        try:
+            _ok, _msg, _detail = save_input_harian(
+                tanggal=datetime.strptime(pending_inner["tanggal"], "%Y-%m-%d").date(),
+                spd=0,
+                rak_items=_rak_items_final,
+                keterangan=f"Input via Yui ({pending_inner.get('file_name', '')})",
+                pic=_rak_pic,
+                update_status_rak=True,
+            )
+            if _ok:
+                _saved_count += 1
+                _total_nominal += float(_detail.get("total_nominal", 0) or 0)
+                _total_items += int(_detail.get("hasil_saved", 0) or 0)
+                yui_log(f"[Yui] ✅ Saved rak {_rak_id}: {len(_rak_items_final)} items")
+            else:
+                _error_count += 1
+                _errors.append(f"Rak {_rak_id}: {_msg[:100]}")
+                yui_log(f"[Yui] ❌ Save fail rak {_rak_id}: {_msg}")
+        except Exception as _e:
+            _error_count += 1
+            _errors.append(f"Rak {_rak_id}: {str(_e)[:100]}")
+            yui_log(f"[Yui] Save error {_rak_id}: {_e}")
+
+    yui_log(f"[Yui] === SAVE DONE: {_saved_count} OK, {_error_count} error ===")
+
+    # Simpan result untuk dialog
+    st.session_state["yui_save_result"] = {
+        "saved_count": _saved_count,
+        "error_count": _error_count,
+        "errors": _errors,
+        "total": _total_nominal,
+        "items": _total_items,
+        "rak_saved_ids": list(edited_by_rak.keys()),
+    }
+
+    # Update history chat
+    if _saved_count > 0:
+        _success_msg = (
+            f"🎉 **Beres Bos!** {_saved_count} rak tersimpan.\n"
+            f"Total: **{fmt_rp_signed(_total_nominal)}**"
+        )
+        st.session_state["yui_history"].append({"role": "assistant", "content": _success_msg})
+        save_message("yui", _session_id, "assistant", _success_msg)
+
+        # Clear pending
+        st.session_state["yui_pending_data"] = None
+        st.cache_data.clear()
+    else:
+        _fail_msg = (
+            f"❌ **Gagal simpan.** {_error_count} rak error.\n"
+            + "\n".join([f"- {e}" for e in _errors[:5]])
+        )
+        st.session_state["yui_history"].append({"role": "assistant", "content": _fail_msg})
+        save_message("yui", _session_id, "assistant", _fail_msg)
+
+    st.rerun()
+
 
 # =========================================================
-# KONFIRMASI MULTI-RAK + MULTI-PIC (pakai st.dialog)
+# KONFIRMASI MULTI-RAK + MULTI-PIC (st.dialog)
 # =========================================================
 if st.session_state.get("yui_pending_data"):
     _pending = st.session_state["yui_pending_data"]
@@ -588,7 +622,6 @@ if st.session_state.get("yui_pending_data"):
         _edited_by_rak = {}
         _pics_per_rak = _pending_inner.get("pics", {})
 
-        # Tab per rak biar rapi
         _rak_ids = list(_items_by_rak_inner.keys())
         if _rak_ids:
             _tabs = st.tabs([f"🏪 {_r}" for _r in _rak_ids])
@@ -639,7 +672,6 @@ if st.session_state.get("yui_pending_data"):
                     _cols_show_src = [c for c in _cols_show_src if c in _df_rak.columns]
                     _df_rak = _df_rak[_cols_show_src].rename(columns=_rename_map)
 
-                    # Qty Var auto-preview
                     if "Qty Sistem" in _df_rak.columns and "Qty Fisik" in _df_rak.columns:
                         _df_rak["Qty Var"] = (
                             pd.to_numeric(_df_rak["Qty Fisik"], errors="coerce").fillna(0).astype(int)
@@ -670,7 +702,6 @@ if st.session_state.get("yui_pending_data"):
                         key=f"editor_rak_{_rak_id}",
                     )
 
-                    # Hitung Qty Var di backend (jaga-jaga)
                     _items_this_rak = []
                     for _, _r in _edited_rak.iterrows():
                         _plu = str(_r.get("PLU", "") or "").strip()
@@ -685,7 +716,7 @@ if st.session_state.get("yui_pending_data"):
                             "nama_produk": _nama,
                             "qty_sistem": _qty_sist,
                             "qty_fisik": _qty_fis,
-                            "qty_var": _qty_fis - _qty_sist,  # ✅ Qty Var = Fisik - Sistem
+                            "qty_var": _qty_fis - _qty_sist,
                             "nominal_adjust": float(_r.get("Nominal", 0) or 0),
                             "pic": _pics_per_rak.get(_rak_id),
                         })
@@ -700,7 +731,6 @@ if st.session_state.get("yui_pending_data"):
                         unsafe_allow_html=True,
                     )
 
-        # Update pending
         _updated_items_all = []
         for _r, _items_list in _edited_by_rak.items():
             _updated_items_all.extend(_items_list)
@@ -746,67 +776,64 @@ if st.session_state.get("yui_pending_data"):
 
 
 # =========================================================
-# HELPER: SAVE + TUTUP DIALOG
+# DIALOG SUKSES / GAGAL
 # =========================================================
-def _save_and_close(edited_by_rak, pics_per_rak, pending_inner):
-    """Simpan semua rak ke DB, tutup dialog, tampil sukses."""
-    _saved_count = 0
-    _error_count = 0
-    _new_total = sum(
-        float(i.get("nominal_adjust", 0) or 0)
-        for _items in edited_by_rak.values()
-        for i in _items
-    )
+if st.session_state.get("yui_save_result"):
+    _sr = st.session_state["yui_save_result"]
 
-    yui_log(f"[Yui] === SAVE START: {len(edited_by_rak)} rak ===")
+    @st.dialog("🎉 Hasil Simpan")
+    def _dialog_save_result():
+        _saved = _sr.get("saved_count", 0)
+        _errors = _sr.get("error_count", 0)
+        _total = _sr.get("total", 0)
+        _items = _sr.get("items", 0)
+        _err_list = _sr.get("errors", [])
+        _rak_ids = _sr.get("rak_saved_ids", [])
 
-    for _rak_id, _rak_items_final in edited_by_rak.items():
-        _rak_pic = pics_per_rak.get(_rak_id, "")
-        if not _rak_pic:
-            yui_log(f"[Yui] Skip rak {_rak_id}: PIC kosong")
-            continue
-        if not _rak_items_final:
-            yui_log(f"[Yui] Skip rak {_rak_id}: item kosong")
-            continue
-
-        yui_log(f"[Yui] Saving rak {_rak_id}: {len(_rak_items_final)} items, PIC={_rak_pic}")
-
-        try:
-            _ok, _msg, _detail = save_input_harian(
-                tanggal=datetime.strptime(pending_inner["tanggal"], "%Y-%m-%d").date(),
-                spd=0,
-                rak_items=_rak_items_final,
-                keterangan=f"Input via Yui ({pending_inner.get('file_name', '')})",
-                pic=_rak_pic,
-                update_status_rak=True,
+        if _saved > 0 and _errors == 0:
+            st.success(f"✅ **{_saved} rak** berhasil tersimpan!")
+            st.markdown(
+                f"<div style='text-align: center; padding: 16px; "
+                f"background: rgba(20, 12, 35, 0.95); border-radius: 12px; margin: 12px 0;'>"
+                f"<div style='font-family: Quicksand; font-size: 10px; color: #A89B8E; "
+                f"letter-spacing: 1.5px;'>TOTAL NOMINAL</div>"
+                f"<div style='font-family: JetBrains Mono; font-size: 28px; font-weight: 900; "
+                f"color: {'#E88B8B' if _total < 0 else '#7FB99B'}; margin-top: 8px;'>"
+                f"{fmt_rp_signed(_total)}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
             )
-            if _ok:
-                _saved_count += 1
-                yui_log(f"[Yui] ✅ Saved rak {_rak_id}: {len(_rak_items_final)} items")
-            else:
-                _error_count += 1
-                yui_log(f"[Yui] ❌ Save fail rak {_rak_id}: {_msg}")
-        except Exception as _e:
-            yui_log(f"[Yui] Save error {_rak_id}: {_e}")
-            _error_count += 1
+            _rak_str = ", ".join(_rak_ids) if _rak_ids else "-"
+            st.caption(f"🏪 Rak tersimpan: **{_rak_str}**")
 
-    yui_log(f"[Yui] === SAVE DONE: {_saved_count} OK, {_error_count} error ===")
+        elif _saved > 0 and _errors > 0:
+            st.warning(f"⚠️ **{_saved} rak tersimpan**, {_errors} rak gagal.")
+            st.markdown(
+                f"<div style='text-align: center; padding: 16px; "
+                f"background: rgba(20, 12, 35, 0.95); border-radius: 12px; margin: 12px 0;'>"
+                f"<div style='font-family: Quicksand; font-size: 10px; color: #A89B8E;'>"
+                f"TOTAL TERSIMPAN</div>"
+                f"<div style='font-family: JetBrains Mono; font-size: 24px; font-weight: 900; "
+                f"color: #E8B189; margin-top: 8px;'>{fmt_rp_signed(_total)}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            with st.expander("❌ Detail Error", expanded=True):
+                for _e in _err_list[:10]:
+                    st.caption(f"- {_e}")
 
-    if _saved_count > 0:
-        _success = (
-            f"🎉 **Beres Bos!** {_saved_count} rak tersimpan.\n"
-            f"Total: **{fmt_rp_signed(_new_total)}**"
-        )
-        st.session_state["yui_last_saved"] = _success
-        st.session_state["yui_history"].append({"role": "assistant", "content": _success})
-        save_message("yui", _session_id, "assistant", _success)
-        st.session_state["yui_pending_data"] = None
-        st.cache_data.clear()
-        st.toast(f"✅ {_saved_count} rak tersimpan!", icon="🎉")
-        time.sleep(1)
-        st.rerun()
-    else:
-        st.error(f"❌ Gagal simpan. Error: {_error_count}")
+        else:
+            st.error(f"❌ **Gagal simpan.** {_errors} rak error.")
+            with st.expander("❌ Detail Error", expanded=True):
+                for _e in _err_list[:10]:
+                    st.caption(f"- {_e}")
+
+        st.markdown("")
+        if st.button("✅ Tutup", width="stretch", type="primary", key="btn_close_save_result"):
+            st.session_state["yui_save_result"] = None
+            st.rerun()
+
+    _dialog_save_result()
 
 
 # =========================================================

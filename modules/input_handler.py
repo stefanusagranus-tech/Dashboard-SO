@@ -24,12 +24,14 @@ def save_input_harian(
     update_status_rak=True,
 ):
     """
-    Simpan input harian: SPD + SO rak (multiple).
+    Simpan input harian: SPD + SO rak (summary) + SO hasil (detail per PLU).
     
     Args:
         tanggal: date
         spd: float (boleh 0)
-        rak_items: list of dict [{rak_id, nominal_adjust}]
+        rak_items: list of dict [
+            {rak_id, plu, nama_produk, qty_sistem, qty_fisik, qty_var, nominal_adjust}
+        ]
         keterangan: str
         pic: str
         update_status_rak: bool
@@ -47,7 +49,8 @@ def save_input_harian(
         
         _detail = {
             "spd_saved": False,
-            "rak_saved": 0,
+            "rak_saved": 0,      # rows di so_rak_harian
+            "hasil_saved": 0,    # rows di so_hasil
             "rak_updated": 0,
             "total_nominal": 0,
         }
@@ -62,21 +65,50 @@ def save_input_harian(
             _detail["spd_saved"] = True
         
         # ============================================================
-        # STEP 2: SIMPAN SO RAK (kalau ada)
+        # STEP 2: SIMPAN SO RAK (summary) + SO HASIL (detail)
         # ============================================================
         if rak_items and len(rak_items) > 0:
-            _rows = []
+            _rak_agg = {}
+            _hasil_rows = []
             _total_nominal = 0
-            
+
             for _item in rak_items:
                 _rak_id = str(_item.get("rak_id", "")).strip().upper()
                 if not _rak_id:
                     continue
-                
-                _nominal = float(_item.get("nominal_adjust", 0))
+
+                _nominal = float(_item.get("nominal_adjust", 0) or 0)
                 _total_nominal += _nominal
-                
-                _rows.append({
+
+                # ✅ Aggregate summary per rak
+                if _rak_id not in _rak_agg:
+                    _rak_agg[_rak_id] = 0
+                _rak_agg[_rak_id] += _nominal
+
+                # ✅ Detail per PLU → so_hasil
+                _plu = str(_item.get("plu", "") or "").strip()
+                if _plu:
+                    _hasil_rows.append({
+                        "so_date": _tgl_str,
+                        "rak_id": _rak_id,
+                        "plu": _plu,
+                        "nama_produk": str(_item.get("nama_produk", "") or "")[:200],
+                        "qty_sistem": int(_item.get("qty_sistem", 0) or 0),
+                        "qty_fisik": int(_item.get("qty_fisik", 0) or 0),
+                        "qty_var": int(_item.get("qty_var", 0) or 0),
+                        "nominal_adjust": _nominal,
+                        "pic": str(pic).upper(),
+                        "keterangan": str(keterangan),
+                        "updated_at": _now.isoformat(),
+                    })
+
+            if not _rak_agg:
+                return False, "❌ Gak ada rak valid", _detail
+
+            # --- 2A: UPSERT summary per rak ke so_rak_harian ---
+            _summary_rows = []
+            for _rak_id, _nominal in _rak_agg.items():
+                _summary_rows.append({
                     "so_date": _tgl_str,
                     "rak_id": _rak_id,
                     "nominal_adjust": _nominal,
@@ -84,44 +116,83 @@ def save_input_harian(
                     "pic": str(pic).upper(),
                     "updated_at": _now.isoformat(),
                 })
-            
-            if _rows:
-                # UPSERT — update kalau (so_date, rak_id) sudah ada, insert kalau belum
-                _res = sb.table("so_rak_harian").upsert(
-                    _rows,
-                    on_conflict="so_date,rak_id"
-                ).execute()
-                
-                if _res.data:
-                    _detail["rak_saved"] = len(_res.data)
-                    _detail["total_nominal"] = _total_nominal
-                    
-                    # Update status rak di rak_master
-                    if update_status_rak:
-                        for _row in _rows:
-                            _upd = (
-                                sb.table("rak_master")
-                                .update({
-                                    "status_so": "SELESAI",
-                                    "last_so_date": _tgl_str,
-                                    "updated_at": _now.isoformat(),
-                                })
-                                .eq("rak_id", _row["rak_id"])
-                                .execute()
-                            )
-                            if _upd.data:
-                                _detail["rak_updated"] += 1
-                else:
-                    return False, "❌ Gagal simpan SO rak", _detail
+
+            _res_summary = sb.table("so_rak_harian").upsert(
+                _summary_rows,
+                on_conflict="so_date,rak_id"
+            ).execute()
+
+            if _res_summary.data:
+                _detail["rak_saved"] = len(_res_summary.data)
+                _detail["total_nominal"] = _total_nominal
+            else:
+                return False, "❌ Gagal simpan SO rak (summary)", _detail
+
+            # --- 2B: UPSERT detail per PLU ke so_hasil ---
+            if _hasil_rows:
+                # Cek duplikat (rak_id + plu) dalam 1 batch — upsert gak bisa handle duplikat
+                _seen = {}
+                _dedup_rows = []
+                for _r in _hasil_rows:
+                    _key = f"{_r['rak_id']}|{_r['plu']}"
+                    if _key in _seen:
+                        # Ambil yang terakhir (last-write-wins)
+                        _dedup_rows[_seen[_key]] = _r
+                        continue
+                    _seen[_key] = len(_dedup_rows)
+                    _dedup_rows.append(_r)
+
+                try:
+                    _res_hasil = sb.table("so_hasil").upsert(
+                        _dedup_rows,
+                        on_conflict="so_date,rak_id,plu"
+                    ).execute()
+                    if _res_hasil.data:
+                        _detail["hasil_saved"] = len(_res_hasil.data)
+                except Exception as _e_hasil:
+                    # Jangan fail seluruh save — summary tetep ke-save
+                    print(f"[SAVE_HASIL WARN] {_e_hasil}")
+                    # Fallback: insert satu-satu (hindari duplikat batch)
+                    _saved_one_by_one = 0
+                    for _r in _dedup_rows:
+                        try:
+                            sb.table("so_hasil").upsert(
+                                _r, on_conflict="so_date,rak_id,plu"
+                            ).execute()
+                            _saved_one_by_one += 1
+                        except Exception:
+                            continue
+                    _detail["hasil_saved"] = _saved_one_by_one
+
+            # --- 2C: Update status rak di rak_master ---
+            if update_status_rak:
+                for _rak_id in _rak_agg.keys():
+                    try:
+                        _upd = (
+                            sb.table("rak_master")
+                            .update({
+                                "status_so": "SELESAI",
+                                "last_so_date": _tgl_str,
+                                "updated_at": _now.isoformat(),
+                            })
+                            .eq("rak_id", _rak_id)
+                            .execute()
+                        )
+                        if _upd.data:
+                            _detail["rak_updated"] += 1
+                    except Exception:
+                        pass
         
         # ============================================================
         # BUILD MESSAGE
         # ============================================================
         _msg_parts = []
         if _detail["spd_saved"]:
-            _msg_parts.append(f"SPD tersimpan")
+            _msg_parts.append("SPD tersimpan")
         if _detail["rak_saved"] > 0:
             _msg_parts.append(f"{_detail['rak_saved']} rak di-SO")
+        if _detail["hasil_saved"] > 0:
+            _msg_parts.append(f"{_detail['hasil_saved']} item detail")
         if _detail["rak_updated"] > 0:
             _msg_parts.append(f"{_detail['rak_updated']} rak di-update status")
         
@@ -131,8 +202,7 @@ def save_input_harian(
     
     except Exception as e:
         return False, f"❌ Error: {str(e)[:200]}", {}
-
-
+        
 # =========================================================================
 # 📥 LOAD: SPD & SO RAK BY DATE
 # =========================================================================
