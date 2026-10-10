@@ -1,84 +1,93 @@
 """
-Test html2pic — Eksperimen 3: Wrapper dengan size eksplisit.
+Test pictex Canvas — bukan html2pic.
 """
 import streamlit as st
 import os
 import tempfile
 
 
-st.set_page_config(page_title="Test html2pic", page_icon="🧪")
-st.title("Test html2pic - Eksperimen 3")
-
-
-_html = """
-<html>
-<body style="margin: 0; padding: 0;">
-
-    <div style="background-color: #F0EEEA; width: 1080px; height: 800px; padding: 40px;">
-
-        <div style="background-color: #97B3AE; width: 1000px; height: 120px; padding: 20px;">
-            <div style="font-size: 36px; color: #FFFFFF; font-weight: bold;">
-                ANALISIS GAMBARAN SO
-            </div>
-            <div style="font-size: 18px; color: #F0EEEA;">
-                Toko C383 - Karang Satria - 10/10/2026
-            </div>
-        </div>
-
-        <div style="display: flex; gap: 20px; margin-top: 20px;">
-            <div style="flex: 1; background-color: #D2E0D3; padding: 25px;">
-                <div style="font-size: 14px; color: #3C3C3C; font-weight: bold;">TOTAL RAK</div>
-                <div style="font-size: 32px; color: #3C3C3C; font-weight: bold;">3 rak</div>
-            </div>
-            <div style="flex: 1; background-color: #F0DDD6; padding: 25px;">
-                <div style="font-size: 14px; color: #3C3C3C; font-weight: bold;">TOTAL ITEM</div>
-                <div style="font-size: 32px; color: #3C3C3C; font-weight: bold;">21 item</div>
-            </div>
-            <div style="flex: 1; background-color: #F2C3B9; padding: 25px;">
-                <div style="font-size: 14px; color: #3C3C3C; font-weight: bold;">TOTAL NOMINAL</div>
-                <div style="font-size: 32px; color: #3C3C3C; font-weight: bold;">-Rp 34.556</div>
-            </div>
-        </div>
-
-        <div style="background-color: #FFFFFF; width: 1000px; padding: 25px; margin-top: 20px;">
-            <div style="font-size: 18px; color: #3C3C3C; font-weight: bold; margin-bottom: 15px;">
-                RINGKASAN PERIODE
-            </div>
-            <div style="font-size: 16px; color: #3C3C3C;">
-                Tanggal: 2026-10-10<br>
-                Total Rak: 3 rak<br>
-                Nominal SO: -Rp 34.556
-            </div>
-        </div>
-
-    </div>
-
-</body>
-</html>
-"""
+st.set_page_config(page_title="Test pictex", page_icon="🧪")
+st.title("Test pictex Canvas")
 
 
 if st.button("Test Render", type="primary"):
     try:
-        from html2pic import Html2Pic
-        
-        _render = Html2Pic(_html)
-        _image = _render.render()
-        
-        st.info(f"✅ Render: `{type(_image)}`")
-        
-        _tmp_path = os.path.join(tempfile.gettempdir(), "test_infografis.png")
+        from pictex import Canvas, Column, Row, Text
+        from pictex import LinearGradient
+
+        # === BIKIN CANVAS ===
+        _canvas = (
+            Canvas()
+            .size(width=1080, height=800)
+            .padding(40)
+            .background_color("#F0EEEA")
+        )
+
+        # === HEADER BAND ===
+        _header = (
+            Column()
+            .padding(30)
+            .background_color("#97B3AE")
+            .border_radius(16)
+            .gap(10)
+        )
+        _header.add(
+            Text("ANALISIS GAMBARAN SO").font_size(36).color("#FFFFFF").font_weight("bold"),
+            Text("Toko C383 - Karang Satria - 10/10/2026").font_size(18).color("#F0EEEA"),
+        )
+
+        # === KPI CARDS ===
+        _kpi_row = Row().gap(20)
+        _kpi_row.add(
+            Column().flex_grow(1).padding(25).background_color("#D2E0D3").border_radius(12).add(
+                Text("TOTAL RAK").font_size(14).color("#3C3C3C").font_weight("bold"),
+                Text("3 rak").font_size(32).color("#3C3C3C").font_weight("bold"),
+            ),
+            Column().flex_grow(1).padding(25).background_color("#F0DDD6").border_radius(12).add(
+                Text("TOTAL ITEM").font_size(14).color("#3C3C3C").font_weight("bold"),
+                Text("21 item").font_size(32).color("#3C3C3C").font_weight("bold"),
+            ),
+            Column().flex_grow(1).padding(25).background_color("#F2C3B9").border_radius(12).add(
+                Text("TOTAL NOMINAL").font_size(14).color("#3C3C3C").font_weight("bold"),
+                Text("-Rp 34.556").font_size(32).color("#3C3C3C").font_weight("bold"),
+            ),
+        )
+
+        # === RINGKASAN ===
+        _ringkasan = (
+            Column()
+            .padding(25)
+            .background_color("#FFFFFF")
+            .border_radius(12)
+            .gap(10)
+        )
+        _ringkasan.add(
+            Text("RINGKASAN PERIODE").font_size(18).color("#3C3C3C").font_weight("bold"),
+            Text("Tanggal: 2026-10-10").font_size(16).color("#3C3C3C"),
+            Text("Total Rak: 3 rak").font_size(16).color("#3C3C3C"),
+            Text("Nominal SO: -Rp 34.556").font_size(16).color("#3C3C3C"),
+            Text("Status: OVER").font_size(16).color("#C83232").font_weight("bold"),
+        )
+
+        # === SUSUN LAYOUT ===
+        _main = Column().gap(20)
+        _main.add(_header, _kpi_row, _ringkasan)
+
+        # === RENDER ===
+        _image = _canvas.render(_main)
+
+        _tmp_path = os.path.join(tempfile.gettempdir(), "test_pictex.png")
         _image.save(_tmp_path)
-        
+
         with open(_tmp_path, "rb") as _f:
             _img_bytes = _f.read()
-        
+
         st.success(f"✅ Save: {len(_img_bytes):,} bytes")
-        
+
         st.markdown("---")
         st.markdown("### 📸 Hasil")
-        st.image(_img_bytes, caption="Hasil html2pic")
-    
+        st.image(_img_bytes, caption="Hasil pictex")
+
     except Exception as e:
         import traceback
         st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
