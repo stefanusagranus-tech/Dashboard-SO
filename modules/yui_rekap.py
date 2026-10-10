@@ -1,0 +1,198 @@
+"""
+Yui Rekap — Query & rekap data SO untuk Yui.
+Semua fungsi di sini cuma baca data (read-only).
+"""
+
+import pandas as pd
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
+from modules.supabase_client import get_supabase
+
+
+def _now_jkt():
+    return datetime.now(ZoneInfo("Asia/Jakarta"))
+
+
+def get_periode_range(mode="hari_ini", tgl_start=None, tgl_end=None):
+    """
+    Hitung rentang tanggal berdasarkan mode.
+    
+    mode: 'hari_ini', 'minggu_ini', 'bulan_ini', 'custom'
+    """
+    _today = _now_jkt().date()
+
+    if mode == "hari_ini":
+        return _today, _today
+
+    if mode == "minggu_ini":
+        # Senin - Minggu
+        _start = _today - timedelta(days=_today.weekday())
+        _end = _start + timedelta(days=6)
+        return _start, _end
+
+    if mode == "bulan_ini":
+        _start = _today.replace(day=1)
+        if _today.month == 12:
+            _end = _today.replace(year=_today.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            _end = _today.replace(month=_today.month + 1, day=1) - timedelta(days=1)
+        return _start, _end
+
+    if mode == "custom" and tgl_start and tgl_end:
+        return tgl_start, tgl_end
+
+    return _today, _today
+
+
+def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
+    """
+    Rekap SO: summary + detail per rak.
+    
+    Returns:
+        dict {
+            success, periode, total_rak, total_item, total_nominal,
+            list_rak: [...], detail_df, chart_data
+        }
+    """
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {"success": False, "error": "Supabase gak konek"}
+
+        _start, _end = get_periode_range(mode, tgl_start, tgl_end)
+
+        # Query so_rak_harian
+        _q = (
+            _sb.table("so_rak_harian")
+            .select("*")
+            .gte("so_date", _start.isoformat())
+            .lte("so_date", _end.isoformat())
+        )
+        if pic_filter:
+            _q = _q.eq("pic", pic_filter.upper())
+        _res = _q.order("so_date").execute()
+
+        _rows = _res.data if _res.data else []
+
+        if not _rows:
+            return {
+                "success": True,
+                "periode": f"{_start} s/d {_end}",
+                "total_rak": 0,
+                "total_item": 0,
+                "total_nominal": 0,
+                "list_rak": [],
+                "detail_df": pd.DataFrame(),
+                "chart_data": [],
+            }
+
+        _df = pd.DataFrame(_rows)
+        _df["nominal_adjust"] = pd.to_numeric(
+            _df["nominal_adjust"], errors="coerce"
+        ).fillna(0)
+
+        _total_rak = int(_df["rak_id"].nunique())
+        _total_nominal = float(_df["nominal_adjust"].sum())
+
+        # Query so_hasil buat total item
+        _q2 = (
+            _sb.table("so_hasil")
+            .select("id", count="exact")
+            .gte("so_date", _start.isoformat())
+            .lte("so_date", _end.isoformat())
+        )
+        _res2 = _q2.execute()
+        _total_item = _res2.count if hasattr(_res2, "count") and _res2.count else len(_res2.data or [])
+
+        # List rak unik dengan total
+        _list_rak = []
+        for _rak, _grp in _df.groupby("rak_id"):
+            _list_rak.append({
+                "rak_id": _rak,
+                "total": float(_grp["nominal_adjust"].sum()),
+                "pic": _grp["pic"].iloc[0] if "pic" in _grp.columns else "-",
+                "tanggal": _grp["so_date"].iloc[0] if "so_date" in _grp.columns else "-",
+            })
+        _list_rak.sort(key=lambda x: x["total"])
+
+        # Chart data: nominal per hari
+        _chart_data = []
+        for _tgl, _grp in _df.groupby("so_date"):
+            _chart_data.append({
+                "tanggal": _tgl,
+                "nominal": float(_grp["nominal_adjust"].sum()),
+                "jumlah_rak": int(_grp["rak_id"].nunique()),
+            })
+        _chart_data.sort(key=lambda x: x["tanggal"])
+
+        return {
+            "success": True,
+            "periode": f"{_start} s/d {_end}",
+            "total_rak": _total_rak,
+            "total_item": _total_item,
+            "total_nominal": _total_nominal,
+            "list_rak": _list_rak,
+            "detail_df": _df,
+            "chart_data": _chart_data,
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)[:200]}
+
+
+def cek_rak_belum_so(tanggal=None):
+    """List rak yang belum di-SO pada tanggal tertentu."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return []
+
+        _tgl = tanggal or _now_jkt().date()
+        _tgl_str = _tgl.isoformat()[:10] if isinstance(_tgl, (date, datetime)) else str(_tgl)[:10]
+
+        # Ambil semua rak
+        _res_all = _sb.table("rak_master").select("rak_id, rak_name").execute()
+        _all_rak = {r["rak_id"]: r.get("rak_name", "") for r in (_res_all.data or [])}
+
+        # Ambil rak yang udah SO
+        _res_so = (
+            _sb.table("so_rak_harian")
+            .select("rak_id")
+            .eq("so_date", _tgl_str)
+            .execute()
+        )
+        _sudah_so = set(r["rak_id"] for r in (_res_so.data or []))
+
+        # Rak yang belum
+        _belum = [
+            {"rak_id": _r, "rak_name": _all_rak[_r]}
+            for _r in _all_rak if _r not in _sudah_so
+        ]
+        _belum.sort(key=lambda x: x["rak_id"])
+        return _belum
+
+    except Exception as e:
+        print(f"[CEK_RAK_BELUM ERROR] {e}")
+        return []
+
+
+def cek_duplikat(tanggal=None, rak_id=None):
+    """Cek apakah ada input duplikat."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return []
+
+        _tgl = tanggal or _now_jkt().date()
+        _tgl_str = _tgl.isoformat()[:10] if isinstance(_tgl, (date, datetime)) else str(_tgl)[:10]
+
+        _q = _sb.table("so_rak_harian").select("*").eq("so_date", _tgl_str)
+        if rak_id:
+            _q = _q.eq("rak_id", rak_id.upper())
+        _res = _q.execute()
+
+        return _res.data or []
+
+    except Exception as e:
+        print(f"[CEK_DUPLIKAT ERROR] {e}")
+        return []
