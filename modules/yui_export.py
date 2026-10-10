@@ -97,36 +97,37 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         # SALES, BTSB, NSB
         # =========================================================
         if net_sales > 0:
-        _total_selisih = hasil.get("_total_selisih_bulan", 0)
-        _total_rak = hasil.get("_total_rak_bulan", 0)
-        _calc = _hitung_btsb_nsb(net_sales, _total_selisih)
-    
-        _pdf.set_font("Helvetica", "B", 12)
-        _pdf.set_text_color(30, 20, 60)
-        _pdf.cell(0, 8, "ANALISIS BTSB & NSB (BULAN INI)", ln=True)
-        _pdf.set_text_color(0, 0, 0)
-        _pdf.set_font("Helvetica", "", 10)
-    
-        _pdf.cell(70, 6, "Net Sales Bulan Ini")
-        _pdf.cell(0, 6, f": {_format_rp(net_sales)}", ln=True)
-        _pdf.cell(70, 6, "BTSB (0,15%)")
-        _pdf.cell(0, 6, f": {_format_rp(_calc['btsb'])}", ln=True)
-        _pdf.cell(70, 6, "Total Selisih Bulan")
-        _pdf.cell(0, 6, f": {_format_rp(_calc['selisih'])}", ln=True)
-        _pdf.cell(70, 6, "NSB (beban personil)")
-        _pdf.cell(0, 6, f": {_format_rp(_calc['nsb'])}", ln=True)
-        _pdf.cell(70, 6, "Total Rak di-SO Bulan Ini")
-        _pdf.cell(0, 6, f": {_total_rak} rak", ln=True)
-        _pdf.cell(70, 6, "Status")
-        _pdf.set_font("Helvetica", "B", 10)
-        if _calc["status"] == "OVER":
-            _pdf.set_text_color(200, 50, 50)
-        else:
-            _pdf.set_text_color(50, 150, 50)
-        _pdf.cell(0, 6, f": {_calc['status']}", ln=True)
-        _pdf.set_text_color(0, 0, 0)
-        _pdf.set_font("Helvetica", "", 10)
-        _pdf.ln(5)
+                _total_selisih = hasil.get("_total_selisih_bulan", 0)
+                _total_rak = hasil.get("_total_rak_bulan", 0)
+                _calc = _hitung_btsb_nsb(net_sales, _total_selisih)
+            
+                _pdf.set_font("Helvetica", "B", 12)
+                _pdf.set_text_color(30, 20, 60)
+                _pdf.cell(0, 8, "ANALISIS BTSB & NSB (BULAN INI)", ln=True)
+                _pdf.set_text_color(0, 0, 0)
+                _pdf.set_font("Helvetica", "", 10)
+            
+                _pdf.cell(70, 6, "Net Sales Bulan Ini")
+                _pdf.cell(0, 6, f": {_format_rp(net_sales)}", ln=True)
+                _pdf.cell(70, 6, "BTSB (0,15%)")
+                _pdf.cell(0, 6, f": {_format_rp(_calc['btsb'])}", ln=True)
+                _pdf.cell(70, 6, "Total Selisih Bulan")
+                _pdf.cell(0, 6, f": {_format_rp(_calc['selisih'])}", ln=True)
+                _pdf.cell(70, 6, "NSB (beban personil)")
+                _pdf.cell(0, 6, f": {_format_rp(_calc['nsb'])}", ln=True)
+                _pdf.cell(70, 6, "Total Rak di-SO Bulan Ini")
+                _pdf.cell(0, 6, f": {_total_rak} rak", ln=True)
+                _pdf.cell(70, 6, "Status")
+                _pdf.set_font("Helvetica", "B", 10)
+                if _calc["status"] == "OVER":
+                    _pdf.set_text_color(200, 50, 50)
+                else:
+                    _pdf.set_text_color(50, 150, 50)
+                _pdf.cell(0, 6, f": {_calc['status']}", ln=True)
+                _pdf.set_text_color(0, 0, 0)
+                _pdf.set_font("Helvetica", "", 10)
+                _pdf.ln(5)
+                
         # =========================================================
         # TOP 5 MINUS & TOP 5 PLUS
         # =========================================================
