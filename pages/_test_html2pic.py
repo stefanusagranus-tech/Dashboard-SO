@@ -1,149 +1,78 @@
 """
-Test html2pic — Eksperimen CSS layout infografis.
+Test html2pic — Eksperimen 2: Inline CSS only.
 """
 import streamlit as st
-import io
 import os
 import tempfile
 
 
 st.set_page_config(page_title="Test html2pic", page_icon="🧪")
-st.title("Test html2pic - Eksperimen Infografis")
+st.title("Test html2pic - Eksperimen 2")
 
 
-# =========================================================
-# HTML INFOGRAFIS
-# =========================================================
 _html = """
 <html>
-<head>
-<style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-        font-family: Arial, sans-serif;
-        background: #F0EEEA;
-        width: 1080px;
-        padding: 40px;
-    }
-    .header {
-        background: #97B3AE;
-        color: #FFFFFF;
-        padding: 30px 40px;
-        border-radius: 16px;
-        margin-bottom: 30px;
-    }
-    .header h1 {
-        font-size: 36px;
-        margin-bottom: 8px;
-        color: #FFFFFF;
-    }
-    .header p {
-        font-size: 18px;
-        color: #F0EEEA;
-    }
-    .kpi-row {
-        display: flex;
-        gap: 20px;
-        margin-bottom: 30px;
-    }
-    .kpi-card {
-        flex: 1;
-        padding: 25px;
-        border-radius: 12px;
-    }
-    .kpi-label {
-        font-size: 14px;
-        color: #3C3C3C;
-        margin-bottom: 10px;
-        font-weight: bold;
-        letter-spacing: 1px;
-    }
-    .kpi-value {
-        font-size: 32px;
-        color: #3C3C3C;
-        font-weight: bold;
-    }
-    .kpi-1 { background: #D2E0D3; }
-    .kpi-2 { background: #F0DDD6; }
-    .kpi-3 { background: #F2C3B9; }
-    .section {
-        background: #FFFFFF;
-        padding: 25px;
-        border-radius: 12px;
-        margin-bottom: 20px;
-    }
-    .section-title {
-        font-size: 18px;
-        font-weight: bold;
-        color: #3C3C3C;
-        margin-bottom: 15px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #97B3AE;
-    }
-    .section-content {
-        font-size: 16px;
-        color: #3C3C3C;
-        line-height: 1.6;
-    }
-    .footer {
-        text-align: center;
-        font-size: 12px;
-        color: #A89B8E;
-        margin-top: 30px;
-        font-style: italic;
-    }
-</style>
-</head>
-<body>
+<body style="background-color: #F0EEEA; margin: 0; padding: 40px; width: 1080px;">
 
-    <!-- HEADER -->
-    <div class="header">
-        <h1>ANALISIS GAMBARAN SO</h1>
-        <p>Toko C383 - Karang Satria - 10/10/2026</p>
-    </div>
-
-    <!-- KPI CARDS -->
-    <div class="kpi-row">
-        <div class="kpi-card kpi-1">
-            <div class="kpi-label">TOTAL RAK</div>
-            <div class="kpi-value">3 rak</div>
+    <div style="background-color: #97B3AE; padding: 30px; margin-bottom: 30px;">
+        <div style="font-size: 36px; color: #FFFFFF; font-weight: bold; margin-bottom: 10px;">
+            ANALISIS GAMBARAN SO
         </div>
-        <div class="kpi-card kpi-2">
-            <div class="kpi-label">TOTAL ITEM</div>
-            <div class="kpi-value">21 item</div>
-        </div>
-        <div class="kpi-card kpi-3">
-            <div class="kpi-label">TOTAL NOMINAL</div>
-            <div class="kpi-value">-Rp 34.556</div>
+        <div style="font-size: 18px; color: #F0EEEA;">
+            Toko C383 - Karang Satria - 10/10/2026
         </div>
     </div>
 
-    <!-- RINGKASAN -->
-    <div class="section">
-        <div class="section-title">RINGKASAN PERIODE</div>
-        <div class="section-content">
+    <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+        <div style="flex: 1; background-color: #D2E0D3; padding: 25px;">
+            <div style="font-size: 14px; color: #3C3C3C; font-weight: bold; margin-bottom: 10px;">
+                TOTAL RAK
+            </div>
+            <div style="font-size: 32px; color: #3C3C3C; font-weight: bold;">
+                3 rak
+            </div>
+        </div>
+        <div style="flex: 1; background-color: #F0DDD6; padding: 25px;">
+            <div style="font-size: 14px; color: #3C3C3C; font-weight: bold; margin-bottom: 10px;">
+                TOTAL ITEM
+            </div>
+            <div style="font-size: 32px; color: #3C3C3C; font-weight: bold;">
+                21 item
+            </div>
+        </div>
+        <div style="flex: 1; background-color: #F2C3B9; padding: 25px;">
+            <div style="font-size: 14px; color: #3C3C3C; font-weight: bold; margin-bottom: 10px;">
+                TOTAL NOMINAL
+            </div>
+            <div style="font-size: 32px; color: #3C3C3C; font-weight: bold;">
+                -Rp 34.556
+            </div>
+        </div>
+    </div>
+
+    <div style="background-color: #FFFFFF; padding: 25px; margin-bottom: 20px;">
+        <div style="font-size: 18px; color: #3C3C3C; font-weight: bold; margin-bottom: 15px;">
+            RINGKASAN PERIODE
+        </div>
+        <div style="font-size: 16px; color: #3C3C3C; line-height: 1.6;">
             Tanggal: 2026-10-10<br>
-            Total Rak di-SO: 3 rak<br>
+            Total Rak: 3 rak<br>
             Nominal SO: -Rp 34.556<br>
             Sales Periode: Rp 10<br>
             BTSB (0,15%): Rp 0<br>
-            Keterangan: <b style="color: #C83232;">OVER</b>
+            Keterangan: OVER
         </div>
     </div>
 
-    <!-- INSIGHT -->
-    <div class="section">
-        <div class="section-title">INSIGHT</div>
-        <div class="section-content" style="font-style: italic;">
+    <div style="background-color: #FFFFFF; padding: 25px;">
+        <div style="font-size: 18px; color: #3C3C3C; font-weight: bold; margin-bottom: 15px;">
+            INSIGHT
+        </div>
+        <div style="font-size: 16px; color: #3C3C3C; line-height: 1.6;">
             Total SO: 3 rak dengan nominal -Rp 34.556. Sales periode: Rp 10.
             BTSB (0,15%): Rp 0. Rak penyumbang minus terbesar: S14 (-Rp 24.785)
-            oleh PIC REZA. Status: OVER - selisih melebihi batas BTSB, perlu perhatian.
+            oleh PIC REZA. Status: OVER - selisih melebihi batas BTSB.
         </div>
-    </div>
-
-    <!-- FOOTER -->
-    <div class="footer">
-        Dokumen ini di-generate otomatis oleh Yui - Dashboard SO Toko C383
     </div>
 
 </body>
@@ -151,9 +80,6 @@ _html = """
 """
 
 
-# =========================================================
-# RENDER
-# =========================================================
 if st.button("Test Render", type="primary"):
     try:
         from html2pic import Html2Pic
@@ -161,7 +87,7 @@ if st.button("Test Render", type="primary"):
         _render = Html2Pic(_html)
         _image = _render.render()
         
-        st.info(f"✅ Render berhasil! Tipe: `{type(_image)}`")
+        st.info(f"✅ Render: `{type(_image)}`")
         
         _tmp_path = os.path.join(tempfile.gettempdir(), "test_infografis.png")
         _image.save(_tmp_path)
@@ -169,7 +95,7 @@ if st.button("Test Render", type="primary"):
         with open(_tmp_path, "rb") as _f:
             _img_bytes = _f.read()
         
-        st.success(f"✅ Save berhasil! Ukuran: {len(_img_bytes):,} bytes")
+        st.success(f"✅ Save: {len(_img_bytes):,} bytes")
         
         st.markdown("---")
         st.markdown("### 📸 Hasil")
