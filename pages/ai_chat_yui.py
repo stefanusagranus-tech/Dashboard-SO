@@ -91,7 +91,12 @@ def fmt_rp(value):
         return f"Rp {int(float(value)):,}".replace(",", ".")
     except Exception:
         return "Rp 0"
-
+try:
+    from modules.yui_export import export_rekap_pdf, export_rekap_image
+    _EXPORT_OK = True
+except ImportError:
+    _EXPORT_OK = False
+    
 # =========================================================
 # CSS
 # =========================================================
@@ -566,17 +571,48 @@ def _dialog_rekap_so():
         st.session_state["yui_last_rekap"] = _hasil
 
         st.markdown("---")
-        _c_exp1, _c_exp2, _c_exp3 = st.columns(3)
+        st.markdown("#### 📥 Export Laporan")
+        _c_exp1, _c_exp2, _c_exp3, _c_exp4 = st.columns(4)
+        
         with _c_exp1:
-            if st.button("📄 Export PDF", width="stretch", key="btn_export_pdf_rekap"):
-                st.info("🚧 Coming soon")
+            if st.button("📄 PDF", width="stretch", key="btn_export_pdf_rekap"):
+                from modules.yui_export import export_rekap_pdf
+                _pdf_bytes = export_rekap_pdf(_hasil)
+                if _pdf_bytes:
+                    st.download_button(
+                        "📥 Download PDF",
+                        data=_pdf_bytes,
+                        file_name=f"rekap_so_{_hasil['periode'].replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        key="dl_pdf_rekap",
+                    )
+                else:
+                    st.error("❌ Gagal bikin PDF")
+        
         with _c_exp2:
-            if st.button("📊 Export Excel", width="stretch", key="btn_export_xlsx_rekap"):
+            if st.button("📊 Excel", width="stretch", key="btn_export_xlsx_rekap"):
                 _export_excel_rekap(_hasil)
+        
         with _c_exp3:
-            if st.button("📋 Copy Text", width="stretch", key="btn_export_text_rekap"):
+            if st.button("📋 Text", width="stretch", key="btn_export_text_rekap"):
                 _text = _build_rekap_text(_hasil)
                 st.code(_text, language="text")
+        
+        with _c_exp4:
+            if st.button("📸 Gambar", width="stretch", key="btn_export_img_rekap"):
+                from modules.yui_export import export_rekap_image
+                _img_path = export_rekap_image(_hasil)
+                if _img_path:
+                    with open(_img_path, "rb") as _f:
+                        st.download_button(
+                            "📥 Download Gambar",
+                            data=_f,
+                            file_name=f"rekap_so_{_hasil['periode'].replace(' ', '_')}.png",
+                            mime="image/png",
+                            key="dl_img_rekap",
+                        )
+                else:
+                    st.error("❌ Gagal bikin gambar. Cek requirements `table-to-image`")
 
     # Cek rak belum SO
     st.markdown("---")
