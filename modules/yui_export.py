@@ -77,36 +77,41 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         # =========================================================
         # RINGKASAN
         # =========================================================
-        _pdf.set_font("Helvetica", "B", 12)
-        _pdf.set_text_color(30, 20, 60)
-        _pdf.cell(0, 8, "RINGKASAN", ln=True)
-        _pdf.set_text_color(0, 0, 0)
-        _pdf.set_font("Helvetica", "", 10)
+        try:
+            _pdf.set_font("Helvetica", "B", 12)
+            _pdf.set_text_color(30, 20, 60)
+            _pdf.cell(0, 8, "RINGKASAN", ln=True)
+            _pdf.set_text_color(0, 0, 0)
+            _pdf.set_font("Helvetica", "", 10)
 
-        _pdf.cell(60, 6, "Periode", border=0)
-        _pdf.cell(0, 6, f": {hasil.get('periode', '-')}", ln=True)
-        _pdf.cell(60, 6, "Total Rak", border=0)
-        _pdf.cell(0, 6, f": {hasil.get('total_rak', 0)}", ln=True)
-        _pdf.cell(60, 6, "Total Item", border=0)
-        _pdf.cell(0, 6, f": {hasil.get('total_item', 0)}", ln=True)
-        _pdf.cell(60, 6, "Total Nominal", border=0)
-        _pdf.cell(0, 6, f": {_format_rp(hasil.get('total_nominal', 0))}", ln=True)
-        _pdf.ln(5)
+            _pdf.cell(60, 6, "Periode", border=0)
+            _pdf.cell(0, 6, f": {hasil.get('periode', '-')}", ln=True)
+            _pdf.cell(60, 6, "Total Rak", border=0)
+            _pdf.cell(0, 6, f": {hasil.get('total_rak', 0)}", ln=True)
+            _pdf.cell(60, 6, "Total Item", border=0)
+            _pdf.cell(0, 6, f": {hasil.get('total_item', 0)}", ln=True)
+            _pdf.cell(60, 6, "Total Nominal", border=0)
+            _pdf.cell(0, 6, f": {_format_rp(hasil.get('total_nominal', 0))}", ln=True)
+            _pdf.ln(5)
+            print("[PDF] Ringkasan OK")
+        except Exception as _e:
+            print(f"[PDF ERROR Ringkasan] {_e}")
 
         # =========================================================
         # SALES, BTSB, NSB
         # =========================================================
         if net_sales > 0:
+            try:
                 _total_selisih = hasil.get("_total_selisih_bulan", 0)
                 _total_rak = hasil.get("_total_rak_bulan", 0)
                 _calc = _hitung_btsb_nsb(net_sales, _total_selisih)
-            
+
                 _pdf.set_font("Helvetica", "B", 12)
                 _pdf.set_text_color(30, 20, 60)
                 _pdf.cell(0, 8, "ANALISIS BTSB & NSB (BULAN INI)", ln=True)
                 _pdf.set_text_color(0, 0, 0)
                 _pdf.set_font("Helvetica", "", 10)
-            
+
                 _pdf.cell(70, 6, "Net Sales Bulan Ini")
                 _pdf.cell(0, 6, f": {_format_rp(net_sales)}", ln=True)
                 _pdf.cell(70, 6, "BTSB (0,15%)")
@@ -127,66 +132,78 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
                 _pdf.set_text_color(0, 0, 0)
                 _pdf.set_font("Helvetica", "", 10)
                 _pdf.ln(5)
-                
+                print("[PDF] BTSB/NSB OK")
+            except Exception as _e:
+                print(f"[PDF ERROR BTSB] {_e}")
+
         # =========================================================
-        # TOP 5 MINUS & TOP 5 PLUS
+        # TOP 5 MINUS & PLUS
         # =========================================================
         _list_rak = hasil.get("list_rak", [])
         if _list_rak:
-            _df = pd.DataFrame(_list_rak)
-            _df["total"] = pd.to_numeric(_df["total"], errors="coerce").fillna(0)
+            try:
+                _df = pd.DataFrame(_list_rak)
+                _df["total"] = pd.to_numeric(_df["total"], errors="coerce").fillna(0)
 
-            _top_minus = _df.nsmallest(5, "total")
-            _top_plus = _df.nlargest(5, "total")
+                _top_minus = _df.nsmallest(5, "total")
+                _top_plus = _df.nlargest(5, "total")
 
-            _pdf.set_font("Helvetica", "B", 12)
-            _pdf.set_text_color(30, 20, 60)
-            _pdf.cell(0, 8, "TOP 5 MINUS TERTINGGI", ln=True)
-            _pdf.set_text_color(0, 0, 0)
+                # Top 5 Minus
+                _pdf.set_font("Helvetica", "B", 12)
+                _pdf.set_text_color(30, 20, 60)
+                _pdf.cell(0, 8, "TOP 5 MINUS TERTINGGI", ln=True)
+                _pdf.set_text_color(0, 0, 0)
 
-            _pdf.set_font("Helvetica", "B", 9)
-            _pdf.set_fill_color(200, 50, 50)
-            _pdf.set_text_color(255, 255, 255)
-            _pdf.cell(40, 7, "RAK", border=1, fill=True, align="C")
-            _pdf.cell(60, 7, "NOMINAL", border=1, fill=True, align="C")
-            _pdf.cell(50, 7, "PIC", border=1, fill=True, align="C")
-            _pdf.cell(40, 7, "TANGGAL", border=1, fill=True, align="C", ln=True)
+                _pdf.set_font("Helvetica", "B", 9)
+                _pdf.set_fill_color(200, 50, 50)
+                _pdf.set_text_color(255, 255, 255)
+                _pdf.cell(40, 7, "RAK", border=1, fill=True, align="C")
+                _pdf.cell(60, 7, "NOMINAL", border=1, fill=True, align="C")
+                _pdf.cell(50, 7, "PIC", border=1, fill=True, align="C")
+                _pdf.cell(40, 7, "TANGGAL", border=1, fill=True, align="C", ln=True)
 
-            _pdf.set_font("Helvetica", "", 9)
-            _pdf.set_text_color(0, 0, 0)
-            for _, _r in _top_minus.iterrows():
-                _pdf.cell(40, 6, str(_r.get("rak_id", "-"))[:15], border=1, align="C")
-                _pdf.cell(60, 6, _format_rp(_r.get("total", 0)), border=1, align="R")
-                _pdf.cell(50, 6, str(_r.get("pic", "-"))[:20], border=1, align="C")
-                _pdf.cell(40, 6, str(_r.get("tanggal", "-"))[:10], border=1, align="C", ln=True)
-            _pdf.ln(4)
+                _pdf.set_font("Helvetica", "", 9)
+                _pdf.set_text_color(0, 0, 0)
+                for _, _r in _top_minus.iterrows():
+                    _pdf.cell(40, 6, str(_r.get("rak_id", "-"))[:15], border=1, align="C")
+                    _pdf.cell(60, 6, _format_rp(_r.get("total", 0)), border=1, align="R")
+                    _pdf.cell(50, 6, str(_r.get("pic", "-"))[:20], border=1, align="C")
+                    _pdf.cell(40, 6, str(_r.get("tanggal", "-"))[:10], border=1, align="C", ln=True)
+                _pdf.ln(4)
 
-            _pdf.set_font("Helvetica", "B", 12)
-            _pdf.set_text_color(30, 20, 60)
-            _pdf.cell(0, 8, "TOP 5 PLUS TERTINGGI", ln=True)
-            _pdf.set_text_color(0, 0, 0)
+                # Top 5 Plus
+                _pdf.set_font("Helvetica", "B", 12)
+                _pdf.set_text_color(30, 20, 60)
+                _pdf.cell(0, 8, "TOP 5 PLUS TERTINGGI", ln=True)
+                _pdf.set_text_color(0, 0, 0)
 
-            _pdf.set_font("Helvetica", "B", 9)
-            _pdf.set_fill_color(50, 150, 50)
-            _pdf.set_text_color(255, 255, 255)
-            _pdf.cell(40, 7, "RAK", border=1, fill=True, align="C")
-            _pdf.cell(60, 7, "NOMINAL", border=1, fill=True, align="C")
-            _pdf.cell(50, 7, "PIC", border=1, fill=True, align="C")
-            _pdf.cell(40, 7, "TANGGAL", border=1, fill=True, align="C", ln=True)
+                _pdf.set_font("Helvetica", "B", 9)
+                _pdf.set_fill_color(50, 150, 50)
+                _pdf.set_text_color(255, 255, 255)
+                _pdf.cell(40, 7, "RAK", border=1, fill=True, align="C")
+                _pdf.cell(60, 7, "NOMINAL", border=1, fill=True, align="C")
+                _pdf.cell(50, 7, "PIC", border=1, fill=True, align="C")
+                _pdf.cell(40, 7, "TANGGAL", border=1, fill=True, align="C", ln=True)
 
-            _pdf.set_font("Helvetica", "", 9)
-            _pdf.set_text_color(0, 0, 0)
-            for _, _r in _top_plus.iterrows():
-                _pdf.cell(40, 6, str(_r.get("rak_id", "-"))[:15], border=1, align="C")
-                _pdf.cell(60, 6, _format_rp(_r.get("total", 0)), border=1, align="R")
-                _pdf.cell(50, 6, str(_r.get("pic", "-"))[:20], border=1, align="C")
-                _pdf.cell(40, 6, str(_r.get("tanggal", "-"))[:10], border=1, align="C", ln=True)
-            _pdf.ln(4)
+                _pdf.set_font("Helvetica", "", 9)
+                _pdf.set_text_color(0, 0, 0)
+                for _, _r in _top_plus.iterrows():
+                    _pdf.cell(40, 6, str(_r.get("rak_id", "-"))[:15], border=1, align="C")
+                    _pdf.cell(60, 6, _format_rp(_r.get("total", 0)), border=1, align="R")
+                    _pdf.cell(50, 6, str(_r.get("pic", "-"))[:20], border=1, align="C")
+                    _pdf.cell(40, 6, str(_r.get("tanggal", "-"))[:10], border=1, align="C", ln=True)
+                _pdf.ln(4)
+                print("[PDF] Top 5 OK")
+            except Exception as _e:
+                print(f"[PDF ERROR Top5] {_e}")
 
         _output = _pdf.output()
+        print(f"[PDF] Output OK: {len(_output) if _output else 0} bytes")
         return bytes(_output) if isinstance(_output, bytearray) else _output
     except Exception as e:
         print(f"[EXPORT_PDF ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
         return None
 
 
@@ -241,105 +258,78 @@ def export_rekap_excel(hasil, net_sales=0):
 # GAMBAR — HTML to Image (html2pic)
 # =========================================================
 def export_rekap_image(hasil, net_sales=0, filename="rekap_so.png"):
-    """Export rekap SO jadi gambar pakai html2pic (no browser)."""
+    """Export rekap SO jadi gambar pakai matplotlib (no external browser)."""
     try:
-        from html2pic import Html2Pic
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
 
         _list_rak = hasil.get("list_rak", [])
         if not _list_rak:
             return None
 
-        # Build HTML
-        _rows_html = ""
-        for _r in _list_rak:
-            _nom = _format_nominal(_r.get("total", 0))
-            _color = "#C83232" if _nom < 0 else "#329632"
-            _sign = "+" if _nom >= 0 else "-"
-            _rows_html += f"""
-            <tr>
-                <td>{_r.get('rak_id', '-')}</td>
-                <td style="color:{_color}; text-align:right; font-weight:bold;">
-                    {_sign}Rp {abs(_nom):,}
-                </td>
-                <td>{_r.get('pic', '-')}</td>
-            </tr>"""
+        _df = pd.DataFrame(_list_rak)
+        _df = _df.rename(columns={
+            "rak_id": "Rak", "total": "Nominal",
+            "pic": "PIC", "tanggal": "Tanggal",
+        })
+        _df["Nominal"] = _df["Nominal"].apply(_format_nominal)
+        _df["Nominal"] = _df["Nominal"].apply(
+            lambda x: f"{'+' if x >= 0 else '-'}Rp {abs(x):,}".replace(",", ".")
+        )
 
-        _html = f"""
-        <html>
-        <head>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                background: #1E143C;
-                padding: 20px;
-                color: #F5E6D3;
-            }}
-            .header {{
-                text-align: center;
-                margin-bottom: 20px;
-            }}
-            .header h1 {{
-                color: #7FB99B;
-                font-size: 22px;
-                margin: 0;
-                letter-spacing: 2px;
-            }}
-            .header p {{
-                color: #E8B189;
-                font-size: 12px;
-                margin: 4px 0;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                background: #2A1F4A;
-                border-radius: 8px;
-                overflow: hidden;
-            }}
-            th {{
-                background: #7FB99B;
-                color: #1E143C;
-                padding: 10px;
-                text-align: left;
-                font-size: 12px;
-                font-weight: bold;
-            }}
-            td {{
-                padding: 8px 10px;
-                border-bottom: 1px solid #3A2F5A;
-                font-size: 12px;
-            }}
-            .footer {{
-                margin-top: 15px;
-                text-align: right;
-                font-size: 11px;
-                color: #A89B8E;
-            }}
-        </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>LAPORAN STOCK OPNAME</h1>
-                <p>Toko C383 — {hasil.get('periode', '-')}</p>
-            </div>
-            <table>
-                <tr><th>RAK</th><th>NOMINAL</th><th>PIC</th></tr>
-                {_rows_html}
-            </table>
-            <div class="footer">
-                Total: {_format_rp(hasil.get('total_nominal', 0))} | {hasil.get('total_rak', 0)} rak
-            </div>
-        </body>
-        </html>
-        """
+        # Figure
+        _fig, _ax = plt.subplots(figsize=(8, max(3, len(_df) * 0.5 + 1.5)))
+        _ax.axis("off")
 
-        _renderer = Html2Pic(_html)
-        _image = _renderer.render()
-        _image.save(filename)
+        # Title
+        _ax.text(
+            0.5, 0.98,
+            "LAPORAN STOCK OPNAME",
+            ha="center", va="top",
+            fontsize=14, fontweight="bold",
+            color="#2E1A47",
+            transform=_ax.transAxes,
+        )
+        _ax.text(
+            0.5, 0.93,
+            f"Toko C383 — {hasil.get('periode', '-')}",
+            ha="center", va="top",
+            fontsize=9,
+            color="#7FB99B",
+            transform=_ax.transAxes,
+        )
+
+        # Table
+        _tbl = _ax.table(
+            cellText=_df[["Rak", "Nominal", "PIC"]].values,
+            colLabels=["Rak", "Nominal", "PIC"],
+            cellLoc="center", loc="center",
+            colWidths=[0.2, 0.4, 0.3],
+        )
+        _tbl.auto_set_font_size(False)
+        _tbl.set_fontsize(10)
+        _tbl.scale(1, 1.6)
+
+        # Style header
+        for _i in range(3):
+            _cell = _tbl[(0, _i)]
+            _cell.set_facecolor("#7FB99B")
+            _cell.set_text_props(color="white", weight="bold")
+
+        # Style rows
+        for _i in range(1, len(_df) + 1):
+            for _j in range(3):
+                _cell = _tbl[(_i, _j)]
+                _cell.set_facecolor("#FFFFFF" if _i % 2 == 0 else "#F5F5F5")
+
+        plt.tight_layout()
+        plt.savefig(filename, dpi=100, bbox_inches="tight", facecolor="#FAFAFA")
+        plt.close(_fig)
+        print(f"[EXPORT_IMG] Saved: {filename}")
         return filename
-    except ImportError:
-        print("[EXPORT_IMG] html2pic gak keinstall")
-        return None
     except Exception as e:
         print(f"[EXPORT_IMG ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
         return None
