@@ -14,18 +14,13 @@ def _now_jkt():
 
 
 def get_periode_range(mode="hari_ini", tgl_start=None, tgl_end=None):
-    """
-    Hitung rentang tanggal berdasarkan mode.
-    
-    mode: 'hari_ini', 'minggu_ini', 'bulan_ini', 'custom'
-    """
+    """Hitung rentang tanggal berdasarkan mode."""
     _today = _now_jkt().date()
 
     if mode == "hari_ini":
         return _today, _today
 
     if mode == "minggu_ini":
-        # Senin - Minggu
         _start = _today - timedelta(days=_today.weekday())
         _end = _start + timedelta(days=6)
         return _start, _end
@@ -45,15 +40,7 @@ def get_periode_range(mode="hari_ini", tgl_start=None, tgl_end=None):
 
 
 def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
-    """
-    Rekap SO: summary + detail per rak.
-    
-    Returns:
-        dict {
-            success, periode, total_rak, total_item, total_nominal,
-            list_rak: [...], detail_df, chart_data
-        }
-    """
+    """Rekap SO: summary + detail per rak + items per rak."""
     try:
         _sb = get_supabase()
         if _sb is None:
@@ -61,7 +48,7 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
 
         _start, _end = get_periode_range(mode, tgl_start, tgl_end)
 
-        # Query so_rak_harian
+        # === QUERY so_rak_harian ===
         _q = (
             _sb.table("so_rak_harian")
             .select("*")
@@ -77,34 +64,44 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
         if not _rows:
             return {
                 "success": True,
+                "mode": mode,
                 "periode": f"{_start} s/d {_end}",
+                "tgl_start": _start.isoformat(),
+                "tgl_end": _end.isoformat(),
                 "total_rak": 0,
                 "total_item": 0,
                 "total_nominal": 0,
                 "list_rak": [],
-                "detail_df": pd.DataFrame(),
+                "items_by_rak": {},
                 "chart_data": [],
+                "sales_periode": 0,
+                "rak_names": {},
             }
 
         _df = pd.DataFrame(_rows)
-        _df["nominal_adjust"] = pd.to_numeric(
-            _df["nominal_adjust"], errors="coerce"
-        ).fillna(0)
+        _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
 
         _total_rak = int(_df["rak_id"].nunique())
         _total_nominal = float(_df["nominal_adjust"].sum())
 
-        # Query so_hasil buat total item
+        # === QUERY so_hasil (untuk total item + items by rak) ===
         _q2 = (
             _sb.table("so_hasil")
-            .select("id", count="exact")
+            .select("*")
             .gte("so_date", _start.isoformat())
             .lte("so_date", _end.isoformat())
         )
         _res2 = _q2.execute()
-        _total_item = _res2.count if hasattr(_res2, "count") and _res2.count else len(_res2.data or [])
+        _hasil_rows = _res2.data if _res2.data else []
+        _total_item = len(_hasil_rows)
 
-        # List rak unik dengan total
+        # Group items by rak
+        _items_by_rak = {}
+        for _r in _hasil_rows:
+            _rak = _r.get("rak_id", "UNKNOWN")
+            _items_by_rak.setdefault(_rak, []).append(_r)
+
+        # === LIST RAK (summary) ===
         _list_rak = []
         for _rak, _grp in _df.groupby("rak_id"):
             _list_rak.append({
@@ -115,7 +112,7 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
             })
         _list_rak.sort(key=lambda x: x["total"])
 
-        # Chart data: nominal per hari
+        # === CHART DATA (per hari) ===
         _chart_data = []
         for _tgl, _grp in _df.groupby("so_date"):
             _chart_data.append({
@@ -125,180 +122,94 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
             })
         _chart_data.sort(key=lambda x: x["tanggal"])
 
+        # === SALES PERIODE ===
+        _sales_periode = _get_sales_periode(_start, _end)
+
+        # === RAK NAMES ===
+        _rak_names = _get_rak_names()
+
         return {
             "success": True,
+            "mode": mode,
             "periode": f"{_start} s/d {_end}",
+            "tgl_start": _start.isoformat(),
+            "tgl_end": _end.isoformat(),
             "total_rak": _total_rak,
             "total_item": _total_item,
             "total_nominal": _total_nominal,
             "list_rak": _list_rak,
-            "detail_df": _df,
+            "items_by_rak": _items_by_rak,
             "chart_data": _chart_data,
+            "sales_periode": _sales_periode,
+            "rak_names": _rak_names,
         }
 
     except Exception as e:
+        print(f"[REKAP_SO ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200]}
 
 
-def cek_rak_belum_so(tanggal=None):
-    """List rak yang belum di-SO pada tanggal tertentu."""
-    try:
-        _sb = get_supabase()
-        if _sb is None:
-            return []
-
-        _tgl = tanggal or _now_jkt().date()
-        _tgl_str = _tgl.isoformat()[:10] if isinstance(_tgl, (date, datetime)) else str(_tgl)[:10]
-
-        # Ambil semua rak
-        _res_all = _sb.table("rak_master").select("rak_id, rak_name").execute()
-        _all_rak = {r["rak_id"]: r.get("rak_name", "") for r in (_res_all.data or [])}
-
-        # Ambil rak yang udah SO
-        _res_so = (
-            _sb.table("so_rak_harian")
-            .select("rak_id")
-            .eq("so_date", _tgl_str)
-            .execute()
-        )
-        _sudah_so = set(r["rak_id"] for r in (_res_so.data or []))
-
-        # Rak yang belum
-        _belum = [
-            {"rak_id": _r, "rak_name": _all_rak[_r]}
-            for _r in _all_rak if _r not in _sudah_so
-        ]
-        _belum.sort(key=lambda x: x["rak_id"])
-        return _belum
-
-    except Exception as e:
-        print(f"[CEK_RAK_BELUM ERROR] {e}")
-        return []
-
-
-def cek_duplikat(tanggal=None, rak_id=None):
-    """Cek apakah ada input duplikat."""
-    try:
-        _sb = get_supabase()
-        if _sb is None:
-            return []
-
-        _tgl = tanggal or _now_jkt().date()
-        _tgl_str = _tgl.isoformat()[:10] if isinstance(_tgl, (date, datetime)) else str(_tgl)[:10]
-
-        _q = _sb.table("so_rak_harian").select("*").eq("so_date", _tgl_str)
-        if rak_id:
-            _q = _q.eq("rak_id", rak_id.upper())
-        _res = _q.execute()
-
-        return _res.data or []
-
-    except Exception as e:
-        print(f"[CEK_DUPLIKAT ERROR] {e}")
-        return []
-
-def export_rekap_image(hasil, filename="rekap_so.png"):
-    """Export rekap SO jadi gambar PNG pakai df2img."""
-    try:
-        import df2img
-        
-        _df = pd.DataFrame(hasil.get("list_rak", []))
-        if _df.empty:
-            return None
-        
-        _df = _df.rename(columns={
-            "rak_id": "Rak",
-            "total": "Nominal",
-            "pic": "PIC",
-        })
-        
-        # Format nominal
-        _df["Nominal"] = _df["Nominal"].apply(
-            lambda x: f"Rp {int(x):,}".replace(",", ".")
-        )
-        
-        _fig = df2img.plot_dataframe(
-            _df,
-            title={
-                "text": f"Rekap SO — {hasil['periode']}",
-                "font_color": "#7FB99B",
-                "font_size": 16,
-            },
-            tbl_header=dict(
-                fill_color="#7FB99B",
-                font_color="white",
-                font_size=12,
-            ),
-            row_fill_color=("#ffffff", "#f0f0f0"),
-            fig_size=(600, 80 + len(_df) * 30),
-        )
-        
-        df2img.save_dataframe(fig=_fig, filename=filename)
-        return filename
-    except Exception as e:
-        print(f"[EXPORT_IMG ERROR] {e}")
-        return None
-        
-def _get_net_sales_bulan(bulan=None, tahun=None):
-    """
-    Hitung net sales bulanan.
-    Prioritas: SUM(spd_harian) bulan ini.
-    Fallback: tabel net_sales (kolom 'net_sales').
-    """
+def _get_sales_periode(tgl_start, tgl_end):
+    """Ambil total SPD (sales) pada rentang tanggal."""
     try:
         _sb = get_supabase()
         if _sb is None:
             return 0
 
-        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _res = (
+            _sb.table("spd_harian")
+            .select("spd")
+            .gte("tanggal", tgl_start.isoformat())
+            .lte("tanggal", tgl_end.isoformat())
+            .execute()
+        )
+
+        if _res.data:
+            _total = sum(float(r.get("spd", 0) or 0) for r in _res.data)
+            print(f"[SALES_PERIODE] {_total} ({len(_res.data)} hari)")
+            return _total
+        return 0
+    except Exception as e:
+        print(f"[SALES_PERIODE ERROR] {e}")
+        return 0
+
+
+def _get_rak_names():
+    """Ambil mapping rak_id -> rak_name dari rak_master."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {}
+
+        _res = _sb.table("rak_master").select("rak_id, rak_name").execute()
+        if _res.data:
+            return {r["rak_id"]: r.get("rak_name", "") for r in _res.data}
+        return {}
+    except Exception as e:
+        print(f"[RAK_NAMES ERROR] {e}")
+        return {}
+
+
+def _get_net_sales_bulan(bulan=None, tahun=None):
+    """Hitung net sales bulanan dari spd_harian."""
+    try:
+        _now = _now_jkt()
         _bulan = bulan or _now.month
         _tahun = tahun or _now.year
 
-        # Range tanggal
         _start = date(_tahun, _bulan, 1)
         if _bulan == 12:
             _end = date(_tahun + 1, 1, 1) - timedelta(days=1)
         else:
             _end = date(_tahun, _bulan + 1, 1) - timedelta(days=1)
 
-        # Prioritas: SUM dari spd_harian
-        try:
-            _res = (
-                _sb.table("spd_harian")
-                .select("spd")
-                .gte("tanggal", _start.isoformat())
-                .lte("tanggal", _end.isoformat())
-                .execute()
-            )
-            if _res.data:
-                # ✅ Sum dulu, baru abs — biar minus & plus saling cancel
-                _sum_raw = sum(float(r.get("nominal_adjust", 0) or 0) for r in _res.data)
-                _total = abs(_sum_raw)
-                print(f"[SELISIH_BULAN] raw={_sum_raw}, abs={_total} ({len(_res.data)} rows)")
-                return _total
-        except Exception as _e:
-            print(f"[NET_SALES] spd_harian error: {_e}")
-
-        # Fallback: tabel net_sales (kolom 'net_sales')
-        try:
-            _res2 = (
-                _sb.table("net_sales")
-                .select("net_sales")
-                .eq("bulan", _bulan)
-                .eq("tahun", _tahun)
-                .execute()
-            )
-            if _res2.data:
-                _total2 = sum(float(r.get("net_sales", 0) or 0) for r in _res2.data)
-                print(f"[NET_SALES] Fallback ke tabel net_sales: {_total2}")
-                return _total2
-        except Exception as _e2:
-            print(f"[NET_SALES] net_sales error: {_e2}")
-
-        return 0
+        return _get_sales_periode(_start, _end)
     except Exception as e:
         print(f"[NET_SALES ERROR] {e}")
         return 0
+
 
 def _get_total_selisih_bulan(bulan=None, tahun=None):
     """Hitung total selisih (abs) 1 bulan dari so_rak_harian."""
@@ -307,7 +218,7 @@ def _get_total_selisih_bulan(bulan=None, tahun=None):
         if _sb is None:
             return 0
 
-        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _now = _now_jkt()
         _bulan = bulan or _now.month
         _tahun = tahun or _now.year
 
@@ -326,9 +237,8 @@ def _get_total_selisih_bulan(bulan=None, tahun=None):
         )
 
         if _res.data:
-            _total = sum(abs(float(r.get("nominal_adjust", 0) or 0)) for r in _res.data)
-            print(f"[SELISIH_BULAN] {_total} ({len(_res.data)} rows)")
-            return _total
+            _sum_raw = sum(float(r.get("nominal_adjust", 0) or 0) for r in _res.data)
+            return abs(_sum_raw)
         return 0
     except Exception as e:
         print(f"[SELISIH_BULAN ERROR] {e}")
@@ -342,7 +252,7 @@ def _get_total_rak_bulan(bulan=None, tahun=None):
         if _sb is None:
             return 0
 
-        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _now = _now_jkt()
         _bulan = bulan or _now.month
         _tahun = tahun or _now.year
 
@@ -361,25 +271,21 @@ def _get_total_rak_bulan(bulan=None, tahun=None):
         )
 
         if _res.data:
-            _unique = len(set(r.get("rak_id", "") for r in _res.data))
-            print(f"[RAK_BULAN] {_unique} rak unik dari {len(_res.data)} rows")
-            return _unique
+            return len(set(r.get("rak_id", "") for r in _res.data))
         return 0
     except Exception as e:
         print(f"[RAK_BULAN ERROR] {e}")
         return 0
 
+
 def get_top_items(bulan=None, tahun=None, limit=5):
-    """
-    Ambil top N item minus & plus dari so_hasil.
-    Return: dict {top_minus: [...], top_plus: [...]}
-    """
+    """Ambil top N item minus & plus dari so_hasil."""
     try:
         _sb = get_supabase()
         if _sb is None:
             return {"top_minus": [], "top_plus": []}
 
-        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _now = _now_jkt()
         _bulan = bulan or _now.month
         _tahun = tahun or _now.year
 
@@ -394,8 +300,6 @@ def get_top_items(bulan=None, tahun=None, limit=5):
             .select("rak_id, plu, nama_produk, qty_var, nominal_adjust, pic, so_date")
             .gte("so_date", _start.isoformat())
             .lte("so_date", _end.isoformat())
-            .order("nominal_adjust", desc=False)
-            .limit(50)  # ambil lebih, nanti di-sort lagi
             .execute()
         )
 
@@ -408,8 +312,39 @@ def get_top_items(bulan=None, tahun=None, limit=5):
         _top_minus = _df.nsmallest(limit, "nominal_adjust").to_dict("records")
         _top_plus = _df.nlargest(limit, "nominal_adjust").to_dict("records")
 
-        print(f"[TOP_ITEMS] Minus: {len(_top_minus)}, Plus: {len(_top_plus)}")
         return {"top_minus": _top_minus, "top_plus": _top_plus}
     except Exception as e:
         print(f"[TOP_ITEMS ERROR] {e}")
         return {"top_minus": [], "top_plus": []}
+
+
+def cek_rak_belum_so(tanggal=None):
+    """List rak yang belum di-SO pada tanggal tertentu."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return []
+
+        _tgl = tanggal or _now_jkt().date()
+        _tgl_str = _tgl.isoformat()[:10] if isinstance(_tgl, (date, datetime)) else str(_tgl)[:10]
+
+        _res_all = _sb.table("rak_master").select("rak_id, rak_name").execute()
+        _all_rak = {r["rak_id"]: r.get("rak_name", "") for r in (_res_all.data or [])}
+
+        _res_so = (
+            _sb.table("so_rak_harian")
+            .select("rak_id")
+            .eq("so_date", _tgl_str)
+            .execute()
+        )
+        _sudah_so = set(r["rak_id"] for r in (_res_so.data or []))
+
+        _belum = [
+            {"rak_id": _r, "rak_name": _all_rak[_r]}
+            for _r in _all_rak if _r not in _sudah_so
+        ]
+        _belum.sort(key=lambda x: x["rak_id"])
+        return _belum
+    except Exception as e:
+        print(f"[CEK_RAK_BELUM ERROR] {e}")
+        return []

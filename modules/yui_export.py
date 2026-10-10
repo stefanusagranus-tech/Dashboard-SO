@@ -1,13 +1,15 @@
 """
-Yui Export — PDF Profesional (pastel theme) + Gambar
-======================================================
-- PDF: fpdf2 + DejaVu font + chart dari matplotlib
-- Gambar: matplotlib (no browser)
-- Palet: pastel warm (sage, peach, salmon, beige)
+Yui Export — PDF Profesional 2 Halaman (pastel theme)
+========================================================
+- Halaman 1: Analisis Gambaran SO (KPI + ringkasan + donut + insight + tabel rak)
+- Halaman 2: List Item yang Minus (per rak + total + insight)
+- Gambar: matplotlib (pastel theme)
+- Excel: ringkasan + rekap per rak
 """
 
 import io
 import os
+import html as _html
 import pandas as pd
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -19,17 +21,23 @@ from fpdf import FPDF
 # PALET WARNA PASTEL
 # =========================================================
 WARNA = {
-    "sage":      (151, 179, 174),   # #97B3AE
-    "sage_light": (210, 224, 211),  # #D2E0D3
-    "peach":     (240, 221, 214),   # #F0DDD6
-    "salmon":    (242, 195, 185),   # #F2C3B9
-    "beige":     (214, 203, 191),   # #D6CBBF
-    "offwhite":  (240, 238, 234),   # #F0EEEA
-    "dark":      (60, 60, 60),      # teks
-    "white":     (255, 255, 255),
-    "red":       (200, 50, 50),
-    "green":     (50, 150, 50),
+    "sage":       (151, 179, 174),
+    "sage_light": (210, 224, 211),
+    "peach":      (240, 221, 214),
+    "salmon":     (242, 195, 185),
+    "beige":      (214, 203, 191),
+    "offwhite":   (240, 238, 234),
+    "dark":       (60, 60, 60),
+    "white":      (255, 255, 255),
+    "red":        (200, 50, 50),
+    "green":      (50, 150, 50),
 }
+
+# Chart colors (hex, buat matplotlib)
+CHART_COLORS = [
+    "#97B3AE", "#F2C3B9", "#D2E0D3", "#F0DDD6", "#D6CBBF",
+    "#B5C9C3", "#E8A99C", "#C4D4C5", "#E0CCC4", "#BEB0A5",
+]
 
 
 # =========================================================
@@ -47,8 +55,19 @@ def _font_tersedia():
 # =========================================================
 # HELPER FORMAT
 # =========================================================
+def _clean_text(text):
+    """Clean HTML entities & karakter aneh."""
+    try:
+        _t = str(text)
+        _t = _html.unescape(_t)
+        _t = _t.replace("&#39;", "'").replace("&amp;", "&")
+        _t = _t.replace("&quot;", '"').replace("&nbsp;", " ")
+        return _t.strip()
+    except Exception:
+        return str(text)
+
+
 def _format_nominal(val):
-    """Round nominal jadi integer."""
     try:
         return int(round(float(val)))
     except Exception:
@@ -56,20 +75,17 @@ def _format_nominal(val):
 
 
 def _format_rp(val):
-    """Format Rp dengan pemisah ribuan."""
     _n = _format_nominal(val)
     _sign = "+" if _n >= 0 else "-"
     return f"{_sign}Rp {abs(_n):,}".replace(",", ".")
 
 
 def _format_rp_no_sign(val):
-    """Format Rp tanpa sign."""
     _n = _format_nominal(val)
     return f"Rp {abs(_n):,}".replace(",", ".")
 
 
 def _hitung_btsb_nsb(net_sales, total_selisih, btsb_persen=0.15):
-    """Hitung BTSB & NSB."""
     _btsb = net_sales * (btsb_persen / 100)
     _selisih_abs = abs(total_selisih)
     _nsb = max(0, _selisih_abs - _btsb)
@@ -83,10 +99,10 @@ def _hitung_btsb_nsb(net_sales, total_selisih, btsb_persen=0.15):
 
 
 # =========================================================
-# GENERATE CHARTS (matplotlib → BytesIO)
+# DONUT CHART — Kontribusi per Rak
 # =========================================================
-def _generate_bar_chart(hasil, max_rak=10):
-    """Bar chart nominal per rak. Mingguan/bulanan: top 10 minus."""
+def _generate_donut_per_rak(hasil):
+    """Donut chart: kontribusi tiap rak terhadap total selisih."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -96,188 +112,49 @@ def _generate_bar_chart(hasil, max_rak=10):
         if not _list_rak:
             return None
 
-        _df = pd.DataFrame(_list_rak)
-        _df["total"] = pd.to_numeric(_df["total"], errors="coerce").fillna(0)
+        # Sort by abs nominal, descending
+        _sorted = sorted(_list_rak, key=lambda x: abs(x.get("total", 0)), reverse=True)
+        _top = _sorted[:6]
+        _sisa = _sorted[6:]
 
-        # Kalau lebih dari max_rak, ambil 10 minus terdalam
-        if len(_df) > max_rak:
-            _df = _df.nsmallest(max_rak, "total")
-            _title = f"TOP {max_rak} MINUS PER RAK"
-        else:
-            _title = "NOMINAL PER RAK"
+        _labels = []
+        _sizes = []
+        for _r in _top:
+            _nom = abs(_r.get("total", 0))
+            if _nom > 0:
+                _labels.append(f"Rak {_r.get('rak_id', '?')}")
+                _sizes.append(_nom)
 
-        _df = _df.sort_values("total")
+        if _sisa:
+            _sisa_total = sum(abs(_r.get("total", 0)) for _r in _sisa)
+            if _sisa_total > 0:
+                _labels.append(f"Lainnya ({len(_sisa)} rak)")
+                _sizes.append(_sisa_total)
 
-        _fig, _ax = plt.subplots(figsize=(10, 4))
-        _fig.patch.set_facecolor("#F0EEEA")
-        _ax.set_facecolor("#F0EEEA")
-
-        _colors = ["#F2C3B9" if v < 0 else "#97B3AE" for v in _df["total"]]
-        _bars = _ax.bar(_df["rak_id"].astype(str), _df["total"], color=_colors, edgecolor="white", linewidth=1)
-
-        _ax.axhline(0, color="#3C3C3C", linewidth=0.8)
-        _ax.set_title(_title, fontsize=13, fontweight="bold", color="#3C3C3C", pad=10)
-        _ax.set_ylabel("Nominal (Rp)", fontsize=10, color="#3C3C3C")
-        _ax.tick_params(axis="x", rotation=45, labelsize=9)
-        _ax.tick_params(axis="y", labelsize=9)
-        _ax.spines["top"].set_visible(False)
-        _ax.spines["right"].set_visible(False)
-        _ax.spines["left"].set_color("#D6CBBF")
-        _ax.spines["bottom"].set_color("#D6CBBF")
-        _ax.grid(axis="y", linestyle="--", alpha=0.4, color="#D6CBBF")
-
-        # Format label y
-        _ax.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda x, p: f"{int(x):,}".replace(",", "."))
-        )
-
-        plt.tight_layout()
-        _buf = io.BytesIO()
-        plt.savefig(_buf, format="png", dpi=130, bbox_inches="tight", facecolor="#F0EEEA")
-        plt.close(_fig)
-        _buf.seek(0)
-        return _buf
-    except Exception as e:
-        print(f"[CHART_BAR ERROR] {e}")
-        return None
-
-
-def _generate_trend_nsb(hasil):
-    """Trend line NSB per hari (dari so_rak_harian)."""
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from modules.supabase_client import get_supabase
-
-        _sb = get_supabase()
-        if _sb is None:
+        if not _sizes:
             return None
 
-        # Ambil data bulan ini
-        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
-        _start = datetime(_now.year, _now.month, 1).date()
-        if _now.month == 12:
-            _end = datetime(_now.year + 1, 1, 1).date() - timedelta(days=1)
-        else:
-            _end = datetime(_now.year, _now.month + 1, 1).date() - timedelta(days=1)
-
-        _res = (
-            _sb.table("so_rak_harian")
-            .select("so_date, nominal_adjust")
-            .gte("so_date", _start.isoformat())
-            .lte("so_date", _end.isoformat())
-            .execute()
-        )
-
-        if not _res.data:
-            return None
-
-        _df = pd.DataFrame(_res.data)
-        _df["so_date"] = pd.to_datetime(_df["so_date"], errors="coerce")
-        _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
-        _df = _df.dropna(subset=["so_date"])
-
-        # Group by tanggal — SUM biasa (bukan abs)
-        _grp = _df.groupby("so_date")["nominal_adjust"].sum().reset_index()
-        _grp = _grp.sort_values("so_date")
-
-        if _grp.empty:
-            return None
-
-        _fig, _ax = plt.subplots(figsize=(10, 3.5))
-        _fig.patch.set_facecolor("#F0EEEA")
-        _ax.set_facecolor("#F0EEEA")
-
-        _ax.plot(
-            _grp["so_date"].dt.strftime("%d/%m"),
-            _grp["nominal_adjust"],
-            color="#97B3AE",
-            linewidth=2.5,
-            marker="o",
-            markersize=6,
-            markerfacecolor="#F2C3B9",
-            markeredgecolor="#97B3AE",
-            markeredgewidth=1.5,
-        )
-        _ax.axhline(0, color="#3C3C3C", linewidth=0.8, linestyle="--")
-        _ax.fill_between(
-            range(len(_grp)),
-            _grp["nominal_adjust"],
-            0,
-            alpha=0.15,
-            color="#97B3AE",
-        )
-
-        _ax.set_title("TREND NSB HARIAN", fontsize=13, fontweight="bold", color="#3C3C3C", pad=10)
-        _ax.set_ylabel("Nominal (Rp)", fontsize=10, color="#3C3C3C")
-        _ax.tick_params(axis="x", rotation=45, labelsize=9)
-        _ax.tick_params(axis="y", labelsize=9)
-        _ax.spines["top"].set_visible(False)
-        _ax.spines["right"].set_visible(False)
-        _ax.spines["left"].set_color("#D6CBBF")
-        _ax.spines["bottom"].set_color("#D6CBBF")
-        _ax.grid(axis="y", linestyle="--", alpha=0.4, color="#D6CBBF")
-
-        _ax.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda x, p: f"{int(x):,}".replace(",", "."))
-        )
-
-        plt.tight_layout()
-        _buf = io.BytesIO()
-        plt.savefig(_buf, format="png", dpi=130, bbox_inches="tight", facecolor="#F0EEEA")
-        plt.close(_fig)
-        _buf.seek(0)
-        return _buf
-    except Exception as e:
-        print(f"[CHART_TREND ERROR] {e}")
-        return None
-
-
-def _generate_donut_sales_nsb(net_sales, nsb):
-    """Donut chart perbandingan Sales vs NSB."""
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-
-        if net_sales <= 0:
-            return None
-
-        # Rekomendasi: proporsi BTSB cover vs NSB (uncovered)
-        _btsb = net_sales * 0.0015
-        _covered = min(_btsb, _btsb)  # BTSB selalu cover BTSB itu sendiri
-        _uncovered = max(0, nsb)
-        _aman = max(0, _btsb - _uncovered)
-
-        _labels = ["Tertutup BTSB", "NSB (Beban)"]
-        _sizes = [_aman, _uncovered]
-        _colors = ["#97B3AE", "#F2C3B9"]
-
-        if sum(_sizes) == 0:
-            return None
-
-        _fig, _ax = plt.subplots(figsize=(5, 5))
+        _fig, _ax = plt.subplots(figsize=(6, 5))
         _fig.patch.set_facecolor("#F0EEEA")
 
         _wedges, _texts, _autotexts = _ax.pie(
             _sizes,
             labels=_labels,
-            colors=_colors,
+            colors=CHART_COLORS[:len(_sizes)],
             autopct=lambda p: f"{p:.1f}%",
             startangle=90,
-            wedgeprops=dict(width=0.4, edgecolor="white", linewidth=2),
-            textprops=dict(color="#3C3C3C", fontsize=10),
+            wedgeprops=dict(width=0.42, edgecolor="white", linewidth=2),
+            textprops=dict(color="#3C3C3C", fontsize=9),
         )
 
         for _at in _autotexts:
             _at.set_color("white")
             _at.set_fontweight("bold")
-            _at.set_fontsize(11)
+            _at.set_fontsize(9)
 
         _ax.set_title(
-            f"COVERAGE BTSB\n(Net Sales: {_format_rp_no_sign(net_sales)})",
-            fontsize=12, fontweight="bold", color="#3C3C3C", pad=15,
+            "KONTRIBUSI PER RAK",
+            fontsize=12, fontweight="bold", color="#3C3C3C", pad=12,
         )
 
         plt.tight_layout()
@@ -287,12 +164,81 @@ def _generate_donut_sales_nsb(net_sales, nsb):
         _buf.seek(0)
         return _buf
     except Exception as e:
-        print(f"[CHART_DONUT ERROR] {e}")
+        print(f"[DONUT ERROR] {e}")
         return None
 
 
 # =========================================================
-# PDF PROFESIONAL
+# INSIGHT OTOMATIS
+# =========================================================
+def _generate_insight_hal1(hasil, sales_periode):
+    """Insight otomatis halaman 1."""
+    try:
+        _list_rak = hasil.get("list_rak", [])
+        _total_nom = hasil.get("total_nominal", 0)
+        _btsb = sales_periode * 0.0015
+        _status = "OVER" if abs(_total_nom) > _btsb else "AMAN"
+
+        _insights = []
+        _insights.append(
+            f"Total SO: {hasil.get('total_rak', 0)} rak dengan nominal {_format_rp(_total_nom)}."
+        )
+        _insights.append(
+            f"Sales periode: {_format_rp(sales_periode)}. BTSB (0,15%): {_format_rp(_btsb)}."
+        )
+
+        if _list_rak:
+            _worst = min(_list_rak, key=lambda x: x.get("total", 0))
+            _insights.append(
+                f"Rak penyumbang minus terbesar: {_worst.get('rak_id', '?')} "
+                f"({_format_rp(_worst.get('total', 0))}) oleh PIC {_worst.get('pic', '-')}."
+            )
+
+        _insights.append(
+            f"Status: {_status} — "
+            f"{'selisih melebihi batas BTSB, perlu perhatian.' if _status == 'OVER' else 'selisih masih dalam batas aman.'}"
+        )
+
+        return " ".join(_insights)
+    except Exception as e:
+        print(f"[INSIGHT1 ERROR] {e}")
+        return "Data insight belum tersedia."
+
+
+def _generate_insight_hal2(hasil):
+    """Insight otomatis halaman 2."""
+    try:
+        _items_by_rak = hasil.get("items_by_rak", {})
+        if not _items_by_rak:
+            return "Belum ada item minus pada periode ini."
+
+        # Cari item minus terbesar
+        _all_items = []
+        for _rak, _items in _items_by_rak.items():
+            for _it in _items:
+                _nom = float(_it.get("nominal_adjust", 0) or 0)
+                if _nom < 0:
+                    _all_items.append({**_it, "_nom": _nom})
+
+        if not _all_items:
+            return "Tidak ada item minus pada periode ini."
+
+        _worst = min(_all_items, key=lambda x: x["_nom"])
+        _total_minus = sum(_it["_nom"] for _it in _all_items)
+
+        return (
+            f"Item minus terbesar: {_clean_text(_worst.get('nama_produk', '-'))} "
+            f"(PLU {_worst.get('plu', '-')}, rak {_worst.get('rak_id', '-')}) "
+            f"senilai {_format_rp(_worst['_nom'])}. "
+            f"Total {len(_all_items)} item minus dengan akumulasi {_format_rp(_total_minus)}."
+        )
+    except Exception as e:
+        print(f"[INSIGHT2 ERROR] {e}")
+        return "Data insight belum tersedia."
+
+
+# =========================================================
+# PDF CLASS
 # =========================================================
 class PDFLaporan(FPDF):
     """PDF dengan header & footer custom, font DejaVu."""
@@ -300,23 +246,19 @@ class PDFLaporan(FPDF):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._font_family = None
-        self._font_family_bold = None
+        self.judul_halaman = "LAPORAN STOCK OPNAME"
 
     def _setup_font(self):
-        """Setup font DejaVu sekali."""
         if self._font_family:
             return
         if _font_tersedia():
             self.add_font(fname=_FONT_PATH)
             self.add_font(fname=_FONT_PATH_BOLD, style="B")
             self._font_family = "DejaVuSansCondensed"
-            self._font_family_bold = "DejaVuSansCondensed"
         else:
             self._font_family = "Helvetica"
-            self._font_family_bold = "Helvetica"
 
     def set_my_font(self, style="", size=10):
-        """Set font dengan fallback aman."""
         self._setup_font()
         try:
             self.set_font(self._font_family, style=style, size=size)
@@ -326,20 +268,20 @@ class PDFLaporan(FPDF):
     def header(self):
         # Header band sage
         self.set_fill_color(*WARNA["sage"])
-        self.rect(0, 0, 210, 30, style="F")
+        self.rect(0, 0, 210, 26, style="F")
 
-        self.set_my_font(style="B", size=15)
+        self.set_my_font(style="B", size=14)
         self.set_text_color(*WARNA["white"])
-        self.set_xy(12, 7)
-        self.cell(0, 8, "LAPORAN STOCK OPNAME", new_x="LMARGIN", new_y="NEXT")
+        self.set_xy(12, 6)
+        self.cell(0, 7, self.judul_halaman, new_x="LMARGIN", new_y="NEXT")
 
         self.set_my_font(style="", size=9)
         self.set_text_color(*WARNA["offwhite"])
-        self.set_xy(12, 17)
-        self.cell(0, 6, "Toko C383 - Karang Satria", new_x="LMARGIN", new_y="NEXT")
+        self.set_xy(12, 14)
+        self.cell(0, 5, "Toko C383 - Karang Satria", new_x="LMARGIN", new_y="NEXT")
 
         self.set_text_color(*WARNA["dark"])
-        self.set_y(38)
+        self.set_y(32)
 
     def footer(self):
         self.set_y(-15)
@@ -348,8 +290,10 @@ class PDFLaporan(FPDF):
         self.cell(0, 10, f"Halaman {self.page_no()}", align="C")
 
 
+# =========================================================
+# KPI CARDS
+# =========================================================
 def _draw_kpi_cards(pdf, total_rak, total_item, total_nominal):
-    """Gambar 3 KPI cards warna pastel."""
     _y_start = pdf.get_y()
     _card_w = 58
     _card_h = 22
@@ -381,16 +325,46 @@ def _draw_kpi_cards(pdf, total_rak, total_item, total_nominal):
     pdf.set_y(_y_start + _card_h + 6)
 
 
+# =========================================================
+# SECTION HEADER
+# =========================================================
+def _draw_section_header(pdf, judul, x=12, w=186, fill=None):
+    if fill is None:
+        fill = WARNA["sage"]
+    _y = pdf.get_y()
+    pdf.set_fill_color(*fill)
+    pdf.rect(x, _y, w, 7, style="F")
+    pdf.set_my_font(style="B", size=10)
+    pdf.set_text_color(*WARNA["white"])
+    pdf.set_xy(x + 2, _y + 1.5)
+    pdf.cell(w - 4, 5, judul, align="L")
+    pdf.set_text_color(*WARNA["dark"])
+    pdf.ln(9)
+
+
+# =========================================================
+# EXPORT PDF — 2 HALAMAN
+# =========================================================
 def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
-    """Export rekap SO jadi PDF profesional (pastel theme)."""
+    """Export rekap SO jadi PDF 2 halaman (analisis + list item minus)."""
     try:
         _pdf = PDFLaporan()
-        _pdf.add_page()
         _pdf.set_auto_page_break(auto=True, margin=18)
 
+        _list_rak = hasil.get("list_rak", [])
+        _items_by_rak = hasil.get("items_by_rak", {})
+        _rak_names = hasil.get("rak_names", {})
+        _sales_periode = hasil.get("sales_periode", 0)
+        _mode = hasil.get("mode", "hari_ini")
+        _periode = hasil.get("periode", "-")
+
         # =========================================================
-        # KPI CARDS
+        # HALAMAN 1: ANALISIS GAMBARAN SO
         # =========================================================
+        _pdf.judul_halaman = "ANALISIS GAMBARAN SO"
+        _pdf.add_page()
+
+        # --- KPI Cards ---
         _draw_kpi_cards(
             _pdf,
             hasil.get("total_rak", 0),
@@ -399,251 +373,196 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         )
         _pdf.ln(4)
 
-        # =========================================================
-        # RINGKASAN + BTSB/NSB (2 kolom)
-        # =========================================================
-        _y_section = _pdf.get_y()
-        _col_w = 90
+        # --- Ringkasan + Sales ---
+        _draw_section_header(_pdf, "RINGKASAN PERIODE")
 
-        # Kolom kiri: Ringkasan
-        _pdf.set_xy(12, _y_section)
-        _pdf.set_fill_color(*WARNA["sage"])
-        _pdf.rect(12, _y_section, _col_w, 7, style="F")
-        _pdf.set_my_font(style="B", size=10)
-        _pdf.set_text_color(*WARNA["white"])
-        _pdf.set_xy(14, _y_section + 1.5)
-        _pdf.cell(_col_w - 4, 5, "RINGKASAN", align="L")
+        _total_nom = hasil.get("total_nominal", 0)
+        _btsb = _sales_periode * 0.0015
+        _status = "OVER" if abs(_total_nom) > _btsb else "AMAN"
 
-        _pdf.set_text_color(*WARNA["dark"])
         _pdf.set_my_font(style="", size=9)
-        _pdf.set_xy(14, _y_section + 10)
-        _pdf.cell(45, 5.5, "Periode")
-        _pdf.cell(0, 5.5, f": {hasil.get('periode', '-')}", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_x(14)
-        _pdf.cell(45, 5.5, "Total Rak")
-        _pdf.cell(0, 5.5, f": {hasil.get('total_rak', 0)}", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_x(14)
-        _pdf.cell(45, 5.5, "Total Item")
-        _pdf.cell(0, 5.5, f": {hasil.get('total_item', 0)}", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_x(14)
-        _pdf.cell(45, 5.5, "Total Nominal")
-        _pdf.cell(0, 5.5, f": {_format_rp(hasil.get('total_nominal', 0))}", new_x="LMARGIN", new_y="NEXT")
-
-        # Kolom kanan: BTSB/NSB
-        _total_selisih = hasil.get("_total_selisih_bulan", 0)
-        _total_rak_bulan = hasil.get("_total_rak_bulan", 0)
-        _calc = _hitung_btsb_nsb(net_sales, _total_selisih) if net_sales > 0 else None
-
-        _pdf.set_xy(108, _y_section)
-        _pdf.set_fill_color(*WARNA["sage"])
-        _pdf.rect(108, _y_section, _col_w, 7, style="F")
-        _pdf.set_my_font(style="B", size=10)
-        _pdf.set_text_color(*WARNA["white"])
-        _pdf.set_xy(110, _y_section + 1.5)
-        _pdf.cell(_col_w - 4, 5, "ANALISIS BTSB & NSB", align="L")
-
         _pdf.set_text_color(*WARNA["dark"])
-        _pdf.set_my_font(style="", size=9)
-        _pdf.set_xy(110, _y_section + 10)
 
-        if _calc:
-            _pdf.cell(45, 5.5, "Net Sales")
-            _pdf.cell(0, 5.5, f": {_format_rp(net_sales)}", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_x(110)
-            _pdf.cell(45, 5.5, "BTSB (0,15%)")
-            _pdf.cell(0, 5.5, f": {_format_rp(_calc['btsb'])}", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_x(110)
-            _pdf.cell(45, 5.5, "Total Selisih")
-            _pdf.cell(0, 5.5, f": {_format_rp(_calc['selisih'])}", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_x(110)
-            _pdf.cell(45, 5.5, "NSB")
-            _pdf.cell(0, 5.5, f": {_format_rp(_calc['nsb'])}", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_x(110)
-            _pdf.cell(45, 5.5, "Total Rak")
-            _pdf.cell(0, 5.5, f": {_total_rak_bulan} rak", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_x(110)
-            _pdf.cell(45, 5.5, "Status")
+        _rows = [
+            ("Tanggal", _periode),
+            ("Total Rak di-SO", f"{hasil.get('total_rak', 0)} rak"),
+            ("Nominal SO", _format_rp(_total_nom)),
+            ("Sales Periode", _format_rp_no_sign(_sales_periode)),
+            ("BTSB (0,15%)", _format_rp_no_sign(_btsb)),
+        ]
+
+        for _label, _val in _rows:
+            _pdf.set_x(14)
+            _pdf.cell(55, 6, _label)
             _pdf.set_my_font(style="B", size=9)
-            if _calc["status"] == "OVER":
-                _pdf.set_text_color(*WARNA["red"])
-            else:
-                _pdf.set_text_color(*WARNA["green"])
-            _pdf.cell(0, 5.5, f": {_calc['status']}", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_text_color(*WARNA["dark"])
+            _pdf.cell(0, 6, f": {_val}", new_x="LMARGIN", new_y="NEXT")
             _pdf.set_my_font(style="", size=9)
+
+        # Keterangan status
+        _pdf.set_x(14)
+        _pdf.cell(55, 6, "Keterangan")
+        _pdf.set_my_font(style="B", size=9)
+        if _status == "OVER":
+            _pdf.set_text_color(*WARNA["red"])
         else:
-            _pdf.cell(0, 5.5, "Data net sales belum tersedia", new_x="LMARGIN", new_y="NEXT")
-
-        _pdf.set_y(max(_pdf.get_y(), _y_section + 45) + 5)
-
-        # =========================================================
-        # BAR CHART
-        # =========================================================
-        _bar_buf = _generate_bar_chart(hasil)
-        if _bar_buf:
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.rect(12, _pdf.get_y(), 186, 7, style="F")
-            _pdf.set_my_font(style="B", size=10)
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.set_xy(14, _pdf.get_y() + 1.5)
-            _pdf.cell(0, 5, "NOMINAL PER RAK", align="L")
-            _pdf.set_text_color(*WARNA["dark"])
-            _pdf.ln(10)
-            _pdf.image(_bar_buf, x=15, w=180)
-            _pdf.ln(4)
-            _bar_buf.close()
-
-        # =========================================================
-        # TREND + DONUT (2 kolom)
-        # =========================================================
-        _y_chart = _pdf.get_y()
-        if _y_chart > 200:
-            _pdf.add_page()
-
-        _trend_buf = _generate_trend_nsb(hasil)
-        _donut_buf = _generate_donut_sales_nsb(net_sales, _calc["nsb"] if _calc else 0)
-
-        if _trend_buf and _donut_buf:
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.rect(12, _pdf.get_y(), 120, 7, style="F")
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.rect(136, _pdf.get_y(), 62, 7, style="F")
-
-            _pdf.set_my_font(style="B", size=9)
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.set_xy(14, _pdf.get_y() + 1.5)
-            _pdf.cell(0, 5, "TREND NSB", align="L")
-            _pdf.set_xy(138, _pdf.get_y() - 5 + 1.5)
-            _pdf.cell(0, 5, "COVERAGE", align="L")
-
-            _pdf.set_text_color(*WARNA["dark"])
-            _pdf.ln(10)
-
-            _y_img = _pdf.get_y()
-            _pdf.image(_trend_buf, x=12, y=_y_img, w=120)
-            _pdf.image(_donut_buf, x=138, y=_y_img, w=60)
-            _pdf.ln(50)
-
-            _trend_buf.close()
-            _donut_buf.close()
-
-        # =========================================================
-        # DAFTAR RAK LENGKAP
-        # =========================================================
-        _pdf.add_page()
-        _pdf.set_fill_color(*WARNA["sage"])
-        _pdf.rect(12, _pdf.get_y(), 186, 7, style="F")
-        _pdf.set_my_font(style="B", size=10)
-        _pdf.set_text_color(*WARNA["white"])
-        _pdf.set_xy(14, _pdf.get_y() + 1.5)
-        _pdf.cell(0, 5, "DAFTAR RAK YANG DI-SO", align="L")
+            _pdf.set_text_color(*WARNA["green"])
+        _pdf.cell(0, 6, f": {_status}", new_x="LMARGIN", new_y="NEXT")
         _pdf.set_text_color(*WARNA["dark"])
-        _pdf.ln(10)
+        _pdf.ln(4)
+
+        # --- Donut Chart ---
+        _donut_buf = _generate_donut_per_rak(hasil)
+        if _donut_buf:
+            _draw_section_header(_pdf, "KONTRIBUSI PER RAK")
+            _y_img = _pdf.get_y()
+            _pdf.image(_donut_buf, x=55, y=_y_img, w=100)
+            _pdf.set_y(_y_img + 85)
+            _donut_buf.close()
+            _pdf.ln(2)
+
+        # --- Insight Halaman 1 ---
+        _draw_section_header(_pdf, "INSIGHT", fill=WARNA["beige"])
+        _pdf.set_my_font(style="I", size=9)
+        _pdf.set_text_color(*WARNA["dark"])
+        _pdf.set_x(14)
+        _pdf.multi_cell(182, 5.5, _generate_insight_hal1(hasil, _sales_periode))
+        _pdf.ln(4)
+
+        # --- Tabel List Rak ---
+        _draw_section_header(_pdf, "DAFTAR RAK YANG DI-SO")
 
         # Header tabel
         _pdf.set_my_font(style="B", size=9)
         _pdf.set_fill_color(*WARNA["sage"])
         _pdf.set_text_color(*WARNA["white"])
-        _pdf.cell(25, 7, "RAK", border=0, fill=True, align="C")
-        _pdf.cell(60, 7, "PIC", border=0, fill=True, align="C")
-        _pdf.cell(45, 7, "TANGGAL", border=0, fill=True, align="C")
-        _pdf.cell(56, 7, "NOMINAL", border=0, fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+        _col_w = [22, 70, 40, 25, 29]
+        _pdf.cell(_col_w[0], 7, "RAK", fill=True, align="C")
+        _pdf.cell(_col_w[1], 7, "NAMA RAK", fill=True, align="C")
+        _pdf.cell(_col_w[2], 7, "PIC", fill=True, align="C")
+        _pdf.cell(_col_w[3], 7, "TANGGAL", fill=True, align="C")
+        _pdf.cell(_col_w[4], 7, "SELISIH", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
 
-        # Body tabel
-        _pdf.set_my_font(style="", size=9)
+        # Body
+        _pdf.set_my_font(style="", size=8)
         _pdf.set_text_color(*WARNA["dark"])
-        _list_rak = hasil.get("list_rak", [])
         for _i, _r in enumerate(_list_rak):
             _bg = WARNA["offwhite"] if _i % 2 == 0 else WARNA["white"]
             _pdf.set_fill_color(*_bg)
-            _pdf.cell(25, 6, str(_r.get("rak_id", "-"))[:15], border=0, fill=True, align="C")
-            _pdf.cell(60, 6, str(_r.get("pic", "-"))[:25], border=0, fill=True, align="L")
-            _pdf.cell(45, 6, str(_r.get("tanggal", "-"))[:12], border=0, fill=True, align="C")
+            _rak_id = str(_r.get("rak_id", "-"))
+            _rak_name = _rak_names.get(_rak_id, "") or "RAK CUSTOM"
             _nom = _r.get("total", 0)
+
+            _pdf.cell(_col_w[0], 6, _rak_id[:12], fill=True, align="C")
+            _pdf.cell(_col_w[1], 6, _clean_text(_rak_name)[:40], fill=True, align="L")
+            _pdf.cell(_col_w[2], 6, str(_r.get("pic", "-"))[:18], fill=True, align="C")
+            _pdf.cell(_col_w[3], 6, str(_r.get("tanggal", "-"))[:12], fill=True, align="C")
+
             if _nom < 0:
                 _pdf.set_text_color(*WARNA["red"])
             else:
                 _pdf.set_text_color(*WARNA["green"])
-            _pdf.cell(56, 6, _format_rp(_nom), border=0, fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+            _pdf.cell(_col_w[4], 6, _format_rp(_nom), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
             _pdf.set_text_color(*WARNA["dark"])
-
-        _pdf.ln(6)
 
         # =========================================================
-        # TOP 5 MINUS & PLUS
+        # HALAMAN 2: LIST ITEM YANG MINUS
         # =========================================================
-        try:
-            from modules.yui_rekap import get_top_items
-            _tops = get_top_items(limit=5)
-            _top_minus = _tops.get("top_minus", [])
-            _top_plus = _tops.get("top_plus", [])
+        _pdf.judul_halaman = "LIST ITEM YANG MINUS"
+        _pdf.add_page()
 
-            # TOP 5 MINUS
-            _pdf.set_fill_color(*WARNA["salmon"])
-            _pdf.rect(12, _pdf.get_y(), 186, 7, style="F")
-            _pdf.set_my_font(style="B", size=10)
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.set_xy(14, _pdf.get_y() + 1.5)
-            _pdf.cell(0, 5, "TOP 5 MINUS TERTINGGI (PER ITEM)", align="L")
-            _pdf.set_text_color(*WARNA["dark"])
-            _pdf.ln(10)
+        # Limit item per rak berdasarkan mode
+        if _mode == "hari_ini":
+            _limit_per_rak = None  # semua
+        elif _mode == "minggu_ini":
+            _limit_per_rak = 10
+        else:  # bulan_ini
+            _limit_per_rak = 20
 
-            _pdf.set_my_font(style="B", size=8)
-            _pdf.set_fill_color(*WARNA["salmon"])
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.cell(15, 7, "RAK", fill=True, align="C")
-            _pdf.cell(22, 7, "PLU", fill=True, align="C")
-            _pdf.cell(75, 7, "NAMA PRODUK", fill=True, align="C")
-            _pdf.cell(46, 7, "NOMINAL", fill=True, align="C")
-            _pdf.cell(28, 7, "PIC", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+        # Loop per rak
+        if _items_by_rak:
+            # Urutkan rak berdasarkan total minus (terbesar dulu)
+            _rak_sorted = sorted(
+                _items_by_rak.items(),
+                key=lambda x: sum(
+                    float(i.get("nominal_adjust", 0) or 0) for i in x[1]
+                ),
+            )
 
-            _pdf.set_my_font(style="", size=8)
-            _pdf.set_text_color(*WARNA["dark"])
-            for _i, _r in enumerate(_top_minus):
-                _bg = WARNA["offwhite"] if _i % 2 == 0 else WARNA["white"]
-                _pdf.set_fill_color(*_bg)
-                _pdf.cell(15, 6, str(_r.get("rak_id", "-"))[:10], fill=True, align="C")
-                _pdf.cell(22, 6, str(_r.get("plu", "-"))[:10], fill=True, align="C")
-                _pdf.cell(75, 6, str(_r.get("nama_produk", "-"))[:40], fill=True, align="L")
+            for _rak_id, _items in _rak_sorted:
+                # Filter item minus
+                _items_minus = [
+                    i for i in _items
+                    if float(i.get("nominal_adjust", 0) or 0) < 0
+                ]
+
+                if not _items_minus:
+                    continue
+
+                # Sort by nominal (paling minus dulu)
+                _items_minus.sort(key=lambda x: float(x.get("nominal_adjust", 0) or 0))
+
+                # Limit
+                if _limit_per_rak is not None:
+                    _items_minus = _items_minus[:_limit_per_rak]
+
+                # Section header per rak
+                _rak_name = _rak_names.get(_rak_id, "") or "RAK CUSTOM"
+                _total_rak = sum(float(i.get("nominal_adjust", 0) or 0) for i in _items_minus)
+
+                _draw_section_header(
+                    _pdf,
+                    f"RAK {_rak_id} — {_clean_text(_rak_name)[:40]}",
+                    fill=WARNA["salmon"],
+                )
+
+                # Header tabel
+                _pdf.set_my_font(style="B", size=8)
+                _pdf.set_fill_color(*WARNA["salmon"])
+                _pdf.set_text_color(*WARNA["white"])
+                _c = [22, 75, 15, 20, 54]
+                _pdf.cell(_c[0], 6, "PLU", fill=True, align="C")
+                _pdf.cell(_c[1], 6, "NAMA PRODUK", fill=True, align="C")
+                _pdf.cell(_c[2], 6, "QTY VAR", fill=True, align="C")
+                _pdf.cell(_c[3], 6, "PIC", fill=True, align="C")
+                _pdf.cell(_c[4], 6, "NOMINAL", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+
+                # Body
+                _pdf.set_my_font(style="", size=8)
+                _pdf.set_text_color(*WARNA["dark"])
+                for _idx, _it in enumerate(_items_minus):
+                    _bg = WARNA["offwhite"] if _idx % 2 == 0 else WARNA["white"]
+                    _pdf.set_fill_color(*_bg)
+                    _nom = float(_it.get("nominal_adjust", 0) or 0)
+                    _qty_var = _it.get("qty_var", 0)
+
+                    _pdf.cell(_c[0], 5.5, str(_it.get("plu", "-"))[:12], fill=True, align="C")
+                    _pdf.cell(_c[1], 5.5, _clean_text(_it.get("nama_produk", "-"))[:42], fill=True, align="L")
+                    _pdf.cell(_c[2], 5.5, str(_qty_var), fill=True, align="C")
+                    _pdf.cell(_c[3], 5.5, str(_it.get("pic", "-"))[:12], fill=True, align="C")
+                    _pdf.set_text_color(*WARNA["red"])
+                    _pdf.cell(_c[4], 5.5, _format_rp(_nom), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+                    _pdf.set_text_color(*WARNA["dark"])
+
+                # Total per rak
+                _pdf.set_fill_color(*WARNA["beige"])
+                _pdf.set_my_font(style="B", size=9)
+                _pdf.set_text_color(*WARNA["dark"])
+                _pdf.cell(sum(_c[:4]), 6.5, f"TOTAL RAK {_rak_id}", fill=True, align="R")
                 _pdf.set_text_color(*WARNA["red"])
-                _pdf.cell(46, 6, _format_rp(_r.get("nominal_adjust", 0)), fill=True, align="R")
+                _pdf.cell(_c[4], 6.5, _format_rp(_total_rak), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
                 _pdf.set_text_color(*WARNA["dark"])
-                _pdf.cell(28, 6, str(_r.get("pic", "-"))[:12], fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
-            _pdf.ln(6)
+                _pdf.ln(5)
 
-            # TOP 5 PLUS
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.rect(12, _pdf.get_y(), 186, 7, style="F")
-            _pdf.set_my_font(style="B", size=10)
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.set_xy(14, _pdf.get_y() + 1.5)
-            _pdf.cell(0, 5, "TOP 5 PLUS TERTINGGI (PER ITEM)", align="L")
+            # Insight Halaman 2
+            _draw_section_header(_pdf, "INSIGHT", fill=WARNA["beige"])
+            _pdf.set_my_font(style="I", size=9)
             _pdf.set_text_color(*WARNA["dark"])
-            _pdf.ln(10)
-
-            _pdf.set_my_font(style="B", size=8)
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.cell(15, 7, "RAK", fill=True, align="C")
-            _pdf.cell(22, 7, "PLU", fill=True, align="C")
-            _pdf.cell(75, 7, "NAMA PRODUK", fill=True, align="C")
-            _pdf.cell(46, 7, "NOMINAL", fill=True, align="C")
-            _pdf.cell(28, 7, "PIC", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
-
-            _pdf.set_my_font(style="", size=8)
+            _pdf.set_x(14)
+            _pdf.multi_cell(182, 5.5, _generate_insight_hal2(hasil))
+        else:
+            _pdf.set_my_font(style="I", size=10)
             _pdf.set_text_color(*WARNA["dark"])
-            for _i, _r in enumerate(_top_plus):
-                _bg = WARNA["offwhite"] if _i % 2 == 0 else WARNA["white"]
-                _pdf.set_fill_color(*_bg)
-                _pdf.cell(15, 6, str(_r.get("rak_id", "-"))[:10], fill=True, align="C")
-                _pdf.cell(22, 6, str(_r.get("plu", "-"))[:10], fill=True, align="C")
-                _pdf.cell(75, 6, str(_r.get("nama_produk", "-"))[:40], fill=True, align="L")
-                _pdf.set_text_color(*WARNA["green"])
-                _pdf.cell(46, 6, _format_rp(_r.get("nominal_adjust", 0)), fill=True, align="R")
-                _pdf.set_text_color(*WARNA["dark"])
-                _pdf.cell(28, 6, str(_r.get("pic", "-"))[:12], fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
-        except Exception as _e:
-            print(f"[PDF TOP5 WARN] {_e}")
+            _pdf.cell(0, 10, "Tidak ada item minus pada periode ini.", align="C")
 
         _output = _pdf.output()
         return bytes(_output) if isinstance(_output, bytearray) else _output
@@ -652,156 +571,95 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         import traceback
         print(traceback.format_exc())
         return None
-    
+
 
 # =========================================================
-# GAMBAR — matplotlib (pastel theme)
+# GAMBAR
 # =========================================================
 def export_rekap_image(hasil, net_sales=0, filename="rekap_so.png"):
-    """Export rekap SO jadi gambar pakai matplotlib (pastel theme)."""
+    """Export rekap jadi gambar (matplotlib pastel theme)."""
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        from modules.yui_rekap import get_top_items
 
         _list_rak = hasil.get("list_rak", [])
         if not _list_rak:
             return None
 
-        _tops = get_top_items(limit=5)
-        _top_minus = _tops.get("top_minus", [])
-        _top_plus = _tops.get("top_plus", [])
+        _rak_names = hasil.get("rak_names", {})
 
-        _fig = plt.figure(figsize=(12, 14))
+        _fig = plt.figure(figsize=(12, 8))
         _fig.patch.set_facecolor("#F0EEEA")
 
-        # ===== Subplot 1: Rekap per Rak =====
-        _ax1 = _fig.add_subplot(4, 1, 1)
-        _ax1.axis("off")
-        _ax1.set_title(
-            "REKAP PER RAK", fontsize=13, fontweight="bold", color="#3C3C3C", pad=12
+        # Title
+        _fig.suptitle(
+            "LAPORAN STOCK OPNAME — TOKO C383",
+            fontsize=14, fontweight="bold", color="#3C3C3C", y=0.98,
         )
 
-        _df_rak = pd.DataFrame(_list_rak).rename(columns={
-            "rak_id": "Rak", "total": "Nominal",
-            "pic": "PIC", "tanggal": "Tanggal",
-        })
-        _df_rak["Nominal"] = _df_rak["Nominal"].apply(
+        # Subplot 1: Tabel Rekap
+        _ax1 = _fig.add_subplot(2, 1, 1)
+        _ax1.axis("off")
+        _ax1.set_title("REKAP PER RAK", fontsize=11, fontweight="bold", color="#3C3C3C", pad=8)
+
+        _df = pd.DataFrame(_list_rak)
+        _df["Nama Rak"] = _df["rak_id"].apply(lambda x: _rak_names.get(x, "") or "RAK CUSTOM")
+        _df["Nominal"] = _df["total"].apply(
             lambda x: f"{'+' if _format_nominal(x) >= 0 else '-'}Rp {abs(_format_nominal(x)):,}".replace(",", ".")
         )
 
-        _tbl1 = _ax1.table(
-            cellText=_df_rak[["Rak", "Nominal", "PIC", "Tanggal"]].values,
-            colLabels=["Rak", "Nominal", "PIC", "Tanggal"],
+        _tbl = _ax1.table(
+            cellText=_df[["rak_id", "Nama Rak", "pic", "Nominal"]].values,
+            colLabels=["Rak", "Nama Rak", "PIC", "Nominal"],
             cellLoc="center", loc="center",
-            colWidths=[0.15, 0.35, 0.25, 0.25],
+            colWidths=[0.12, 0.38, 0.18, 0.32],
         )
-        _tbl1.auto_set_font_size(False)
-        _tbl1.set_fontsize(9)
-        _tbl1.scale(1, 1.5)
+        _tbl.auto_set_font_size(False)
+        _tbl.set_fontsize(9)
+        _tbl.scale(1, 1.5)
         for _i in range(4):
-            _cell = _tbl1[(0, _i)]
+            _cell = _tbl[(0, _i)]
             _cell.set_facecolor("#97B3AE")
             _cell.set_text_props(color="white", weight="bold")
-        for _i in range(1, len(_df_rak) + 1):
-            for _j in range(4):
-                _cell = _tbl1[(_i, _j)]
-                _cell.set_facecolor("#FFFFFF" if _i % 2 == 1 else "#F0EEEA")
 
-        # ===== Subplot 2: Bar Chart per Rak =====
-        _ax2 = _fig.add_subplot(4, 1, 2)
-        _ax2.set_facecolor("#F0EEEA")
-        _df_bar = pd.DataFrame(_list_rak)
-        _df_bar["total"] = pd.to_numeric(_df_bar["total"], errors="coerce").fillna(0)
-        if len(_df_bar) > 10:
-            _df_bar = _df_bar.nsmallest(10, "total")
-            _bar_title = "TOP 10 MINUS PER RAK"
-        else:
-            _bar_title = "NOMINAL PER RAK"
-        _df_bar = _df_bar.sort_values("total")
+        # Subplot 2: Donut
+        _ax2 = _fig.add_subplot(2, 2, 3)
+        _list_sorted = sorted(_list_rak, key=lambda x: abs(x.get("total", 0)), reverse=True)
+        _top = _list_sorted[:6]
+        _labels = [f"Rak {r.get('rak_id', '?')}" for r in _top]
+        _sizes = [abs(r.get("total", 0)) for r in _top]
 
-        _colors = ["#F2C3B9" if v < 0 else "#97B3AE" for v in _df_bar["total"]]
-        _ax2.bar(_df_bar["rak_id"].astype(str), _df_bar["total"], color=_colors, edgecolor="white", linewidth=1)
-        _ax2.axhline(0, color="#3C3C3C", linewidth=0.8)
-        _ax2.set_title(_bar_title, fontsize=12, fontweight="bold", color="#3C3C3C", pad=8)
-        _ax2.tick_params(axis="x", rotation=45, labelsize=8)
-        _ax2.tick_params(axis="y", labelsize=8)
-        _ax2.spines["top"].set_visible(False)
-        _ax2.spines["right"].set_visible(False)
-        _ax2.spines["left"].set_color("#D6CBBF")
-        _ax2.spines["bottom"].set_color("#D6CBBF")
-        _ax2.grid(axis="y", linestyle="--", alpha=0.4, color="#D6CBBF")
-        _ax2.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda x, p: f"{int(x):,}".replace(",", "."))
-        )
+        if _sizes:
+            _wedges, _texts, _autotexts = _ax2.pie(
+                _sizes, labels=_labels,
+                colors=CHART_COLORS[:len(_sizes)],
+                autopct=lambda p: f"{p:.1f}%",
+                startangle=90,
+                wedgeprops=dict(width=0.4, edgecolor="white", linewidth=2),
+                textprops=dict(color="#3C3C3C", fontsize=8),
+            )
+            for _at in _autotexts:
+                _at.set_color("white")
+                _at.set_fontweight("bold")
+                _at.set_fontsize(8)
+            _ax2.set_title("KONTRIBUSI PER RAK", fontsize=11, fontweight="bold", color="#3C3C3C")
 
-        # ===== Subplot 3: Top 5 Minus =====
-        _ax3 = _fig.add_subplot(4, 1, 3)
+        # Subplot 3: Insight
+        _ax3 = _fig.add_subplot(2, 2, 4)
         _ax3.axis("off")
-        _ax3.set_title(
-            "TOP 5 MINUS (PER ITEM)", fontsize=12, fontweight="bold", color="#C83232", pad=10
+        _ax3.set_title("INSIGHT", fontsize=11, fontweight="bold", color="#3C3C3C")
+        _insight = _generate_insight_hal1(hasil, hasil.get("sales_periode", 0))
+        _ax3.text(
+            0.05, 0.5, _insight,
+            fontsize=9, color="#3C3C3C",
+            wrap=True, verticalalignment="center",
+            transform=_ax3.transAxes,
         )
-
-        if _top_minus:
-            _rows_minus = []
-            for _r in _top_minus:
-                _nom = _format_nominal(_r.get("nominal_adjust", 0))
-                _rows_minus.append([
-                    str(_r.get("rak_id", "-"))[:8],
-                    str(_r.get("plu", "-"))[:10],
-                    str(_r.get("nama_produk", "-"))[:35],
-                    f"-Rp {abs(_nom):,}".replace(",", "."),
-                ])
-            _tbl2 = _ax3.table(
-                cellText=_rows_minus,
-                colLabels=["Rak", "PLU", "Nama Produk", "Nominal"],
-                cellLoc="center", loc="center",
-                colWidths=[0.1, 0.15, 0.55, 0.2],
-            )
-            _tbl2.auto_set_font_size(False)
-            _tbl2.set_fontsize(8)
-            _tbl2.scale(1, 1.5)
-            for _i in range(4):
-                _cell = _tbl2[(0, _i)]
-                _cell.set_facecolor("#F2C3B9")
-                _cell.set_text_props(color="white", weight="bold")
-
-        # ===== Subplot 4: Top 5 Plus =====
-        _ax4 = _fig.add_subplot(4, 1, 4)
-        _ax4.axis("off")
-        _ax4.set_title(
-            "TOP 5 PLUS (PER ITEM)", fontsize=12, fontweight="bold", color="#329632", pad=10
-        )
-
-        if _top_plus:
-            _rows_plus = []
-            for _r in _top_plus:
-                _nom = _format_nominal(_r.get("nominal_adjust", 0))
-                _rows_plus.append([
-                    str(_r.get("rak_id", "-"))[:8],
-                    str(_r.get("plu", "-"))[:10],
-                    str(_r.get("nama_produk", "-"))[:35],
-                    f"+Rp {abs(_nom):,}".replace(",", "."),
-                ])
-            _tbl3 = _ax4.table(
-                cellText=_rows_plus,
-                colLabels=["Rak", "PLU", "Nama Produk", "Nominal"],
-                cellLoc="center", loc="center",
-                colWidths=[0.1, 0.15, 0.55, 0.2],
-            )
-            _tbl3.auto_set_font_size(False)
-            _tbl3.set_fontsize(8)
-            _tbl3.scale(1, 1.5)
-            for _i in range(4):
-                _cell = _tbl3[(0, _i)]
-                _cell.set_facecolor("#97B3AE")
-                _cell.set_text_props(color="white", weight="bold")
 
         plt.tight_layout()
         plt.savefig(filename, dpi=110, bbox_inches="tight", facecolor="#F0EEEA")
         plt.close(_fig)
-        print(f"[EXPORT_IMG] Saved: {filename}")
         return filename
     except Exception as e:
         print(f"[EXPORT_IMG ERROR] {e}")
@@ -817,14 +675,17 @@ def export_rekap_excel(hasil, net_sales=0):
     """Export Excel: ringkasan + rekap per rak."""
     try:
         _buf = io.BytesIO()
+        _rak_names = hasil.get("rak_names", {})
 
         _df_rak = pd.DataFrame(hasil.get("list_rak", []))
         if not _df_rak.empty:
+            _df_rak["Nama Rak"] = _df_rak["rak_id"].apply(lambda x: _rak_names.get(x, "") or "RAK CUSTOM")
             _df_rak = _df_rak.rename(columns={
                 "rak_id": "Rak", "total": "Nominal",
                 "pic": "PIC", "tanggal": "Tanggal",
             })
             _df_rak["Nominal"] = _df_rak["Nominal"].apply(_format_nominal)
+            _df_rak = _df_rak[["Rak", "Nama Rak", "Nominal", "PIC", "Tanggal"]]
 
         _summary = {
             "Periode": [hasil.get("periode", "-")],
