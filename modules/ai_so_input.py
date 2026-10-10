@@ -313,12 +313,12 @@ def _extract_from_dataframe(df, context=None):
     _log(f"[Yui DF] Shape: {df.shape}, cols: {list(df.columns)[:8]}")
 
     _col_plu = _find_col(df.columns, ["plu", "kode_barang", "barcode", "sku"])
-_col_nama = _find_col(df.columns, ["nama barang", "nama produk", "nama", "produk", "deskripsi"])
-_col_rak = _find_col(df.columns, ["rack", "rak", "sub_dept"])
-_col_stock = _find_col(df.columns, ["stock fisik", "stok fisik", "fisik", "qtycount"])
-_col_onhand = _find_col(df.columns, ["onhand", "stok sistem", "stock sistem", "stock onhand"])
-_col_var = _find_col(df.columns, ["plus/minus", "plus minus", "plusminus", "selisih qty", "qty var"])
-_col_nominal = _find_col(df.columns, ["selisih rupiah", "selisih_rupiah", "nominal", "rupiah", "adjust"])
+    _col_nama = _find_col(df.columns, ["nama barang", "nama produk", "nama", "produk", "deskripsi"])
+    _col_rak = _find_col(df.columns, ["rack", "rak", "sub_dept"])
+    _col_stock = _find_col(df.columns, ["stock fisik", "stok fisik", "fisik", "qtycount"])
+    _col_onhand = _find_col(df.columns, ["onhand", "stok sistem", "stock sistem", "stock onhand"])
+    _col_var = _find_col(df.columns, ["plus/minus", "plus minus", "plusminus", "selisih qty", "qty var"])
+    _col_nominal = _find_col(df.columns, ["selisih rupiah", "selisih_rupiah", "nominal", "rupiah", "adjust"])
 
     for _idx, _row in df.iterrows():
         try:
@@ -326,17 +326,15 @@ _col_nominal = _find_col(df.columns, ["selisih rupiah", "selisih_rupiah", "nomin
             _nama = str(_row[_col_nama]).strip()[:120] if _col_nama else ""
             _rak = str(_row[_col_rak]).strip().upper() if _col_rak else _ctx.get("rak_id", "")
 
-            # ✅ Validasi PLU struktural — minimal 3 digit angka
+            # Validasi PLU struktural — minimal 3 digit angka
             if not _plu or _plu.lower() in ("nan", "none", "plu", "no", ""):
                 continue
-            
-            # Extract digit doang dari PLU
+
             _plu_digits = re.sub(r'[^\d]', '', str(_plu))
             if not _plu_digits or len(_plu_digits) < 3:
                 _log(f"[Yui DF] Skip PLU invalid: '{_plu}'")
                 continue
-            
-            # Skip kalau nama produk kosong atau cuma keyword header
+
             if not _nama or _nama.lower() in ("nan", "none", "nama", "nama barang", "produk", ""):
                 continue
 
@@ -362,7 +360,6 @@ _col_nominal = _find_col(df.columns, ["selisih rupiah", "selisih_rupiah", "nomin
     if not _all_items:
         return None
 
-    # ✅ Grouping per rak
     _grouped = {}
     for _item in _all_items:
         _rak = _item["rak_id"] or "UNKNOWN"
@@ -375,7 +372,7 @@ _col_nominal = _find_col(df.columns, ["selisih rupiah", "selisih_rupiah", "nomin
     return {
         "tanggal": _ctx.get("tanggal"),
         "items": _all_items,
-        "items_by_rak": _grouped,  # ✅ Baru
+        "items_by_rak": _grouped,
         "total_nominal": sum(i["nominal_adjust"] for i in _all_items),
         "rak_id": None,
         "pic": None,
