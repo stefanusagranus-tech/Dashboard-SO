@@ -465,7 +465,7 @@ if st.session_state.get("yui_pending_data"):
     st.markdown("#### 📋 Konfirmasi Data SO")
     st.caption("Koreksi item, isi PIC per rak, atau tambah item manual")
 
-    # Info
+    # Info summary
     _c1, _c2, _c3 = st.columns(3)
     with _c1:
         st.markdown(
@@ -494,12 +494,11 @@ if st.session_state.get("yui_pending_data"):
 
     st.markdown("")
 
-    # ✅ Per rak — tabel editable + PIC
+    # Per rak — tabel editable + PIC
     _updated_items_all = []
     _pics_per_rak = _pending.get("pics", {})
 
     for _rak_id, _rak_items in _items_by_rak.items():
-        # Header rak + PIC
         _col_h1, _col_h2 = st.columns([2, 2])
 
         with _col_h1:
@@ -531,7 +530,7 @@ if st.session_state.get("yui_pending_data"):
                 if _new_pic:
                     _pics_per_rak[_rak_id] = _new_pic
 
-        # Tabel editable
+        # Tabel editable — pakai num_rows="dynamic"
         _df_rak = pd.DataFrame(_rak_items)
         _cols_show = ["plu", "nama_produk", "qty_sistem", "qty_fisik", "qty_var", "nominal_adjust"]
         _cols_show = [c for c in _cols_show if c in _df_rak.columns]
@@ -563,7 +562,6 @@ if st.session_state.get("yui_pending_data"):
             key=f"editor_rak_{_rak_id}",
         )
 
-        # Total per rak
         _rak_total = sum(float(_r.get("Nominal", 0) or 0) for _, _r in _edited_rak.iterrows())
         st.markdown(
             f"<div class='rak-group-total'>💰 Total {_rak_id}: "
@@ -572,7 +570,6 @@ if st.session_state.get("yui_pending_data"):
             unsafe_allow_html=True,
         )
 
-        # Simpan edited items
         for _, _r in _edited_rak.iterrows():
             _updated_items_all.append({
                 "rak_id": _rak_id,
@@ -591,7 +588,6 @@ if st.session_state.get("yui_pending_data"):
     _new_total = sum(i["nominal_adjust"] for i in _updated_items_all)
     st.session_state["yui_pending_data"]["total_nominal"] = _new_total
 
-    # Total besar
     st.markdown(
         f"<div class='metric-clean' style='border-left-color: {'#E88B8B' if _new_total < 0 else '#7FB99B'}; "
         f"text-align: right; margin-top: 16px;'>"
@@ -618,7 +614,6 @@ if st.session_state.get("yui_pending_data"):
                 _saved_count = 0
                 _error_count = 0
 
-                # Save per rak
                 for _rak_id, _rak_items in _items_by_rak.items():
                     _rak_pic = _pics_per_rak.get(_rak_id, "")
                     if not _rak_pic:
@@ -663,7 +658,6 @@ if st.session_state.get("yui_pending_data"):
             save_message("yui", _session_id, "assistant", _cancel)
             st.session_state["yui_pending_data"] = None
             st.rerun()
-
 
 # =========================================================
 # CHAT INPUT

@@ -391,7 +391,7 @@ def parse_file_text(file_text, file_type="pdf", context=None, primary_df=None):
         file_text = file_text.replace("&quot;", '"').replace("&nbsp;", " ")
 
     # ============================================================
-    # PRIORITAS 1: DataFrame (Excel)
+    # PRIORITAS 1: DataFrame (Excel / PDF via pdfplumber)
     # ============================================================
     if primary_df is not None and not primary_df.empty:
         _log(f"[Yui] DataFrame mode ({primary_df.shape})")
@@ -408,34 +408,39 @@ def parse_file_text(file_text, file_type="pdf", context=None, primary_df=None):
                 return {
                     "success": True,
                     "data": _df_data,
-                    "missing": ["pic"],
+                    "missing": [],  # ✅ JANGAN skip konfirmasi
                     "warnings": [],
                     "raw": file_text,
                     "model": "dataframe_extract",
                 }
 
-        _log(f"[Yui] DataFrame gagal/skip, lanjut...")
-
     # ============================================================
-    # PRIORITAS 2: PDF → Gemini (bukan Groq, biar stabil)
+    # PRIORITAS 2: PDF → Gemini (bukan Groq)
     # ============================================================
     if file_type == "pdf":
         _log(f"[Yui] PDF mode — coba Gemini...")
         _gemini_data = _parse_via_gemini(file_text, context=_ctx)
 
         if _gemini_data and _gemini_data.get("items"):
+            # ✅ Grouping per rak
+            _grouped = {}
+            for _item in _gemini_data["items"]:
+                _rak = _item.get("rak_id") or "UNKNOWN"
+                _grouped.setdefault(_rak, []).append(_item)
+            _gemini_data["items_by_rak"] = _grouped
+
             _log(f"[Yui] ✅ Gemini extract: {len(_gemini_data['items'])} items")
             return {
                 "success": True,
                 "data": _gemini_data,
-                "missing": ["pic"],
+                "missing": [],
                 "warnings": [],
                 "raw": file_text,
                 "model": "gemini_parse",
             }
 
     # ============================================================
-    # PRIORITAS 3: Screenshot / general → Groq
+    # PRIORITAS 3: General → Groq
     # ============================================================
     _clean_text = re.sub(r'</?(?:table|tr|td|th|div|span|p|br)[^>]*>', ' ', file_text, flags=re.IGNORECASE)
     _clean_text = re.sub(r'[ \t]+', ' ', _clean_text)
@@ -476,11 +481,18 @@ Output HANYA JSON.
             _data = _json.get("data") or {}
             _items = _data.get("items", []) if isinstance(_data, dict) else []
             if _items:
+                # ✅ Grouping per rak
+                _grouped = {}
+                for _item in _items:
+                    _rak = _item.get("rak_id") or "UNKNOWN"
+                    _grouped.setdefault(_rak, []).append(_item)
+                _data["items_by_rak"] = _grouped
+
                 _log(f"[Yui] ✅ Groq extract: {len(_items)} items")
                 return {
                     "success": True,
                     "data": _data,
-                    "missing": ["pic"],
+                    "missing": [],
                     "warnings": _json.get("warnings", []),
                     "raw": _text,
                     "model": _model,
@@ -493,11 +505,18 @@ Output HANYA JSON.
     _regex_data = _regex_fallback(file_text)
 
     if _regex_data and _regex_data.get("items"):
+        # ✅ Grouping per rak
+        _grouped = {}
+        for _item in _regex_data["items"]:
+            _rak = _item.get("rak_id") or "UNKNOWN"
+            _grouped.setdefault(_rak, []).append(_item)
+        _regex_data["items_by_rak"] = _grouped
+
         _log(f"[Yui] ✅ Regex: {len(_regex_data['items'])} items")
         return {
             "success": True,
             "data": _regex_data,
-            "missing": ["pic"],
+            "missing": [],
             "warnings": ["Extracted via regex"],
             "raw": file_text,
             "model": "regex_fallback",
