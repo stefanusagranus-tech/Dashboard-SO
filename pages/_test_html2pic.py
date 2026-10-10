@@ -287,7 +287,7 @@ def _build_infografis(data, tmp_dir):
     # SECTION 01 — KIRI: TREND | KANAN: RINGKASAN + INSIGHT
     # =========================================================
     _title_01 = _section_title("01", "TREND & RINGKASAN")
-
+    
     # --- KIRI: TREND CHART ---
     _trend_col = (
         Column(
@@ -297,12 +297,12 @@ def _build_infografis(data, tmp_dir):
         .background_color(WARNA["white"])
         .border_radius(12)
         .gap(0)
-        .flex_grow(1)
+        # Hapus flex_grow(1) karena kita akan pakai stretch
     )
-
+    
     # --- KANAN: RINGKASAN + INSIGHT ---
     _status_color = WARNA["red"] if data["status"] == "OVER" else WARNA["green"]
-
+    
     def _metric_row(label, value, value_color=None):
         if value_color is None:
             value_color = WARNA["text_primary"]
@@ -310,7 +310,7 @@ def _build_infografis(data, tmp_dir):
             Text(label).font_size(12).color(WARNA["text_muted"]).width(130),
             Text(value).font_size(13).color(value_color).font_weight("bold"),
         ).gap(10).size(width=400)
-
+    
     _status_badge = (
         Row(
             Column(Text("").font_size(1))
@@ -320,12 +320,12 @@ def _build_infografis(data, tmp_dir):
             Text(f" {data['status']}").font_size(13).color(_status_color).font_weight("bold"),
         ).gap(6)
     )
-
+    
     _ringkasan_col = (
         Column(
+            # Konten Ringkasan
             Text("RINGKASAN PERIODE").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=400, h=2, color=WARNA["accent_deep"]),
-
             _metric_row("Tanggal", data["periode"]),
             _divider(w=400, h=1),
             _metric_row("Total Rak", f"{data['total_rak']} rak"),
@@ -336,14 +336,11 @@ def _build_infografis(data, tmp_dir):
             _divider(w=400, h=1),
             _metric_row("BTSB (0,15%)", _fmt_rp_no_sign(data["btsb"])),
             _divider(w=400, h=1),
-
             Row(
                 Text("Status").font_size(12).color(WARNA["text_muted"]).width(130),
                 _status_badge,
             ).gap(10).size(width=400),
-
             Column(Text("").font_size(1)).size(width=1, height=10),
-
             Text("INSIGHT").font_size(14).color(WARNA["accent_deep"]).font_weight("bold"),
             _divider(w=400, h=2, color=WARNA["accent_deep"]),
             Column(
@@ -354,10 +351,12 @@ def _build_infografis(data, tmp_dir):
         .background_color(WARNA["white"])
         .border_radius(12)
         .gap(8)
-        .flex_grow(1)
+        # Hapus flex_grow(1)
     )
-
-    _row_01 = Row(_trend_col, _ringkasan_col).gap(30).size(width=_W).align_items("start")
+    
+    # --- ROW UTAMA SECTION 01 ---
+    # Kunci perbaikannya ada di sini: align_items("stretch")
+    _row_01 = Row(_trend_col, _ringkasan_col).gap(30).size(width=_W).align_items("stretch")
 
     # =========================================================
     # SECTION 02 — KIRI: TABEL | KANAN: DONUT
