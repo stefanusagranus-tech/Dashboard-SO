@@ -236,6 +236,37 @@ def _generate_insight_hal1(hasil):
         print(f"[INSIGHT1 ERROR] {e}")
         return "Data insight belum tersedia."
 
+def _generate_insight_hal2(hasil):
+    """Insight otomatis halaman 2."""
+    try:
+        _items_by_rak = hasil.get("items_by_rak", {})
+        if not _items_by_rak:
+            return "Belum ada item pada periode ini."
+
+        _all_items = []
+        for _rak, _items in _items_by_rak.items():
+            for _it in _items:
+                _nom = float(_it.get("nominal_adjust", 0) or 0)
+                _all_items.append({**_it, "_nom": _nom})
+
+        if not _all_items:
+            return "Belum ada item pada periode ini."
+
+        _worst = min(_all_items, key=lambda x: x["_nom"])
+        _total_minus = sum(_it["_nom"] for _it in _all_items if _it["_nom"] < 0)
+        _count_minus = sum(1 for _it in _all_items if _it["_nom"] < 0)
+
+        return (
+            f"Item minus terbesar: {_clean_text(_worst.get('nama_produk', '-'))} "
+            f"(PLU {_worst.get('plu', '-')}, rak {_worst.get('rak_id', '-')}) "
+            f"senilai {_format_rp(_worst['_nom'])}. "
+            f"Total {len(_all_items)} item, {_count_minus} minus, "
+            f"akumulasi selisih {_format_rp(_total_minus)}."
+        )
+    except Exception as e:
+        print(f"[INSIGHT2 ERROR] {e}")
+        return "Data insight belum tersedia."
+        
 
 # =========================================================
 # PDF CLASS
