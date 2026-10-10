@@ -6,6 +6,7 @@ Semua dialog cuma trigger. Hasil rekap/export di halaman utama.
 
 import streamlit as st
 import time
+import html2pic
 import re
 import io
 import pandas as pd
