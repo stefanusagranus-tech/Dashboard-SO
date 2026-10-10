@@ -6,6 +6,7 @@ Semua dialog cuma trigger. Hasil rekap/export di halaman utama.
 
 import streamlit as st
 import time
+import html2pic
 import re
 import io
 import pandas as pd
@@ -845,21 +846,24 @@ if st.session_state.get("yui_rekap_hasil"):
     
     with _c_exp1:
         if st.button("📄 PDF", width="stretch", key="btn_exp_pdf"):
-            if not _EXPORT_OK:
+            _hasil_for_export = st.session_state.get("_last_hasil_rekap") or st.session_state.get("yui_rekap_hasil")
+            if not _hasil_for_export:
+                st.error("❌ Data rekap hilang. Coba rekap ulang.")
+            elif not _EXPORT_OK:
                 st.error("❌ Module yui_export gak ada")
             else:
-                with st.spinner("Bikin PDF profesional..."):
-                    _pdf_bytes = export_rekap_pdf(_hasil_rekap, net_sales=_net_sales_bulan)
+                with st.spinner("Bikin PDF..."):
+                    _pdf_bytes = export_rekap_pdf(_hasil_for_export)
                 if _pdf_bytes:
                     st.session_state["yui_export_result"] = {
                         "type": "pdf",
                         "bytes": _pdf_bytes,
-                        "filename": f"laporan_so_{_hasil_rekap['periode'].replace(' ', '_')}.pdf",
+                        "filename": f"laporan_so_{_hasil_for_export['periode'].replace(' ', '_')}.pdf",
                     }
                     st.rerun()
                 else:
-                    st.error("❌ Gagal bikin PDF")
-    
+                    st.error("❌ Gagal bikin PDF. Cek log.")
+        
     with _c_exp2:
         if st.button("📊 Excel", width="stretch", key="btn_exp_xlsx"):
             _xlsx_bytes = None
