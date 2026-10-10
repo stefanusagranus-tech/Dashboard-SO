@@ -6,3 +6,4 @@ libsm6
 libxext6
 libxrender-dev
 fonts-dejavu-core
+libegl1
