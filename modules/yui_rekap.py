@@ -271,11 +271,11 @@ def _get_net_sales_bulan(bulan=None, tahun=None):
                 .execute()
             )
             if _res.data:
-            # ✅ Sum dulu, baru abs — biar minus & plus saling cancel
-            _sum_raw = sum(float(r.get("nominal_adjust", 0) or 0) for r in _res.data)
-            _total = abs(_sum_raw)
-            print(f"[SELISIH_BULAN] raw={_sum_raw}, abs={_total} ({len(_res.data)} rows)")
-            return _total
+                # ✅ Sum dulu, baru abs — biar minus & plus saling cancel
+                _sum_raw = sum(float(r.get("nominal_adjust", 0) or 0) for r in _res.data)
+                _total = abs(_sum_raw)
+                print(f"[SELISIH_BULAN] raw={_sum_raw}, abs={_total} ({len(_res.data)} rows)")
+                return _total
         except Exception as _e:
             print(f"[NET_SALES] spd_harian error: {_e}")
 
