@@ -238,3 +238,29 @@ def export_rekap_image(hasil, filename="rekap_so.png"):
     except Exception as e:
         print(f"[EXPORT_IMG ERROR] {e}")
         return None
+        
+def _get_net_sales_bulan(bulan=None, tahun=None):
+    """Ambil total net sales bulan ini dari tabel net_sales."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return 0
+
+        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _bulan = bulan or _now.month
+        _tahun = tahun or _now.year
+
+        _res = (
+            _sb.table("net_sales")
+            .select("nominal")
+            .eq("bulan", _bulan)
+            .eq("tahun", _tahun)
+            .execute()
+        )
+
+        if _res.data:
+            return sum(float(r.get("nominal", 0) or 0) for r in _res.data)
+        return 0
+    except Exception as e:
+        print(f"[NET_SALES ERROR] {e}")
+        return 0
