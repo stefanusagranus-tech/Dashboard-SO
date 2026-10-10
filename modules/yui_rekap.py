@@ -368,3 +368,48 @@ def _get_total_rak_bulan(bulan=None, tahun=None):
     except Exception as e:
         print(f"[RAK_BULAN ERROR] {e}")
         return 0
+
+def get_top_items(bulan=None, tahun=None, limit=5):
+    """
+    Ambil top N item minus & plus dari so_hasil.
+    Return: dict {top_minus: [...], top_plus: [...]}
+    """
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {"top_minus": [], "top_plus": []}
+
+        _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+        _bulan = bulan or _now.month
+        _tahun = tahun or _now.year
+
+        _start = date(_tahun, _bulan, 1)
+        if _bulan == 12:
+            _end = date(_tahun + 1, 1, 1) - timedelta(days=1)
+        else:
+            _end = date(_tahun, _bulan + 1, 1) - timedelta(days=1)
+
+        _res = (
+            _sb.table("so_hasil")
+            .select("rak_id, plu, nama_produk, qty_var, nominal_adjust, pic, so_date")
+            .gte("so_date", _start.isoformat())
+            .lte("so_date", _end.isoformat())
+            .order("nominal_adjust", desc=False)
+            .limit(50)  # ambil lebih, nanti di-sort lagi
+            .execute()
+        )
+
+        if not _res.data:
+            return {"top_minus": [], "top_plus": []}
+
+        _df = pd.DataFrame(_res.data)
+        _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
+
+        _top_minus = _df.nsmallest(limit, "nominal_adjust").to_dict("records")
+        _top_plus = _df.nlargest(limit, "nominal_adjust").to_dict("records")
+
+        print(f"[TOP_ITEMS] Minus: {len(_top_minus)}, Plus: {len(_top_plus)}")
+        return {"top_minus": _top_minus, "top_plus": _top_plus}
+    except Exception as e:
+        print(f"[TOP_ITEMS ERROR] {e}")
+        return {"top_minus": [], "top_plus": []}
