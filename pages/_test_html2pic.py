@@ -257,93 +257,147 @@ def _build_infografis(data, tmp_dir):
         .gap(10)
     )
     
-# =========================================================
-# SECTION 02 — DETAIL PER RAK
-# =========================================================
-_title_02 = _section_title("02", "DETAIL PER RAK")
-
-_col_w = [110, 420, 170, 300]
-
-_header_cells = Row(
-    Text("RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[0]),
-    Text("NAMA RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[1]),
-    Text("PIC").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[2]),
-    Text("SELISIH").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[3]),
-).size(width=_W).background_color(WARNA["accent_deep"]).gap(0)
-
-_rows = [_header_cells]
-for _i, _r in enumerate(data["list_rak"]):
-    _bg = WARNA["cream"] if _i % 2 == 0 else WARNA["white"]
-    _color = WARNA["red"] if _r["nominal"] < 0 else WARNA["green"]
-    _rows.append(
+    # =========================================================
+    # SECTION 02 — DETAIL PER RAK
+    # =========================================================
+    _title_02 = _section_title("02", "DETAIL PER RAK")
+    
+    _col_w = [110, 420, 170, 300]
+    
+    _header_cells = Row(
+        Text("RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[0]),
+        Text("NAMA RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[1]),
+        Text("PIC").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[2]),
+        Text("SELISIH").font_size(13).color(WARNA["white"]).font_weight("bold").padding(16).width(_col_w[3]),
+    ).size(width=_W).background_color(WARNA["accent_deep"]).gap(0)
+    
+    _rows = [_header_cells]
+    for _i, _r in enumerate(data["list_rak"]):
+        _bg = WARNA["cream"] if _i % 2 == 0 else WARNA["white"]
+        _color = WARNA["red"] if _r["nominal"] < 0 else WARNA["green"]
+        _rows.append(
+            Row(
+                Text(_r["rak_id"]).font_size(14).color(WARNA["text_primary"]).font_weight("bold").padding(16).width(_col_w[0]),
+                Text(_r["nama"]).font_size(14).color(WARNA["text_primary"]).padding(16).width(_col_w[1]),
+                Text(_r["pic"]).font_size(14).color(WARNA["text_primary"]).font_weight("bold").padding(16).width(_col_w[2]),
+                Text(_fmt_rp(_r["nominal"])).font_size(14).color(_color).font_weight("bold").padding(16).width(_col_w[3]),
+            ).size(width=_W).background_color(_bg).gap(0)
+        )
+    
+    tabel_rak = Column(*_rows).size(width=_W).gap(0)
+    
+    # TOTAL SELISIH
+    _total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
+    _total_row = (
         Row(
-            Text(_r["rak_id"]).font_size(14).color(WARNA["text_primary"]).font_weight("bold").padding(16).width(_col_w[0]),
-            Text(_r["nama"]).font_size(14).color(WARNA["text_primary"]).padding(16).width(_col_w[1]),
-            Text(_r["pic"]).font_size(14).color(WARNA["text_primary"]).font_weight("bold").padding(16).width(_col_w[2]),
-            Text(_fmt_rp(_r["nominal"])).font_size(14).color(_color).font_weight("bold").padding(16).width(_col_w[3]),
-        ).size(width=_W).background_color(_bg).gap(0)
+            Text("TOTAL SELISIH").font_size(14).color(WARNA["text_primary"]).font_weight("bold").padding(18).width(700),
+            Text(_fmt_rp(data["total_nominal"])).font_size(16).color(_total_color).font_weight("bold").padding(18).width(300),
+        )
+        .size(width=_W)
+        .background_color(WARNA["terracotta_light"])
     )
-
-tabel_rak = Column(*_rows).size(width=_W).gap(0)
-
-# TOTAL SELISIH
-_total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
-_total_row = (
-    Row(
-        Text("TOTAL SELISIH").font_size(14).color(WARNA["text_primary"]).font_weight("bold").padding(18).width(700),
-        Text(_fmt_rp(data["total_nominal"])).font_size(16).color(_total_color).font_weight("bold").padding(18).width(300),
+    
+    # =========================================================
+    # SECTION 03 — TREND
+    # =========================================================
+    _title_03 = _section_title("03", "TREND SELISIH HARIAN")
+    
+    _chart_section = (
+        Column(
+            Image(_double_path).size(width=_W),
+        )
+        .size(width=_W)
+        .padding(0)
+        .gap(0)
     )
-    .size(width=_W)
-    .background_color(WARNA["terracotta_light"])
-)
-
-# =========================================================
-# SECTION 03 — TREND
-# =========================================================
-_title_03 = _section_title("03", "TREND SELISIH HARIAN")
-
-_chart_section = (
-    Column(
-        Image(_double_path).size(width=_W),
+    
+    # =========================================================
+    # FOOTER
+    # =========================================================
+    footer_line = _divider(w=_W, h=1)
+    
+    footer = (
+        Column(
+            Text("Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383")
+            .font_size(11)
+            .color(WARNA["text_muted"]),
+        )
+        .size(width=_W)
+        .padding(12)
+        .gap(0)
     )
-    .size(width=_W)
-    .padding(0)
-    .gap(0)
-)
-
+    
+    # =========================================================
+    # SUSUN LAYOUT
+    # =========================================================
+    layout = Column(
+        header,
+        divider_top,
+        kpi_row,
+        _title_01,
+        _mid_row,
+        _insight_section,   # ← Insight full width
+        _title_02,
+        tabel_rak,
+        _total_row,
+        _title_03,
+        _chart_section,
+        footer_line,
+        footer,
+    ).size(width=_W).gap(24)
+    
+    return canvas.render(layout)
+    
 # =========================================================
-# FOOTER
+# RENDER UTAMA
 # =========================================================
-footer_line = _divider(w=_W, h=1)
+if st.button("🎨 Render Premium Report", type="primary"):
+    try:
+        _tmp_dir = tempfile.mkdtemp()
 
-footer = (
-    Column(
-        Text("Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383")
-        .font_size(11)
-        .color(WARNA["text_muted"]),
-    )
-    .size(width=_W)
-    .padding(12)
-    .gap(0)
-)
+        with st.spinner("Bikin infografis..."):
+            _image = _build_infografis(_data, _tmp_dir)
 
-# =========================================================
-# SUSUN LAYOUT
-# =========================================================
-layout = Column(
-    header,
-    divider_top,
-    kpi_row,
-    _title_01,
-    _mid_row,
-    _insight_section,   # ← Insight full width
-    _title_02,
-    tabel_rak,
-    _total_row,
-    _title_03,
-    _chart_section,
-    footer_line,
-    footer,
-).size(width=_W).gap(24)
+        _output_path = os.path.join(_tmp_dir, "infografis_so.png")
+        _image.save(_output_path)
 
-return canvas.render(layout)
+        with open(_output_path, "rb") as _f:
+            _img_bytes = _f.read()
+
+        st.success(f"✅ Berhasil! Ukuran: {len(_img_bytes):,} bytes")
+
+        st.markdown("---")
+        st.markdown("### 📸 Preview")
+        st.image(_img_bytes, caption="Premium Report — Final")
+
+        st.download_button(
+            "📥 Download PNG",
+            data=_img_bytes,
+            file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
+            mime="image/png",
+            key="dl_premium_final_v4",
+            type="primary",
+        )
+
+        try:
+            import shutil
+            shutil.rmtree(_tmp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    except Exception as e:
+        import traceback
+        st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
+
+
+st.markdown("---")
+with st.expander("ℹ️ Info", expanded=False):
+    st.markdown("""
+    **Premium Report — Final (Fix Divider)**
+
+    **Perbaikan teknis:**
+    - Divider pakai `Column().size(width=, height=).background_color()` — bukan Text
+    - Badge status pakai `Column().size(12,12).border_radius(6)` — bulat sempurna
+    - Semua element visual punya size eksplisit
+    - Canvas 1700px height
+    """)
