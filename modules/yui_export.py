@@ -397,107 +397,106 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
             _pdf.cell(_card_w - 6, 7, _val)
         _pdf.set_y(_y + 22)
 
-            # =========================================================
-            # LAYOUT: RINGKASAN + INSIGHT (ATAS) | DONUT + TREND (BAWAH)
-            # =========================================================
-            _y_dual = _pdf.get_y()
-            
-            # --- ATAS KIRI: RINGKASAN PERIODE ---
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.rect(12, _y_dual, 90, 7, style="F")
-            _sf(style="B", size=10)
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.set_xy(14, _y_dual + 1.5)
-            _pdf.cell(86, 5, "RINGKASAN PERIODE")
-            _pdf.set_text_color(*WARNA["dark"])
-            
-            _sales = hasil.get("sales_periode", 0)
-            _btsb = _sales * 0.0015
-            _total_nom = hasil.get("total_nominal", 0)
-            _status = "OVER" if abs(_total_nom) > _btsb else "AMAN"
-            
-            _rows = [
-                ("Tanggal", hasil.get("periode", "-")),
-                ("Total Rak", f"{hasil.get('total_rak', 0)} rak"),
-                ("Nominal SO", _format_rp(_total_nom)),
-                ("Sales Periode", _format_rp_no_sign(_sales)),
-                ("BTSB (0,15%)", _format_rp_no_sign(_btsb)),
-            ]
-            _sf(style="", size=8)
-            _y_row = _y_dual + 9
-            for _lbl, _val in _rows:
-                _pdf.set_xy(14, _y_row)
-                _pdf.cell(30, 4.5, _lbl)
-                _sf(style="B", size=8)
-                _pdf.cell(0, 4.5, f": {_val}", new_x="LMARGIN", new_y="NEXT")
-                _sf(style="", size=8)
-                _y_row += 4.5
-            
+        # =========================================================
+        # LAYOUT: RINGKASAN + INSIGHT (ATAS) | DONUT + TREND (BAWAH)
+        # =========================================================
+        _y_dual = _pdf.get_y()
+        
+        # --- ATAS KIRI: RINGKASAN PERIODE ---
+        _pdf.set_fill_color(*WARNA["sage"])
+        _pdf.rect(12, _y_dual, 90, 7, style="F")
+        _sf(style="B", size=10)
+        _pdf.set_text_color(*WARNA["white"])
+        _pdf.set_xy(14, _y_dual + 1.5)
+        _pdf.cell(86, 5, "RINGKASAN PERIODE")
+        _pdf.set_text_color(*WARNA["dark"])
+        
+        _sales = hasil.get("sales_periode", 0)
+        _btsb = _sales * 0.0015
+        _total_nom = hasil.get("total_nominal", 0)
+        _status = "OVER" if abs(_total_nom) > _btsb else "AMAN"
+        
+        _rows = [
+            ("Tanggal", hasil.get("periode", "-")),
+            ("Total Rak", f"{hasil.get('total_rak', 0)} rak"),
+            ("Nominal SO", _format_rp(_total_nom)),
+            ("Sales Periode", _format_rp_no_sign(_sales)),
+            ("BTSB (0,15%)", _format_rp_no_sign(_btsb)),
+        ]
+        _sf(style="", size=8)
+        _y_row = _y_dual + 9
+        for _lbl, _val in _rows:
             _pdf.set_xy(14, _y_row)
-            _pdf.cell(30, 4.5, "Keterangan")
+            _pdf.cell(30, 4.5, _lbl)
             _sf(style="B", size=8)
-            if _status == "OVER":
-                _pdf.set_text_color(*WARNA["red"])
-            else:
-                _pdf.set_text_color(*WARNA["green"])
-            _pdf.cell(0, 4.5, f": {_status}", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_text_color(*WARNA["dark"])
-            
-            # --- ATAS KANAN: INSIGHT ---
-            _x_kanan = 108
-            _w_kanan = 90
-            
-            _pdf.set_fill_color(*WARNA["beige"])
-            _pdf.rect(_x_kanan, _y_dual, _w_kanan, 7, style="F")
-            _sf(style="B", size=10)
-            _pdf.set_text_color(*WARNA["dark"])
-            _pdf.set_xy(_x_kanan + 2, _y_dual + 1.5)
-            _pdf.cell(_w_kanan - 4, 5, "INSIGHT")
-            
-            _sf(style="I", size=7)
-            _pdf.set_text_color(*WARNA["dark"])
-            _pdf.set_xy(_x_kanan + 2, _y_dual + 9)
-            _pdf.multi_cell(_w_kanan - 4, 3.8, _generate_insight_hal1(hasil))
-            
-            # Geser ke baris berikutnya
-            _y_row2 = max(_y_row + 4, _y_dual + 48)
-            _pdf.set_y(_y_row2)
-            _pdf.ln(2)
-            
-            # --- BAWAH KIRI: DONUT ---
-            _y_donut = _pdf.get_y()
-            
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.rect(12, _y_donut, 90, 7, style="F")
-            _sf(style="B", size=10)
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.set_xy(14, _y_donut + 1.5)
-            _pdf.cell(86, 5, "KONTRIBUSI PER RAK")
-            _pdf.set_text_color(*WARNA["dark"])
-            
-            _donut_buf = _generate_donut_per_rak(hasil)
-            if _donut_buf:
-                _pdf.image(_donut_buf, x=18, y=_y_donut + 9, w=76)
-                _donut_buf.close()
-            
-            # --- BAWAH KANAN: TREND ---
-            _pdf.set_fill_color(*WARNA["sage"])
-            _pdf.rect(_x_kanan, _y_donut, _w_kanan, 7, style="F")
-            _sf(style="B", size=10)
-            _pdf.set_text_color(*WARNA["white"])
-            _pdf.set_xy(_x_kanan + 2, _y_donut + 1.5)
-            _pdf.cell(_w_kanan - 4, 5, "TREND SELISIH (5 HARI)")
-            _pdf.set_text_color(*WARNA["dark"])
-            
-            _line_buf = _generate_trend_line_5hari(hasil)
-            if _line_buf:
-                _pdf.image(_line_buf, x=_x_kanan + 2, y=_y_donut + 9, w=_w_kanan - 4)
-                _line_buf.close()
-            
-            # Geser Y ke bawah chart
-            _pdf.set_y(_y_donut + 78)
-            _pdf.ln(4)
-            
+            _pdf.cell(0, 4.5, f": {_val}", new_x="LMARGIN", new_y="NEXT")
+            _sf(style="", size=8)
+            _y_row += 4.5
+        
+        _pdf.set_xy(14, _y_row)
+        _pdf.cell(30, 4.5, "Keterangan")
+        _sf(style="B", size=8)
+        if _status == "OVER":
+            _pdf.set_text_color(*WARNA["red"])
+        else:
+            _pdf.set_text_color(*WARNA["green"])
+        _pdf.cell(0, 4.5, f": {_status}", new_x="LMARGIN", new_y="NEXT")
+        _pdf.set_text_color(*WARNA["dark"])
+        
+        # --- ATAS KANAN: INSIGHT ---
+        _x_kanan = 108
+        _w_kanan = 90
+        
+        _pdf.set_fill_color(*WARNA["beige"])
+        _pdf.rect(_x_kanan, _y_dual, _w_kanan, 7, style="F")
+        _sf(style="B", size=10)
+        _pdf.set_text_color(*WARNA["dark"])
+        _pdf.set_xy(_x_kanan + 2, _y_dual + 1.5)
+        _pdf.cell(_w_kanan - 4, 5, "INSIGHT")
+        
+        _sf(style="I", size=7)
+        _pdf.set_text_color(*WARNA["dark"])
+        _pdf.set_xy(_x_kanan + 2, _y_dual + 9)
+        _pdf.multi_cell(_w_kanan - 4, 3.8, _generate_insight_hal1(hasil))
+        
+        # Geser ke baris berikutnya
+        _y_row2 = max(_y_row + 4, _y_dual + 48)
+        _pdf.set_y(_y_row2)
+        _pdf.ln(2)
+        
+        # --- BAWAH KIRI: DONUT ---
+        _y_donut = _pdf.get_y()
+        
+        _pdf.set_fill_color(*WARNA["sage"])
+        _pdf.rect(12, _y_donut, 90, 7, style="F")
+        _sf(style="B", size=10)
+        _pdf.set_text_color(*WARNA["white"])
+        _pdf.set_xy(14, _y_donut + 1.5)
+        _pdf.cell(86, 5, "KONTRIBUSI PER RAK")
+        _pdf.set_text_color(*WARNA["dark"])
+        
+        _donut_buf = _generate_donut_per_rak(hasil)
+        if _donut_buf:
+            _pdf.image(_donut_buf, x=18, y=_y_donut + 9, w=76)
+            _donut_buf.close()
+        
+        # --- BAWAH KANAN: TREND ---
+        _pdf.set_fill_color(*WARNA["sage"])
+        _pdf.rect(_x_kanan, _y_donut, _w_kanan, 7, style="F")
+        _sf(style="B", size=10)
+        _pdf.set_text_color(*WARNA["white"])
+        _pdf.set_xy(_x_kanan + 2, _y_donut + 1.5)
+        _pdf.cell(_w_kanan - 4, 5, "TREND SELISIH (5 HARI)")
+        _pdf.set_text_color(*WARNA["dark"])
+        
+        _line_buf = _generate_trend_line_5hari(hasil)
+        if _line_buf:
+            _pdf.image(_line_buf, x=_x_kanan + 2, y=_y_donut + 9, w=_w_kanan - 4)
+            _line_buf.close()
+        
+        # Geser Y ke bawah chart
+        _pdf.set_y(_y_donut + 78)
+        _pdf.ln(4)
         # =========================================================
         # DAFTAR RAK (full width)
         # =========================================================
