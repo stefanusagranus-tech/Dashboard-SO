@@ -303,149 +303,149 @@ def _build_infografis(data, tmp_dir):
         .gap(8)
     )
     
-# =========================================================
-# TABEL RAK
-# =========================================================
-_col_w = [110, 400, 190, 260]  # total 960
-
-_header_cells = Row(
-    Text("RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[0]),
-    Text("NAMA RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[1]),
-    Text("PIC").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[2]),
-    Text("SELISIH").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[3]),
-).background_color(WARNA["sage"])
-
-_rows = [_header_cells]
-for _i, _r in enumerate(data["list_rak"]):
-    _bg = WARNA["offwhite"] if _i % 2 == 0 else WARNA["white"]
-    _color = WARNA["red"] if _r["nominal"] < 0 else WARNA["green"]
+    # =========================================================
+    # TABEL RAK
+    # =========================================================
+    _col_w = [110, 400, 190, 260]  # total 960
+    
+    _header_cells = Row(
+        Text("RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[0]),
+        Text("NAMA RAK").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[1]),
+        Text("PIC").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[2]),
+        Text("SELISIH").font_size(13).color(WARNA["white"]).font_weight("bold").padding(12).width(_col_w[3]),
+    ).background_color(WARNA["sage"])
+    
+    _rows = [_header_cells]
+    for _i, _r in enumerate(data["list_rak"]):
+        _bg = WARNA["offwhite"] if _i % 2 == 0 else WARNA["white"]
+        _color = WARNA["red"] if _r["nominal"] < 0 else WARNA["green"]
+        _rows.append(
+            Row(
+                Text(_r["rak_id"]).font_size(13).color(WARNA["dark"]).font_weight("bold").padding(12).width(_col_w[0]),
+                Text(_r["nama"]).font_size(12).color(WARNA["dark"]).padding(12).width(_col_w[1]),
+                Text(_r["pic"]).font_size(13).color(WARNA["dark"]).padding(12).width(_col_w[2]),
+                Text(_fmt_rp(_r["nominal"])).font_size(13).color(_color).font_weight("bold").padding(12).width(_col_w[3]),
+            ).background_color(_bg)
+        )
+    
+    # Footer tabel: TOTAL SELISIH
+    _total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
     _rows.append(
         Row(
-            Text(_r["rak_id"]).font_size(13).color(WARNA["dark"]).font_weight("bold").padding(12).width(_col_w[0]),
-            Text(_r["nama"]).font_size(12).color(WARNA["dark"]).padding(12).width(_col_w[1]),
-            Text(_r["pic"]).font_size(13).color(WARNA["dark"]).padding(12).width(_col_w[2]),
-            Text(_fmt_rp(_r["nominal"])).font_size(13).color(_color).font_weight("bold").padding(12).width(_col_w[3]),
-        ).background_color(_bg)
+            Text("").padding(12).width(sum(_col_w[:3])),
+            Text("TOTAL SELISIH").font_size(13).color(WARNA["dark"]).font_weight("bold").padding(12).width(200),
+            Text(_fmt_rp(data["total_nominal"])).font_size(14).color(_total_color).font_weight("bold").padding(12).width(60),
+        ).background_color(WARNA["beige"])
     )
-
-# Footer tabel: TOTAL SELISIH
-_total_color = WARNA["red"] if data["total_nominal"] < 0 else WARNA["green"]
-_rows.append(
-    Row(
-        Text("").padding(12).width(sum(_col_w[:3])),
-        Text("TOTAL SELISIH").font_size(13).color(WARNA["dark"]).font_weight("bold").padding(12).width(200),
-        Text(_fmt_rp(data["total_nominal"])).font_size(14).color(_total_color).font_weight("bold").padding(12).width(60),
-    ).background_color(WARNA["beige"])
-)
-
-tabel_rak = Column(*_rows).background_color(WARNA["white"]).border_radius(14)
-
-# =========================================================
-# TREND CHART
-# =========================================================
-_trend_section = (
-    Column(
-        Image(_trend_path).width(_W - 40),
-    )
-    .width(_W)
-    .padding(20)
-    .background_color(WARNA["white"])
-    .border_radius(14)
-)
-
-# =========================================================
-# FOOTER WATERMARK
-# =========================================================
-footer = (
-    Column(
-        Text("Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383")
-        .font_size(11)
-        .color("#A89B8E")
-        .font_weight("normal"),
-    )
-    .width(_W)
-    .padding(10)
-    .gap(0)
-)
-
-# =========================================================
-# SUSUN LAYOUT UTAMA
-# =========================================================
-layout = Column(
-    header,         # 1. Header band
-    kpi_row,        # 2. KPI cards
-    _mid_row,       # 3. Donut + Ringkasan
-    insight,        # 4. Insight
-    tabel_rak,      # 5. Tabel rak + total
-    _trend_section, # 6. Trend chart
-    footer,         # 7. Watermark
-).width(_W).gap(18)
-
-return canvas.render(layout)
-
-
-# =========================================================
-# RENDER UTAMA
-# =========================================================
-if st.button("🎨 Render Infografis", type="primary"):
-    try:
-        # Bikin temp dir
-        _tmp_dir = tempfile.mkdtemp()
-
-        with st.spinner("Bikin infografis..."):
-            _image = _build_infografis(_data, _tmp_dir)
-
-        # Save hasil
-        _output_path = os.path.join(_tmp_dir, "infografis_so.png")
-        _image.save(_output_path)
-
-        # Baca file
-        with open(_output_path, "rb") as _f:
-            _img_bytes = _f.read()
-
-        st.success(f"✅ Infografis berhasil! Ukuran: {len(_img_bytes):,} bytes")
-
-        # Tampilkan preview
-        st.markdown("---")
-        st.markdown("### 📸 Preview")
-        st.image(_img_bytes, caption="Infografis SO — Next Level")
-
-        # Download button
-        st.download_button(
-            "📥 Download PNG",
-            data=_img_bytes,
-            file_name=f"infografis_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
-            mime="image/png",
-            key="dl_infografis_test",
-            type="primary",
+    
+    tabel_rak = Column(*_rows).background_color(WARNA["white"]).border_radius(14)
+    
+    # =========================================================
+    # TREND CHART
+    # =========================================================
+    _trend_section = (
+        Column(
+            Image(_trend_path).width(_W - 40),
         )
-
-        # Cleanup temp
+        .width(_W)
+        .padding(20)
+        .background_color(WARNA["white"])
+        .border_radius(14)
+    )
+    
+    # =========================================================
+    # FOOTER WATERMARK
+    # =========================================================
+    footer = (
+        Column(
+            Text("Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383")
+            .font_size(11)
+            .color("#A89B8E")
+            .font_weight("normal"),
+        )
+        .width(_W)
+        .padding(10)
+        .gap(0)
+    )
+    
+    # =========================================================
+    # SUSUN LAYOUT UTAMA
+    # =========================================================
+    layout = Column(
+        header,         # 1. Header band
+        kpi_row,        # 2. KPI cards
+        _mid_row,       # 3. Donut + Ringkasan
+        insight,        # 4. Insight
+        tabel_rak,      # 5. Tabel rak + total
+        _trend_section, # 6. Trend chart
+        footer,         # 7. Watermark
+    ).width(_W).gap(18)
+    
+    return canvas.render(layout)
+    
+    
+    # =========================================================
+    # RENDER UTAMA
+    # =========================================================
+    if st.button("🎨 Render Infografis", type="primary"):
         try:
-            import shutil
-            shutil.rmtree(_tmp_dir, ignore_errors=True)
-        except Exception:
-            pass
-
-    except Exception as e:
-        import traceback
-        st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
-
-
-# =========================================================
-# INFO
-# =========================================================
-st.markdown("---")
-with st.expander("ℹ️ Info", expanded=False):
-    st.markdown("""
-    **Layout infografis:**
-    1. Header band sage
-    2. 3 KPI cards (icon + value)
-    3. Donut chart + Ringkasan periode (2 kolom)
-    4. Insight (quote style)
-    5. Tabel rak + Total Selisih
-    6. Trend chart 5 hari
-    7. Watermark footer
-
-    **Ukuran:** 1080 × 1350 px (portrait, cocok WA/IG)
-    """)
+            # Bikin temp dir
+            _tmp_dir = tempfile.mkdtemp()
+    
+            with st.spinner("Bikin infografis..."):
+                _image = _build_infografis(_data, _tmp_dir)
+    
+            # Save hasil
+            _output_path = os.path.join(_tmp_dir, "infografis_so.png")
+            _image.save(_output_path)
+    
+            # Baca file
+            with open(_output_path, "rb") as _f:
+                _img_bytes = _f.read()
+    
+            st.success(f"✅ Infografis berhasil! Ukuran: {len(_img_bytes):,} bytes")
+    
+            # Tampilkan preview
+            st.markdown("---")
+            st.markdown("### 📸 Preview")
+            st.image(_img_bytes, caption="Infografis SO — Next Level")
+    
+            # Download button
+            st.download_button(
+                "📥 Download PNG",
+                data=_img_bytes,
+                file_name=f"infografis_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
+                mime="image/png",
+                key="dl_infografis_test",
+                type="primary",
+            )
+    
+            # Cleanup temp
+            try:
+                import shutil
+                shutil.rmtree(_tmp_dir, ignore_errors=True)
+            except Exception:
+                pass
+    
+        except Exception as e:
+            import traceback
+            st.error(f"❌ Gagal:\n\n```\n{str(e)}\n\n{traceback.format_exc()}\n```")
+    
+    
+    # =========================================================
+    # INFO
+    # =========================================================
+    st.markdown("---")
+    with st.expander("ℹ️ Info", expanded=False):
+        st.markdown("""
+        **Layout infografis:**
+        1. Header band sage
+        2. 3 KPI cards (icon + value)
+        3. Donut chart + Ringkasan periode (2 kolom)
+        4. Insight (quote style)
+        5. Tabel rak + Total Selisih
+        6. Trend chart 5 hari
+        7. Watermark footer
+    
+        **Ukuran:** 1080 × 1350 px (portrait, cocok WA/IG)
+        """)
