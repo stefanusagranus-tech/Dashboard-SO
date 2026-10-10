@@ -348,3 +348,4 @@ def cek_rak_belum_so(tanggal=None):
     except Exception as e:
         print(f"[CEK_RAK_BELUM ERROR] {e}")
         return []
+        
