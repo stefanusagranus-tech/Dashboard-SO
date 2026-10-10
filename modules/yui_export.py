@@ -261,7 +261,7 @@ def _generate_insight_hal2(hasil):
             f"(PLU {_worst.get('plu', '-')}, rak {_worst.get('rak_id', '-')}) "
             f"senilai {_format_rp(_worst['_nom'])}. "
             f"Total {len(_all_items)} item, {_count_minus} minus, "
-            f"akumulasi selisih {_format_rp(_total_minus)}."
+            f"total selisih barang 1 hari: {_format_rp(_total_minus)}."
         )
     except Exception as e:
         print(f"[INSIGHT2 ERROR] {e}")
@@ -441,37 +441,53 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         _pdf.set_text_color(*WARNA["dark"])
         _pdf.ln(4)
 
-        # --- Donut Chart ---
+        # === DONUT + INSIGHT (2 KOLOM) ===
+        _y_dual = _pdf.get_y()
+        
+        # Section header untuk kedua kolom
+        _pdf.set_fill_color(*WARNA["sage"])
+        _pdf.rect(12, _y_dual, 90, 7, style="F")  # kiri
+        _pdf.rect(108, _y_dual, 90, 7, style="F")  # kanan
+        
+        _sf(style="B", size=10)
+        _pdf.set_text_color(*WARNA["white"])
+        _pdf.set_xy(14, _y_dual + 1.5)
+        _pdf.cell(86, 5, "KONTRIBUSI PER RAK")
+        _pdf.set_xy(110, _y_dual + 1.5)
+        _pdf.cell(86, 5, "INSIGHT")
+        _pdf.set_text_color(*WARNA["dark"])
+        _pdf.set_y(_y_dual + 10)
+        
+        # Donut chart (kiri) — kecil
         _donut_buf = _generate_donut_per_rak(hasil)
         if _donut_buf:
-            _draw_section_header(_pdf, "KONTRIBUSI PER RAK")
-            _y_img = _pdf.get_y()
-            _pdf.image(_donut_buf, x=55, y=_y_img, w=100)
-            _pdf.set_y(_y_img + 85)
+            _pdf.image(_donut_buf, x=18, y=_y_dual + 10, w=78)
             _donut_buf.close()
-            _pdf.ln(2)
-
-        # --- Insight Halaman 1 ---
-        _draw_section_header(_pdf, "INSIGHT", fill=WARNA["beige"])
-        _pdf.set_my_font(style="I", size=9)
+        
+        # Insight (kanan) — side-by-side
+        _sf(style="I", size=8)
         _pdf.set_text_color(*WARNA["dark"])
-        _pdf.set_x(14)
-        _pdf.multi_cell(182, 5.5, _generate_insight_hal1(hasil, _sales_periode))
-        _pdf.ln(4)
+        _pdf.set_xy(110, _y_dual + 10)
+        _pdf.multi_cell(86, 4.5, _generate_insight_hal1(hasil))
+        
+        # Set Y ke bawah chart (tinggi chart ~75mm)
+        _pdf.set_y(_y_dual + 90)
+        _pdf.ln(2)
 
         # --- Tabel List Rak ---
         _draw_section_header(_pdf, "DAFTAR RAK YANG DI-SO")
 
-        # Header tabel
-        _pdf.set_my_font(style="B", size=9)
-        _pdf.set_fill_color(*WARNA["sage"])
+        # === HEADER TABEL ===
+        _sf(style="B", size=8)
+        _pdf.set_fill_color(*WARNA["salmon"])
         _pdf.set_text_color(*WARNA["white"])
-        _col_w = [22, 70, 40, 25, 29]
-        _pdf.cell(_col_w[0], 7, "RAK", fill=True, align="C")
-        _pdf.cell(_col_w[1], 7, "NAMA RAK", fill=True, align="C")
-        _pdf.cell(_col_w[2], 7, "PIC", fill=True, align="C")
-        _pdf.cell(_col_w[3], 7, "TANGGAL", fill=True, align="C")
-        _pdf.cell(_col_w[4], 7, "SELISIH", fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
+        _c = [22, 70, 15, 20, 59]  # total 186mm
+        _pdf.set_x(12)
+        _pdf.cell(_c[0], 7, "PLU", border=0, fill=True, align="C")
+        _pdf.cell(_c[1], 7, "NAMA PRODUK", border=0, fill=True, align="C")
+        _pdf.cell(_c[2], 7, "QTY", border=0, fill=True, align="C")
+        _pdf.cell(_c[3], 7, "PIC", border=0, fill=True, align="C")
+        _pdf.cell(_c[4], 7, "NOMINAL", border=0, fill=True, align="C", new_x="LMARGIN", new_y="NEXT")
 
         # Body
         _pdf.set_my_font(style="", size=8)
@@ -575,14 +591,19 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
                     _pdf.set_text_color(*WARNA["dark"])
 
                 # Total per rak
+                _pdf.set_x(12)  # ✅ Reset X
                 _pdf.set_fill_color(*WARNA["beige"])
-                _pdf.set_my_font(style="B", size=9)
+                _sf(style="B", size=9)
                 _pdf.set_text_color(*WARNA["dark"])
-                _pdf.cell(sum(_c[:4]), 6.5, f"TOTAL RAK {_rak_id}", fill=True, align="R")
-                _pdf.set_text_color(*WARNA["red"])
-                _pdf.cell(_c[4], 6.5, _format_rp(_total_rak), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+                _pdf.cell(sum(_c[:4]), 7, f"TOTAL RAK {_rak_id}", border=0, fill=True, align="R")
+                
+                if _total_rak < 0:
+                    _pdf.set_text_color(*WARNA["red"])
+                else:
+                    _pdf.set_text_color(*WARNA["green"])
+                _pdf.cell(_c[4], 7, _format_rp(_total_rak), border=0, fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
                 _pdf.set_text_color(*WARNA["dark"])
-                _pdf.ln(5)
+                _pdf.ln(4)
 
             # Insight Halaman 2
             _draw_section_header(_pdf, "INSIGHT", fill=WARNA["beige"])
@@ -1004,23 +1025,24 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
                 for _idx, _it in enumerate(_items_all):
                     _bg = WARNA["offwhite"] if _idx % 2 == 0 else WARNA["white"]
                     _pdf.set_fill_color(*_bg)
-    
+                    _pdf.set_x(12)  # ✅ Reset X tiap row
+                
                     _plu = str(_it.get("plu", "-"))[:12]
-                    _nama = _clean_text(_it.get("nama_produk", "-"))[:42]
+                    _nama = _clean_text(_it.get("nama_produk", "-"))[:38]  # ✅ 38 char
                     _qty_var = _it.get("qty_var", 0)
                     _pic = str(_it.get("pic", "-"))[:12]
                     _nom_it = float(_it.get("nominal_adjust", 0) or 0)
-    
-                    _pdf.cell(_c[0], 5.5, _plu, fill=True, align="C")
-                    _pdf.cell(_c[1], 5.5, _nama, fill=True, align="L")
-                    _pdf.cell(_c[2], 5.5, str(_qty_var), fill=True, align="C")
-                    _pdf.cell(_c[3], 5.5, _pic, fill=True, align="C")
-    
+                
+                    _pdf.cell(_c[0], 6, _plu, border=0, fill=True, align="C")
+                    _pdf.cell(_c[1], 6, _nama, border=0, fill=True, align="L")
+                    _pdf.cell(_c[2], 6, str(_qty_var), border=0, fill=True, align="C")
+                    _pdf.cell(_c[3], 6, _pic, border=0, fill=True, align="C")
+                
                     if _nom_it < 0:
                         _pdf.set_text_color(*WARNA["red"])
                     else:
                         _pdf.set_text_color(*WARNA["green"])
-                    _pdf.cell(_c[4], 5.5, _format_rp(_nom_it), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+                    _pdf.cell(_c[4], 6, _format_rp(_nom_it), border=0, fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
                     _pdf.set_text_color(*WARNA["dark"])
     
                 # === TOTAL PER RAK ===
