@@ -61,7 +61,7 @@ except ImportError as e:
     _import_error = str(e)
 
 try:
-    from modules.yui_rekap import rekap_so, cek_rak_belum_so, cek_duplikat
+    from modules.yui_rekap import rekap_so, cek_rak_belum_so
     _REKAP_OK = True
 except ImportError:
     _REKAP_OK = False
