@@ -171,12 +171,13 @@ def _generate_donut_per_rak(hasil):
 # =========================================================
 # INSIGHT OTOMATIS
 # =========================================================
-def _generate_insight_hal1(hasil, sales_periode):
+def _generate_insight_hal1(hasil):
     """Insight otomatis halaman 1."""
     try:
         _list_rak = hasil.get("list_rak", [])
         _total_nom = hasil.get("total_nominal", 0)
-        _btsb = sales_periode * 0.0015
+        _sales = hasil.get("sales_periode", 0)
+        _btsb = _sales * 0.0015
         _status = "OVER" if abs(_total_nom) > _btsb else "AMAN"
 
         _insights = []
@@ -184,7 +185,7 @@ def _generate_insight_hal1(hasil, sales_periode):
             f"Total SO: {hasil.get('total_rak', 0)} rak dengan nominal {_format_rp(_total_nom)}."
         )
         _insights.append(
-            f"Sales periode: {_format_rp(sales_periode)}. BTSB (0,15%): {_format_rp(_btsb)}."
+            f"Sales periode: {_format_rp_no_sign(_sales)}. BTSB (0,15%): {_format_rp(_btsb)}."
         )
 
         if _list_rak:
@@ -205,35 +206,34 @@ def _generate_insight_hal1(hasil, sales_periode):
         return "Data insight belum tersedia."
 
 
-def _generate_insight_hal2(hasil):
-    """Insight otomatis halaman 2."""
+def _generate_insight_hal1(hasil):
+    """Insight otomatis halaman 1 — versi 1 argumen."""
     try:
-        _items_by_rak = hasil.get("items_by_rak", {})
-        if not _items_by_rak:
-            return "Belum ada item minus pada periode ini."
+        _list_rak = hasil.get("list_rak", [])
+        _total_nom = hasil.get("total_nominal", 0)
+        _sales = hasil.get("sales_periode", 0)
+        _btsb = _sales * 0.0015
+        _status = "OVER" if abs(_total_nom) > _btsb else "AMAN"
 
-        # Cari item minus terbesar
-        _all_items = []
-        for _rak, _items in _items_by_rak.items():
-            for _it in _items:
-                _nom = float(_it.get("nominal_adjust", 0) or 0)
-                if _nom < 0:
-                    _all_items.append({**_it, "_nom": _nom})
+        _insights = [
+            f"Total SO: {hasil.get('total_rak', 0)} rak dengan nominal {_format_rp(_total_nom)}.",
+            f"Sales periode: {_format_rp_no_sign(_sales)}. BTSB (0,15%): {_format_rp_no_sign(_btsb)}.",
+        ]
 
-        if not _all_items:
-            return "Tidak ada item minus pada periode ini."
+        if _list_rak:
+            _worst = min(_list_rak, key=lambda x: x.get("total", 0))
+            _insights.append(
+                f"Rak penyumbang minus terbesar: {_worst.get('rak_id', '?')} "
+                f"({_format_rp(_worst.get('total', 0))}) oleh PIC {_worst.get('pic', '-')}."
+            )
 
-        _worst = min(_all_items, key=lambda x: x["_nom"])
-        _total_minus = sum(_it["_nom"] for _it in _all_items)
-
-        return (
-            f"Item minus terbesar: {_clean_text(_worst.get('nama_produk', '-'))} "
-            f"(PLU {_worst.get('plu', '-')}, rak {_worst.get('rak_id', '-')}) "
-            f"senilai {_format_rp(_worst['_nom'])}. "
-            f"Total {len(_all_items)} item minus dengan akumulasi {_format_rp(_total_minus)}."
+        _insights.append(
+            f"Status: {_status} - "
+            + ("selisih melebihi batas BTSB, perlu perhatian." if _status == "OVER" else "selisih masih dalam batas aman.")
         )
+        return " ".join(_insights)
     except Exception as e:
-        print(f"[INSIGHT2 ERROR] {e}")
+        print(f"[INSIGHT1 ERROR] {e}")
         return "Data insight belum tersedia."
 
 
