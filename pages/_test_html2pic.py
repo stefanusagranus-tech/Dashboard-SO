@@ -1,7 +1,7 @@
 """
-Infografis SO — Matplotlib Murni v2
+Infografis SO — Matplotlib Murni v3
 ======================================
-Fix: Header band, KPI font, ringkasan layout, insight wrap, trend
+Fix: KPI value, Status value, nama rak, tabel card
 """
 import streamlit as st
 import io
@@ -20,7 +20,7 @@ import pandas as pd
 
 
 st.set_page_config(page_title="Infografis SO", page_icon="🎨", layout="wide")
-st.title("🎨 Infografis SO — Matplotlib Murni v2")
+st.title("🎨 Infografis SO — Matplotlib Murni v3")
 
 
 # =========================================================
@@ -134,11 +134,9 @@ def _divider(ax, x, y, w, color=None, thickness=0.0015):
     
 
 # =========================================================
-# FUNGSI UTAMA: RENDER INFOGRAFIS
+# FUNGSI UTAMA
 # =========================================================
 def render_infografis(data, output_path):
-    """Render infografis SO — 1 canvas matplotlib."""
-
     FIG_W, FIG_H = 8.27, 11.0
     DPI = 130
 
@@ -151,19 +149,17 @@ def render_infografis(data, output_path):
     ax.set_facecolor(W["bg"])
 
     # =========================================================
-    # LAYOUT KOORDINAT
+    # LAYOUT
     # =========================================================
     PAD = 0.04
     W_CONTENT = 1 - 2 * PAD
     X_LEFT = PAD
-    X_RIGHT = 1 - PAD
 
-    # Y positions
     Y_HEADER_TOP = 0.98
-    Y_HEADER_BOT = 0.895
-    Y_KPI_TOP = 0.88
-    Y_KPI_BOT = 0.78
-    Y_S1_TOP = 0.765
+    Y_HEADER_BOT = 0.90
+    Y_KPI_TOP = 0.885
+    Y_KPI_BOT = 0.79
+    Y_S1_TOP = 0.775
     Y_S1_BOT = 0.44
     Y_S2_TOP = 0.425
     Y_S2_BOT = 0.10
@@ -199,11 +195,11 @@ def render_infografis(data, output_path):
         x = X_LEFT + i * (KPI_W + GAP)
         _draw_card(ax, x, Y_KPI_BOT, KPI_W, KPI_H, bg, radius=0.012)
 
-        _text(ax, x + 0.012, Y_KPI_TOP - 0.017,
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.018,
               label, size=7, color=W["text_muted"], weight="bold")
-        _text(ax, x + 0.012, Y_KPI_TOP - 0.042,
-              value, size=17, color=W["text"], weight="bold")
-        _text(ax, x + 0.012, Y_KPI_TOP - 0.065,
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.046,
+              value, size=16, color=W["text"], weight="bold")
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.070,
               sub, size=7, color=W["text_sec"])
 
     # =========================================================
@@ -230,7 +226,6 @@ def render_infografis(data, output_path):
           "KONTRIBUSI PER RAK", size=8.5, color=W["sage_deep"], weight="bold")
     _divider(ax, LEFT_X + 0.015, Y_S1_TOP - 0.028, LEFT_W - 0.03, W["sage_deep"], 0.0015)
 
-    # Sub-axes donut
     donut_ax = fig.add_axes([
         LEFT_X + 0.03, Y_S1_BOT + 0.015,
         LEFT_W - 0.06, S1_H - 0.06
@@ -269,7 +264,7 @@ def render_infografis(data, output_path):
                   fontsize=6.5, fontweight="bold", color=W["text_muted"])
     donut_ax.set_aspect("equal")
 
-    # --- KANAN: RINGKASAN + INSIGHT ---
+    # --- KANAN: RINGKASAN ---
     _draw_card(ax, RIGHT_X, Y_S1_BOT, RIGHT_W, S1_H, W["white"], radius=0.012)
 
     _text(ax, RIGHT_X + 0.015, Y_S1_TOP - 0.018,
@@ -290,7 +285,7 @@ def render_infografis(data, output_path):
     y_metric = Y_S1_TOP - 0.048
     for label, val, color in metrics:
         _text(ax, RIGHT_X + 0.015, y_metric, label, size=7.5, color=W["text_muted"])
-        _text(ax, RIGHT_X + 0.055, y_metric, val, size=8, color=color, weight="bold")
+        _text(ax, RIGHT_X + 0.075, y_metric, val, size=8, color=color, weight="bold")
         y_metric -= 0.022
         _divider(ax, RIGHT_X + 0.015, y_metric + 0.008, RIGHT_W - 0.03, W["divider"], 0.0008)
 
@@ -328,18 +323,18 @@ def render_infografis(data, output_path):
     TRD_X = X_LEFT + TBL_W + 0.02
 
     # --- TABEL ---
-    _draw_card(ax, TBL_X, Y_S2_BOT, TBL_W, S2_H, W["white"], radius=0.012)
+    _draw_card(ax, TBL_X, Y_S2_BOT + 0.05, TBL_W, S2_H - 0.05, W["white"], radius=0.012)
 
     tbl_ax = fig.add_axes([
-        TBL_X + 0.015, Y_S2_BOT + 0.01,
-        TBL_W - 0.03, S2_H - 0.02
+        TBL_X + 0.015, Y_S2_BOT + 0.055,
+        TBL_W - 0.03, S2_H - 0.12
     ])
     tbl_ax.axis("off")
     tbl_ax.set_xlim(0, 1)
     tbl_ax.set_ylim(0, 1)
 
     col_labels = ["RAK", "NAMA RAK", "PIC", "SELISIH"]
-    col_w = [0.10, 0.48, 0.16, 0.26]
+    col_w = [0.09, 0.52, 0.15, 0.24]
 
     # Header
     tbl_ax.add_patch(Rectangle((0, 0.90), 1, 0.10,
@@ -361,7 +356,7 @@ def render_infografis(data, output_path):
                                     transform=tbl_ax.transAxes))
         color = W["red"] if r["nominal"] < 0 else W["green"]
         x_pos = 0
-        vals = [r["rak_id"], r["nama"][:22], r["pic"], _rp(r["nominal"])]
+        vals = [r["rak_id"], r["nama"][:26], r["pic"], _rp(r["nominal"])]
         for i, v in enumerate(vals):
             tbl_ax.text(x_pos + 0.01, y_pos - row_h / 2 + 0.03, v,
                         fontsize=6.5, color=color if i == 3 else W["text"],
@@ -383,15 +378,15 @@ def render_infografis(data, output_path):
                 va="center", transform=tbl_ax.transAxes)
 
     # --- TREND ---
-    _draw_card(ax, TRD_X, Y_S2_BOT, TRD_W, S2_H, W["white"], radius=0.012)
+    _draw_card(ax, TRD_X, Y_S2_BOT + 0.05, TRD_W, S2_H - 0.05, W["white"], radius=0.012)
 
     _text(ax, TRD_X + 0.015, Y_S2_TOP - 0.018,
           "TREND SELISIH HARIAN", size=8.5, color=W["sage_deep"], weight="bold")
     _divider(ax, TRD_X + 0.015, Y_S2_TOP - 0.028, TRD_W - 0.03, W["sage_deep"], 0.0015)
 
     trend_ax = fig.add_axes([
-        TRD_X + 0.02, Y_S2_BOT + 0.015,
-        TRD_W - 0.04, S2_H - 0.05
+        TRD_X + 0.02, Y_S2_BOT + 0.06,
+        TRD_W - 0.04, S2_H - 0.12
     ])
     trend_ax.set_facecolor(W["white"])
 
@@ -463,14 +458,14 @@ if st.button("🎨 Render Infografis", type="primary"):
         st.success(f"✅ Berhasil! Ukuran: {len(img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(img_bytes, caption="Infografis SO — Matplotlib Murni v2")
+        st.image(img_bytes, caption="Infografis SO — Matplotlib Murni v3")
 
         st.download_button(
             "📥 Download PNG",
             data=img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
             mime="image/png",
-            key="dl_mpl_v2",
+            key="dl_mpl_v3",
             type="primary",
         )
 
