@@ -1,7 +1,7 @@
 """
-Infografis SO — Matplotlib Murni v4
-======================================
-Fix: Section title spacing, insight center, tabel proporsional
+Infografis SO — Matplotlib Murni FINAL
+========================================
+Fix: Card whitespace, section title, tabel, trend fill
 """
 import streamlit as st
 import io
@@ -18,7 +18,7 @@ import numpy as np
 
 
 st.set_page_config(page_title="Infografis SO", page_icon="🎨", layout="wide")
-st.title("🎨 Infografis SO — Matplotlib Murni v4")
+st.title("🎨 Infografis SO — FINAL")
 
 
 # =========================================================
@@ -157,9 +157,9 @@ def render_infografis(data, output_path):
     Y_HEADER_BOT = 0.90
     Y_KPI_TOP = 0.885
     Y_KPI_BOT = 0.79
-    Y_S1_TOP = 0.775
+    Y_S1_TOP = 0.760
     Y_S1_BOT = 0.44
-    Y_S2_TOP = 0.425
+    Y_S2_TOP = 0.410
     Y_S2_BOT = 0.10
     Y_FOOTER = 0.045
 
@@ -201,17 +201,17 @@ def render_infografis(data, output_path):
               sub, size=7, color=W["text_sec"])
 
     # =========================================================
-    # 3. SECTION TITLE 01
+    # 3. SECTION TITLE 01 — accent bar tebal
     # =========================================================
-    _text(ax, X_LEFT, Y_S1_TOP + 0.005, "▌", size=13, color=W["sage_deep"], weight="bold")
-    _text(ax, X_LEFT + 0.022, Y_S1_TOP + 0.005, "01", size=9, color=W["terracotta"], weight="bold")
-    _text(ax, X_LEFT + 0.048, Y_S1_TOP + 0.005,
-          "DISTRIBUSI & RINGKASAN", size=10, color=W["text"], weight="bold")
+    _text(ax, X_LEFT, Y_S1_TOP - 0.015, "▌", size=15, color=W["sage_deep"], weight="bold")
+    _text(ax, X_LEFT + 0.025, Y_S1_TOP - 0.015, "01", size=10, color=W["terracotta"], weight="bold")
+    _text(ax, X_LEFT + 0.052, Y_S1_TOP - 0.015,
+          "DISTRIBUSI & RINGKASAN", size=11, color=W["text"], weight="bold")
 
     # =========================================================
     # 4. SECTION 01: DONUT + RINGKASAN
     # =========================================================
-    S1_H = Y_S1_TOP - Y_S1_BOT
+    S1_H = (Y_S1_TOP - 0.02) - Y_S1_BOT
     LEFT_W = (W_CONTENT - 0.02) * 0.45
     RIGHT_W = (W_CONTENT - 0.02) * 0.55
     LEFT_X = X_LEFT
@@ -220,13 +220,13 @@ def render_infografis(data, output_path):
     # --- KIRI: DONUT ---
     _draw_card(ax, LEFT_X, Y_S1_BOT, LEFT_W, S1_H, W["white"], radius=0.012)
 
-    _text(ax, LEFT_X + 0.015, Y_S1_TOP - 0.018,
+    _text(ax, LEFT_X + 0.015, Y_S1_TOP - 0.04,
           "KONTRIBUSI PER RAK", size=8.5, color=W["sage_deep"], weight="bold")
-    _divider(ax, LEFT_X + 0.015, Y_S1_TOP - 0.028, LEFT_W - 0.03, W["sage_deep"], 0.0015)
+    _divider(ax, LEFT_X + 0.015, Y_S1_TOP - 0.05, LEFT_W - 0.03, W["sage_deep"], 0.0015)
 
     donut_ax = fig.add_axes([
         LEFT_X + 0.03, Y_S1_BOT + 0.015,
-        LEFT_W - 0.06, S1_H - 0.06
+        LEFT_W - 0.06, S1_H - 0.075
     ])
     donut_ax.set_facecolor(W["white"])
 
@@ -265,9 +265,9 @@ def render_infografis(data, output_path):
     # --- KANAN: RINGKASAN ---
     _draw_card(ax, RIGHT_X, Y_S1_BOT, RIGHT_W, S1_H, W["white"], radius=0.012)
 
-    _text(ax, RIGHT_X + 0.015, Y_S1_TOP - 0.018,
+    _text(ax, RIGHT_X + 0.015, Y_S1_TOP - 0.04,
           "RINGKASAN PERIODE", size=8.5, color=W["sage_deep"], weight="bold")
-    _divider(ax, RIGHT_X + 0.015, Y_S1_TOP - 0.028, RIGHT_W - 0.03, W["sage_deep"], 0.0015)
+    _divider(ax, RIGHT_X + 0.015, Y_S1_TOP - 0.05, RIGHT_W - 0.03, W["sage_deep"], 0.0015)
 
     status_color = W["red"] if data["status"] == "OVER" else W["green"]
 
@@ -280,14 +280,14 @@ def render_infografis(data, output_path):
         ("Status", data["status"], status_color),
     ]
 
-    y_metric = Y_S1_TOP - 0.048
+    y_metric = Y_S1_TOP - 0.07
     for label, val, color in metrics:
         _text(ax, RIGHT_X + 0.015, y_metric, label, size=7.5, color=W["text_muted"])
         _text(ax, RIGHT_X + 0.075, y_metric, val, size=8, color=color, weight="bold")
         y_metric -= 0.022
         _divider(ax, RIGHT_X + 0.015, y_metric + 0.008, RIGHT_W - 0.03, W["divider"], 0.0008)
 
-    # Insight — CENTER
+    # Insight — center
     y_insight = y_metric - 0.018
 
     _text(ax, RIGHT_X + 0.015, y_insight,
@@ -307,26 +307,30 @@ def render_infografis(data, output_path):
     # =========================================================
     # 5. SECTION TITLE 02
     # =========================================================
-    _text(ax, X_LEFT, Y_S2_TOP + 0.005, "▌", size=13, color=W["sage_deep"], weight="bold")
-    _text(ax, X_LEFT + 0.022, Y_S2_TOP + 0.005, "02", size=9, color=W["terracotta"], weight="bold")
-    _text(ax, X_LEFT + 0.048, Y_S2_TOP + 0.005,
-          "DETAIL & TREND", size=10, color=W["text"], weight="bold")
+    _text(ax, X_LEFT, Y_S2_TOP - 0.015, "▌", size=15, color=W["sage_deep"], weight="bold")
+    _text(ax, X_LEFT + 0.025, Y_S2_TOP - 0.015, "02", size=10, color=W["terracotta"], weight="bold")
+    _text(ax, X_LEFT + 0.052, Y_S2_TOP - 0.015,
+          "DETAIL & TREND", size=11, color=W["text"], weight="bold")
 
     # =========================================================
     # 6. SECTION 02: TABEL + TREND
     # =========================================================
-    S2_H = Y_S2_TOP - Y_S2_BOT
+    S2_H = (Y_S2_TOP - 0.02) - Y_S2_BOT
     TBL_W = (W_CONTENT - 0.02) * 0.55
     TRD_W = (W_CONTENT - 0.02) * 0.45
     TBL_X = X_LEFT
     TRD_X = X_LEFT + TBL_W + 0.02
 
-    # --- TABEL ---
-    _draw_card(ax, TBL_X, Y_S2_BOT + 0.05, TBL_W, S2_H - 0.05, W["white"], radius=0.012)
+    # --- TABEL (auto-height) ---
+    _n_rak = len(data["list_rak"])
+    _tabel_h = 0.16 + _n_rak * 0.028
+    _tabel_h = min(_tabel_h, S2_H - 0.05)
+
+    _draw_card(ax, TBL_X, Y_S2_TOP - 0.02 - _tabel_h, TBL_W, _tabel_h, W["white"], radius=0.012)
 
     tbl_ax = fig.add_axes([
-        TBL_X + 0.015, Y_S2_BOT + 0.06,
-        TBL_W - 0.03, S2_H - 0.13
+        TBL_X + 0.015, Y_S2_TOP - 0.02 - _tabel_h + 0.005,
+        TBL_W - 0.03, _tabel_h - 0.01
     ])
     tbl_ax.axis("off")
     tbl_ax.set_xlim(0, 1)
@@ -335,54 +339,57 @@ def render_infografis(data, output_path):
     col_labels = ["RAK", "NAMA RAK", "PIC", "SELISIH"]
     col_w = [0.09, 0.52, 0.15, 0.24]
 
-    tbl_ax.add_patch(Rectangle((0, 0.90), 1, 0.10,
+    tbl_ax.add_patch(Rectangle((0, 0.88), 1, 0.12,
                                 facecolor=W["sage_deep"], edgecolor="none",
                                 transform=tbl_ax.transAxes))
     x_pos = 0
     for i, lbl in enumerate(col_labels):
-        tbl_ax.text(x_pos + 0.01, 0.95, lbl, fontsize=7, color=W["white"],
+        tbl_ax.text(x_pos + 0.01, 0.94, lbl, fontsize=7, color=W["white"],
                     fontweight="bold", va="center", transform=tbl_ax.transAxes)
         x_pos += col_w[i]
 
-    y_pos = 0.85
-    row_h = 0.13
+    y_pos = 0.88
+    row_h = 0.14
     for idx, r in enumerate(data["list_rak"]):
         bg = W["bg"] if idx % 2 == 0 else W["white"]
-        tbl_ax.add_patch(Rectangle((0, y_pos - row_h + 0.03), 1, row_h,
+        tbl_ax.add_patch(Rectangle((0, y_pos - row_h), 1, row_h,
                                     facecolor=bg, edgecolor="none",
                                     transform=tbl_ax.transAxes))
+        tbl_ax.plot([0, 1], [y_pos - row_h, y_pos - row_h],
+                    color=W["divider"], linewidth=0.5,
+                    transform=tbl_ax.transAxes, clip_on=False)
         color = W["red"] if r["nominal"] < 0 else W["green"]
         x_pos = 0
         vals = [r["rak_id"], r["nama"][:26], r["pic"], _rp(r["nominal"])]
         for i, v in enumerate(vals):
-            tbl_ax.text(x_pos + 0.01, y_pos - row_h / 2 + 0.03, v,
+            tbl_ax.text(x_pos + 0.01, y_pos - row_h / 2, v,
                         fontsize=6.5, color=color if i == 3 else W["text"],
                         fontweight="bold" if i in (0, 2, 3) else "normal",
                         va="center", transform=tbl_ax.transAxes)
             x_pos += col_w[i]
         y_pos -= row_h
 
-    tbl_ax.add_patch(Rectangle((0, y_pos - row_h + 0.03), 1, row_h,
+    tbl_ax.add_patch(Rectangle((0, y_pos - row_h), 1, row_h,
                                 facecolor=W["terracotta_light"], edgecolor="none",
                                 transform=tbl_ax.transAxes))
     total_color = W["red"] if data["total_nominal"] < 0 else W["green"]
-    tbl_ax.text(0.60, y_pos - row_h / 2 + 0.03, "TOTAL",
+    tbl_ax.text(0.60, y_pos - row_h / 2, "TOTAL",
                 fontsize=7.5, color=W["text"], fontweight="bold",
                 va="center", transform=tbl_ax.transAxes)
-    tbl_ax.text(0.75, y_pos - row_h / 2 + 0.03, _rp(data["total_nominal"]),
+    tbl_ax.text(0.75, y_pos - row_h / 2, _rp(data["total_nominal"]),
                 fontsize=7.5, color=total_color, fontweight="bold",
                 va="center", transform=tbl_ax.transAxes)
 
     # --- TREND ---
-    _draw_card(ax, TRD_X, Y_S2_BOT + 0.05, TRD_W, S2_H - 0.05, W["white"], radius=0.012)
+    _draw_card(ax, TRD_X, Y_S2_TOP - 0.02 - _tabel_h, TRD_W, _tabel_h, W["white"], radius=0.012)
 
-    _text(ax, TRD_X + 0.015, Y_S2_TOP - 0.018,
+    _text(ax, TRD_X + 0.015, Y_S2_TOP - 0.04,
           "TREND SELISIH HARIAN", size=8.5, color=W["sage_deep"], weight="bold")
-    _divider(ax, TRD_X + 0.015, Y_S2_TOP - 0.028, TRD_W - 0.03, W["sage_deep"], 0.0015)
+    _divider(ax, TRD_X + 0.015, Y_S2_TOP - 0.05, TRD_W - 0.03, W["sage_deep"], 0.0015)
 
     trend_ax = fig.add_axes([
-        TRD_X + 0.02, Y_S2_BOT + 0.06,
-        TRD_W - 0.06, S2_H - 0.13
+        TRD_X + 0.02, Y_S2_TOP - 0.02 - _tabel_h + 0.01,
+        TRD_W - 0.06, _tabel_h - 0.08
     ])
     trend_ax.set_facecolor(W["white"])
 
@@ -393,6 +400,8 @@ def render_infografis(data, output_path):
     bar_colors = [W["bar_neg"] if v < 0 else W["bar_pos"] for v in trend_values]
     trend_ax.bar(x_idx, trend_values, color=bar_colors, width=0.55,
                  alpha=0.75, edgecolor="white", linewidth=1)
+
+    trend_ax.fill_between(x_idx, trend_values, 0, alpha=0.08, color=W["sage_deep"])
 
     trend_ax.plot(x_idx, trend_values, color=W["sage_deep"], linewidth=2,
                   marker="o", markersize=5, markerfacecolor="white",
@@ -454,14 +463,14 @@ if st.button("🎨 Render Infografis", type="primary"):
         st.success(f"✅ Berhasil! Ukuran: {len(img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(img_bytes, caption="Infografis SO — Matplotlib Murni v4")
+        st.image(img_bytes, caption="Infografis SO — FINAL")
 
         st.download_button(
             "📥 Download PNG",
             data=img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
             mime="image/png",
-            key="dl_mpl_v4",
+            key="dl_mpl_final",
             type="primary",
         )
 
