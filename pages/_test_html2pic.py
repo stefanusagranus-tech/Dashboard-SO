@@ -1,7 +1,7 @@
 """
-Infografis SO — Matplotlib Murni FINAL
-========================================
-Fix: Card whitespace, section title, tabel, trend fill
+Infografis SO — Matplotlib Murni FINAL v2
+==========================================
+Fix: Divider vertikal, trend gridline, tabel zebra kontras
 """
 import streamlit as st
 import io
@@ -18,7 +18,7 @@ import numpy as np
 
 
 st.set_page_config(page_title="Infografis SO", page_icon="🎨", layout="wide")
-st.title("🎨 Infografis SO — FINAL")
+st.title("🎨 Infografis SO — FINAL v2")
 
 
 # =========================================================
@@ -97,6 +97,15 @@ def _rp_short(val):
     return f"{n:+d}"
 
 
+def _rp_short_no_sign(val):
+    n = int(round(float(val)))
+    if abs(n) >= 1_000_000:
+        return f"{n/1_000_000:.1f}M"
+    if abs(n) >= 1_000:
+        return f"{n/1_000:.0f}K"
+    return f"{n:d}"
+
+
 # =========================================================
 # HELPER DRAW
 # =========================================================
@@ -125,6 +134,17 @@ def _divider(ax, x, y, w, color=None, thickness=0.0015):
         color = W["divider"]
     line = Rectangle(
         (x, y), w, thickness,
+        facecolor=color, edgecolor="none",
+        transform=ax.transAxes, zorder=5,
+    )
+    ax.add_patch(line)
+
+
+def _divider_v(ax, x, y, h, color=None, thickness=0.0008):
+    if color is None:
+        color = W["divider"]
+    line = Rectangle(
+        (x, y), thickness, h,
         facecolor=color, edgecolor="none",
         transform=ax.transAxes, zorder=5,
     )
@@ -201,7 +221,7 @@ def render_infografis(data, output_path):
               sub, size=7, color=W["text_sec"])
 
     # =========================================================
-    # 3. SECTION TITLE 01 — accent bar tebal
+    # 3. SECTION TITLE 01
     # =========================================================
     _text(ax, X_LEFT, Y_S1_TOP - 0.015, "▌", size=15, color=W["sage_deep"], weight="bold")
     _text(ax, X_LEFT + 0.025, Y_S1_TOP - 0.015, "01", size=10, color=W["terracotta"], weight="bold")
@@ -283,11 +303,13 @@ def render_infografis(data, output_path):
     y_metric = Y_S1_TOP - 0.07
     for label, val, color in metrics:
         _text(ax, RIGHT_X + 0.015, y_metric, label, size=7.5, color=W["text_muted"])
+        # Divider vertikal tipis
+        _divider_v(ax, RIGHT_X + 0.070, y_metric - 0.008, 0.016, W["divider"], 0.0008)
         _text(ax, RIGHT_X + 0.075, y_metric, val, size=8, color=color, weight="bold")
         y_metric -= 0.022
         _divider(ax, RIGHT_X + 0.015, y_metric + 0.008, RIGHT_W - 0.03, W["divider"], 0.0008)
 
-    # Insight — center
+    # Insight
     y_insight = y_metric - 0.018
 
     _text(ax, RIGHT_X + 0.015, y_insight,
@@ -321,7 +343,7 @@ def render_infografis(data, output_path):
     TBL_X = X_LEFT
     TRD_X = X_LEFT + TBL_W + 0.02
 
-    # --- TABEL (auto-height) ---
+    # --- TABEL ---
     _n_rak = len(data["list_rak"])
     _tabel_h = 0.16 + _n_rak * 0.028
     _tabel_h = min(_tabel_h, S2_H - 0.05)
@@ -339,6 +361,7 @@ def render_infografis(data, output_path):
     col_labels = ["RAK", "NAMA RAK", "PIC", "SELISIH"]
     col_w = [0.09, 0.52, 0.15, 0.24]
 
+    # Header
     tbl_ax.add_patch(Rectangle((0, 0.88), 1, 0.12,
                                 facecolor=W["sage_deep"], edgecolor="none",
                                 transform=tbl_ax.transAxes))
@@ -348,10 +371,11 @@ def render_infografis(data, output_path):
                     fontweight="bold", va="center", transform=tbl_ax.transAxes)
         x_pos += col_w[i]
 
+    # Body — zebra SAGE_LIGHT
     y_pos = 0.88
     row_h = 0.14
     for idx, r in enumerate(data["list_rak"]):
-        bg = W["bg"] if idx % 2 == 0 else W["white"]
+        bg = W["sage_light"] if idx % 2 == 0 else W["white"]
         tbl_ax.add_patch(Rectangle((0, y_pos - row_h), 1, row_h,
                                     facecolor=bg, edgecolor="none",
                                     transform=tbl_ax.transAxes))
@@ -369,6 +393,7 @@ def render_infografis(data, output_path):
             x_pos += col_w[i]
         y_pos -= row_h
 
+    # Total
     tbl_ax.add_patch(Rectangle((0, y_pos - row_h), 1, row_h,
                                 facecolor=W["terracotta_light"], edgecolor="none",
                                 transform=tbl_ax.transAxes))
@@ -423,8 +448,13 @@ def render_infografis(data, output_path):
     trend_ax.spines["right"].set_visible(False)
     trend_ax.spines["left"].set_visible(False)
     trend_ax.spines["bottom"].set_color(W["divider"])
-    trend_ax.grid(axis="y", linestyle=":", alpha=0.3, color=W["divider"])
+    # Gridline solid
+    trend_ax.grid(axis="y", linestyle="-", alpha=0.5, color=W["divider"], linewidth=0.5)
     trend_ax.set_axisbelow(True)
+    # Y-axis format K
+    trend_ax.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda x, p: _rp_short_no_sign(int(x)))
+    )
 
     min_v, max_v = min(trend_values), max(trend_values)
     pad = abs(max_v - min_v) * 0.40 if max_v != min_v else 8000
@@ -463,14 +493,14 @@ if st.button("🎨 Render Infografis", type="primary"):
         st.success(f"✅ Berhasil! Ukuran: {len(img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(img_bytes, caption="Infografis SO — FINAL")
+        st.image(img_bytes, caption="Infografis SO — FINAL v2")
 
         st.download_button(
             "📥 Download PNG",
             data=img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
             mime="image/png",
-            key="dl_mpl_final",
+            key="dl_mpl_final_v2",
             type="primary",
         )
 
