@@ -11,10 +11,11 @@ import io
 import pandas as pd
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-
+import urllib.parse
 from themes.theme_loader import (
     render_theme, render_theme_animations, get_theme_by_month,
 )
+
 
 st.set_page_config(
     page_title="Yui — Input SO", page_icon="📦",
@@ -97,6 +98,17 @@ def fmt_rp(value):
 def _now_jkt():
     return datetime.now(ZoneInfo("Asia/Jakarta"))
 
+def _build_wa_link(text, phone="6285892620149"):
+    """Build WhatsApp click-to-chat link dengan pesan pre-filled."""
+    # WA credit
+    _wa_text = (
+        f"{text}\n\n"
+        f"---\n"
+        f"📦 *Pesan ini dikirim oleh Yui — Asisten SO bagian Pencatatan*"
+    )
+    _encoded = urllib.parse.quote(_wa_text, safe="")
+    return f"https://wa.me/{phone}?text={_encoded}"
+    
 # =========================================================
 # CSS
 # =========================================================
@@ -928,6 +940,20 @@ if st.session_state.get("yui_rekap_hasil"):
 
         if _exp["type"] == "text":
             st.code(_exp["text"], language="text")
+        
+            # ✅ WA Link
+            _wa_link = _build_wa_link(_exp["text"])
+            st.markdown("")
+            st.markdown(
+                f"<a href='{_wa_link}' target='_blank' "
+                f"style='display:inline-block; padding:12px 24px; "
+                f"background:#25D366; color:white; text-decoration:none; "
+                f"border-radius:8px; font-weight:bold; font-size:14px;'>"
+                f"📱 Kirim ke WhatsApp</a>",
+                unsafe_allow_html=True,
+            )
+            st.caption("💡 Klik tombol di atas buat buka WhatsApp dengan pesan yang udah ke-isi.")
+            
         elif _exp["type"] == "png":
             st.image(_exp["bytes"], caption=_exp["filename"])
             st.download_button(
