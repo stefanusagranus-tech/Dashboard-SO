@@ -1,7 +1,7 @@
 """
-Infografis SO — Matplotlib Murni v3
+Infografis SO — Matplotlib Murni v4
 ======================================
-Fix: KPI value, Status value, nama rak, tabel card
+Fix: Section title spacing, insight center, tabel proporsional
 """
 import streamlit as st
 import io
@@ -13,14 +13,12 @@ from datetime import datetime
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, Rectangle
 import numpy as np
-import pandas as pd
 
 
 st.set_page_config(page_title="Infografis SO", page_icon="🎨", layout="wide")
-st.title("🎨 Infografis SO — Matplotlib Murni v3")
+st.title("🎨 Infografis SO — Matplotlib Murni v4")
 
 
 # =========================================================
@@ -197,17 +195,17 @@ def render_infografis(data, output_path):
 
         _text(ax, x + 0.012, Y_KPI_TOP - 0.018,
               label, size=7, color=W["text_muted"], weight="bold")
-        _text(ax, x + 0.012, Y_KPI_TOP - 0.046,
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.048,
               value, size=16, color=W["text"], weight="bold")
-        _text(ax, x + 0.012, Y_KPI_TOP - 0.070,
+        _text(ax, x + 0.012, Y_KPI_TOP - 0.072,
               sub, size=7, color=W["text_sec"])
 
     # =========================================================
     # 3. SECTION TITLE 01
     # =========================================================
-    _text(ax, X_LEFT, Y_S1_TOP + 0.012, "▌", size=13, color=W["sage_deep"], weight="bold")
-    _text(ax, X_LEFT + 0.02, Y_S1_TOP + 0.012, "01", size=9, color=W["terracotta"], weight="bold")
-    _text(ax, X_LEFT + 0.043, Y_S1_TOP + 0.012,
+    _text(ax, X_LEFT, Y_S1_TOP + 0.005, "▌", size=13, color=W["sage_deep"], weight="bold")
+    _text(ax, X_LEFT + 0.022, Y_S1_TOP + 0.005, "01", size=9, color=W["terracotta"], weight="bold")
+    _text(ax, X_LEFT + 0.048, Y_S1_TOP + 0.005,
           "DISTRIBUSI & RINGKASAN", size=10, color=W["text"], weight="bold")
 
     # =========================================================
@@ -289,7 +287,7 @@ def render_infografis(data, output_path):
         y_metric -= 0.022
         _divider(ax, RIGHT_X + 0.015, y_metric + 0.008, RIGHT_W - 0.03, W["divider"], 0.0008)
 
-    # Insight
+    # Insight — CENTER
     y_insight = y_metric - 0.018
 
     _text(ax, RIGHT_X + 0.015, y_insight,
@@ -301,16 +299,17 @@ def render_infografis(data, output_path):
     _draw_card(ax, RIGHT_X + 0.015, insight_y - insight_h, RIGHT_W - 0.03, insight_h,
                W["terracotta_light"], radius=0.008)
 
-    insight_wrapped = textwrap.fill(data["insight"], width=42)
-    _text(ax, RIGHT_X + 0.025, insight_y - insight_h / 2,
-          insight_wrapped, size=6.5, color=W["text"], weight="bold", va="center")
+    insight_wrapped = textwrap.fill(data["insight"], width=48)
+    _text(ax, RIGHT_X + RIGHT_W / 2, insight_y - insight_h / 2,
+          insight_wrapped, size=6.5, color=W["text"], weight="bold",
+          ha="center", va="center")
 
     # =========================================================
     # 5. SECTION TITLE 02
     # =========================================================
-    _text(ax, X_LEFT, Y_S2_TOP + 0.012, "▌", size=13, color=W["sage_deep"], weight="bold")
-    _text(ax, X_LEFT + 0.02, Y_S2_TOP + 0.012, "02", size=9, color=W["terracotta"], weight="bold")
-    _text(ax, X_LEFT + 0.043, Y_S2_TOP + 0.012,
+    _text(ax, X_LEFT, Y_S2_TOP + 0.005, "▌", size=13, color=W["sage_deep"], weight="bold")
+    _text(ax, X_LEFT + 0.022, Y_S2_TOP + 0.005, "02", size=9, color=W["terracotta"], weight="bold")
+    _text(ax, X_LEFT + 0.048, Y_S2_TOP + 0.005,
           "DETAIL & TREND", size=10, color=W["text"], weight="bold")
 
     # =========================================================
@@ -326,8 +325,8 @@ def render_infografis(data, output_path):
     _draw_card(ax, TBL_X, Y_S2_BOT + 0.05, TBL_W, S2_H - 0.05, W["white"], radius=0.012)
 
     tbl_ax = fig.add_axes([
-        TBL_X + 0.015, Y_S2_BOT + 0.055,
-        TBL_W - 0.03, S2_H - 0.12
+        TBL_X + 0.015, Y_S2_BOT + 0.06,
+        TBL_W - 0.03, S2_H - 0.13
     ])
     tbl_ax.axis("off")
     tbl_ax.set_xlim(0, 1)
@@ -336,7 +335,6 @@ def render_infografis(data, output_path):
     col_labels = ["RAK", "NAMA RAK", "PIC", "SELISIH"]
     col_w = [0.09, 0.52, 0.15, 0.24]
 
-    # Header
     tbl_ax.add_patch(Rectangle((0, 0.90), 1, 0.10,
                                 facecolor=W["sage_deep"], edgecolor="none",
                                 transform=tbl_ax.transAxes))
@@ -346,7 +344,6 @@ def render_infografis(data, output_path):
                     fontweight="bold", va="center", transform=tbl_ax.transAxes)
         x_pos += col_w[i]
 
-    # Body
     y_pos = 0.85
     row_h = 0.13
     for idx, r in enumerate(data["list_rak"]):
@@ -365,7 +362,6 @@ def render_infografis(data, output_path):
             x_pos += col_w[i]
         y_pos -= row_h
 
-    # Total
     tbl_ax.add_patch(Rectangle((0, y_pos - row_h + 0.03), 1, row_h,
                                 facecolor=W["terracotta_light"], edgecolor="none",
                                 transform=tbl_ax.transAxes))
@@ -386,7 +382,7 @@ def render_infografis(data, output_path):
 
     trend_ax = fig.add_axes([
         TRD_X + 0.02, Y_S2_BOT + 0.06,
-        TRD_W - 0.04, S2_H - 0.12
+        TRD_W - 0.06, S2_H - 0.13
     ])
     trend_ax.set_facecolor(W["white"])
 
@@ -458,14 +454,14 @@ if st.button("🎨 Render Infografis", type="primary"):
         st.success(f"✅ Berhasil! Ukuran: {len(img_bytes):,} bytes")
         st.markdown("---")
         st.markdown("### 📸 Preview")
-        st.image(img_bytes, caption="Infografis SO — Matplotlib Murni v3")
+        st.image(img_bytes, caption="Infografis SO — Matplotlib Murni v4")
 
         st.download_button(
             "📥 Download PNG",
             data=img_bytes,
             file_name=f"laporan_so_{datetime.now().strftime('%Y%m%d_%H%M')}.png",
             mime="image/png",
-            key="dl_mpl_v3",
+            key="dl_mpl_v4",
             type="primary",
         )
 
