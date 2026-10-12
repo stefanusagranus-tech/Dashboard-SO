@@ -285,7 +285,7 @@ if not st.session_state["rei_history"]:
     save_message("rei", _session_id, "assistant", _welcome)
 
 # =========================================================
-# HEADER — CUSTOM COMPONENT V2
+# HEADER — CUSTOM COMPONENT V2 (TANPA JAM, REI DI TENGAH)
 # =========================================================
 _rei_header_component = st.components.v2.component(
     name="rei_header",
@@ -293,7 +293,6 @@ _rei_header_component = st.components.v2.component(
     <div class="rei-header">
         <button id="btn-back" class="hdr-btn">←</button>
         <span class="hdr-title">📊 REI</span>
-        <span class="hdr-time">⏰ __TIME__</span>
         <button id="btn-menu" class="hdr-btn">⋮</button>
     </div>
     """,
@@ -327,6 +326,7 @@ _rei_header_component = st.components.v2.component(
         cursor: pointer;
         padding: 0;
         transition: all 0.2s ease;
+        flex-shrink: 0;
     }
     .hdr-btn:hover {
         background: rgba(232, 177, 137, 0.25);
@@ -338,16 +338,8 @@ _rei_header_component = st.components.v2.component(
         color: #E8B189;
         letter-spacing: 1.5px;
         text-shadow: 0 0 10px rgba(232, 177, 137, 0.6);
-    }
-    .hdr-time {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px;
-        color: #7FB99B;
-        font-weight: 700;
-        padding: 4px 10px;
-        background: rgba(127, 185, 155, 0.1);
-        border: 1px solid rgba(127, 185, 155, 0.4);
-        border-radius: 8px;
+        text-align: center;
+        flex-grow: 1;
     }
     """,
     js="""
@@ -375,7 +367,7 @@ _rei_header_component = st.components.v2.component(
 
 # Mount komponen
 _header_result = _rei_header_component(
-    data={"time": _now_jkt().strftime("%H:%M")},
+    data={},
     key="rei_header",
     on_back_change=lambda: None,
     on_menu_change=lambda: None,
@@ -388,91 +380,89 @@ if _header_result.get("back"):
     except Exception:
         st.warning("⚠️ Gagal pindah.")
 
-# Handle trigger menu
+# Handle trigger menu → buka dialog
 if _header_result.get("menu"):
-    st.session_state["rei_show_menu"] = not st.session_state["rei_show_menu"]
+    st.session_state["rei_show_menu"] = True
     st.rerun()
+    
+# =========================================================
+# MENU DIALOG (MODAL — overlay, gak nyorong chat)
+# =========================================================
+@st.dialog("⚙️ Menu Rei", width="small")
+def _rei_menu_dialog():
+    st.caption("📈 ANALISIS")
+    if st.button("📈 Trend SO", use_container_width=True, key="pop_trend"):
+        st.session_state["rei_preset"] = COMMANDS["/trend"]
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+    if st.button("📋 LPJ SO", use_container_width=True, key="pop_lpj"):
+        st.session_state["rei_preset"] = COMMANDS["/lpj"]
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+    if st.button("🔮 Prediksi", use_container_width=True, key="pop_pred"):
+        st.session_state["rei_preset"] = COMMANDS["/prediksi"]
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+    if st.button("🔍 Top Item", use_container_width=True, key="pop_item"):
+        st.session_state["rei_preset"] = COMMANDS["/item"]
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+    if st.button("💡 Insight", use_container_width=True, key="pop_insight"):
+        st.session_state["rei_preset"] = COMMANDS["/insight"]
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
 
-# =========================================================
-# POPOVER MENU (muncul kalau tombol ⋮ diklik)
-# =========================================================
+    st.divider()
+
+    st.caption("📤 EXPORT")
+    if st.button("📄 PDF", use_container_width=True, key="pop_pdf"):
+        _export_rei_pdf(st.session_state["rei_history"], _session_id)
+    if st.button("📊 PPT", use_container_width=True, key="pop_ppt"):
+        _export_rei_ppt(st.session_state["rei_history"], _session_id)
+
+    st.divider()
+
+    st.caption("💾 SESSION")
+    if st.button("📂 Restore Chat", use_container_width=True, key="pop_restore"):
+        st.session_state["rei_show_menu"] = False
+        st.session_state["show_restore_dialog"] = True
+        st.rerun()
+    if st.button("🆕 New Chat", use_container_width=True, key="pop_new"):
+        new_session_id("rei")
+        st.session_state["rei_history"] = []
+        st.session_state["rei_last_model"] = None
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+    if st.button("🗑️ Hapus Sesi Ini", use_container_width=True, key="pop_delete"):
+        clear_session("rei", _session_id)
+        st.session_state["rei_history"] = []
+        st.session_state["rei_last_model"] = None
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+
+    st.divider()
+
+    st.caption("⚙️ SISTEM")
+    _total_msg = len(st.session_state["rei_history"])
+    _model_str = st.session_state.get("rei_last_model") or "—"
+    st.caption(f"🧠 Session: `{_session_id[-12:]}`")
+    st.caption(f"💬 Total: {_total_msg} pesan")
+    st.caption(f"⚙️ Model: {_model_str}")
+
+    st.divider()
+
+    if st.button("💬 /help", use_container_width=True, key="pop_help"):
+        st.session_state["rei_preset"] = "/help"
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+    if st.button("❌ Tutup", use_container_width=True, key="pop_close"):
+        st.session_state["rei_show_menu"] = False
+        st.rerun()
+
+
+# Trigger menu dialog
 if st.session_state.get("rei_show_menu"):
-    with st.container(border=True):
-        st.markdown(
-            "<div style='font-family: Cinzel, serif; font-size: 14px; "
-            "color: #E8B189; font-weight: 700; margin-bottom: 8px;'>"
-            "⚙️ Menu</div>",
-            unsafe_allow_html=True,
-        )
-
-        st.caption("📈 ANALISIS")
-        if st.button("📈 Trend SO", use_container_width=True, key="pop_trend"):
-            st.session_state["rei_preset"] = COMMANDS["/trend"]
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-        if st.button("📋 LPJ SO", use_container_width=True, key="pop_lpj"):
-            st.session_state["rei_preset"] = COMMANDS["/lpj"]
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-        if st.button("🔮 Prediksi", use_container_width=True, key="pop_pred"):
-            st.session_state["rei_preset"] = COMMANDS["/prediksi"]
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-        if st.button("🔍 Top Item", use_container_width=True, key="pop_item"):
-            st.session_state["rei_preset"] = COMMANDS["/item"]
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-        if st.button("💡 Insight", use_container_width=True, key="pop_insight"):
-            st.session_state["rei_preset"] = COMMANDS["/insight"]
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-
-        st.divider()
-
-        st.caption("📤 EXPORT")
-        if st.button("📄 PDF", use_container_width=True, key="pop_pdf"):
-            _export_rei_pdf(st.session_state["rei_history"], _session_id)
-        if st.button("📊 PPT", use_container_width=True, key="pop_ppt"):
-            _export_rei_ppt(st.session_state["rei_history"], _session_id)
-
-        st.divider()
-
-        st.caption("💾 SESSION")
-        if st.button("📂 Restore Chat", use_container_width=True, key="pop_restore"):
-            st.session_state["show_restore_dialog"] = True
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-        if st.button("🆕 New Chat", use_container_width=True, key="pop_new"):
-            new_session_id("rei")
-            st.session_state["rei_history"] = []
-            st.session_state["rei_last_model"] = None
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-        if st.button("🗑️ Hapus Sesi Ini", use_container_width=True, key="pop_delete"):
-            clear_session("rei", _session_id)
-            st.session_state["rei_history"] = []
-            st.session_state["rei_last_model"] = None
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-
-        st.divider()
-
-        st.caption("⚙️ SISTEM")
-        _total_msg = len(st.session_state["rei_history"])
-        _model_str = st.session_state.get("rei_last_model") or "—"
-        st.caption(f"🧠 Session: `{_session_id[-12:]}`")
-        st.caption(f"💬 Total: {_total_msg} pesan")
-        st.caption(f"⚙️ Model: {_model_str}")
-
-        st.divider()
-
-        if st.button("💬 /help", use_container_width=True, key="pop_help"):
-            st.session_state["rei_preset"] = "/help"
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
-        if st.button("❌ Tutup", use_container_width=True, key="pop_close"):
-            st.session_state["rei_show_menu"] = False
-            st.rerun()
+    _rei_menu_dialog()
 
 
 # =========================================================
