@@ -88,8 +88,92 @@ def _parse_command(text):
 # =========================================================
 # EXPORT STUBS
 # =========================================================
+# =========================================================
+# EXPORT PDF (REAL)
+# =========================================================
 def _export_rei_pdf(history, session_id):
-    st.info("🚧 **Export PDF belum diimplementasikan.** Coming soon!")
+    """Generate PDF dari data SO terkini."""
+    try:
+        from modules.rei_export import generate_rei_pdf
+
+        with st.spinner("📄 Generate PDF..."):
+            # Build data context
+            _data_context_str = _build_data_context()
+
+            # Parse data dari context (atau langsung query ulang)
+            from modules.yui_rekap import rekap_so, get_top_items, _get_net_sales_bulan, _get_total_selisih_bulan
+            from modules.supabase_client import get_supabase
+
+            _rekap = rekap_so(mode="bulan_ini")
+            _net_sales = _get_net_sales_bulan()
+            _total_selisih = _get_total_selisih_bulan()
+
+            # Hitung lost sales
+            _sb = get_supabase()
+            _now = _now_jkt().date()
+            _start = _now.replace(day=1)
+            _res = _sb.table("so_hasil").select("qty_var, nominal_adjust").gte("so_date", _start.isoformat()).lte("so_date", _now.isoformat()).execute()
+            _rows = _res.data or []
+
+            _gross = sum(abs(float(r.get("nominal_adjust", 0) or 0)) for r in _rows if int(r.get("qty_var", 0) or 0) < 0)
+            _plus = sum(float(r.get("nominal_adjust", 0) or 0) for r in _rows if int(r.get("qty_var", 0) or 0) > 0)
+            _net = abs(_gross - _plus)
+            _shrinkage = (_net / _net_sales * 100) if _net_sales > 0 else 0
+
+            _top_items_data = get_top_items(mode="bulan_ini", limit=30, only_minus=True)
+            _top_items = _top_items_data.get("items", [])
+            _top_rak = sorted(_rekap.get("list_rak", []), key=lambda x: x["total"])[:5] if _rekap.get("success") else []
+
+            # AI analysis (dari message terakhir Rei)
+            _ai_analysis = ""
+            for _msg in reversed(st.session_state.get("rei_history", [])):
+                if _msg.get("role") == "assistant":
+                    _ai_analysis = _msg.get("content", "")[:2000]
+                    break
+
+            _data_context = {
+                "periode": _rekap.get("periode", "-"),
+                "rekap": _rekap,
+                "lost_sales": {
+                    "gross": _gross,
+                    "plus": _plus,
+                    "net": _net,
+                    "shrinkage": _shrinkage,
+                    "net_sales": _net_sales,
+                },
+                "btsb": {
+                    "net_sales": _net_sales,
+                    "btsb": _net_sales * 0.0015,
+                    "total_selisih": _total_selisih,
+                    "nsb": max(0, abs(_total_selisih) - _net_sales * 0.0015),
+                    "status": "PERLU PERHATIAN" if abs(_total_selisih) > _net_sales * 0.0015 else "DALAM TOLERANSI",
+                },
+                "chart_data": _rekap.get("chart_data", []),
+                "top_items": _top_items,
+                "top_rak": _top_rak,
+                "ai_analysis": _ai_analysis,
+            }
+
+            _pdf_bytes = generate_rei_pdf(_data_context)
+
+            if _pdf_bytes:
+                _filename = f"Laporan_SO_C383_{_now_jkt().strftime('%Y%m%d_%H%M')}.pdf"
+                st.download_button(
+                    label="📥 Download PDF",
+                    data=_pdf_bytes,
+                    file_name=_filename,
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary",
+                )
+                st.success(f"✅ PDF siap: {_filename}")
+            else:
+                st.error("❌ Gagal generate PDF. Cek log.")
+    except Exception as _e:
+        st.error(f"❌ Error: {str(_e)[:200]}")
+        print(f"[REI PDF ERROR] {_e}")
+        import traceback
+        print(traceback.format_exc())
 
 def _export_rei_ppt(history, session_id):
     st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
