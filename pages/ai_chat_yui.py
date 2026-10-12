@@ -1230,26 +1230,108 @@ if _user_msg:
 
     _user_lower = _user_msg.lower().strip()
 
+    # =========================================================
+    # INTENT DETECTION
+    # =========================================================
     _is_rekap = any(kw in _user_lower for kw in [
-        "rekap", "rangkum", "summary", "ringkas",
-        "total so", "list rak", "belum so", "belum di-so",
-        "cek rak", "cek duplikat", "cek validasi",
+        "rekap", "rangkum", "summary", "ringkas", "total so", "list rak",
     ])
-
+    _is_list_item = any(kw in _user_lower for kw in [
+        "list item", "rekap item", "item minus", "item plus", "item di rak",
+    ])
     _is_spd_input = (
         ("spd" in _user_lower and any(k in _user_lower for k in ["input", "catat", "simpan", "tambah"]))
         or ("spd" in _user_lower and bool(re.search(r'\d{3,}', _user_lower.replace(".", "").replace(",", ""))))
     )
-
     _is_input_so = (
         any(kw in _user_lower for kw in ["input so", "catat so", "tambah so", "minus", "plus", "selisih"])
         or bool(re.search(r'\d+\s*(rb|ribu|jt|juta|k)\b', _user_lower))
         or bool(re.search(r'rp\s*\d', _user_lower))
     )
 
-    if _is_rekap or _is_spd_input:
+    if _is_rekap or _is_list_item or _is_spd_input:
         _is_input_so = False
 
+    # =========================================================
+    # HELPER: PARSER TANGGAL RANGE
+    # =========================================================
+    def _parse_tanggal_range(text):
+        """Parse tanggal dari text — support range & single."""
+        from datetime import date, timedelta
+        _now = _now_jkt().date()
+        _text = text.lower()
+
+        # Pattern: "tanggal 10-12" atau "10-12 oktober" atau "10 s/d 12"
+        _match_range = re.search(
+            r'(\d{1,2})\s*[-–]\s*(\d{1,2})\s*(oktober|okt|november|nov|desember|des|'
+            r'januari|jan|februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|'
+            r'agustus|agu|ags|september|sep)?',
+            _text,
+        )
+        if _match_range:
+            _d1 = int(_match_range.group(1))
+            _d2 = int(_match_range.group(2))
+            _bulan_str = _match_range.group(3)
+            _bulan_map = {
+                "januari": 1, "jan": 1, "februari": 2, "feb": 2,
+                "maret": 3, "mar": 3, "april": 4, "apr": 4,
+                "mei": 5, "juni": 6, "jun": 6, "juli": 7, "jul": 7,
+                "agustus": 8, "agu": 8, "ags": 8,
+                "september": 9, "sep": 9,
+                "oktober": 10, "okt": 10,
+                "november": 11, "nov": 11,
+                "desember": 12, "des": 12,
+            }
+            _bulan = _bulan_map.get(_bulan_str, _now.month) if _bulan_str else _now.month
+            try:
+                _start = date(_now.year, _bulan, _d1)
+                _end = date(_now.year, _bulan, _d2)
+                return _start, _end
+            except Exception:
+                pass
+
+        # Pattern: "tanggal 10" atau "tanggal 10 oktober 2026"
+        _match_single = re.search(
+            r'(\d{1,2})\s*(oktober|okt|november|nov|desember|des|januari|jan|'
+            r'februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|'
+            r'agustus|agu|ags|september|sep)?\s*(\d{4})?',
+            _text,
+        )
+        if _match_single:
+            _d = int(_match_single.group(1))
+            _bulan_str = _match_single.group(2)
+            _tahun_str = _match_single.group(3)
+            _bulan_map = {
+                "januari": 1, "jan": 1, "februari": 2, "feb": 2,
+                "maret": 3, "mar": 3, "april": 4, "apr": 4,
+                "mei": 5, "juni": 6, "jun": 6, "juli": 7, "jul": 7,
+                "agustus": 8, "agu": 8, "ags": 8,
+                "september": 9, "sep": 9, "oktober": 10, "okt": 10,
+                "november": 11, "nov": 11, "desember": 12, "des": 12,
+            }
+            _bulan = _bulan_map.get(_bulan_str, _now.month) if _bulan_str else _now.month
+            _tahun = int(_tahun_str) if _tahun_str else _now.year
+            try:
+                _tgl = date(_tahun, _bulan, _d)
+                return _tgl, _tgl
+            except Exception:
+                pass
+
+        return None, None
+
+    # =========================================================
+    # HELPER: EKSTRAK RAK DARI TEXT
+    # =========================================================
+    def _ekstrak_rak(text):
+        """Cari kode rak di text, misal 'S11', 'Q51', '800'."""
+        _match = re.search(r'\b([A-Za-z]{1,3}\d{1,4}|\d{3,4})\b', text.upper())
+        if _match:
+            return _match.group(1)
+        return None
+
+    # =========================================================
+    # RESPONSE
+    # =========================================================
     with st.chat_message("assistant", avatar="📦"):
         with st.spinner("📦 Aku cek..."):
 
@@ -1311,16 +1393,97 @@ if _user_msg:
                 st.session_state["yui_history"].append({"role": "assistant", "content": _resp})
                 save_message("yui", _session_id, "assistant", _resp)
 
-            # --- REKAP ---
+            # --- ✅ LIST ITEM (NEW) ---
+            elif _is_list_item:
+                try:
+                    from modules.supabase_client import get_supabase
+                    from modules.yui_rekap import get_top_items
+                    from datetime import date, timedelta
+
+                    _sb = get_supabase()
+                    _rak_filter = _ekstrak_rak(_user_lower)
+                    _tgl_start, _tgl_end = _parse_tanggal_range(_user_lower)
+
+                    # Kalau gak ada tanggal → default hari ini
+                    if _tgl_start is None:
+                        _tgl_start = _now_jkt().date()
+                        _tgl_end = _tgl_start
+
+                    # Kalau ada rak filter
+                    if _rak_filter:
+                        _res = (
+                            _sb.table("so_hasil")
+                            .select("*")
+                            .eq("rak_id", _rak_filter)
+                            .gte("so_date", _tgl_start.isoformat())
+                            .lte("so_date", _tgl_end.isoformat())
+                            .execute()
+                        )
+                        _rows = _res.data or []
+
+                        if not _rows:
+                            _resp = f"📭 Gak ada item di rak **{_rak_filter}** periode {_tgl_start} s/d {_tgl_end}."
+                        else:
+                            _rows_sorted = sorted(_rows, key=lambda x: float(x.get("nominal_adjust", 0) or 0))
+                            _total = sum(float(r.get("nominal_adjust", 0) or 0) for r in _rows)
+                            _resp = f"📦 **Item RAK {_rak_filter}** ({_tgl_start} s/d {_tgl_end})\n\n"
+                            _resp += f"Total: **{len(_rows)} item** • **{fmt_rp_signed(_total)}**\n\n"
+                            for _r in _rows_sorted[:20]:
+                                _nom = float(_r.get("nominal_adjust", 0) or 0)
+                                _resp += f"- `{_r.get('plu', '-')}` {str(_r.get('nama_produk', '-'))[:35]}: **{fmt_rp_signed(_nom)}**\n"
+                            if len(_rows_sorted) > 20:
+                                _resp += f"\n... +{len(_rows_sorted) - 20} item lainnya"
+
+                    # Kalau minta "minus tertinggi" atau "plus tertinggi"
+                    elif "minus" in _user_lower or "plus" in _user_lower:
+                        _top = get_top_items(limit=5)
+                        _key = "top_minus" if "minus" in _user_lower else "top_plus"
+                        _items = _top.get(_key, [])
+
+                        if not _items:
+                            _resp = f"📭 Gak ada item {'minus' if 'minus' in _user_lower else 'plus'} di periode ini."
+                        else:
+                            _resp = f"📊 **Top 5 Item {'Minus' if 'minus' in _user_lower else 'Plus'} Tertinggi**\n\n"
+                            for _i, _it in enumerate(_items, 1):
+                                _nom = float(_it.get("nominal_adjust", 0) or 0)
+                                _resp += f"{_i}. `{_it.get('plu', '-')}` {str(_it.get('nama_produk', '-'))[:30]}\n"
+                                _resp += f"   Rak **{_it.get('rak_id', '-')}** • **{fmt_rp_signed(_nom)}**\n"
+
+                    # Fallback: list item tanpa filter spesifik
+                    else:
+                        _resp = "❓ Bos, aku bisa bantu list item dengan command:\n\n"
+                        _resp += "- `list item minus tertinggi`\n"
+                        _resp += "- `list item plus tertinggi`\n"
+                        _resp += "- `list item di rak S11`\n"
+                        _resp += "- `list item tanggal 10-12`\n"
+
+                except Exception as _e:
+                    _resp = f"❌ Error: {str(_e)[:150]}"
+
+                st.markdown(_resp)
+                st.session_state["yui_history"].append({"role": "assistant", "content": _resp})
+                save_message("yui", _session_id, "assistant", _resp)
+
+            # --- REKAP (existing, tapi pake parser tanggal range) ---
             elif _is_rekap:
                 _mode = "hari_ini"
-                if "minggu" in _user_lower:
+                _tgl_start, _tgl_end = _parse_tanggal_range(_user_lower)
+
+                if _tgl_start and _tgl_end and _tgl_start != _tgl_end:
+                    _mode = "custom"
+                elif _tgl_start and _tgl_end and _tgl_start == _tgl_end:
+                    _mode = "custom"
+                elif "minggu" in _user_lower:
                     _mode = "minggu_ini"
                 elif "bulan" in _user_lower:
                     _mode = "bulan_ini"
 
                 try:
-                    _hasil = rekap_so(mode=_mode)
+                    _hasil = rekap_so(
+                        mode=_mode,
+                        tgl_start=_tgl_start if _mode == "custom" else None,
+                        tgl_end=_tgl_end if _mode == "custom" else None,
+                    )
                     if _hasil.get("success"):
                         _nom = _hasil["total_nominal"]
                         _resp = f"📊 **Rekap SO ({_hasil['periode']})**\n\n"
@@ -1337,7 +1500,6 @@ if _user_msg:
                                 _resp += f"... +{len(_list_rak) - 10} rak lainnya\n"
 
                         _resp += f"\n💡 Mau analisis? Tanya Rei aja Bos 😏"
-                        # Simpan hasil rekap biar bisa di-export dari halaman utama
                         st.session_state["yui_rekap_hasil"] = _hasil
                     else:
                         _resp = f"❌ Gagal rekap: {_hasil.get('error', 'unknown')}"
@@ -1348,7 +1510,7 @@ if _user_msg:
                 st.session_state["yui_history"].append({"role": "assistant", "content": _resp})
                 save_message("yui", _session_id, "assistant", _resp)
 
-            # --- INPUT SO ---
+            # --- INPUT SO (chat) ---
             elif _is_input_so:
                 _parse = parse_natural_language(_user_msg, _rak_list[:100])
                 if _parse.get("success") and _parse.get("data"):
@@ -1387,7 +1549,7 @@ if _user_msg:
                     st.session_state["yui_history"].append({"role": "assistant", "content": _resp})
                     save_message("yui", _session_id, "assistant", _resp)
 
-            # --- CHAT BIASA ---
+            # --- CHAT BIASA (fallback) ---
             else:
                 _chat = yui_chat(_user_msg, st.session_state["yui_history"])
                 _resp = _chat.get("text", "")
