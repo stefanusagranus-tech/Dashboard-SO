@@ -74,17 +74,28 @@ class ReiPDF(FPDF):
         self.set_auto_page_break(auto=True, margin=25)
 
         _font_dir = os.path.join(os.path.dirname(__file__), "..", "fonts")
+
+        # === REGISTER SEMUA FONT ===
         _fonts = {
+            # Serif
             ("Serif", ""):    "DejaVuSerifCondensed.ttf",
             ("Serif", "B"):   "DejaVuSerifCondensed-Bold.ttf",
             ("Serif", "I"):   "DejaVuSerif-Italic.ttf",
+            ("Serif", "BI"):  "DejaVuSerif-BoldItalic.ttf",
+            # Sans
             ("Sans", ""):     "DejaVuSansCondensed.ttf",
             ("Sans", "B"):    "DejaVuSansCondensed-Bold.ttf",
+            ("Sans", "I"):    "DejaVuSans-Oblique.ttf",
+            ("Sans", "BI"):   "DejaVuSans-BoldOblique.ttf",
+            # Mono
             ("Mono", ""):     "DejaVuSansMono.ttf",
             ("Mono", "B"):    "DejaVuSansMono-Bold.ttf",
+            ("Mono", "I"):    "DejaVuSansMono-Oblique.ttf",
+            ("Mono", "BI"):   "DejaVuSansMono-BoldOblique.ttf",
         }
 
         _loaded = 0
+        _missing = []
         for (_fam, _style), _fn in _fonts.items():
             _p = os.path.join(_font_dir, _fn)
             if os.path.exists(_p):
@@ -93,35 +104,26 @@ class ReiPDF(FPDF):
                     _loaded += 1
                 except Exception as _e:
                     print(f"[REI PDF] Gagal load {_fn}: {_e}")
+                    _missing.append(_fn)
+            else:
+                print(f"[REI PDF] File gak ada: {_fn}")
+                _missing.append(_fn)
 
         print(f"[REI PDF] Loaded {_loaded}/{len(_fonts)} fonts")
+        if _missing:
+            print(f"[REI PDF] Missing: {_missing}")
 
+        # === DEFAULT FONT ===
         self.font_title = "Serif"
         self.font_body = "Sans"
         self.font_mono = "Mono"
 
-    def header(self):
-        if self.page_no() == 1:
-            return
-        self.set_fill_color(*self.theme.PURPLE)
-        self.rect(0, 0, 210, 15, "F")
-        self.set_y(4)
-        self.set_font(self.font_mono, "B", 8)
-        self.set_text_color(*self.theme.GOLD)
-        self.cell(0, 7, "ANALISIS STOCK OPNAME - TOKO C383", align="L")
-        self.set_y(4)
-        self.set_font(self.font_mono, "", 8)
-        self.cell(0, 7, f"Halaman {self.page_no()}", align="R")
-        self.ln(12)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font(self.font_mono, "I", 7)
-        self.set_text_color(*self.theme.TEXT_MUTED)
-        self.set_draw_color(*self.theme.GOLD)
-        self.set_line_width(0.3)
-        self.line(20, self.get_y() - 2, 190, self.get_y() - 2)
-        self.cell(0, 10, "Dashboard SO Toko C383 - Rei (AI Analis)", align="C")
+        # === FALLBACK kalau font Mono gagal load ===
+        if _loaded == 0:
+            self.font_title = "Helvetica"
+            self.font_body = "Helvetica"
+            self.font_mono = "Courier"
+            print("[REI PDF] Fallback ke built-in fonts (Helvetica/Courier)")
 
 # =========================================================
 # CHART
@@ -397,7 +399,7 @@ def generate_rei_pdf(data_context):
         print(traceback.format_exc())
         return None
         
-# =========================================================
+        # =========================================================
 # MAIN EXPORT — PART 2 (Top Item, Pembahasan, Kesimpulan)
 # =========================================================
 def _generate_rei_pdf_part2(_pdf, data_context, _theme, _lost, _btsb, _top_rak=None):
