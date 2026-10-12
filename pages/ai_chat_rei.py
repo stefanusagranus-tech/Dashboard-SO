@@ -170,21 +170,80 @@ def inject_rei_css():
             padding: 8px !important;
         }
 
-        /* === HEADER 1 BARIS — SEJAJAR === */
-        [data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) {
-            align-items: center !important;
-            gap: 4px !important;
-            margin-bottom: 8px !important;
-            background: linear-gradient(135deg, rgba(30, 20, 60, 0.95), rgba(76, 29, 149, 0.6)) !important;
-            border-bottom: 2px solid rgba(232, 177, 137, 0.6) !important;
-            border-radius: 10px !important;
-            padding: 6px 10px !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        /* ============================================
+           HEADER BAR — HTML MURNI (100% STABIL)
+           ============================================ */
+        .rei-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 52px 10px 52px;  /* kiri & kanan dikasih space buat tombol overlay */
+            background: linear-gradient(135deg, rgba(30, 20, 60, 0.95), rgba(76, 29, 149, 0.6));
+            border-bottom: 2px solid rgba(232, 177, 137, 0.6);
+            border-radius: 10px 10px 0 0;
+            margin-bottom: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            position: relative;
+            z-index: 1;
+            min-height: 44px;
         }
-        [data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) button {
-            height: 34px !important;
-            min-height: 34px !important;
+        .rei-header-bar .rei-title {
+            font-family: Cinzel, serif;
+            font-size: 18px;
+            font-weight: 900;
+            color: #E8B189;
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 10px rgba(232, 177, 137, 0.6);
+            line-height: 1;
+        }
+        .rei-header-bar .rei-time {
+            font-family: JetBrains Mono, monospace;
+            font-size: 11px;
+            color: #7FB99B;
+            font-weight: 700;
+            padding: 4px 10px;
+            background: rgba(127, 185, 155, 0.1);
+            border: 1px solid rgba(127, 185, 155, 0.4);
+            border-radius: 8px;
+            line-height: 1;
+        }
+
+        /* === OVERLAY: TOMBOL BACK & MENU DI ATAS HEADER === */
+        /* Container kolom tombol (persis setelah header HTML) */
+        .main .block-container > div:has(.rei-header-bar) + div {
+            margin-top: -50px !important;
+            position: relative !important;
+            z-index: 100 !important;
+            padding: 0 !important;
+            margin-bottom: 4px !important;
+        }
+        /* Reset styling default horizontal block */
+        .main .block-container > div:has(.rei-header-bar) + div [data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+            align-items: center !important;
             padding: 0 8px !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            min-height: 40px !important;
+        }
+        /* Style tombol back & menu */
+        .main .block-container > div:has(.rei-header-bar) + div button {
+            height: 36px !important;
+            min-height: 36px !important;
+            width: 40px !important;
+            background: rgba(30, 20, 60, 0.7) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
+            border-radius: 10px !important;
+            color: #E8B189 !important;
+            font-size: 16px !important;
+            font-weight: 900 !important;
+            padding: 0 !important;
+            transition: all 0.2s ease !important;
+        }
+        .main .block-container > div:has(.rei-header-bar) + div button:hover {
+            background: rgba(232, 177, 137, 0.2) !important;
+            border-color: #E8B189 !important;
         }
 
         /* === MODEL BADGE === */
@@ -250,6 +309,24 @@ def inject_rei_css():
             color: #E8B189 !important;
             font-size: 18px !important;
         }
+
+        /* === MOBILE TWEAK === */
+        @media (max-width: 480px) {
+            .rei-header-bar {
+                padding: 8px 46px 8px 46px;
+                min-height: 40px;
+            }
+            .rei-header-bar .rei-title { font-size: 15px; }
+            .rei-header-bar .rei-time { font-size: 10px; padding: 3px 8px; }
+            .main .block-container > div:has(.rei-header-bar) + div {
+                margin-top: -46px !important;
+            }
+            .main .block-container > div:has(.rei-header-bar) + div button {
+                height: 34px !important;
+                width: 38px !important;
+                font-size: 15px !important;
+            }
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -307,11 +384,23 @@ if not st.session_state["rei_history"]:
     save_message("rei", _session_id, "assistant", _welcome)
     
 # =========================================================
-# HEADER 1 BARIS — SEJAJAR HORIZONTAL
+# HEADER — HTML + TOMBOL OVERLAY (100% STABIL)
 # =========================================================
 _time_str = _now_jkt().strftime("%H:%M")
 
-_col_back, _col_title, _col_time, _col_menu = st.columns([1, 4, 2, 1])
+# 1. Header visual (HTML murni)
+st.markdown(
+    f"""
+    <div class="rei-header-bar">
+        <span class="rei-title">📊 REI</span>
+        <span class="rei-time">⏰ {_time_str}</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# 2. Tombol fungsional (di-render terpisah, di-overlay CSS)
+_col_back, _col_spacer, _col_menu = st.columns([1, 6, 1])
 
 with _col_back:
     if st.button("←", key="btn_back_rei", help="Balik ke Dashboard"):
@@ -319,23 +408,6 @@ with _col_back:
             st.switch_page("Dashboard.py")
         except Exception:
             st.warning("⚠️ Gagal pindah.")
-
-with _col_title:
-    st.markdown(
-        "<div style='font-family: Cinzel, serif; font-size: 16px; font-weight: 900; "
-        "color: #E8B189; letter-spacing: 1.5px; padding-top: 4px; "
-        "text-shadow: 0 0 8px rgba(232, 177, 137, 0.5);'>"
-        "📊 REI</div>",
-        unsafe_allow_html=True,
-    )
-
-with _col_time:
-    st.markdown(
-        f"<div style='font-family: JetBrains Mono; font-size: 10px; "
-        f"color: #7FB99B; text-align: right; padding-top: 8px; "
-        f"font-weight: 700;'>⏰ {_time_str}</div>",
-        unsafe_allow_html=True,
-    )
 
 with _col_menu:
     with st.popover("⋮", use_container_width=False):
