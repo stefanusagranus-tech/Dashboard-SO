@@ -1,13 +1,15 @@
 """
-AI Chat Rei — Analis SO (AI-3) v8
-===================================
+AI Chat Rei — Analis SO (AI-3) v10
+====================================
 Layout: WhatsApp-style, full screen, bubble chat + timestamp
-Changelog v8:
-- Header 1 baris: [←] [📊 REI] [⏰ jam] [⋮] — semua sejajar horizontal
-- Bubble chat dengan timestamp asli dari DB (created_at)
+Header: Custom Component v2 (STABIL, tombol nempel di header)
+
+Changelog v10:
+- Header pakai st.components.v2.component (Custom Component v2)
+- Tombol ← dan ⋮ NEMPEL di dalam header (position: fixed)
+- Bubble chat + timestamp per pesan
 - Restore dialog (modal) untuk load sesi lama
-- New Chat & Hapus Sesi di popover
-- Session ID persistent (gak reset jam 12 malam)
+- Session persistent (gak reset jam 12 malam)
 """
 
 import streamlit as st
@@ -101,9 +103,10 @@ def _export_rei_pdf(history, session_id):
 
 def _export_rei_ppt(history, session_id):
     st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
-    
+
+
 # =========================================================
-# CSS — FULL SCREEN + BUBBLE + HEADER
+# CSS — FULL SCREEN + BUBBLE + POPOVER (header dihandle component)
 # =========================================================
 def inject_rei_css():
     st.markdown("""
@@ -170,116 +173,6 @@ def inject_rei_css():
             padding: 8px !important;
         }
 
-        /* ============================================
-           HEADER BAR — FIXED DI ATAS (WA STYLE)
-           ============================================ */
-        .rei-header-bar {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            z-index: 9999 !important;
-            display: flex !important;
-            justify-content: space-between !important;
-            align-items: center !important;
-            padding: 10px 60px 10px 60px !important;
-            background: linear-gradient(135deg, rgba(30, 20, 60, 0.98), rgba(76, 29, 149, 0.9)) !important;
-            border-bottom: 2px solid rgba(232, 177, 137, 0.6) !important;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
-            min-height: 52px !important;
-            box-sizing: border-box !important;
-        }
-        .rei-header-bar .rei-title {
-            font-family: Cinzel, serif !important;
-            font-size: 18px !important;
-            font-weight: 900 !important;
-            color: #E8B189 !important;
-            letter-spacing: 1.5px !important;
-            text-shadow: 0 0 10px rgba(232, 177, 137, 0.6) !important;
-            line-height: 1 !important;
-        }
-        .rei-header-bar .rei-time {
-            font-family: JetBrains Mono, monospace !important;
-            font-size: 11px !important;
-            color: #7FB99B !important;
-            font-weight: 700 !important;
-            padding: 4px 10px !important;
-            background: rgba(127, 185, 155, 0.1) !important;
-            border: 1px solid rgba(127, 185, 155, 0.4) !important;
-            border-radius: 8px !important;
-            line-height: 1 !important;
-        }
-
-        /* ============================================
-           TOMBOL BACK — FIXED DI HEADER (KIRI)
-           ============================================ */
-        .main .block-container button[key="btn_back_rei"] {
-            position: fixed !important;
-            top: 8px !important;
-            left: 10px !important;
-            z-index: 10000 !important;
-            height: 36px !important;
-            min-height: 36px !important;
-            width: 40px !important;
-            background: rgba(30, 20, 60, 0.85) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
-            border-radius: 10px !important;
-            color: #E8B189 !important;
-            font-size: 16px !important;
-            font-weight: 900 !important;
-            padding: 0 !important;
-            transition: all 0.2s ease !important;
-        }
-        .main .block-container button[key="btn_back_rei"]:hover {
-            background: rgba(232, 177, 137, 0.25) !important;
-            border-color: #E8B189 !important;
-        }
-
-        /* ============================================
-           POPOVER MENU — FIXED DI HEADER (KANAN)
-           ============================================ */
-        .main .block-container [data-testid="stPopover"] {
-            position: fixed !important;
-            top: 8px !important;
-            right: 10px !important;
-            z-index: 10000 !important;
-            width: 40px !important;
-        }
-        .main .block-container [data-testid="stPopover"] > button {
-            height: 36px !important;
-            min-height: 36px !important;
-            width: 40px !important;
-            background: rgba(30, 20, 60, 0.85) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
-            border-radius: 10px !important;
-            color: #E8B189 !important;
-            font-size: 18px !important;
-            font-weight: 900 !important;
-            padding: 0 !important;
-            transition: all 0.2s ease !important;
-        }
-        .main .block-container [data-testid="stPopover"] > button:hover {
-            background: rgba(232, 177, 137, 0.25) !important;
-            border-color: #E8B189 !important;
-        }
-
-        /* === POPOVER BODY (MENU) === */
-        [data-testid="stPopoverBody"] {
-            background: rgba(20, 12, 35, 0.98) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
-            border-radius: 12px !important;
-            padding: 12px !important;
-            z-index: 10001 !important;
-        }
-        [data-testid="stPopoverBody"] button {
-            background: rgba(30, 20, 60, 0.6) !important;
-            border: 1px solid rgba(232, 177, 137, 0.3) !important;
-            border-radius: 8px !important;
-            color: #F5E6D3 !important;
-            font-size: 12px !important;
-            margin-bottom: 4px !important;
-        }
-
         /* === MODEL BADGE === */
         .model-badge {
             display: inline-block;
@@ -290,6 +183,38 @@ def inject_rei_css():
             font-family: JetBrains Mono, monospace;
             font-size: 9px;
             color: #E8B189;
+        }
+
+        /* === POPOVER (menu di bawah header) === */
+        [data-testid="stPopover"] > button {
+            background: rgba(30, 20, 60, 0.6) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
+            border-radius: 10px !important;
+            color: #E8B189 !important;
+            font-size: 18px !important;
+            font-weight: 900 !important;
+            height: 34px !important;
+            width: 34px !important;
+            padding: 0 !important;
+            transition: all 0.2s ease !important;
+        }
+        [data-testid="stPopover"] > button:hover {
+            background: rgba(232, 177, 137, 0.2) !important;
+            border-color: #E8B189 !important;
+        }
+        [data-testid="stPopoverBody"] {
+            background: rgba(20, 12, 35, 0.98) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
+            border-radius: 12px !important;
+            padding: 12px !important;
+        }
+        [data-testid="stPopoverBody"] button {
+            background: rgba(30, 20, 60, 0.6) !important;
+            border: 1px solid rgba(232, 177, 137, 0.3) !important;
+            border-radius: 8px !important;
+            color: #F5E6D3 !important;
+            font-size: 12px !important;
+            margin-bottom: 4px !important;
         }
 
         /* === TIMESTAMP BUBBLE === */
@@ -311,36 +236,6 @@ def inject_rei_css():
             color: #E8B189 !important;
             font-size: 18px !important;
         }
-
-        /* === MOBILE TWEAK === */
-        @media (max-width: 480px) {
-            .main .block-container {
-                padding: 62px 0.4rem 0.4rem 0.4rem !important;
-            }
-            .rei-header-bar {
-                padding: 8px 54px 8px 54px !important;
-                min-height: 46px !important;
-            }
-            .rei-header-bar .rei-title { font-size: 15px !important; }
-            .rei-header-bar .rei-time { font-size: 10px !important; padding: 3px 8px !important; }
-            .main .block-container button[key="btn_back_rei"] {
-                top: 6px !important;
-                left: 8px !important;
-                height: 34px !important;
-                width: 38px !important;
-                font-size: 15px !important;
-            }
-            .main .block-container [data-testid="stPopover"] {
-                top: 6px !important;
-                right: 8px !important;
-                width: 38px !important;
-            }
-            .main .block-container [data-testid="stPopover"] > button {
-                height: 34px !important;
-                width: 38px !important;
-                font-size: 16px !important;
-            }
-        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -350,6 +245,7 @@ inject_rei_css()
 if not _REI_OK:
     st.error(f"❌ Gagal import: {_import_error}")
     st.stop()
+
 
 # =========================================================
 # SESSION STATE — PAKAI TIMESTAMP ASLI DARI DB
@@ -377,6 +273,9 @@ if "rei_last_model" not in st.session_state:
 if "show_restore_dialog" not in st.session_state:
     st.session_state["show_restore_dialog"] = False
 
+if "rei_show_menu" not in st.session_state:
+    st.session_state["rei_show_menu"] = False
+
 # Welcome
 if not st.session_state["rei_history"]:
     _welcome = (
@@ -396,52 +295,151 @@ if not st.session_state["rei_history"]:
         "time": _now_jkt().strftime("%H:%M"),
     })
     save_message("rei", _session_id, "assistant", _welcome)
-    
-# =========================================================
-# HEADER — HTML + TOMBOL OVERLAY (100% STABIL)
-# =========================================================
-_time_str = _now_jkt().strftime("%H:%M")
 
-# 1. Header visual (HTML murni)
-st.markdown(
-    f"""
-    <div class="rei-header-bar">
-        <span class="rei-title">📊 REI</span>
-        <span class="rei-time">⏰ {_time_str}</span>
+
+# =========================================================
+# HEADER — CUSTOM COMPONENT V2
+# =========================================================
+# Register komponen (di luar function biar gak re-register)
+_rei_header_component = st.components.v2.component(
+    name="rei_header",
+    html="""
+    <div class="rei-header">
+        <button id="btn-back" class="hdr-btn">←</button>
+        <span class="hdr-title">📊 REI</span>
+        <span class="hdr-time">⏰ __TIME__</span>
+        <button id="btn-menu" class="hdr-btn">⋮</button>
     </div>
     """,
-    unsafe_allow_html=True,
+    css="""
+    .rei-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 16px;
+        background: linear-gradient(135deg, rgba(30, 20, 60, 0.98), rgba(76, 29, 149, 0.9));
+        border-bottom: 2px solid rgba(232, 177, 137, 0.6);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        min-height: 52px;
+        box-sizing: border-box;
+        font-family: 'Cinzel', serif;
+    }
+    .hdr-btn {
+        width: 40px;
+        height: 36px;
+        background: rgba(30, 20, 60, 0.85);
+        border: 1.5px solid rgba(232, 177, 137, 0.6);
+        border-radius: 10px;
+        color: #E8B189;
+        font-size: 16px;
+        font-weight: 900;
+        cursor: pointer;
+        padding: 0;
+        transition: all 0.2s ease;
+    }
+    .hdr-btn:hover {
+        background: rgba(232, 177, 137, 0.25);
+        border-color: #E8B189;
+    }
+    .hdr-title {
+        font-size: 18px;
+        font-weight: 900;
+        color: #E8B189;
+        letter-spacing: 1.5px;
+        text-shadow: 0 0 10px rgba(232, 177, 137, 0.6);
+    }
+    .hdr-time {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: #7FB99B;
+        font-weight: 700;
+        padding: 4px 10px;
+        background: rgba(127, 185, 155, 0.1);
+        border: 1px solid rgba(127, 185, 155, 0.4);
+        border-radius: 8px;
+    }
+    """,
+    js="""
+    export default function(component) {
+        const { parentElement, setTriggerValue } = component;
+
+        const backBtn = parentElement.querySelector('#btn-back');
+        const menuBtn = parentElement.querySelector('#btn-menu');
+
+        if (backBtn) {
+            backBtn.onclick = () => {
+                setTriggerValue('back', true);
+            };
+        }
+
+        if (menuBtn) {
+            menuBtn.onclick = () => {
+                setTriggerValue('menu', true);
+            };
+        }
+    }
+    """,
+    isolate_styles=True,
 )
 
-# 2. Tombol fungsional (di-render terpisah, di-overlay CSS)
-_col_back, _col_spacer, _col_menu = st.columns([1, 6, 1])
+# Mount komponen
+_header_result = _rei_header_component(
+    data={"time": _now_jkt().strftime("%H:%M")},
+    key="rei_header",
+    on_back_change=lambda: None,
+    on_menu_change=lambda: None,
+)
 
-with _col_back:
-    if st.button("←", key="btn_back_rei", help="Balik ke Dashboard"):
-        try:
-            st.switch_page("Dashboard.py")
-        except Exception:
-            st.warning("⚠️ Gagal pindah.")
+# Handle trigger back
+if _header_result.get("back"):
+    try:
+        st.switch_page("Dashboard.py")
+    except Exception:
+        st.warning("⚠️ Gagal pindah.")
 
-with _col_menu:
-    with st.popover("⋮", use_container_width=False):
-        st.markdown("**⚙️ Menu**")
+# Handle trigger menu
+if _header_result.get("menu"):
+    st.session_state["rei_show_menu"] = not st.session_state["rei_show_menu"]
+    st.rerun()
+
+
+# =========================================================
+# POPOVER MENU (muncul kalau tombol ⋮ diklik)
+# =========================================================
+if st.session_state.get("rei_show_menu"):
+    with st.container(border=True):
+        st.markdown(
+            "<div style='font-family: Cinzel, serif; font-size: 14px; "
+            "color: #E8B189; font-weight: 700; margin-bottom: 8px;'>"
+            "⚙️ Menu</div>",
+            unsafe_allow_html=True,
+        )
 
         st.caption("📈 ANALISIS")
         if st.button("📈 Trend SO", use_container_width=True, key="pop_trend"):
             st.session_state["rei_preset"] = COMMANDS["/trend"]
+            st.session_state["rei_show_menu"] = False
             st.rerun()
         if st.button("📋 LPJ SO", use_container_width=True, key="pop_lpj"):
             st.session_state["rei_preset"] = COMMANDS["/lpj"]
+            st.session_state["rei_show_menu"] = False
             st.rerun()
         if st.button("🔮 Prediksi", use_container_width=True, key="pop_pred"):
             st.session_state["rei_preset"] = COMMANDS["/prediksi"]
+            st.session_state["rei_show_menu"] = False
             st.rerun()
         if st.button("🔍 Top Item", use_container_width=True, key="pop_item"):
             st.session_state["rei_preset"] = COMMANDS["/item"]
+            st.session_state["rei_show_menu"] = False
             st.rerun()
         if st.button("💡 Insight", use_container_width=True, key="pop_insight"):
             st.session_state["rei_preset"] = COMMANDS["/insight"]
+            st.session_state["rei_show_menu"] = False
             st.rerun()
 
         st.divider()
@@ -457,16 +455,19 @@ with _col_menu:
         st.caption("💾 SESSION")
         if st.button("📂 Restore Chat", use_container_width=True, key="pop_restore"):
             st.session_state["show_restore_dialog"] = True
+            st.session_state["rei_show_menu"] = False
             st.rerun()
         if st.button("🆕 New Chat", use_container_width=True, key="pop_new"):
             new_session_id("rei")
             st.session_state["rei_history"] = []
             st.session_state["rei_last_model"] = None
+            st.session_state["rei_show_menu"] = False
             st.rerun()
         if st.button("🗑️ Hapus Sesi Ini", use_container_width=True, key="pop_delete"):
             clear_session("rei", _session_id)
             st.session_state["rei_history"] = []
             st.session_state["rei_last_model"] = None
+            st.session_state["rei_show_menu"] = False
             st.rerun()
 
         st.divider()
@@ -482,8 +483,13 @@ with _col_menu:
 
         if st.button("💬 /help", use_container_width=True, key="pop_help"):
             st.session_state["rei_preset"] = "/help"
+            st.session_state["rei_show_menu"] = False
             st.rerun()
-            
+        if st.button("❌ Tutup", use_container_width=True, key="pop_close"):
+            st.session_state["rei_show_menu"] = False
+            st.rerun()
+
+
 # =========================================================
 # RESTORE DIALOG (MODAL)
 # =========================================================
@@ -557,7 +563,7 @@ def _restore_dialog():
                         st.session_state["show_restore_dialog"] = False
                         st.rerun()
 
-    st.divider()
+  st.divider()
     if st.button("❌ Tutup", use_container_width=True):
         st.session_state["show_restore_dialog"] = False
         st.rerun()
@@ -567,7 +573,7 @@ def _restore_dialog():
 if st.session_state.get("show_restore_dialog"):
     _restore_dialog()
 
-# =========================================================
+ # =========================================================
 # CHAT CONTAINER — BUBBLE + TIMESTAMP
 # =========================================================
 _CHAT_HEIGHT = 600
@@ -587,6 +593,7 @@ with _chat_container:
                 f"● {_time_msg}</div>",
                 unsafe_allow_html=True,
             )
+
 
 # =========================================================
 # HELPER: BUILD DATA CONTEXT (ITEM-LEVEL)
@@ -686,7 +693,8 @@ def _build_data_context():
     except Exception as _e:
         print(f"[Rei] Gagal build context: {_e}")
         return ""
-        
+
+
 # =========================================================
 # CHAT INPUT
 # =========================================================
