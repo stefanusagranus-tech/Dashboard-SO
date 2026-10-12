@@ -341,55 +341,24 @@ def cek_rak_belum_so(tanggal=None):
 # TOP ITEMS — untuk Yui & Rei
 # =========================================================
 def get_top_items(
-    tgl_start=None,
-    tgl_end=None,
-    mode="bulan_ini",
-    limit=10,
-    order="desc",
-    only_minus=True,
-    pic_filter=None,
-    rak_filter=None,
+    tgl_start=None, tgl_end=None, mode="bulan_ini",
+    limit=10, order="desc", only_minus=True,
+    pic_filter=None, rak_filter=None,
 ):
-    """
-    Ambil top N item SO berdasarkan nominal_adjust.
-    
-    Args:
-        tgl_start, tgl_end: date/str (kalau mode='custom')
-        mode:              'hari_ini' | 'minggu_ini' | 'bulan_ini' | 'custom'
-        limit:             jumlah item (default 10)
-        order:             'desc' = minus terbesar (default)
-                           'asc'  = plus terbesar
-        only_minus:        True = cuma qty_var < 0 (default)
-        pic_filter:        filter PIC (opsional, uppercase)
-        rak_filter:        filter rak_id (opsional)
-    
-    Returns:
-        dict: {
-            "success": bool,
-            "periode": str,
-            "tgl_start": str,
-            "tgl_end": str,
-            "items": list[dict],   # sorted
-            "total_item": int,
-            "total_nominal": float,
-        }
-    """
+    """..."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
             return {"success": False, "error": "Supabase gak konek", "items": []}
 
-        # === HITUNG PERIODE ===
         if mode == "custom" and tgl_start and tgl_end:
             _start, _end = tgl_start, tgl_end
         else:
             _start, _end = get_periode_range(mode)
 
-        # Normalisasi ke string YYYY-MM-DD
         _start_str = _start.isoformat()[:10] if isinstance(_start, (date, datetime)) else str(_start)[:10]
         _end_str = _end.isoformat()[:10] if isinstance(_end, (date, datetime)) else str(_end)[:10]
 
-        # === QUERY ===
         _q = (
             _sb.table("so_hasil")
             .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
@@ -399,26 +368,32 @@ def get_top_items(
 
         if only_minus:
             _q = _q.lt("qty_var", 0)
-
         if pic_filter:
             _q = _q.eq("pic", pic_filter.upper())
-
         if rak_filter:
             _q = _q.eq("rak_id", rak_filter.upper())
 
-        # Sort: desc = minus terbesar dulu (nominal paling negatif)
-        _q = _q.order("nominal_adjust", desc=(order == "desc"))
-        _q = _q.limit(limit)
+        # ⚠️ JANGAN pakai .order() — fetch semua dulu, sort di Python
+        _q = _q.limit(2000)  # safety cap
 
         _res = _q.execute()
         _items = _res.data if _res.data else []
 
-        # Konversi tipe biar aman
+        # Konversi tipe
         for _it in _items:
             _it["qty_var"] = int(_it.get("qty_var") or 0)
             _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
 
-        _total_nominal = sum(_it["nominal_adjust"] for _it in _items)
+        # === SORT DI PYTHON ===
+        if only_minus:
+            # Minus terbesar (paling negatif) dulu
+            _items.sort(key=lambda x: x["nominal_adjust"])  # ascending = -80000 dulu
+        else:
+            # Sort by ABS value descending (item paling "signifikan")
+            _items.sort(key=lambda x: abs(x["nominal_adjust"]), reverse=True)
+
+        # Limit
+        _items = _items[:limit]
 
         return {
             "success": True,
@@ -427,16 +402,14 @@ def get_top_items(
             "tgl_end": _end_str,
             "items": _items,
             "total_item": len(_items),
-            "total_nominal": _total_nominal,
+            "total_nominal": sum(_it["nominal_adjust"] for _it in _items),
         }
-
     except Exception as e:
         print(f"[GET_TOP_ITEMS ERROR] {e}")
         import traceback
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "items": []}
-
-
+        
 def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini"):
     """
     Ambil semua item SO di rak tertentu (buat 'list item di rak S11').
@@ -452,90 +425,4 @@ def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini"):
         order="desc",
         only_minus=False,  # include plus juga
         rak_filter=rak_id,
-    )
-# =========================================================
-# TOP ITEMS — untuk Rei & Yui
-# =========================================================
-def get_top_items(
-    tgl_start=None,
-    tgl_end=None,
-    mode="bulan_ini",
-    limit=10,
-    order="desc",
-    only_minus=True,
-    pic_filter=None,
-    rak_filter=None,
-):
-    """
-    Ambil top N item SO berdasarkan nominal_adjust.
-    
-    Returns:
-        dict: {
-            "success": bool,
-            "periode": str,
-            "items": list[dict],   # ← KEY INI, BUKAN "top_minus"
-            "total_item": int,
-            "total_nominal": float,
-        }
-    """
-    try:
-        _sb = _get_supabase_safe()
-        if _sb is None:
-            return {"success": False, "error": "Supabase gak konek", "items": []}
-
-        # Hitung periode
-        if mode == "custom" and tgl_start and tgl_end:
-            _start, _end = tgl_start, tgl_end
-        else:
-            _start, _end = get_periode_range(mode)
-
-        _start_str = _start.isoformat()[:10] if isinstance(_start, (date, datetime)) else str(_start)[:10]
-        _end_str = _end.isoformat()[:10] if isinstance(_end, (date, datetime)) else str(_end)[:10]
-
-        # Query
-        _q = (
-            _sb.table("so_hasil")
-            .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
-            .gte("so_date", _start_str)
-            .lte("so_date", _end_str)
-        )
-
-        if only_minus:
-            _q = _q.lt("qty_var", 0)
-        if pic_filter:
-            _q = _q.eq("pic", pic_filter.upper())
-        if rak_filter:
-            _q = _q.eq("rak_id", rak_filter.upper())
-
-        _q = _q.order("nominal_adjust", desc=(order == "desc")).limit(limit)
-
-        _res = _q.execute()
-        _items = _res.data if _res.data else []
-
-        for _it in _items:
-            _it["qty_var"] = int(_it.get("qty_var") or 0)
-            _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
-
-        return {
-            "success": True,
-            "periode": f"{_start_str} s/d {_end_str}",
-            "tgl_start": _start_str,
-            "tgl_end": _end_str,
-            "items": _items,   # ← KEY "items"
-            "total_item": len(_items),
-            "total_nominal": sum(_it["nominal_adjust"] for _it in _items),
-        }
-
-    except Exception as e:
-        print(f"[GET_TOP_ITEMS ERROR] {e}")
-        import traceback
-        print(traceback.format_exc())
-        return {"success": False, "error": str(e)[:200], "items": []}
-
-
-def get_items_by_rak(rak_id, mode="bulan_ini", tgl_start=None, tgl_end=None):
-    """Ambil semua item di rak tertentu."""
-    return get_top_items(
-        tgl_start=tgl_start, tgl_end=tgl_end, mode=mode,
-        limit=1000, order="desc", only_minus=False, rak_filter=rak_id,
     )
