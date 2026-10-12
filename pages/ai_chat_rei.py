@@ -574,9 +574,11 @@ with _chat_container:
 # HELPER: BUILD DATA CONTEXT (ITEM-LEVEL)
 # =========================================================
 def _build_data_context():
+    """Ambil data SO real dari DB buat konteks Rei — agregat + item-level."""
     try:
         _ctx_parts = []
 
+        # === 1. REKAP BULAN INI ===
         _hasil_bulan = rekap_so(mode="bulan_ini")
         if _hasil_bulan.get("success"):
             _nom = _hasil_bulan.get("total_nominal", 0)
@@ -584,8 +586,9 @@ def _build_data_context():
                 f"=== REKAP BULAN INI ({_hasil_bulan.get('periode', '-')}) ===\n"
                 f"Total Rak: {_hasil_bulan.get('total_rak', 0)}\n"
                 f"Total Item: {_hasil_bulan.get('total_item', 0)}\n"
-                f"Total Nominal: {fmt_rp_signed(_nom)}"
+                f"Total Selisih (Net): {fmt_rp_signed(_nom)}"
             )
+
             _list_rak = _hasil_bulan.get("list_rak", [])
             if _list_rak:
                 _top_minus = sorted(_list_rak, key=lambda x: x["total"])[:5]
@@ -595,6 +598,7 @@ def _build_data_context():
                         f"- Rak {_r['rak_id']}: {fmt_rp_signed(_r['total'])} (PIC: {_r['pic']})"
                     )
 
+            # === DISTRIBUSI PER PIC ===
             _pic_summary = {}
             for _r in _list_rak:
                 _pic = _r.get("pic", "-")
@@ -608,22 +612,64 @@ def _build_data_context():
                         f"- {_pic}: {fmt_rp_signed(_data['total'])} ({_data['rak_count']} rak)"
                     )
 
+        # === 2. LOST SALES & SHRINKAGE (GROSS + NET) ===
+        try:
+            _sb = get_supabase()
+            _now = _now_jkt().date()
+            _start_of_month = _now.replace(day=1)
+
+            _res = (
+                _sb.table("so_hasil")
+                .select("qty_var, nominal_adjust")
+                .gte("so_date", _start_of_month.isoformat())
+                .lte("so_date", _now.isoformat())
+                .execute()
+            )
+            _rows = _res.data or []
+
+            _gross_minus = 0
+            _total_plus = 0
+            for _r in _rows:
+                _qty = int(_r.get("qty_var", 0) or 0)
+                _nom = float(_r.get("nominal_adjust", 0) or 0)
+                if _qty < 0:
+                    _gross_minus += abs(_nom)
+                elif _qty > 0:
+                    _total_plus += _nom
+
+            _net = abs(_gross_minus - _total_plus)
+            _net_sales = _get_net_sales_bulan()
+            _shrinkage = (_net / _net_sales * 100) if _net_sales > 0 else 0
+
+            _ctx_parts.append(
+                f"\n=== LOST SALES & SHRINKAGE ===\n"
+                f"Gross Lost Sales (Σ minus): Rp {_gross_minus:,.0f}\n"
+                f"Kompensasi (Σ plus): Rp {_total_plus:,.0f}\n"
+                f"Net Lost Sales: Rp {_net:,.0f}\n"
+                f"Shrinkage Rate: {_shrinkage:.2f}% dari Net Sales Rp {_net_sales:,.0f}\n"
+                f"Benchmark: < 2% (aman) | > 2% (perlu perhatian)"
+            )
+        except Exception as _e:
+            print(f"[Rei ctx lost sales] {_e}")
+
+        # === 3. BTSB & NSB ===
         try:
             _net_sales = _get_net_sales_bulan()
             _total_selisih = _get_total_selisih_bulan()
             _btsb = _net_sales * 0.0015
             _nsb = max(0, abs(_total_selisih) - _btsb)
             _ctx_parts.append(
-                f"\n=== BTSB & NSB BULAN INI ===\n"
+                f"\n=== BTSB & NSB ===\n"
                 f"Net Sales: {fmt_rp(_net_sales)}\n"
                 f"BTSB (0,15%): {fmt_rp(_btsb)}\n"
                 f"Total Selisih: {fmt_rp(abs(_total_selisih))}\n"
                 f"NSB: {fmt_rp(_nsb)}\n"
-                f"Status: {'OVER' if abs(_total_selisih) > _btsb else 'AMAN'}"
+                f"Status: {'PERLU PERHATIAN' if abs(_total_selisih) > _btsb else 'DALAM TOLERANSI'}"
             )
         except Exception as _e:
             print(f"[Rei ctx BTSB] {_e}")
 
+        # === 4. TREND 7 HARI ===
         try:
             _sb = get_supabase()
             _now = _now_jkt().date()
@@ -648,18 +694,22 @@ def _build_data_context():
         except Exception as _e:
             print(f"[Rei ctx trend] {_e}")
 
+        # === 5. TOP ITEM (FOKUS NOMINAL) ===
         try:
-            _top = get_top_items(mode="bulan_ini", limit=15, only_minus=True)
+            _top = get_top_items(mode="bulan_ini", limit=30, only_minus=True)
             _items = _top.get("items", [])
             if _items:
+                _total_item_nominal = sum(abs(_it.get("nominal_adjust", 0)) for _it in _items)
                 _ctx_parts.append(
-                    f"\n=== TOP 15 ITEM SELISIH TERBESAR ({_top.get('periode', '-')}) ==="
+                    f"\n=== TOP ITEM SELISIH TERBESAR ({_top.get('periode', '-')}) ===\n"
+                    f"Total dari {len(_items)} item: Rp {_total_item_nominal:,.0f}"
                 )
-                for _i, _it in enumerate(_items, 1):
+                for _i, _it in enumerate(_items[:15], 1):
+                    _nom = abs(_it.get("nominal_adjust", 0))
                     _ctx_parts.append(
-                        f"{_i}. PLU {_it.get('plu', '-')} — {_it.get('nama_produk', '-')}\n"
-                        f"   Rak: {_it.get('rak_id', '-')} | PIC: {_it.get('pic', '-')}\n"
-                        f"   Qty var: {_it.get('qty_var', 0)} | Nominal: {fmt_rp_signed(_it.get('nominal_adjust', 0))}"
+                        f"{_i}. {_it.get('nama_produk', '-')} "
+                        f"(Rak {_it.get('rak_id', '-')}, PIC: {_it.get('pic', '-')}): "
+                        f"Rp {_nom:,.0f}"
                     )
         except Exception as _e:
             print(f"[Rei ctx top items] {_e}")
@@ -667,6 +717,8 @@ def _build_data_context():
         return "\n".join(_ctx_parts)
     except Exception as _e:
         print(f"[Rei] Gagal build context: {_e}")
+        import traceback
+        print(traceback.format_exc())
         return ""
 
 # =========================================================
