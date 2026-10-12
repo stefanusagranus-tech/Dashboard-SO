@@ -2,7 +2,14 @@
 Rei Export — PDF Generator (Jurnal Ilmiah SINTA Style)
 =======================================================
 Generate PDF laporan analisis SO dengan standar jurnal SINTA.
-BTSB Alfamart: 0,15% dari Net Sales.
+
+Standar yang diterapkan:
+- Tabel: garis horizontal saja (border layout MINIMAL)
+- Warna tabel: gradasi abu-abu, hindari warna mencolok
+- Font: Serif untuk judul, Sans untuk body
+
+BTSB Alfamart: 0,15% dari Net Sales
+Shrinkage Rate = Total Selisih / Net Sales × 100%
 
 Dependencies: fpdf2>=2.8.0, matplotlib
 """
@@ -30,12 +37,16 @@ class ReiTheme:
     PURPLE = (76, 29, 149)
     GOLD = (232, 177, 137)
     SAGE = (127, 185, 155)
-    TEXT_LIGHT = (245, 230, 211)       # untuk background gelap
+    TEXT_LIGHT = (245, 230, 211)
     TEXT_MUTED_LIGHT = (168, 155, 142)
-    TEXT_DARK = (40, 40, 50)            # untuk background terang
+    TEXT_DARK = (40, 40, 50)
     TEXT_MUTED_DARK = (110, 110, 120)
     RED = (200, 50, 50)
     GREEN = (40, 160, 80)
+    # Warna tabel SINTA — gradasi abu-abu
+    TABLE_HEADER_BG = (220, 220, 220)
+    TABLE_HEADER_TEXT = (0, 0, 0)
+    TABLE_BORDER = (150, 150, 150)
 
 
 def _now_jkt():
@@ -54,6 +65,20 @@ def fmt_rp(value):
     except Exception:
         return "Rp 0"
 
+
+def hitung_shrinkage_rate(total_selisih, net_sales):
+    """Shrinkage Rate = Total Selisih / Net Sales × 100%"""
+    if net_sales <= 0:
+        return 0
+    return abs(total_selisih) / net_sales * 100
+
+
+def status_shrinkage(shrinkage_rate, btsb_pct=0.15):
+    """Status berdasarkan BTSB 0,15%."""
+    if shrinkage_rate > btsb_pct:
+        return "PERHATIAN"
+    return "AMAN"
+    
 # =========================================================
 # PDF CLASS
 # =========================================================
@@ -173,9 +198,8 @@ def _create_trend_chart(chart_data):
 
     fig.tight_layout()
     return _chart_to_image(fig)
-
-
-# =========================================================
+    
+    # =========================================================
 # REKOMENDASI
 # =========================================================
 def _generate_rekomendasi(data_context):
@@ -211,7 +235,7 @@ def _generate_rekomendasi(data_context):
 
     return _rekom
     
-# =========================================================
+    # =========================================================
 # MAIN EXPORT — PART 1
 # =========================================================
 def generate_rei_pdf(data_context):
@@ -224,9 +248,13 @@ def generate_rei_pdf(data_context):
         _lost = data_context.get("lost_sales", {})
         _btsb = data_context.get("btsb", {})
         _rekap = data_context.get("rekap", {})
-        _sh = _lost.get("shrinkage", 0)
         _top_rak = data_context.get("top_rak", [])
         _top_items = data_context.get("top_items", [])
+
+        _total_selisih_abs = abs(_btsb.get("total_selisih", 0))
+        _net_sales = _lost.get("net_sales", 0)
+        _sh = hitung_shrinkage_rate(_total_selisih_abs, _net_sales)
+        _status = status_shrinkage(_sh)
 
         # ===== HAL 1: COVER =====
         _pdf.add_page()
@@ -268,8 +296,8 @@ def generate_rei_pdf(data_context):
             f"nilai kehilangan (shrinkage) di Toko C383 Karang Satria periode {_periode}. "
             f"Metode meliputi perhitungan Gross Lost Sales, Net Lost Sales, dan Shrinkage Rate "
             f"berdasarkan {_rekap.get('total_item', 0)} item dari {_rekap.get('total_rak', 0)} rak. "
-            f"Hasil: Net Sales Rp {_lost.get('net_sales', 0):,.0f}, Net Lost Sales Rp {_lost.get('net', 0):,.0f} "
-            f"({_sh:.4f}%). Status BTSB: {_btsb.get('status', '-')}. "
+            f"Hasil: Net Sales {fmt_rp(_net_sales)}, Total Selisih {fmt_rp(_total_selisih_abs)}, "
+            f"Shrinkage Rate {_sh:.4f}%. Status: {_status}. "
             f"Rekomendasi audit disusun untuk mengurangi risiko shrinkage periode mendatang."
         )
         _pdf.body_text(_abstrak)
@@ -305,9 +333,10 @@ def generate_rei_pdf(data_context):
         _pdf.body_text(
             "1. Gross Lost Sales = total nilai absolut item dengan qty_var < 0.\n"
             "2. Net Lost Sales = nilai absolut dari total nominal_adjust semua item.\n"
-            "3. Shrinkage Rate = (Net Lost Sales / Net Sales) x 100 persen.\n"
-            "4. BTSB = Batas Toleransi Selisih Barang (0,15% dari Net Sales).\n"
-            "5. NSB = Nilai Selisih Barang (selisih di atas BTSB yang dibebankan)."
+            "3. Total Selisih = nilai absolut dari total nominal_adjust (net).\n"
+            "4. Shrinkage Rate = (Total Selisih / Net Sales) x 100 persen.\n"
+            "5. BTSB = Batas Toleransi Selisih Barang (0,15% dari Net Sales).\n"
+            "6. NSB = Nilai Selisih Barang (selisih di atas BTSB yang dibebankan)."
         )
 
         _pdf.sub_title("2.3 Batasan")
@@ -324,34 +353,36 @@ def generate_rei_pdf(data_context):
 
         _headings = FontFace(
             family=_pdf.font_title, emphasis="BOLD",
-            color=(232, 177, 137), fill_color=(76, 29, 149), size_pt=8,
+            color=_theme.TABLE_HEADER_TEXT,
+            fill_color=_theme.TABLE_HEADER_BG,
+            size_pt=8,
         )
 
-        _total_selisih = abs(_btsb.get("total_selisih", 0))
-        _btsb_val = _btsb.get("btsb", 0)
-        _nsb_val = _btsb.get("nsb", 0)
-
-        with _pdf.table(col_widths=(60, 65, 45), headings_style=_headings,
-                        line_height=5.5, first_row_as_headings=True) as _t:
+        with _pdf.table(
+            col_widths=(60, 65, 45),
+            headings_style=_headings,
+            line_height=5.5,
+            first_row_as_headings=True,
+            borders_layout="MINIMAL",
+        ) as _t:
             _row = _t.row()
             _row.cell("Metrik"); _row.cell("Nilai"); _row.cell("Status")
             _row = _t.row()
-            _row.cell("Net Sales"); _row.cell(fmt_rp(_lost.get("net_sales", 0))); _row.cell("-")
+            _row.cell("Net Sales"); _row.cell(fmt_rp(_net_sales)); _row.cell("-")
             _row = _t.row()
             _row.cell("Gross Lost Sales"); _row.cell(fmt_rp(_lost.get("gross", 0))); _row.cell("-")
             _row = _t.row()
-            _row.cell("Net Lost Sales"); _row.cell(fmt_rp(_lost.get("net", 0)))
-            _row.cell("AMAN" if _sh <= 0.15 else "PERHATIAN")
+            _row.cell("Net Lost Sales"); _row.cell(fmt_rp(_lost.get("net", 0))); _row.cell("-")
+            _row = _t.row()
+            _row.cell("Total Selisih"); _row.cell(fmt_rp(_total_selisih_abs)); _row.cell("-")
             _row = _t.row()
             _row.cell("Shrinkage Rate"); _row.cell(f"{_sh:.4f}%")
             _row.cell("<= 0,15%" if _sh <= 0.15 else "> 0,15%")
             _row = _t.row()
-            _row.cell("BTSB"); _row.cell(fmt_rp(_btsb_val)); _row.cell("-")
+            _row.cell("BTSB (0,15%)"); _row.cell(fmt_rp(_btsb.get("btsb", 0))); _row.cell("-")
             _row = _t.row()
-            _row.cell("Total Selisih"); _row.cell(fmt_rp(_total_selisih)); _row.cell("-")
-            _row = _t.row()
-            _row.cell("NSB"); _row.cell(fmt_rp(_nsb_val))
-            _row.cell("DIBEBANKAN" if _nsb_val > 0 else "NOL")
+            _row.cell("NSB"); _row.cell(fmt_rp(_btsb.get("nsb", 0)))
+            _row.cell("DIBEBANKAN" if _btsb.get("nsb", 0) > 0 else "NOL")
 
         _pdf.sub_title("3.2 Tren Selisih 7 Hari", space_before=3)
         _chart_data = data_context.get("chart_data", [])
@@ -363,8 +394,13 @@ def generate_rei_pdf(data_context):
 
         _pdf.sub_title("3.3 Top 10 Item Selisih Terbesar", space_before=3)
         if _top_items:
-            with _pdf.table(col_widths=(78, 18, 32, 32), headings_style=_headings,
-                            line_height=5, first_row_as_headings=True) as _t:
+            with _pdf.table(
+                col_widths=(78, 18, 32, 32),
+                headings_style=_headings,
+                line_height=5,
+                first_row_as_headings=True,
+                borders_layout="MINIMAL",
+            ) as _t:
                 _row = _t.row()
                 _row.cell("Nama Produk"); _row.cell("Rak"); _row.cell("Nominal"); _row.cell("PIC")
                 for _it in _top_items[:10]:
@@ -376,8 +412,13 @@ def generate_rei_pdf(data_context):
 
         _pdf.sub_title("3.4 Top 5 Rak Selisih Tertinggi", space_before=3)
         if _top_rak:
-            with _pdf.table(col_widths=(28, 40, 45, 30), headings_style=_headings,
-                            line_height=5, first_row_as_headings=True) as _t:
+            with _pdf.table(
+                col_widths=(28, 40, 45, 30),
+                headings_style=_headings,
+                line_height=5,
+                first_row_as_headings=True,
+                borders_layout="MINIMAL",
+            ) as _t:
                 _row = _t.row()
                 _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal"); _row.cell("Jml Item")
                 for _r in _top_rak[:5]:
@@ -388,20 +429,23 @@ def generate_rei_pdf(data_context):
                     _row.cell(str(_r.get("total_item", 0)))
 
         # Lanjut ke Part 2
-        return _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _top_rak, _top_items, _nsb_val)
+        return _rei_pdf_part2(
+            _pdf, _theme, _lost, _btsb, _sh, _status,
+            _top_rak, _top_items, _btsb.get("nsb", 0), _total_selisih_abs
+        )
 
     except Exception as _e:
         print(f"[REI EXPORT PDF ERROR] {_e}")
         import traceback
         print(traceback.format_exc())
         return None
-
-# =========================================================
+        
+        # =========================================================
 # MAIN EXPORT — PART 2 (Halaman 4)
 # =========================================================
-def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _top_rak, _top_items, _nsb_val):
+def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
+                   _top_rak, _top_items, _nsb_val, _total_selisih_abs):
     try:
-        # ===== HAL 4: PEMBAHASAN KOMPLEKS + KESIMPULAN =====
         _pdf.add_page()
         _pdf.section_title("4. PEMBAHASAN", space_before=0)
 
@@ -409,7 +453,7 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _top_rak, _top_items, _nsb_v
         _pdf.body_text(
             f"Selisih antara pencatatan sistem dan persediaan fisik menunjukkan pola yang "
             f"konsisten dengan temuan penelitian sebelumnya. Dari data yang di-SO, ditemukan "
-            f"selisih bersih {fmt_rp(_lost.get('net', 0))} dengan Gross Lost Sales "
+            f"Total Selisih {fmt_rp(_total_selisih_abs)} dengan Gross Lost Sales "
             f"{fmt_rp(_lost.get('gross', 0))}. Nilai barang yang hilang tidak sepenuhnya "
             f"terkompensasi oleh selisih positif, mengindikasikan kebocoran operasional "
             f"yang perlu ditelusuri."
@@ -458,19 +502,20 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _top_rak, _top_items, _nsb_v
 
         _pdf.sub_title("4.5 Implikasi Manajerial", space_before=3)
         _pdf.body_text(
-            f"Dengan Shrinkage Rate {_sh:.4f}% terhadap BTSB 0,15%, status toko saat ini "
-            f"adalah {'PERLU PERHATIAN' if _sh > 0.15 else 'DALAM TOLERANSI'}. "
-            f"NSB sebesar {fmt_rp(_nsb_val)} {'akan dibebankan' if _nsb_val > 0 else 'tidak dibebankan'} "
+            f"Shrinkage Rate periode ini {_sh:.4f}% terhadap BTSB 0,15% — status toko "
+            f"saat ini adalah {_status}. Total Selisih {fmt_rp(_total_selisih_abs)} dengan "
+            f"NSB {fmt_rp(_nsb_val)} "
+            f"{'yang akan dibebankan' if _nsb_val > 0 else 'tidak ada beban'} "
             f"sesuai kebijakan perusahaan. Implikasi manajerial mencakup peningkatan akurasi input, "
             f"penjadwalan SO parsial pada area rawan, dan penerapan sistem peringatan dini "
-            f"jika selisih melampaui threshold."
+            f"jika selisih melampaui threshold 0,15%."
         )
 
         _pdf.section_title("5. KESIMPULAN")
         _pdf.body_text(
             f"1. Shrinkage Rate periode ini {_sh:.4f}%, "
             f"{'di atas' if _sh > 0.15 else 'dalam'} toleransi BTSB 0,15%.\n"
-            f"2. Net Lost Sales {fmt_rp(_lost.get('net', 0))} dari Net Sales "
+            f"2. Total Selisih {fmt_rp(_total_selisih_abs)} dari Net Sales "
             f"{fmt_rp(_lost.get('net_sales', 0))}.\n"
             f"3. NSB sebesar {fmt_rp(_nsb_val)} "
             f"{'menjadi beban' if _nsb_val > 0 else 'tidak menjadi beban'}.\n"
@@ -481,7 +526,8 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _top_rak, _top_items, _nsb_v
 
         _pdf.sub_title("Rekomendasi Audit", space_before=3)
         _rekomendasi = _generate_rekomendasi({
-            "lost_sales": _lost, "top_rak": _top_rak,
+            "lost_sales": {"shrinkage": _sh},
+            "top_rak": _top_rak,
         })
         for _i, _r in enumerate(_rekomendasi, 1):
             _pdf.set_font(_pdf.font_body, "B", 9)
@@ -512,4 +558,4 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _top_rak, _top_items, _nsb_v
         import traceback
         print(traceback.format_exc())
         return None
-    
+        
