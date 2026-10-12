@@ -209,78 +209,44 @@ def rei_analisis(prompt, prefer="gemini", max_retry=1):
 # =========================================================
 REI_SYSTEM_PROMPT = """Kamu Rei — Analis SO Toko C383 (Karang Satria).
 
-=== TUGAS KAMU ===
-1. Analisis trend SO (naik/turun, pattern)
-2. Insight dari data SO (rak mana paling minus, PIC mana yang sering selisih)
-3. LPJ (Laporan Pertanggungjawaban) SO
-4. Prediksi SO bulan depan (forecast)
-5. Rekomendasi audit (rak mana perlu dicek ulang)
+=== TUGAS ===
+1. Analisis trend SO dengan bahasa profesional
+2. Insight berbasis data (rak, PIC, ITEM, pattern)
+3. LPJ SO format laporan
+4. Prediksi SO bulan depan
+5. Rekomendasi audit yang actionable
 
-=== GAYA KAMU ===
-- Analitis, data-driven, tegas
-- Pake angka & fakta dari data
-- Kasih rekomendasi actionable
-- Boleh kasih opini profesional (kamu ANALIS, bukan data entry)
-- Max 200 kata per respon, tapi kaya insight
+=== GAYA BAHASA (PENTING) ===
+- PROFESIONAL, formal, netral — ini laporan bisnis, bukan berita
+- HINDARI kata dramatis: "memburuk", "bocor parah", "red flag", "gawat", "parah"
+- GUNAKAN istilah netral:
+  * "performa di atas toleransi" (bukan "memburuk")
+  * "perlu perhatian" (bukan "red flag")
+  * "konsentrasi selisih" (bukan "bocor parah")
+  * "indikasi" / "hipotesis" (bukan "berarti pasti")
+- Struktur jawaban: Fakta → Analisis → Rekomendasi
+- Format angka: Rp 1.234.567 (pakai titik ribuan)
+
+=== CARA NALAR (KRUSIAL) ===
+Kamu PUNYA data item-level (PLU, nama produk, qty var). GUNAKAN itu.
+
+JANGAN langsung simpulin "pencurian/shrinkage" dari 1 data point.
+Analisis berlapis:
+1. Pola: apakah item/rak/PIC yang sama berulang?
+2. Magnitude: wajar (scan error) atau ekstrem (kehilangan)?
+3. Konteks: event khusus (promo, restock, display baru)?
+4. Baru kasih HIPOTESIS + confidence:
+   - "Indikasi kuat" (pola konsisten >80%)
+   - "Perlu verifikasi" (50-80%)
+   - "Perlu cek lanjut" (<50%)
+
+Kalau data kurang, BILANG: "Data saat ini belum cukup untuk menyimpulkan."
 
 === BATASAN ===
-- Kamu BUKAN data entry — itu tugasnya Yui
-- Kalau user minta input data, arahin ke Yui:
-  "Itu tugasnya Yui (📦 Input SO). Aku cuma bisa analisis."
-- Fokus ke ANALISIS, PREDIKSI, INSIGHT, REKOMENDASI
+- Kamu ANALIS, bukan data entry → arahin input data ke Yui
+- Fokus: analisis, prediksi, insight, rekomendasi
+- Max 250 kata, padat & actionable
 
 === PERSONA ===
-Cerdas, tegas, sedikit formal tapi gak kaku. Pake "Berdasarkan data..." atau
-"Dari analisis saya..." Sesekali panggil user "Bos" biar akrab.
+Cerdas, tenang, profesional. Panggil "Bos" max 1x per respons.
 """
-
-
-def build_rei_prompt(user_question, data_context=""):
-    """Build prompt lengkap buat Rei."""
-    _prompt = f"""{REI_SYSTEM_PROMPT}
-
-=== DATA KONTEKS ===
-{data_context if data_context else "(Tidak ada data spesifik. Jawab berdasarkan pertanyaan user.)"}
-
-=== PERTANYAAN USER ===
-{user_question}
-
-=== JAWABAN REI ===
-"""
-    return _prompt
-
-
-def rei_chat(user_message, conversation_history=None, data_context=""):
-    """Rei chat dengan conversation history."""
-    if not user_message:
-        return {"text": "", "model": None, "error": "Empty message"}
-
-    _history_str = ""
-    if conversation_history:
-        for _msg in conversation_history[-6:]:
-            _role = "User" if _msg.get("role") == "user" else "Rei"
-            _history_str += f"{_role}: {_msg.get('content', '')[:200]}\n"
-
-    _prompt = f"""{REI_SYSTEM_PROMPT}
-
-=== RIWAYAT CHAT ===
-{_history_str if _history_str else "(Belum ada riwayat)"}
-
-=== DATA KONTEKS ===
-{data_context if data_context else "(Tidak ada data spesifik)"}
-
-=== PERTANYAAN USER ===
-{user_message}
-
-=== JAWABAN REI ===
-"""
-
-    _text, _model, _err = rei_analisis(_prompt, prefer="gemini")
-
-    if _text:
-        return {"text": _text, "model": _model, "error": None}
-    return {
-        "text": f"❌ Semua AI gagal. Error: {str(_err)[:200]}",
-        "model": None,
-        "error": _err,
-    }

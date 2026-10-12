@@ -1,14 +1,20 @@
 """
-AI Chat Rei — Analis SO (AI-3) v1
+AI Chat Rei — Analis SO (AI-3) v2
 ===================================
 Rei = analis SO: trend, LPJ, prediksi, insight.
 Bukan data entry — itu tugasnya Yui.
+
+Changelog v2:
+- Fix import timedelta
+- Fix context builder (item-level pakai key "items")
+- Tambah command parser (/trend, /lpj, /prediksi, /item, /help)
+- Tambah stub export PDF & PPT (siap diisi)
 """
 
 import streamlit as st
 import time
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
 from themes.theme_loader import (
@@ -33,7 +39,10 @@ try:
     from modules.chat_memory import (
         save_message, load_messages, get_or_create_session_id, clear_session,
     )
-    from modules.yui_rekap import rekap_so, get_top_items, _get_net_sales_bulan, _get_total_selisih_bulan
+    from modules.yui_rekap import (
+        rekap_so, get_top_items, get_items_by_rak,
+        _get_net_sales_bulan, _get_total_selisih_bulan,
+    )
     from modules.supabase_client import get_supabase
     _REI_OK = True
 except ImportError as _e:
@@ -59,6 +68,58 @@ def fmt_rp(value):
         return f"Rp {int(float(value)):,}".replace(",", ".")
     except Exception:
         return "Rp 0"
+
+
+# =========================================================
+# COMMAND PARSER
+# =========================================================
+COMMANDS = {
+    "/trend":    "Analisis trend SO bulan ini dong. Bandingin sama bulan lalu, kasih insight.",
+    "/lpj":      "Buatkan LPJ (Laporan Pertanggungjawaban) SO bulan ini. Lengkap dengan analisis BTSB/NSB.",
+    "/prediksi": "Prediksi SO bulan depan berdasarkan trend 3 bulan terakhir. Kasih angka + rekomendasi.",
+    "/insight":  "Kasih insight dari data SO bulan ini. Rak mana paling minus? PIC mana paling sering selisih?",
+    "/item":     "Tampilkan top 10 item dengan selisih terbesar bulan ini. Analisis pola & kategorinya.",
+    "/help":     "__HELP__",
+}
+
+
+def _parse_command(text):
+    """Kalau user ngetik /command, ganti jadi prompt lengkap."""
+    if not text:
+        return text
+    _t = text.strip().lower()
+    if _t in COMMANDS:
+        if COMMANDS[_t] == "__HELP__":
+            return None
+        return COMMANDS[_t]
+    return text
+
+
+# =========================================================
+# EXPORT STUBS (siap diisi nanti)
+# =========================================================
+def _export_rei_pdf(history, session_id):
+    """
+    Export chat Rei + data context ke PDF.
+    TODO: implement pakai fpdf2 + DejaVu font.
+    """
+    st.info("🚧 **Export PDF belum diimplementasikan.** Coming soon!")
+    # TODO:
+    # 1. from modules.yui_export import generate_rei_pdf
+    # 2. generate_rei_pdf(history, session_id)
+    # 3. st.download_button(...)
+
+
+def _export_rei_ppt(history, session_id):
+    """
+    Export chat Rei + data context ke PPT.
+    TODO: implement pakai python-pptx.
+    """
+    st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
+    # TODO:
+    # 1. from pptx import Presentation
+    # 2. Build slide: cover, ringkasan, KPI, top items, insight, rekomendasi
+    # 3. st.download_button(...)
 
 
 # =========================================================
@@ -118,6 +179,22 @@ def inject_rei_css():
             font-size: 9px;
             color: #E8B189;
             margin-left: 8px;
+        }
+        .cmd-hint {
+            background: rgba(20, 12, 35, 0.8);
+            border-left: 3px solid #7FB99B;
+            border-radius: 8px;
+            padding: 8px 14px;
+            margin-bottom: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #A89B8E;
+        }
+        .cmd-hint code {
+            color: #E8B189 !important;
+            background: rgba(232, 177, 137, 0.1) !important;
+            padding: 1px 5px !important;
+            border-radius: 3px !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -200,7 +277,9 @@ if not st.session_state["rei_history"]:
         "- 📈 Trend SO (harian, mingguan, bulanan)\n"
         "- 📋 LPJ (Laporan Pertanggungjawaban)\n"
         "- 🔮 Prediksi SO bulan depan\n"
-        "- 💡 Insight & rekomendasi audit\n\n"
+        "- 💡 Insight & rekomendasi audit\n"
+        "- 🔍 **Top item dengan selisih terbesar** (item-level)\n\n"
+        "**Command cepat:** `/trend` `/lpj` `/prediksi` `/item` `/help`\n\n"
         "**Catatan:** Aku ANALIS — buat input data, tanya Yui ya 📦\n\n"
         "Mau mulai dari mana?"
     )
@@ -223,26 +302,26 @@ st.markdown(
 
 
 # =========================================================
-# TOOLBAR AKSI CEPAT
+# TOOLBAR AKSI CEPAT + EXPORT
 # =========================================================
 st.markdown("#### ⚡ Analisis Cepat")
 _c1, _c2, _c3, _c4, _c5 = st.columns(5)
 
 with _c1:
     if st.button("📈 Trend SO", width="stretch", key="btn_rei_trend"):
-        st.session_state["rei_preset"] = "Analisis trend SO bulan ini dong. Bandingin sama bulan lalu, kasih insight."
+        st.session_state["rei_preset"] = COMMANDS["/trend"]
 
 with _c2:
     if st.button("📋 LPJ SO", width="stretch", key="btn_rei_lpj"):
-        st.session_state["rei_preset"] = "Buatkan LPJ (Laporan Pertanggungjawaban) SO bulan ini. Lengkap dengan analisis BTSB/NSB."
+        st.session_state["rei_preset"] = COMMANDS["/lpj"]
 
 with _c3:
     if st.button("🔮 Prediksi", width="stretch", key="btn_rei_prediksi"):
-        st.session_state["rei_preset"] = "Prediksi SO bulan depan berdasarkan trend 3 bulan terakhir. Kasih angka + rekomendasi."
+        st.session_state["rei_preset"] = COMMANDS["/prediksi"]
 
 with _c4:
-    if st.button("💡 Insight", width="stretch", key="btn_rei_insight"):
-        st.session_state["rei_preset"] = "Kasih insight dari data SO bulan ini. Rak mana paling minus? PIC mana paling sering selisih?"
+    if st.button("🔍 Top Item", width="stretch", key="btn_rei_item"):
+        st.session_state["rei_preset"] = COMMANDS["/item"]
 
 with _c5:
     if st.button("🗑️ Reset", width="stretch", key="btn_rei_reset"):
@@ -250,6 +329,25 @@ with _c5:
         st.session_state["rei_history"] = []
         st.session_state["rei_last_model"] = None
         st.rerun()
+
+# === EXPORT ROW (stub — siap diisi nanti) ===
+_c1e, _c2e, _c3e, _c4e = st.columns([1, 1, 1, 2])
+with _c1e:
+    if st.button("📄 Export PDF", width="stretch", key="btn_rei_export_pdf"):
+        _export_rei_pdf(st.session_state["rei_history"], _session_id)
+with _c2e:
+    if st.button("📊 Export PPT", width="stretch", key="btn_rei_export_ppt"):
+        _export_rei_ppt(st.session_state["rei_history"], _session_id)
+with _c3e:
+    if st.button("💬 /help", width="stretch", key="btn_rei_help"):
+        st.session_state["rei_preset"] = "/help"
+
+st.markdown(
+    "<div class='cmd-hint'>💡 <b>Command:</b> "
+    "<code>/trend</code> <code>/lpj</code> <code>/prediksi</code> "
+    "<code>/insight</code> <code>/item</code> <code>/help</code></div>",
+    unsafe_allow_html=True,
+)
 
 st.markdown("---")
 
@@ -262,38 +360,51 @@ for _msg in st.session_state["rei_history"]:
     _role = _msg.get("role", "user")
     with st.chat_message(_role, avatar="👤" if _role == "user" else "📊"):
         st.markdown(_msg.get("content", ""))
-        
+
 
 # =========================================================
-# HELPER: BUILD DATA CONTEXT
+# HELPER: BUILD DATA CONTEXT (FIXED — ITEM-LEVEL)
 # =========================================================
 def _build_data_context():
-    """Ambil data SO real dari DB buat konteks Rei."""
+    """Ambil data SO real dari DB buat konteks Rei — agregat + item-level."""
     try:
         _ctx_parts = []
 
-        # === REKAP BULAN INI ===
+        # === 1. REKAP BULAN INI ===
         _hasil_bulan = rekap_so(mode="bulan_ini")
         if _hasil_bulan.get("success"):
             _nom = _hasil_bulan.get("total_nominal", 0)
             _ctx_parts.append(
-                f"REKAP BULAN INI ({_hasil_bulan.get('periode', '-')}):\n"
-                f"- Total Rak: {_hasil_bulan.get('total_rak', 0)}\n"
-                f"- Total Item: {_hasil_bulan.get('total_item', 0)}\n"
-                f"- Total Nominal: {fmt_rp_signed(_nom)}\n"
+                f"=== REKAP BULAN INI ({_hasil_bulan.get('periode', '-')}) ===\n"
+                f"Total Rak: {_hasil_bulan.get('total_rak', 0)}\n"
+                f"Total Item: {_hasil_bulan.get('total_item', 0)}\n"
+                f"Total Nominal: {fmt_rp_signed(_nom)}"
             )
 
             _list_rak = _hasil_bulan.get("list_rak", [])
             if _list_rak:
                 _top_minus = sorted(_list_rak, key=lambda x: x["total"])[:5]
-                _ctx_parts.append("TOP 5 RAK MINUS BULAN INI:")
+                _ctx_parts.append("\n=== TOP 5 RAK MINUS ===")
                 for _r in _top_minus:
                     _ctx_parts.append(
-                        f"  - Rak {_r['rak_id']}: {fmt_rp_signed(_r['total'])} (PIC: {_r['pic']})"
+                        f"- Rak {_r['rak_id']}: {fmt_rp_signed(_r['total'])} (PIC: {_r['pic']})"
                     )
-                _ctx_parts.append("")
 
-        # === BTSB & NSB ===
+            # Distribusi per PIC
+            _pic_summary = {}
+            for _r in _list_rak:
+                _pic = _r.get("pic", "-")
+                _pic_summary.setdefault(_pic, {"total": 0, "rak_count": 0})
+                _pic_summary[_pic]["total"] += _r["total"]
+                _pic_summary[_pic]["rak_count"] += 1
+            if _pic_summary:
+                _ctx_parts.append("\n=== DISTRIBUSI PER PIC ===")
+                for _pic, _data in sorted(_pic_summary.items(), key=lambda x: x[1]["total"]):
+                    _ctx_parts.append(
+                        f"- {_pic}: {fmt_rp_signed(_data['total'])} ({_data['rak_count']} rak)"
+                    )
+
+        # === 2. BTSB & NSB ===
         try:
             _net_sales = _get_net_sales_bulan()
             _total_selisih = _get_total_selisih_bulan()
@@ -301,17 +412,17 @@ def _build_data_context():
             _nsb = max(0, abs(_total_selisih) - _btsb)
 
             _ctx_parts.append(
-                f"BTSB & NSB BULAN INI:\n"
-                f"- Net Sales: {fmt_rp(_net_sales)}\n"
-                f"- BTSB (0,15%): {fmt_rp(_btsb)}\n"
-                f"- Total Selisih: {fmt_rp(abs(_total_selisih))}\n"
-                f"- NSB: {fmt_rp(_nsb)}\n"
-                f"- Status: {'OVER' if abs(_total_selisih) > _btsb else 'AMAN'}\n"
+                f"\n=== BTSB & NSB BULAN INI ===\n"
+                f"Net Sales: {fmt_rp(_net_sales)}\n"
+                f"BTSB (0,15%): {fmt_rp(_btsb)}\n"
+                f"Total Selisih: {fmt_rp(abs(_total_selisih))}\n"
+                f"NSB: {fmt_rp(_nsb)}\n"
+                f"Status: {'OVER' if abs(_total_selisih) > _btsb else 'AMAN'}"
             )
         except Exception as _e:
-            pass
+            print(f"[Rei ctx BTSB] {_e}")
 
-        # === TREND 7 HARI TERAKHIR ===
+        # === 3. TREND 7 HARI ===
         try:
             _sb = get_supabase()
             _now = _now_jkt().date()
@@ -329,33 +440,36 @@ def _build_data_context():
                 _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
                 _grp = _df.groupby("so_date")["nominal_adjust"].sum().reset_index().sort_values("so_date")
 
-                _ctx_parts.append("TREND 7 HARI TERAKHIR:")
+                _ctx_parts.append("\n=== TREND 7 HARI TERAKHIR ===")
                 for _, _r in _grp.iterrows():
                     _ctx_parts.append(
-                        f"  - {_r['so_date'].strftime('%d/%m')}: {fmt_rp_signed(_r['nominal_adjust'])}"
+                        f"- {_r['so_date'].strftime('%d/%m')}: {fmt_rp_signed(_r['nominal_adjust'])}"
                     )
-                _ctx_parts.append("")
         except Exception as _e:
-            pass
+            print(f"[Rei ctx trend] {_e}")
 
-        # === TOP 5 ITEM ===
+        # === 4. TOP 15 ITEM MINUS (ITEM LEVEL) ===
         try:
-            _top = get_top_items(limit=5)
-            _top_minus = _top.get("top_minus", [])
-            if _top_minus:
-                _ctx_parts.append("TOP 5 ITEM MINUS:")
-                for _it in _top_minus:
+            _top = get_top_items(mode="bulan_ini", limit=15, only_minus=True)
+            _items = _top.get("items", [])
+            if _items:
+                _ctx_parts.append(
+                    f"\n=== TOP 15 ITEM SELISIH TERBESAR ({_top.get('periode', '-')}) ==="
+                )
+                for _i, _it in enumerate(_items, 1):
                     _ctx_parts.append(
-                        f"  - {_it.get('nama_produk', '-')[:30]} "
-                        f"(rak {_it.get('rak_id', '-')}): {fmt_rp_signed(_it.get('nominal_adjust', 0))}"
+                        f"{_i}. PLU {_it.get('plu', '-')} — {_it.get('nama_produk', '-')}\n"
+                        f"   Rak: {_it.get('rak_id', '-')} | PIC: {_it.get('pic', '-')}\n"
+                        f"   Qty var: {_it.get('qty_var', 0)} | Nominal: {fmt_rp_signed(_it.get('nominal_adjust', 0))}"
                     )
-                _ctx_parts.append("")
         except Exception as _e:
-            pass
+            print(f"[Rei ctx top items] {_e}")
 
         return "\n".join(_ctx_parts)
     except Exception as _e:
         print(f"[Rei] Gagal build context: {_e}")
+        import traceback
+        print(traceback.format_exc())
         return ""
 
 
@@ -369,6 +483,28 @@ if _preset and not _user_msg:
     _user_msg = _preset
 
 if _user_msg:
+    # === PARSE COMMAND ===
+    _parsed = _parse_command(_user_msg)
+
+    # === HANDLE /help ===
+    if _parsed is None:
+        _help_text = (
+            "**📋 Command yang tersedia:**\n\n"
+            "- `/trend` — Analisis trend SO bulan ini\n"
+            "- `/lpj` — Laporan Pertanggungjawaban\n"
+            "- `/prediksi` — Forecast bulan depan\n"
+            "- `/insight` — Insight rak & PIC\n"
+            "- `/item` — Top 10 item selisih terbesar\n"
+            "- `/help` — Tampilkan command ini\n\n"
+            "Atau ketik pertanyaan bebas — Rei bakal jawab."
+        )
+        st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
+        save_message("rei", _session_id, "user", _user_msg)
+        st.session_state["rei_history"].append({"role": "assistant", "content": _help_text})
+        save_message("rei", _session_id, "assistant", _help_text)
+        st.rerun()
+
+    # === SIMPAN USER MSG (yang udah di-parse) ===
     st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
     save_message("rei", _session_id, "user", _user_msg)
 
@@ -377,10 +513,8 @@ if _user_msg:
 
     with st.chat_message("assistant", avatar="📊"):
         with st.spinner("📊 Rei analisis data..."):
-            # Build context dari DB
             _data_context = _build_data_context()
 
-            # Panggil Rei
             _result = rei_chat(
                 user_message=_user_msg,
                 conversation_history=st.session_state["rei_history"],
@@ -389,12 +523,9 @@ if _user_msg:
 
             _resp = _result.get("text", "")
             _model = _result.get("model")
-            _err = _result.get("error")
 
-            # Tampilkan response
             st.markdown(_resp)
 
-            # Badge model yang dipake
             if _model:
                 st.markdown(
                     f"<div style='text-align: right; margin-top: 4px;'>"
@@ -403,7 +534,6 @@ if _user_msg:
                 )
                 st.session_state["rei_last_model"] = _model
 
-            # Simpan history
             st.session_state["rei_history"].append({"role": "assistant", "content": _resp})
             save_message("rei", _session_id, "assistant", _resp)
 
