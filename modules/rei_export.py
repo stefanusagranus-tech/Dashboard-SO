@@ -63,7 +63,7 @@ def fmt_rp_signed(value):
     except Exception:
         return "Rp 0"
         
-        # =========================================================
+# =========================================================
 # PDF CLASS
 # =========================================================
 class ReiPDF(FPDF):
@@ -122,8 +122,8 @@ class ReiPDF(FPDF):
         self.set_line_width(0.3)
         self.line(20, self.get_y() - 2, 190, self.get_y() - 2)
         self.cell(0, 10, "Dashboard SO Toko C383 - Rei (AI Analis)", align="C")
-        
-        # =========================================================
+
+# =========================================================
 # CHART
 # =========================================================
 def _chart_to_image(fig, dpi=180):
@@ -199,7 +199,7 @@ def _generate_rekomendasi(data_context):
 
     return _rekom
     
-    # =========================================================
+ # =========================================================
 # MAIN EXPORT — PART 1
 # =========================================================
 def generate_rei_pdf(data_context):
@@ -397,7 +397,7 @@ def generate_rei_pdf(data_context):
         print(traceback.format_exc())
         return None
         
-        # =========================================================
+# =========================================================
 # MAIN EXPORT — PART 2 (Top Item, Pembahasan, Kesimpulan)
 # =========================================================
 def _generate_rei_pdf_part2(_pdf, data_context, _theme, _lost, _btsb, _top_rak=None):
