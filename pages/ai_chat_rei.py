@@ -1,14 +1,11 @@
 """
-AI Chat Rei — Analis SO (AI-3) v2
+AI Chat Rei — Analis SO (AI-3) v3
 ===================================
-Rei = analis SO: trend, LPJ, prediksi, insight.
-Bukan data entry — itu tugasnya Yui.
-
-Changelog v2:
-- Fix import timedelta
-- Fix context builder (item-level pakai key "items")
-- Tambah command parser (/trend, /lpj, /prediksi, /item, /help)
-- Tambah stub export PDF & PPT (siap diisi)
+Layout: WhatsApp-style scrollable chat
+Changelog v3:
+- Chat history pakai st.container(height=480) — scrollable
+- Chat input fixed di bawah
+- Popover ⚡ nempel di samping chat input
 """
 
 import streamlit as st
@@ -84,7 +81,6 @@ COMMANDS = {
 
 
 def _parse_command(text):
-    """Kalau user ngetik /command, ganti jadi prompt lengkap."""
     if not text:
         return text
     _t = text.strip().lower()
@@ -96,32 +92,13 @@ def _parse_command(text):
 
 
 # =========================================================
-# EXPORT STUBS (siap diisi nanti)
+# EXPORT STUBS
 # =========================================================
 def _export_rei_pdf(history, session_id):
-    """
-    Export chat Rei + data context ke PDF.
-    TODO: implement pakai fpdf2 + DejaVu font.
-    """
     st.info("🚧 **Export PDF belum diimplementasikan.** Coming soon!")
-    # TODO:
-    # 1. from modules.yui_export import generate_rei_pdf
-    # 2. generate_rei_pdf(history, session_id)
-    # 3. st.download_button(...)
-
 
 def _export_rei_ppt(history, session_id):
-    """
-    Export chat Rei + data context ke PPT.
-    TODO: implement pakai python-pptx.
-    """
     st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
-    # TODO:
-    # 1. from pptx import Presentation
-    # 2. Build slide: cover, ringkasan, KPI, top items, insight, rekomendasi
-    # 3. st.download_button(...)
-
-
 # =========================================================
 # CSS
 # =========================================================
@@ -240,8 +217,6 @@ inject_rei_css()
 if not _REI_OK:
     st.error(f"❌ Gagal import: {_import_error}")
     st.stop()
-
-
 # =========================================================
 # HEADER
 # =========================================================
@@ -334,20 +309,27 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-
+st.markdown(
+    "<div class='cmd-hint'>💡 <b>Command:</b> "
+    "<code>/trend</code> <code>/lpj</code> <code>/prediksi</code> "
+    "<code>/insight</code> <code>/item</code> <code>/help</code></div>",
+    unsafe_allow_html=True,
+)
 # =========================================================
-# RENDER CHAT HISTORY
+# CHAT HISTORY — SCROLLABLE (WhatsApp style)
 # =========================================================
 st.markdown("#### 💬 Percakapan")
-for _msg in st.session_state["rei_history"]:
-    _role = _msg.get("role", "user")
-    with st.chat_message(_role, avatar="👤" if _role == "user" else "📊"):
-        st.markdown(_msg.get("content", ""))
 
+# Container fixed height + scroll
+_chat_container = st.container(height=480, border=False)
 
+with _chat_container:
+    for _msg in st.session_state["rei_history"]:
+        _role = _msg.get("role", "user")
+        with st.chat_message(_role, avatar="👤" if _role == "user" else "📊"):
+            st.markdown(_msg.get("content", ""))
 # =========================================================
-# HELPER: BUILD DATA CONTEXT (FIXED — ITEM-LEVEL)
+# HELPER: BUILD DATA CONTEXT (ITEM-LEVEL)
 # =========================================================
 def _build_data_context():
     """Ambil data SO real dari DB buat konteks Rei — agregat + item-level."""
@@ -374,7 +356,6 @@ def _build_data_context():
                         f"- Rak {_r['rak_id']}: {fmt_rp_signed(_r['total'])} (PIC: {_r['pic']})"
                     )
 
-            # Distribusi per PIC
             _pic_summary = {}
             for _r in _list_rak:
                 _pic = _r.get("pic", "-")
@@ -394,7 +375,6 @@ def _build_data_context():
             _total_selisih = _get_total_selisih_bulan()
             _btsb = _net_sales * 0.0015
             _nsb = max(0, abs(_total_selisih) - _btsb)
-
             _ctx_parts.append(
                 f"\n=== BTSB & NSB BULAN INI ===\n"
                 f"Net Sales: {fmt_rp(_net_sales)}\n"
@@ -423,7 +403,6 @@ def _build_data_context():
                 _df["so_date"] = pd.to_datetime(_df["so_date"], errors="coerce")
                 _df["nominal_adjust"] = pd.to_numeric(_df["nominal_adjust"], errors="coerce").fillna(0)
                 _grp = _df.groupby("so_date")["nominal_adjust"].sum().reset_index().sort_values("so_date")
-
                 _ctx_parts.append("\n=== TREND 7 HARI TERAKHIR ===")
                 for _, _r in _grp.iterrows():
                     _ctx_parts.append(
@@ -432,7 +411,7 @@ def _build_data_context():
         except Exception as _e:
             print(f"[Rei ctx trend] {_e}")
 
-        # === 4. TOP 15 ITEM MINUS (ITEM LEVEL) ===
+        # === 4. TOP 15 ITEM MINUS ===
         try:
             _top = get_top_items(mode="bulan_ini", limit=15, only_minus=True)
             _items = _top.get("items", [])
@@ -455,84 +434,117 @@ def _build_data_context():
         import traceback
         print(traceback.format_exc())
         return ""
-
-
 # =========================================================
-# CHAT INPUT + POPOVER QUICK ACTION
+# CHAT INPUT + POPOVER
 # =========================================================
 _preset = st.session_state.pop("rei_preset", "")
 
-_col_input, _col_pop = st.columns([10, 1])
+_col_input, _col_pop = st.columns([8, 1])
 
 with _col_input:
     _user_msg = st.chat_input("Tanya Rei soal analisis SO...", key="rei_chat_input")
 
 with _col_pop:
     with st.popover("⚡", use_container_width=True):
-        st.markdown(
-            "<div style='font-family: Cinzel, serif; font-size: 13px; "
-            "color: #E8B189; font-weight: 700; margin-bottom: 8px;'>"
-            "⚡ Aksi Cepat</div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("**⚡ Aksi Cepat**")
 
-        # === ANALISIS ===
-        st.markdown(
-            "<div style='font-size: 10px; color: #7FB99B; "
-            "letter-spacing: 1px; margin: 4px 0;'>📈 ANALISIS</div>",
-            unsafe_allow_html=True,
-        )
-
+        st.caption("📈 ANALISIS")
         if st.button("📈 Trend SO", use_container_width=True, key="pop_trend"):
             st.session_state["rei_preset"] = COMMANDS["/trend"]
             st.rerun()
-
         if st.button("📋 LPJ SO", use_container_width=True, key="pop_lpj"):
             st.session_state["rei_preset"] = COMMANDS["/lpj"]
             st.rerun()
-
         if st.button("🔮 Prediksi", use_container_width=True, key="pop_pred"):
             st.session_state["rei_preset"] = COMMANDS["/prediksi"]
             st.rerun()
-
         if st.button("🔍 Top Item", use_container_width=True, key="pop_item"):
             st.session_state["rei_preset"] = COMMANDS["/item"]
             st.rerun()
-
         if st.button("💡 Insight", use_container_width=True, key="pop_insight"):
             st.session_state["rei_preset"] = COMMANDS["/insight"]
             st.rerun()
 
-        # === EXPORT ===
-        st.markdown("---")
-        st.markdown(
-            "<div style='font-size: 10px; color: #7FB99B; "
-            "letter-spacing: 1px; margin: 4px 0;'>📤 EXPORT</div>",
-            unsafe_allow_html=True,
-        )
+        st.divider()
 
+        st.caption("📤 EXPORT")
         if st.button("📄 PDF", use_container_width=True, key="pop_pdf"):
             _export_rei_pdf(st.session_state["rei_history"], _session_id)
-
         if st.button("📊 PPT", use_container_width=True, key="pop_ppt"):
             _export_rei_ppt(st.session_state["rei_history"], _session_id)
 
-        # === UTILITY ===
-        st.markdown("---")
+        st.divider()
 
         if st.button("💬 /help", use_container_width=True, key="pop_help"):
             st.session_state["rei_preset"] = "/help"
             st.rerun()
-
         if st.button("🗑️ Reset", use_container_width=True, key="pop_reset"):
             clear_session("rei", _session_id)
             st.session_state["rei_history"] = []
             st.session_state["rei_last_model"] = None
             st.rerun()
 
-# Handle preset (dari tombol popover)
 if _preset and not _user_msg:
     _user_msg = _preset
+    # =========================================================
+# CHAT HANDLER
+# =========================================================
+if _user_msg:
+    # Parse command
+    _parsed = _parse_command(_user_msg)
+
+    # Handle /help
+    if _parsed is None:
+        _help_text = (
+            "**📋 Command yang tersedia:**\n\n"
+            "- `/trend` — Analisis trend SO bulan ini\n"
+            "- `/lpj` — Laporan Pertanggungjawaban\n"
+            "- `/prediksi` — Forecast bulan depan\n"
+            "- `/insight` — Insight rak & PIC\n"
+            "- `/item` — Top 10 item selisih terbesar\n"
+            "- `/help` — Tampilkan command ini\n\n"
+            "Atau ketik pertanyaan bebas — Rei bakal jawab."
+        )
+        st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
+        save_message("rei", _session_id, "user", _user_msg)
+        st.session_state["rei_history"].append({"role": "assistant", "content": _help_text})
+        save_message("rei", _session_id, "assistant", _help_text)
+        st.rerun()
+
+    # Simpan user msg
+    st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
+    save_message("rei", _session_id, "user", _user_msg)
+
+    with st.chat_message("user", avatar="👤"):
+        st.markdown(_user_msg)
+
+    with st.chat_message("assistant", avatar="📊"):
+        with st.spinner("📊 Rei analisis data..."):
+            _data_context = _build_data_context()
+
+            _result = rei_chat(
+                user_message=_user_msg,
+                conversation_history=st.session_state["rei_history"],
+                data_context=_data_context,
+            )
+
+            _resp = _result.get("text", "")
+            _model = _result.get("model")
+
+            st.markdown(_resp)
+
+            if _model:
+                st.markdown(
+                    f"<div style='text-align: right; margin-top: 4px;'>"
+                    f"<span class='model-badge'>⚙️ {_model}</span></div>",
+                    unsafe_allow_html=True,
+                )
+                st.session_state["rei_last_model"] = _model
+
+            st.session_state["rei_history"].append({"role": "assistant", "content": _resp})
+            save_message("rei", _session_id, "assistant", _resp)
+
+    st.rerun()
 
 
 # =========================================================
