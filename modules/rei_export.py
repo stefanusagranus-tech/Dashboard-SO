@@ -62,7 +62,29 @@ def fmt_rp_signed(value):
         return f"{_sign}Rp {int(abs(_v)):,}".replace(",", ".")
     except Exception:
         return "Rp 0"
-        
+
+def section_title(self, text, space_before=4):
+    """Heading section — compact."""
+    self.ln(space_before)
+    self.set_font(self.font_title, "B", 12)
+    self.set_text_color(*self.theme.GOLD)
+    self.cell(0, 7, text, new_x="LMARGIN", new_y="NEXT")
+    self.ln(2)
+
+def sub_title(self, text, space_before=3):
+    """Sub-heading."""
+    self.ln(space_before)
+    self.set_font(self.font_body, "B", 10)
+    self.set_text_color(*self.theme.SAGE)
+    self.cell(0, 6, text, new_x="LMARGIN", new_y="NEXT")
+    self.ln(1)
+
+def body_text(self, text, line_height=5):
+    """Paragraf body."""
+    self.set_font(self.font_body, "", 9)
+    self.set_text_color(*self.theme.TEXT_LIGHT)
+    self.multi_cell(0, line_height, text)
+    
 # =========================================================
 # PDF CLASS
 # =========================================================
@@ -276,90 +298,62 @@ def generate_rei_pdf(data_context):
         _pdf.cell(0, 6, "Kata kunci: stock opname, shrinkage, lost sales, analisis retail, BTSB",
                   new_x="LMARGIN", new_y="NEXT")
 
-        # ===== HALAMAN 3: PENDAHULUAN & METODE =====
+        # ===== HALAMAN 3: PENDAHULUAN + METODE (1 PAGE) =====
         _pdf.add_page()
-        _pdf.set_font(_pdf.font_title, "B", 14)
-        _pdf.set_text_color(*_theme.GOLD)
-        _pdf.cell(0, 10, "1. PENDAHULUAN", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-
-        _pendahuluan = (
+        
+        _pdf.section_title("1. PENDAHULUAN", space_before=0)
+        _pdf.body_text(
             f"Stock Opname (SO) merupakan proses penghitungan fisik stok barang untuk "
             f"memverifikasi akurasi data antara catatan sistem dengan kondisi aktual. "
             f"Di industri retail, akurasi stok menjadi kunci utama dalam menjaga ketersediaan "
             f"produk sekaligus meminimalkan nilai kehilangan (shrinkage) yang berdampak "
-            f"langsung pada profitabilitas.\n\n"
+            f"langsung pada profitabilitas."
+        )
+        _pdf.ln(2)
+        _pdf.body_text(
             f"Toko C383 Karang Satria melaksanakan SO secara berkala. Analisis ini bertujuan untuk: "
             f"(1) mengukur tingkat akurasi stok periode {_periode}, (2) menghitung nilai Gross dan "
             f"Net Lost Sales, (3) mengidentifikasi pola selisih berdasarkan rak dan PIC, serta "
             f"(4) memberikan rekomendasi audit yang actionable."
         )
-        _pdf.multi_cell(0, 6, _pendahuluan)
-        _pdf.ln(4)
-
-        _pdf.set_font(_pdf.font_title, "B", 14)
-        _pdf.set_text_color(*_theme.GOLD)
-        _pdf.cell(0, 10, "2. METODE", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "2.1 Sumber Data", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-        _pdf.multi_cell(0, 6,
+        
+        _pdf.section_title("2. METODE")
+        
+        _pdf.sub_title("2.1 Sumber Data")
+        _pdf.body_text(
             f"Data diperoleh dari sistem SO Toko C383 periode {_periode}. "
             f"Total rak: {_rekap.get('total_rak', 0)}. Total item: {_rekap.get('total_item', 0)}."
         )
-        _pdf.ln(3)
-
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "2.2 Metrik yang Digunakan", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-        _pdf.multi_cell(0, 6,
+        
+        _pdf.sub_title("2.2 Metrik yang Digunakan")
+        _pdf.body_text(
             "1. Gross Lost Sales = total nilai absolut item dengan qty_var < 0.\n"
             "2. Net Lost Sales = nilai absolut dari total nominal_adjust semua item.\n"
             "3. Shrinkage Rate = (Net Lost Sales / Net Sales) x 100 persen."
         )
-        _pdf.ln(3)
-
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "2.3 Batasan", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-        _pdf.multi_cell(0, 6,
+        
+        _pdf.sub_title("2.3 Batasan")
+        _pdf.body_text(
             "1. Data hanya dari SO periode ini.\n"
             "2. Tidak ada data benchmark internal.\n"
             "3. Analisis berbasis pola data yang tersedia."
         )
-
-        # ===== HALAMAN 4: HASIL =====
+        
+        # ===== HALAMAN 4: HASIL (RINGKASAN + CHART) =====
         _pdf.add_page()
-        _pdf.set_font(_pdf.font_title, "B", 14)
-        _pdf.set_text_color(*_theme.GOLD)
-        _pdf.cell(0, 10, "3. HASIL", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "3.1 Ringkasan Metrik", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
+        
+        _pdf.section_title("3. HASIL", space_before=0)
+        
+        _pdf.sub_title("3.1 Ringkasan Metrik")
+        _sh = _lost.get("shrinkage", 0)
+        
         _headings = FontFace(
             family=_pdf.font_title, emphasis="BOLD",
             color=(232, 177, 137), fill_color=(76, 29, 149), size_pt=9,
         )
-
-        _sh = _lost.get("shrinkage", 0)
-
+        
         with _pdf.table(col_widths=(70, 60, 40), headings_style=_headings,
-                        line_height=7, first_row_as_headings=True) as _t:
+                        line_height=6, first_row_as_headings=True) as _t:
             _row = _t.row()
             _row.cell("Metrik"); _row.cell("Nilai"); _row.cell("Status")
             _row = _t.row()
@@ -372,57 +366,28 @@ def generate_rei_pdf(data_context):
             _row = _t.row()
             _row.cell("Shrinkage Rate"); _row.cell(f"{_sh:.2f}%")
             _row.cell("> 2%" if _sh > 2 else "< 2%")
-
-        _pdf.ln(5)
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "3.2 Tren Selisih 7 Hari", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
+        
+        _pdf.sub_title("3.2 Tren Selisih 7 Hari", space_before=4)
+        
         _chart_data = data_context.get("chart_data", [])
         if _chart_data:
             _trend_img = _create_trend_chart(_chart_data)
             if _trend_img:
-                _pdf.image(_trend_img, x=25, w=160)
-                _pdf.ln(3)
+                _pdf.image(_trend_img, x=30, w=150)
+                _pdf.ln(2)
         else:
-            _pdf.set_font(_pdf.font_body, "I", 10)
+            _pdf.set_font(_pdf.font_body, "I", 9)
             _pdf.set_text_color(*_theme.TEXT_MUTED)
             _pdf.cell(0, 6, "Data tren tidak tersedia.", new_x="LMARGIN", new_y="NEXT")
-
-        # ⬇️ LANJUT KE BAGIAN 5
-        return _generate_rei_pdf_part2(_pdf, data_context, _theme, _lost, _btsb, _top_rak=None)
-
-    except Exception as _e:
-        print(f"[REI EXPORT PDF ERROR] {_e}")
-        import traceback
-        print(traceback.format_exc())
-        return None
         
-        # =========================================================
-# MAIN EXPORT — PART 2 (Top Item, Pembahasan, Kesimpulan)
-# =========================================================
-def _generate_rei_pdf_part2(_pdf, data_context, _theme, _lost, _btsb, _top_rak=None):
-    """Lanjutan generate PDF — halaman 5-8."""
-    try:
-        _headings = FontFace(
-            family=_pdf.font_title, emphasis="BOLD",
-            color=(232, 177, 137), fill_color=(76, 29, 149), size_pt=9,
-        )
-        _sh = _lost.get("shrinkage", 0)
-        _top_rak = data_context.get("top_rak", [])
-
         # ===== HALAMAN 5: TOP ITEM & RAK =====
         _pdf.add_page()
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "3.3 Top 10 Item Selisih Terbesar", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
+        
+        _pdf.sub_title("3.3 Top 10 Item Selisih Terbesar", space_before=0)
         _top_items = data_context.get("top_items", [])
         if _top_items:
             with _pdf.table(col_widths=(75, 20, 35, 30), headings_style=_headings,
-                            line_height=6, first_row_as_headings=True) as _t:
+                            line_height=5.5, first_row_as_headings=True) as _t:
                 _row = _t.row()
                 _row.cell("Nama Produk"); _row.cell("Rak"); _row.cell("Nominal"); _row.cell("PIC")
                 for _it in _top_items[:10]:
@@ -432,19 +397,15 @@ def _generate_rei_pdf_part2(_pdf, data_context, _theme, _lost, _btsb, _top_rak=N
                     _row.cell(fmt_rp(abs(_it.get("nominal_adjust", 0))))
                     _row.cell(str(_it.get("pic", "-")))
         else:
-            _pdf.set_font(_pdf.font_body, "I", 10)
+            _pdf.set_font(_pdf.font_body, "I", 9)
             _pdf.set_text_color(*_theme.TEXT_MUTED)
             _pdf.cell(0, 6, "Data tidak tersedia.", new_x="LMARGIN", new_y="NEXT")
-
-        _pdf.ln(6)
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "3.4 Top 5 Rak dengan Selisih Tertinggi", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
+        
+        _pdf.sub_title("3.4 Top 5 Rak dengan Selisih Tertinggi", space_before=4)
+        _top_rak = data_context.get("top_rak", [])
         if _top_rak:
             with _pdf.table(col_widths=(30, 40, 45, 30), headings_style=_headings,
-                            line_height=6, first_row_as_headings=True) as _t:
+                            line_height=5.5, first_row_as_headings=True) as _t:
                 _row = _t.row()
                 _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal"); _row.cell("Jml Item")
                 for _r in _top_rak[:5]:
@@ -454,45 +415,35 @@ def _generate_rei_pdf_part2(_pdf, data_context, _theme, _lost, _btsb, _top_rak=N
                     _row.cell(fmt_rp(abs(_r.get("total", 0))))
                     _row.cell(str(_r.get("total_item", 0)))
         else:
-            _pdf.set_font(_pdf.font_body, "I", 10)
+            _pdf.set_font(_pdf.font_body, "I", 9)
             _pdf.set_text_color(*_theme.TEXT_MUTED)
             _pdf.cell(0, 6, "Data tidak tersedia.", new_x="LMARGIN", new_y="NEXT")
-
-        # ===== HALAMAN 6: PEMBAHASAN =====
+        
+        # ===== HALAMAN 6: PEMBAHASAN + KESIMPULAN (1 PAGE) =====
         _pdf.add_page()
-        _pdf.set_font(_pdf.font_title, "B", 14)
-        _pdf.set_text_color(*_theme.GOLD)
-        _pdf.cell(0, 10, "4. PEMBAHASAN", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(2)
-
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-
-        _pembahasan = (
+        
+        _pdf.section_title("4. PEMBAHASAN", space_before=0)
+        _pdf.body_text(
             f"Berdasarkan hasil analisis, Toko C383 mencatat Net Sales sebesar "
             f"{fmt_rp(_lost.get('net_sales', 0))} dengan Net Lost Sales {fmt_rp(_lost.get('net', 0))}. "
             f"Shrinkage Rate berada di {_sh:.2f}%, {'di atas' if _sh > 2 else 'di bawah'} "
-            f"benchmark umum retail (2%). Status BTSB: {_btsb.get('status', '-')}.\n\n"
+            f"benchmark umum retail (2%). Status BTSB: {_btsb.get('status', '-')}."
+        )
+        _pdf.ln(2)
+        _pdf.body_text(
             f"Dari sisi distribusi, konsentrasi selisih terbesar berada pada rak "
             f"{', '.join([r.get('rak_id', '-') for r in _top_rak[:3]])}. "
-            f"Hal ini mengindikasikan perlunya verifikasi prosedur pada area tersebut.\n\n"
-            f"Perlu dicatat bahwa PIC dalam konteks ini adalah petugas yang melakukan "
-            f"SO pada rak tersebut, bukan pemilik rak. Pola selisih berulang pada PIC "
-            f"tertentu dapat mengindikasikan perlunya evaluasi prosedur atau pelatihan."
+            f"Hal ini mengindikasikan perlunya verifikasi prosedur pada area tersebut."
         )
-        _pdf.multi_cell(0, 6, _pembahasan)
-
-        # ===== HALAMAN 7: KESIMPULAN =====
-        _pdf.add_page()
-        _pdf.set_font(_pdf.font_title, "B", 14)
-        _pdf.set_text_color(*_theme.GOLD)
-        _pdf.cell(0, 10, "5. KESIMPULAN", new_x="LMARGIN", new_y="NEXT")
         _pdf.ln(2)
-
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-
-        _kesimpulan = (
+        _pdf.body_text(
+            "Perlu dicatat bahwa PIC dalam konteks ini adalah petugas yang melakukan "
+            "SO pada rak tersebut, bukan pemilik rak. Pola selisih berulang pada PIC "
+            "tertentu dapat mengindikasikan perlunya evaluasi prosedur atau pelatihan."
+        )
+        
+        _pdf.section_title("5. KESIMPULAN", space_before=4)
+        _pdf.body_text(
             f"1. Shrinkage Rate periode ini sebesar {_sh:.2f}% "
             f"({'di atas' if _sh > 2 else 'dalam'}) toleransi 2%.\n"
             f"2. Net Lost Sales tercatat {fmt_rp(_lost.get('net', 0))} dari Net Sales "
@@ -501,44 +452,32 @@ def _generate_rei_pdf_part2(_pdf, data_context, _theme, _lost, _btsb, _top_rak=N
             f"{', '.join([r.get('rak_id', '-') for r in _top_rak[:3]])}.\n"
             f"4. Diperlukan verifikasi prosedur scan dan penempatan barang pada area tersebut."
         )
-        _pdf.multi_cell(0, 6, _kesimpulan)
-        _pdf.ln(6)
-
-        _pdf.set_font(_pdf.font_body, "B", 11)
-        _pdf.set_text_color(*_theme.SAGE)
-        _pdf.cell(0, 8, "Rekomendasi Audit", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-
+        
+        _pdf.sub_title("Rekomendasi Audit", space_before=4)
         _rekomendasi = _generate_rekomendasi(data_context)
         for _i, _r in enumerate(_rekomendasi, 1):
-            _pdf.set_font(_pdf.font_body, "B", 10)
+            _pdf.set_font(_pdf.font_body, "B", 9)
             _pdf.set_text_color(*_theme.SAGE)
-            _pdf.cell(0, 7, f"{_i}. {_r['title']}", new_x="LMARGIN", new_y="NEXT")
-            _pdf.set_font(_pdf.font_body, "", 10)
+            _pdf.cell(0, 6, f"{_i}. {_r['title']}", new_x="LMARGIN", new_y="NEXT")
+            _pdf.set_font(_pdf.font_body, "", 9)
             _pdf.set_text_color(*_theme.TEXT_LIGHT)
-            _pdf.multi_cell(0, 6, _r["detail"])
-            _pdf.ln(2)
-
-        # ===== HALAMAN 8: PENUTUP =====
-        _pdf.add_page()
-        _pdf.ln(30)
-        _pdf.set_font(_pdf.font_title, "B", 12)
-        _pdf.set_text_color(*_theme.GOLD)
-        _pdf.cell(0, 8, "Catatan:", align="C", new_x="LMARGIN", new_y="NEXT")
-        _pdf.set_font(_pdf.font_body, "", 10)
-        _pdf.set_text_color(*_theme.TEXT_LIGHT)
-        _pdf.multi_cell(0, 6,
-            "Laporan ini disusun berdasarkan data SO periode yang tertera. "
+            _pdf.multi_cell(0, 5, _r["detail"])
+            _pdf.ln(1)
+        
+        # ===== CATATAN (di halaman terakhir, gak perlu halaman baru) =====
+        _pdf.ln(6)
+        _pdf.set_draw_color(*_theme.GOLD)
+        _pdf.set_line_width(0.4)
+        _pdf.line(20, _pdf.get_y(), 190, _pdf.get_y())
+        _pdf.ln(4)
+        
+        _pdf.set_font(_pdf.font_body, "I", 8)
+        _pdf.set_text_color(*_theme.TEXT_MUTED)
+        _pdf.multi_cell(0, 5,
+            "Catatan: Laporan ini disusun berdasarkan data SO periode yang tertera. "
             "Data yang tidak tersedia tidak diestimasi atau diasumsikan. "
             "Analisis dan rekomendasi bersifat sebagai bahan pertimbangan untuk "
             "pengambilan keputusan manajemen."
         )
-
+        
         return bytes(_pdf.output())
-
-    except Exception as _e:
-        print(f"[REI EXPORT PDF PART2 ERROR] {_e}")
-        import traceback
-        print(traceback.format_exc())
-        return None
