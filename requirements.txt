@@ -2,7 +2,7 @@ streamlit>=1.30.0
 pandas>=2.0.0
 plotly>=5.18.0
 openpyxl>=3.1.0
-fpdf2>=2.7.0
+fpdf2>=2.8.0
 supabase>=2.0.0
 pytesseract>=0.3.10
 Pillow>=10.0.0
@@ -14,3 +14,4 @@ PyPDF2>=3.0.0
 pdfplumber>=0.11.0
 html2pic
 kaleido
+python-pptx>=0.6.21
