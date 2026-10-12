@@ -350,20 +350,28 @@ def generate_rei_pdf(data_context):
         _pdf.add_page()
         _pdf.section_title("3. HASIL", space_before=0)
         _pdf.sub_title("3.1 Ringkasan Metrik", space_before=0)
-
+        
+        # === SET WARNA DASAR TABLE — HITAM DI PUTIH ===
+        _pdf.set_fill_color(255, 255, 255)   # Background putih
+        _pdf.set_text_color(0, 0, 0)          # Teks hitam
+        _pdf.set_draw_color(150, 150, 150)    # Garis abu-abu
+        
         _headings = FontFace(
             family=_pdf.font_title, emphasis="BOLD",
-            color=_theme.TABLE_HEADER_TEXT,
-            fill_color=_theme.TABLE_HEADER_BG,
+            color=(0, 0, 0),              # teks hitam
+            fill_color=(220, 220, 220),   # header abu-abu terang
             size_pt=8,
         )
-
+        
         with _pdf.table(
             col_widths=(60, 65, 45),
             headings_style=_headings,
             line_height=5.5,
             first_row_as_headings=True,
             borders_layout="MINIMAL",
+            cell_fill_color=(255, 255, 255),   # ← FIX: paksa body cell putih
+            cell_fill_mode="ALL",              # ← FIX: apply ke semua cell
+            text_align=("LEFT", "RIGHT", "CENTER"),
         ) as _t:
             _row = _t.row()
             _row.cell("Metrik"); _row.cell("Nilai"); _row.cell("Status")
@@ -383,7 +391,7 @@ def generate_rei_pdf(data_context):
             _row = _t.row()
             _row.cell("NSB"); _row.cell(fmt_rp(_btsb.get("nsb", 0)))
             _row.cell("DIBEBANKAN" if _btsb.get("nsb", 0) > 0 else "NOL")
-
+        
         _pdf.sub_title("3.2 Tren Selisih 7 Hari", space_before=3)
         _chart_data = data_context.get("chart_data", [])
         if _chart_data:
@@ -391,7 +399,7 @@ def generate_rei_pdf(data_context):
             if _trend_img:
                 _pdf.image(_trend_img, x=30, w=150)
                 _pdf.ln(1)
-
+        
         _pdf.sub_title("3.3 Top 10 Item Selisih Terbesar", space_before=3)
         if _top_items:
             with _pdf.table(
@@ -400,6 +408,9 @@ def generate_rei_pdf(data_context):
                 line_height=5,
                 first_row_as_headings=True,
                 borders_layout="MINIMAL",
+                cell_fill_color=(255, 255, 255),   # ← FIX
+                cell_fill_mode="ALL",              # ← FIX
+                text_align=("LEFT", "CENTER", "RIGHT", "CENTER"),
             ) as _t:
                 _row = _t.row()
                 _row.cell("Nama Produk"); _row.cell("Rak"); _row.cell("Nominal"); _row.cell("PIC")
@@ -409,7 +420,7 @@ def generate_rei_pdf(data_context):
                     _row.cell(str(_it.get("rak_id", "-")))
                     _row.cell(fmt_rp(abs(_it.get("nominal_adjust", 0))))
                     _row.cell(str(_it.get("pic", "-")))
-
+        
         _pdf.sub_title("3.4 Top 5 Rak Selisih Tertinggi", space_before=3)
         if _top_rak:
             with _pdf.table(
@@ -418,6 +429,9 @@ def generate_rei_pdf(data_context):
                 line_height=5,
                 first_row_as_headings=True,
                 borders_layout="MINIMAL",
+                cell_fill_color=(255, 255, 255),   # ← FIX
+                cell_fill_mode="ALL",              # ← FIX
+                text_align=("CENTER", "LEFT", "RIGHT", "CENTER"),
             ) as _t:
                 _row = _t.row()
                 _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal"); _row.cell("Jml Item")
