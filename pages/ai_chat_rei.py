@@ -117,10 +117,10 @@ def inject_rei_css():
         [data-testid="stToolbar"] { display: none !important; }
         [data-testid="stDecoration"] { display: none !important; }
 
-        /* === ZERO PADDING === */
+        /* === ZERO PADDING + PADDING TOP BUAT HEADER FIXED === */
         .main .block-container {
             max-width: 100% !important;
-            padding: 0.4rem 0.6rem 0 0.6rem !important;
+            padding: 70px 0.6rem 0.4rem 0.6rem !important;
             margin: 0 !important;
         }
         .main, .stApp, section.main { padding: 0 !important; }
@@ -171,69 +171,58 @@ def inject_rei_css():
         }
 
         /* ============================================
-           HEADER BAR — HTML MURNI (100% STABIL)
+           HEADER BAR — FIXED DI ATAS (WA STYLE)
            ============================================ */
         .rei-header-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 52px 10px 52px;  /* kiri & kanan dikasih space buat tombol overlay */
-            background: linear-gradient(135deg, rgba(30, 20, 60, 0.95), rgba(76, 29, 149, 0.6));
-            border-bottom: 2px solid rgba(232, 177, 137, 0.6);
-            border-radius: 10px 10px 0 0;
-            margin-bottom: 0;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            position: relative;
-            z-index: 1;
-            min-height: 44px;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 9999 !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            padding: 10px 60px 10px 60px !important;
+            background: linear-gradient(135deg, rgba(30, 20, 60, 0.98), rgba(76, 29, 149, 0.9)) !important;
+            border-bottom: 2px solid rgba(232, 177, 137, 0.6) !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+            min-height: 52px !important;
+            box-sizing: border-box !important;
         }
         .rei-header-bar .rei-title {
-            font-family: Cinzel, serif;
-            font-size: 18px;
-            font-weight: 900;
-            color: #E8B189;
-            letter-spacing: 1.5px;
-            text-shadow: 0 0 10px rgba(232, 177, 137, 0.6);
-            line-height: 1;
+            font-family: Cinzel, serif !important;
+            font-size: 18px !important;
+            font-weight: 900 !important;
+            color: #E8B189 !important;
+            letter-spacing: 1.5px !important;
+            text-shadow: 0 0 10px rgba(232, 177, 137, 0.6) !important;
+            line-height: 1 !important;
         }
         .rei-header-bar .rei-time {
-            font-family: JetBrains Mono, monospace;
-            font-size: 11px;
-            color: #7FB99B;
-            font-weight: 700;
-            padding: 4px 10px;
-            background: rgba(127, 185, 155, 0.1);
-            border: 1px solid rgba(127, 185, 155, 0.4);
-            border-radius: 8px;
-            line-height: 1;
+            font-family: JetBrains Mono, monospace !important;
+            font-size: 11px !important;
+            color: #7FB99B !important;
+            font-weight: 700 !important;
+            padding: 4px 10px !important;
+            background: rgba(127, 185, 155, 0.1) !important;
+            border: 1px solid rgba(127, 185, 155, 0.4) !important;
+            border-radius: 8px !important;
+            line-height: 1 !important;
         }
 
-        /* === OVERLAY: TOMBOL BACK & MENU DI ATAS HEADER === */
-        /* Container kolom tombol (persis setelah header HTML) */
-        .main .block-container > div:has(.rei-header-bar) + div {
-            margin-top: -50px !important;
-            position: relative !important;
-            z-index: 100 !important;
-            padding: 0 !important;
-            margin-bottom: 4px !important;
-        }
-        /* Reset styling default horizontal block */
-        .main .block-container > div:has(.rei-header-bar) + div [data-testid="stHorizontalBlock"] {
-            gap: 0 !important;
-            align-items: center !important;
-            padding: 0 8px !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            min-height: 40px !important;
-        }
-        /* Style tombol back & menu */
-        .main .block-container > div:has(.rei-header-bar) + div button {
+        /* ============================================
+           TOMBOL BACK — FIXED DI HEADER (KIRI)
+           ============================================ */
+        .main .block-container button[key="btn_back_rei"] {
+            position: fixed !important;
+            top: 8px !important;
+            left: 10px !important;
+            z-index: 10000 !important;
             height: 36px !important;
             min-height: 36px !important;
             width: 40px !important;
-            background: rgba(30, 20, 60, 0.7) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
+            background: rgba(30, 20, 60, 0.85) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
             border-radius: 10px !important;
             color: #E8B189 !important;
             font-size: 16px !important;
@@ -241,9 +230,54 @@ def inject_rei_css():
             padding: 0 !important;
             transition: all 0.2s ease !important;
         }
-        .main .block-container > div:has(.rei-header-bar) + div button:hover {
-            background: rgba(232, 177, 137, 0.2) !important;
+        .main .block-container button[key="btn_back_rei"]:hover {
+            background: rgba(232, 177, 137, 0.25) !important;
             border-color: #E8B189 !important;
+        }
+
+        /* ============================================
+           POPOVER MENU — FIXED DI HEADER (KANAN)
+           ============================================ */
+        .main .block-container [data-testid="stPopover"] {
+            position: fixed !important;
+            top: 8px !important;
+            right: 10px !important;
+            z-index: 10000 !important;
+            width: 40px !important;
+        }
+        .main .block-container [data-testid="stPopover"] > button {
+            height: 36px !important;
+            min-height: 36px !important;
+            width: 40px !important;
+            background: rgba(30, 20, 60, 0.85) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
+            border-radius: 10px !important;
+            color: #E8B189 !important;
+            font-size: 18px !important;
+            font-weight: 900 !important;
+            padding: 0 !important;
+            transition: all 0.2s ease !important;
+        }
+        .main .block-container [data-testid="stPopover"] > button:hover {
+            background: rgba(232, 177, 137, 0.25) !important;
+            border-color: #E8B189 !important;
+        }
+
+        /* === POPOVER BODY (MENU) === */
+        [data-testid="stPopoverBody"] {
+            background: rgba(20, 12, 35, 0.98) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
+            border-radius: 12px !important;
+            padding: 12px !important;
+            z-index: 10001 !important;
+        }
+        [data-testid="stPopoverBody"] button {
+            background: rgba(30, 20, 60, 0.6) !important;
+            border: 1px solid rgba(232, 177, 137, 0.3) !important;
+            border-radius: 8px !important;
+            color: #F5E6D3 !important;
+            font-size: 12px !important;
+            margin-bottom: 4px !important;
         }
 
         /* === MODEL BADGE === */
@@ -256,38 +290,6 @@ def inject_rei_css():
             font-family: JetBrains Mono, monospace;
             font-size: 9px;
             color: #E8B189;
-        }
-
-        /* === POPOVER === */
-        [data-testid="stPopover"] > button {
-            background: rgba(30, 20, 60, 0.6) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
-            border-radius: 10px !important;
-            color: #E8B189 !important;
-            font-size: 18px !important;
-            font-weight: 900 !important;
-            height: 34px !important;
-            width: 34px !important;
-            padding: 0 !important;
-            transition: all 0.2s ease !important;
-        }
-        [data-testid="stPopover"] > button:hover {
-            background: rgba(232, 177, 137, 0.2) !important;
-            border-color: #E8B189 !important;
-        }
-        [data-testid="stPopoverBody"] {
-            background: rgba(20, 12, 35, 0.98) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
-            border-radius: 12px !important;
-            padding: 12px !important;
-        }
-        [data-testid="stPopoverBody"] button {
-            background: rgba(30, 20, 60, 0.6) !important;
-            border: 1px solid rgba(232, 177, 137, 0.3) !important;
-            border-radius: 8px !important;
-            color: #F5E6D3 !important;
-            font-size: 12px !important;
-            margin-bottom: 4px !important;
         }
 
         /* === TIMESTAMP BUBBLE === */
@@ -312,19 +314,31 @@ def inject_rei_css():
 
         /* === MOBILE TWEAK === */
         @media (max-width: 480px) {
+            .main .block-container {
+                padding: 62px 0.4rem 0.4rem 0.4rem !important;
+            }
             .rei-header-bar {
-                padding: 8px 46px 8px 46px;
-                min-height: 40px;
+                padding: 8px 54px 8px 54px !important;
+                min-height: 46px !important;
             }
-            .rei-header-bar .rei-title { font-size: 15px; }
-            .rei-header-bar .rei-time { font-size: 10px; padding: 3px 8px; }
-            .main .block-container > div:has(.rei-header-bar) + div {
-                margin-top: -46px !important;
-            }
-            .main .block-container > div:has(.rei-header-bar) + div button {
+            .rei-header-bar .rei-title { font-size: 15px !important; }
+            .rei-header-bar .rei-time { font-size: 10px !important; padding: 3px 8px !important; }
+            .main .block-container button[key="btn_back_rei"] {
+                top: 6px !important;
+                left: 8px !important;
                 height: 34px !important;
                 width: 38px !important;
                 font-size: 15px !important;
+            }
+            .main .block-container [data-testid="stPopover"] {
+                top: 6px !important;
+                right: 8px !important;
+                width: 38px !important;
+            }
+            .main .block-container [data-testid="stPopover"] > button {
+                height: 34px !important;
+                width: 38px !important;
+                font-size: 16px !important;
             }
         }
     </style>
