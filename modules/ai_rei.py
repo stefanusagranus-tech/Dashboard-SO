@@ -250,3 +250,71 @@ Kalau data kurang, BILANG: "Data saat ini belum cukup untuk menyimpulkan."
 === PERSONA ===
 Cerdas, tenang, profesional. Panggil "Bos" max 1x per respons.
 """
+
+
+# =========================================================
+# REI PROMPT BUILDER
+# =========================================================
+def build_rei_prompt(user_question, data_context=""):
+    """Build prompt lengkap buat Rei (single-turn)."""
+    _prompt = f"""{REI_SYSTEM_PROMPT}
+
+=== DATA KONTEKS ===
+{data_context if data_context else "(Tidak ada data spesifik. Jawab berdasarkan pertanyaan user.)"}
+
+=== PERTANYAAN USER ===
+{user_question}
+
+=== JAWABAN REI ===
+"""
+    return _prompt
+
+
+# =========================================================
+# REI CHAT — Multi-turn dengan history
+# =========================================================
+def rei_chat(user_message, conversation_history=None, data_context=""):
+    """
+    Rei chat dengan conversation history.
+    
+    Args:
+        user_message: pesan user
+        conversation_history: list of {"role": "user"/"assistant", "content": str}
+        data_context: string data dari DB
+    
+    Returns:
+        dict: {"text": str, "model": str|None, "error": str|None}
+    """
+    if not user_message:
+        return {"text": "", "model": None, "error": "Empty message"}
+
+    # Bangun history string (max 6 pesan terakhir)
+    _history_str = ""
+    if conversation_history:
+        for _msg in conversation_history[-6:]:
+            _role = "User" if _msg.get("role") == "user" else "Rei"
+            _history_str += f"{_role}: {_msg.get('content', '')[:200]}\n"
+
+    _prompt = f"""{REI_SYSTEM_PROMPT}
+
+=== RIWAYAT CHAT ===
+{_history_str if _history_str else "(Belum ada riwayat)"}
+
+=== DATA KONTEKS ===
+{data_context if data_context else "(Tidak ada data spesifik)"}
+
+=== PERTANYAAN USER ===
+{user_message}
+
+=== JAWABAN REI ===
+"""
+
+    _text, _model, _err = rei_analisis(_prompt, prefer="gemini")
+
+    if _text:
+        return {"text": _text, "model": _model, "error": None}
+    return {
+        "text": f"❌ Semua AI gagal. Error: {str(_err)[:200]}",
+        "model": None,
+        "error": _err,
+    }
