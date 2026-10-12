@@ -1,12 +1,13 @@
 """
-AI Chat Rei — Analis SO (AI-3) v4
+AI Chat Rei — Analis SO (AI-3) v6
 ===================================
-Layout: WhatsApp-style FULL SCREEN (no page scroll)
-Changelog v4:
-- Chat container auto-height (100vh - header - input)
-- Footer dihapus
-- Command hint dihapus (pindah ke /help)
-- Compact header (2 baris)
+Layout: WhatsApp-style, minimalis, bubble chat + timestamp
+Changelog v6:
+- Header 1 baris: back + nama + jam + titik 3 (popover)
+- Bubble chat dengan timestamp per pesan
+- Footer DIHAPUS
+- Full screen, no page scroll
+- Popover isi: analisis + export + help + reset
 """
 
 import streamlit as st
@@ -101,28 +102,27 @@ def _export_rei_ppt(history, session_id):
     st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
 
 # =========================================================
-# CSS — FULL SCREEN LAYOUT
+# CSS — FULL SCREEN + BUBBLE CHAT
 # =========================================================
 def inject_rei_css():
     st.markdown("""
     <style>
-        /* === HIDE SIDEBAR & SCROLL === */
+        /* === HIDE STREAMLIT CHROME === */
         [data-testid="stSidebar"] { display: none !important; }
         [data-testid="stSidebarCollapsedControl"] { display: none !important; }
-
-        /* === COMPACT LAYOUT === */
-        .main .block-container {
-            max-width: 100% !important;
-            padding: 0.5rem 0.8rem 0 0.8rem !important;
-            margin: 0 !important;
-        }
-        .main { padding-top: 0 !important; }
-        .stApp { padding-top: 0 !important; }
         header[data-testid="stHeader"] { display: none !important; }
-
-        /* === HIDE STREAMLIT FOOTER === */
         footer { display: none !important; }
         #MainMenu { display: none !important; }
+        [data-testid="stToolbar"] { display: none !important; }
+        [data-testid="stDecoration"] { display: none !important; }
+
+        /* === ZERO PADDING === */
+        .main .block-container {
+            max-width: 100% !important;
+            padding: 0.4rem 0.6rem 0 0.6rem !important;
+            margin: 0 !important;
+        }
+        .main, .stApp, section.main { padding: 0 !important; }
 
         /* === COLORS === */
         .stApp, .stApp * { color: #F5E6D3 !important; }
@@ -131,52 +131,31 @@ def inject_rei_css():
             background: rgba(30, 20, 60, 0.6) !important;
         }
 
-        /* === HEADER COMPACT === */
-        .rei-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 4px 12px;
-            background: rgba(20, 12, 35, 0.95);
-            border-bottom: 1.5px solid rgba(232, 177, 137, 0.5);
-            border-radius: 8px;
-            margin-bottom: 6px;
-        }
-        .rei-title {
-            font-family: Cinzel, serif;
-            font-size: 16px;
-            font-weight: 900;
-            color: #E8B189;
-            letter-spacing: 1.5px;
-            text-shadow: 0 0 10px rgba(232, 177, 137, 0.5);
-        }
-        .rei-subtitle {
-            font-family: JetBrains Mono, monospace;
-            font-size: 8px;
-            color: #A89B8E;
-        }
-        .rei-status {
-            font-family: JetBrains Mono, monospace;
-            font-size: 9px;
-            color: #7FB99B;
-            text-align: right;
+        /* === CHAT MESSAGES — BUBBLE === */
+        [data-testid="stChatMessage"] {
+            padding: 0.6rem 1rem !important;
+            margin-bottom: 0.8rem !important;
+            border-radius: 18px !important;
+            max-width: 85% !important;
+            transition: all 0.2s ease !important;
         }
 
-        /* === CHAT MESSAGES === */
-        [data-testid="stChatMessage"] {
-            padding: 0.5rem 0.9rem !important;
-            margin-bottom: 0.4rem !important;
-            border-radius: 14px !important;
-        }
+        /* User — kanan */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
-            background: linear-gradient(135deg, rgba(127, 185, 155, 0.25), rgba(232, 177, 137, 0.15)) !important;
-            border: 1.5px solid rgba(127, 185, 155, 0.6) !important;
-            margin-left: 15% !important;
+            background: linear-gradient(135deg, rgba(127, 185, 155, 0.85), rgba(232, 177, 137, 0.6)) !important;
+            border: 1px solid rgba(127, 185, 155, 0.8) !important;
+            margin-left: auto !important;
+            margin-right: 0 !important;
+            border-bottom-right-radius: 4px !important;
         }
+
+        /* Assistant — kiri */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
-            background: linear-gradient(135deg, rgba(30, 20, 60, 0.85), rgba(76, 29, 149, 0.65)) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
-            margin-right: 15% !important;
+            background: linear-gradient(135deg, rgba(30, 20, 60, 0.95), rgba(76, 29, 149, 0.85)) !important;
+            border: 1px solid rgba(232, 177, 137, 0.6) !important;
+            margin-right: auto !important;
+            margin-left: 0 !important;
+            border-bottom-left-radius: 4px !important;
         }
 
         /* === CHAT INPUT === */
@@ -186,7 +165,7 @@ def inject_rei_css():
             border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
         }
 
-        /* === SCROLLABLE CHAT CONTAINER === */
+        /* === SCROLLABLE CONTAINER === */
         div[data-testid="stVerticalBlock"] > div[style*="height"] {
             background: rgba(20, 12, 35, 0.4) !important;
             border-radius: 12px !important;
@@ -206,15 +185,22 @@ def inject_rei_css():
             color: #E8B189;
         }
 
-        /* === POPOVER === */
+        /* === POPOVER (titik 3) === */
         [data-testid="stPopover"] > button {
-            background: linear-gradient(135deg, rgba(232, 177, 137, 0.15), rgba(127, 185, 155, 0.15)) !important;
-            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
-            border-radius: 12px !important;
+            background: rgba(30, 20, 60, 0.6) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
+            border-radius: 10px !important;
             color: #E8B189 !important;
             font-size: 18px !important;
-            height: 44px !important;
+            font-weight: 900 !important;
+            height: 38px !important;
+            width: 38px !important;
+            padding: 0 !important;
             transition: all 0.2s ease !important;
+        }
+        [data-testid="stPopover"] > button:hover {
+            background: rgba(232, 177, 137, 0.2) !important;
+            border-color: #E8B189 !important;
         }
         [data-testid="stPopoverBody"] {
             background: rgba(20, 12, 35, 0.98) !important;
@@ -230,6 +216,24 @@ def inject_rei_css():
             font-size: 12px !important;
             margin-bottom: 4px !important;
         }
+
+        /* === HEADER TITLE === */
+        .rei-title {
+            font-family: Cinzel, serif;
+            font-size: 16px;
+            font-weight: 900;
+            color: #E8B189;
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 8px rgba(232, 177, 137, 0.5);
+        }
+
+        /* === TIMESTAMP BUBBLE === */
+        .bubble-time {
+            font-family: JetBrains Mono, monospace;
+            font-size: 8px;
+            color: rgba(245, 230, 211, 0.5);
+            margin-top: 2px;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -241,16 +245,19 @@ if not _REI_OK:
     st.stop()
     
 # =========================================================
-# HEADER COMPACT (1-2 baris)
+# SESSION STATE
 # =========================================================
 _session_id = get_or_create_session_id("rei")
 
-# Session state
 if "rei_history" not in st.session_state:
     with st.spinner("⏳ Load chat..."):
         _saved = load_messages("rei", _session_id, limit=100)
     st.session_state["rei_history"] = [
-        {"role": _m.get("role", "user"), "content": _m.get("content", "")}
+        {
+            "role": _m.get("role", "user"),
+            "content": _m.get("content", ""),
+            "time": _now_jkt().strftime("%H:%M"),
+        }
         for _m in _saved
     ]
 
@@ -264,24 +271,29 @@ if "rei_last_model" not in st.session_state:
 if not st.session_state["rei_history"]:
     _welcome = (
         "📊 **Halo Bos!** Aku Rei, analis SO Toko C383.\n\n"
-        "Aku bisa bantu analisis:\n"
+        "Aku bisa bantu:\n"
         "- 📈 Trend SO\n"
-        "- 📋 LPJ (Laporan Pertanggungjawaban)\n"
-        "- 🔮 Prediksi SO bulan depan\n"
-        "- 💡 Insight & rekomendasi audit\n"
-        "- 🔍 Top item selisih terbesar\n\n"
+        "- 📋 LPJ\n"
+        "- 🔮 Prediksi SO\n"
+        "- 💡 Insight audit\n"
+        "- 🔍 Top item selisih\n\n"
         "**Command:** `/trend` `/lpj` `/prediksi` `/item` `/help`\n\n"
         "Aku ANALIS — buat input data, tanya Yui ya 📦"
     )
-    st.session_state["rei_history"].append({"role": "assistant", "content": _welcome})
+    st.session_state["rei_history"].append({
+        "role": "assistant",
+        "content": _welcome,
+        "time": _now_jkt().strftime("%H:%M"),
+    })
     save_message("rei", _session_id, "assistant", _welcome)
 
 
-_total_msg = len(st.session_state["rei_history"])
-_model_str = st.session_state["rei_last_model"] or "—"
+# =========================================================
+# HEADER 1 BARIS — Back + Nama + Jam + Titik 3
+# =========================================================
+_time_str = _now_jkt().strftime("%H:%M")
 
-# Header
-_col_back, _col_title, _col_status = st.columns([1, 6, 2])
+_col_back, _col_title, _col_time, _col_menu = st.columns([1, 5, 2, 1])
 
 with _col_back:
     if st.button("←", key="btn_back_rei", help="Balik ke Dashboard"):
@@ -292,44 +304,87 @@ with _col_back:
 
 with _col_title:
     st.markdown(
-        f"<div class='rei-header'>"
-        f"<div>"
-        f"<span class='rei-title'>📊 REI</span> "
-        f"<span class='rei-subtitle'>Analis SO</span>"
-        f"</div>"
-        f"<div class='rei-status'>"
-        f"🧠 {_session_id[-12:]} | {_total_msg} pesan | ⚙️ {_model_str}"
-        f"</div>"
-        f"</div>",
+        "<div class='rei-title' style='padding-top: 8px;'>📊 REI</div>",
         unsafe_allow_html=True,
     )
 
-with _col_status:
-    _time_str = _now_jkt().strftime("%H:%M")
+with _col_time:
     st.markdown(
-        f"<div style='text-align: right; font-family: JetBrains Mono; "
-        f"font-size: 10px; color: #7FB99B; padding-top: 8px;'>"
-        f"● ONLINE<br>{_time_str} WIB</div>",
+        f"<div style='font-family: JetBrains Mono; font-size: 10px; "
+        f"color: #7FB99B; text-align: right; padding-top: 12px;'>"
+        f"⏰ {_time_str}</div>",
         unsafe_allow_html=True,
     )
-    
-# =========================================================
-# CHAT CONTAINER — FULL SCREEN SCROLLABLE
-# =========================================================
-# Hitung tinggi container biar pas 1 layar
-# 100vh - (header ~80px) - (input ~60px) - (margin ~40px) = ~ calc(100vh - 180px)
-# Streamlit butuh integer px, jadi kita pake ~520px sebagai default
-# Atau pake 500 biar aman di HP
 
-_CHAT_HEIGHT = 500  # ubah sesuai kebutuhan (HP: 500, desktop: 600)
+with _col_menu:
+    with st.popover("⋮", use_container_width=False):
+        st.markdown("**⚙️ Menu**")
+
+        st.caption("📈 ANALISIS")
+        if st.button("📈 Trend SO", use_container_width=True, key="pop_trend"):
+            st.session_state["rei_preset"] = COMMANDS["/trend"]
+            st.rerun()
+        if st.button("📋 LPJ SO", use_container_width=True, key="pop_lpj"):
+            st.session_state["rei_preset"] = COMMANDS["/lpj"]
+            st.rerun()
+        if st.button("🔮 Prediksi", use_container_width=True, key="pop_pred"):
+            st.session_state["rei_preset"] = COMMANDS["/prediksi"]
+            st.rerun()
+        if st.button("🔍 Top Item", use_container_width=True, key="pop_item"):
+            st.session_state["rei_preset"] = COMMANDS["/item"]
+            st.rerun()
+        if st.button("💡 Insight", use_container_width=True, key="pop_insight"):
+            st.session_state["rei_preset"] = COMMANDS["/insight"]
+            st.rerun()
+
+        st.divider()
+
+        st.caption("📤 EXPORT")
+        if st.button("📄 PDF", use_container_width=True, key="pop_pdf"):
+            _export_rei_pdf(st.session_state["rei_history"], _session_id)
+        if st.button("📊 PPT", use_container_width=True, key="pop_ppt"):
+            _export_rei_ppt(st.session_state["rei_history"], _session_id)
+
+        st.divider()
+
+        st.caption("⚙️ SISTEM")
+        _total_msg = len(st.session_state["rei_history"])
+        _model_str = st.session_state.get("rei_last_model") or "—"
+        st.caption(f"🧠 Session: `{_session_id[-12:]}`")
+        st.caption(f"💬 Total: {_total_msg} pesan")
+        st.caption(f"⚙️ Model: {_model_str}")
+
+        st.divider()
+
+        if st.button("💬 /help", use_container_width=True, key="pop_help"):
+            st.session_state["rei_preset"] = "/help"
+            st.rerun()
+        if st.button("🗑️ Reset Chat", use_container_width=True, key="pop_reset"):
+            clear_session("rei", _session_id)
+            st.session_state["rei_history"] = []
+            st.session_state["rei_last_model"] = None
+            st.rerun()
+
+# =========================================================
+# CHAT CONTAINER — BUBBLE + TIMESTAMP
+# =========================================================
+_CHAT_HEIGHT = 600  # ubah sesuai kebutuhan HP/desktop
 
 _chat_container = st.container(height=_CHAT_HEIGHT, border=False)
 
 with _chat_container:
     for _msg in st.session_state["rei_history"]:
         _role = _msg.get("role", "user")
+        _time_msg = _msg.get("time", _now_jkt().strftime("%H:%M"))
+
         with st.chat_message(_role, avatar="👤" if _role == "user" else "📊"):
             st.markdown(_msg.get("content", ""))
+            _align = "right" if _role == "user" else "left"
+            st.markdown(
+                f"<div class='bubble-time' style='text-align: {_align};'>"
+                f"● {_time_msg}</div>",
+                unsafe_allow_html=True,
+            )
 
 # =========================================================
 # HELPER: BUILD DATA CONTEXT (ITEM-LEVEL)
@@ -352,7 +407,9 @@ def _build_data_context():
                 _top_minus = sorted(_list_rak, key=lambda x: x["total"])[:5]
                 _ctx_parts.append("\n=== TOP 5 RAK MINUS ===")
                 for _r in _top_minus:
-                    _ctx_parts.append(f"- Rak {_r['rak_id']}: {fmt_rp_signed(_r['total'])} (PIC: {_r['pic']})")
+                    _ctx_parts.append(
+                        f"- Rak {_r['rak_id']}: {fmt_rp_signed(_r['total'])} (PIC: {_r['pic']})"
+                    )
 
             _pic_summary = {}
             for _r in _list_rak:
@@ -363,7 +420,9 @@ def _build_data_context():
             if _pic_summary:
                 _ctx_parts.append("\n=== DISTRIBUSI PER PIC ===")
                 for _pic, _data in sorted(_pic_summary.items(), key=lambda x: x[1]["total"]):
-                    _ctx_parts.append(f"- {_pic}: {fmt_rp_signed(_data['total'])} ({_data['rak_count']} rak)")
+                    _ctx_parts.append(
+                        f"- {_pic}: {fmt_rp_signed(_data['total'])} ({_data['rak_count']} rak)"
+                    )
 
         try:
             _net_sales = _get_net_sales_bulan()
@@ -399,7 +458,9 @@ def _build_data_context():
                 _grp = _df.groupby("so_date")["nominal_adjust"].sum().reset_index().sort_values("so_date")
                 _ctx_parts.append("\n=== TREND 7 HARI TERAKHIR ===")
                 for _, _r in _grp.iterrows():
-                    _ctx_parts.append(f"- {_r['so_date'].strftime('%d/%m')}: {fmt_rp_signed(_r['nominal_adjust'])}")
+                    _ctx_parts.append(
+                        f"- {_r['so_date'].strftime('%d/%m')}: {fmt_rp_signed(_r['nominal_adjust'])}"
+                    )
         except Exception as _e:
             print(f"[Rei ctx trend] {_e}")
 
@@ -407,7 +468,9 @@ def _build_data_context():
             _top = get_top_items(mode="bulan_ini", limit=15, only_minus=True)
             _items = _top.get("items", [])
             if _items:
-                _ctx_parts.append(f"\n=== TOP 15 ITEM SELISIH TERBESAR ({_top.get('periode', '-')}) ===")
+                _ctx_parts.append(
+                    f"\n=== TOP 15 ITEM SELISIH TERBESAR ({_top.get('periode', '-')}) ==="
+                )
                 for _i, _it in enumerate(_items, 1):
                     _ctx_parts.append(
                         f"{_i}. PLU {_it.get('plu', '-')} — {_it.get('nama_produk', '-')}\n"
@@ -423,62 +486,23 @@ def _build_data_context():
         return ""
         
 # =========================================================
-# CHAT INPUT + POPOVER
+# CHAT INPUT
 # =========================================================
 _preset = st.session_state.pop("rei_preset", "")
 
-_col_input, _col_pop = st.columns([8, 1])
-
-with _col_input:
-    _user_msg = st.chat_input("Tanya Rei...", key="rei_chat_input")
-
-with _col_pop:
-    with st.popover("⚡", use_container_width=True):
-        st.markdown("**⚡ Aksi Cepat**")
-
-        st.caption("📈 ANALISIS")
-        if st.button("📈 Trend SO", use_container_width=True, key="pop_trend"):
-            st.session_state["rei_preset"] = COMMANDS["/trend"]
-            st.rerun()
-        if st.button("📋 LPJ SO", use_container_width=True, key="pop_lpj"):
-            st.session_state["rei_preset"] = COMMANDS["/lpj"]
-            st.rerun()
-        if st.button("🔮 Prediksi", use_container_width=True, key="pop_pred"):
-            st.session_state["rei_preset"] = COMMANDS["/prediksi"]
-            st.rerun()
-        if st.button("🔍 Top Item", use_container_width=True, key="pop_item"):
-            st.session_state["rei_preset"] = COMMANDS["/item"]
-            st.rerun()
-        if st.button("💡 Insight", use_container_width=True, key="pop_insight"):
-            st.session_state["rei_preset"] = COMMANDS["/insight"]
-            st.rerun()
-
-        st.divider()
-        st.caption("📤 EXPORT")
-        if st.button("📄 PDF", use_container_width=True, key="pop_pdf"):
-            _export_rei_pdf(st.session_state["rei_history"], _session_id)
-        if st.button("📊 PPT", use_container_width=True, key="pop_ppt"):
-            _export_rei_ppt(st.session_state["rei_history"], _session_id)
-
-        st.divider()
-        if st.button("💬 /help", use_container_width=True, key="pop_help"):
-            st.session_state["rei_preset"] = "/help"
-            st.rerun()
-        if st.button("🗑️ Reset", use_container_width=True, key="pop_reset"):
-            clear_session("rei", _session_id)
-            st.session_state["rei_history"] = []
-            st.session_state["rei_last_model"] = None
-            st.rerun()
+_user_msg = st.chat_input("Tanya Rei...", key="rei_chat_input")
 
 if _preset and not _user_msg:
     _user_msg = _preset
-
+    
 # =========================================================
 # CHAT HANDLER
 # =========================================================
 if _user_msg:
     _parsed = _parse_command(_user_msg)
+    _time_now = _now_jkt().strftime("%H:%M")
 
+    # Handle /help
     if _parsed is None:
         _help_text = (
             "**📋 Command:**\n\n"
@@ -490,18 +514,36 @@ if _user_msg:
             "- `/help` — Command ini\n\n"
             "Atau ketik bebas."
         )
-        st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
+        st.session_state["rei_history"].append({
+            "role": "user",
+            "content": _user_msg,
+            "time": _time_now,
+        })
         save_message("rei", _session_id, "user", _user_msg)
-        st.session_state["rei_history"].append({"role": "assistant", "content": _help_text})
+        st.session_state["rei_history"].append({
+            "role": "assistant",
+            "content": _help_text,
+            "time": _time_now,
+        })
         save_message("rei", _session_id, "assistant", _help_text)
         st.rerun()
 
-    st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
+    # Simpan user message
+    st.session_state["rei_history"].append({
+        "role": "user",
+        "content": _user_msg,
+        "time": _time_now,
+    })
     save_message("rei", _session_id, "user", _user_msg)
 
     with _chat_container:
         with st.chat_message("user", avatar="👤"):
             st.markdown(_user_msg)
+            st.markdown(
+                f"<div class='bubble-time' style='text-align: right;'>"
+                f"● {_time_now}</div>",
+                unsafe_allow_html=True,
+            )
 
         with st.chat_message("assistant", avatar="📊"):
             with st.spinner("📊 Rei analisis data..."):
@@ -515,6 +557,7 @@ if _user_msg:
 
                 _resp = _result.get("text", "")
                 _model = _result.get("model")
+                _time_resp = _now_jkt().strftime("%H:%M")
 
                 st.markdown(_resp)
 
@@ -526,7 +569,21 @@ if _user_msg:
                     )
                     st.session_state["rei_last_model"] = _model
 
-                st.session_state["rei_history"].append({"role": "assistant", "content": _resp})
+                st.markdown(
+                    f"<div class='bubble-time' style='text-align: left;'>"
+                    f"● {_time_resp}</div>",
+                    unsafe_allow_html=True,
+                )
+
+                st.session_state["rei_history"].append({
+                    "role": "assistant",
+                    "content": _resp,
+                    "time": _time_resp,
+                })
                 save_message("rei", _session_id, "assistant", _resp)
 
     st.rerun()
+    
+# =========================================================
+# TIDAK ADA FOOTER — full screen
+# =========================================================
