@@ -196,6 +196,40 @@ def inject_rei_css():
             padding: 1px 5px !important;
             border-radius: 3px !important;
         }
+        /* Popover styling */
+        [data-testid="stPopover"] > button {
+            background: linear-gradient(135deg, rgba(232, 177, 137, 0.15), rgba(127, 185, 155, 0.15)) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
+            border-radius: 12px !important;
+            color: #E8B189 !important;
+            font-size: 18px !important;
+            height: 48px !important;
+            transition: all 0.2s ease !important;
+        }
+        [data-testid="stPopover"] > button:hover {
+            background: linear-gradient(135deg, rgba(232, 177, 137, 0.3), rgba(127, 185, 155, 0.25)) !important;
+            border-color: #E8B189 !important;
+            box-shadow: 0 0 12px rgba(232, 177, 137, 0.4) !important;
+        }
+        [data-testid="stPopoverBody"] {
+            background: rgba(20, 12, 35, 0.98) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
+            border-radius: 12px !important;
+            padding: 12px !important;
+        }
+        [data-testid="stPopoverBody"] button {
+            background: rgba(30, 20, 60, 0.6) !important;
+            border: 1px solid rgba(232, 177, 137, 0.3) !important;
+            border-radius: 8px !important;
+            color: #F5E6D3 !important;
+            font-size: 12px !important;
+            margin-bottom: 4px !important;
+            transition: all 0.15s ease !important;
+        }
+        [data-testid="stPopoverBody"] button:hover {
+            background: rgba(232, 177, 137, 0.2) !important;
+            border-color: #E8B189 !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -300,56 +334,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# =========================================================
-# TOOLBAR AKSI CEPAT + EXPORT
-# =========================================================
-st.markdown("#### ⚡ Analisis Cepat")
-_c1, _c2, _c3, _c4, _c5 = st.columns(5)
-
-with _c1:
-    if st.button("📈 Trend SO", width="stretch", key="btn_rei_trend"):
-        st.session_state["rei_preset"] = COMMANDS["/trend"]
-
-with _c2:
-    if st.button("📋 LPJ SO", width="stretch", key="btn_rei_lpj"):
-        st.session_state["rei_preset"] = COMMANDS["/lpj"]
-
-with _c3:
-    if st.button("🔮 Prediksi", width="stretch", key="btn_rei_prediksi"):
-        st.session_state["rei_preset"] = COMMANDS["/prediksi"]
-
-with _c4:
-    if st.button("🔍 Top Item", width="stretch", key="btn_rei_item"):
-        st.session_state["rei_preset"] = COMMANDS["/item"]
-
-with _c5:
-    if st.button("🗑️ Reset", width="stretch", key="btn_rei_reset"):
-        clear_session("rei", _session_id)
-        st.session_state["rei_history"] = []
-        st.session_state["rei_last_model"] = None
-        st.rerun()
-
-# === EXPORT ROW (stub — siap diisi nanti) ===
-_c1e, _c2e, _c3e, _c4e = st.columns([1, 1, 1, 2])
-with _c1e:
-    if st.button("📄 Export PDF", width="stretch", key="btn_rei_export_pdf"):
-        _export_rei_pdf(st.session_state["rei_history"], _session_id)
-with _c2e:
-    if st.button("📊 Export PPT", width="stretch", key="btn_rei_export_ppt"):
-        _export_rei_ppt(st.session_state["rei_history"], _session_id)
-with _c3e:
-    if st.button("💬 /help", width="stretch", key="btn_rei_help"):
-        st.session_state["rei_preset"] = "/help"
-
-st.markdown(
-    "<div class='cmd-hint'>💡 <b>Command:</b> "
-    "<code>/trend</code> <code>/lpj</code> <code>/prediksi</code> "
-    "<code>/insight</code> <code>/item</code> <code>/help</code></div>",
-    unsafe_allow_html=True,
-)
-
-st.markdown("---")
 
 
 # =========================================================
@@ -474,70 +458,81 @@ def _build_data_context():
 
 
 # =========================================================
-# CHAT INPUT
+# CHAT INPUT + POPOVER QUICK ACTION
 # =========================================================
 _preset = st.session_state.pop("rei_preset", "")
-_user_msg = st.chat_input("Tanya Rei soal analisis SO...", key="rei_chat_input")
 
+_col_input, _col_pop = st.columns([10, 1])
+
+with _col_input:
+    _user_msg = st.chat_input("Tanya Rei soal analisis SO...", key="rei_chat_input")
+
+with _col_pop:
+    with st.popover("⚡", use_container_width=True):
+        st.markdown(
+            "<div style='font-family: Cinzel, serif; font-size: 13px; "
+            "color: #E8B189; font-weight: 700; margin-bottom: 8px;'>"
+            "⚡ Aksi Cepat</div>",
+            unsafe_allow_html=True,
+        )
+
+        # === ANALISIS ===
+        st.markdown(
+            "<div style='font-size: 10px; color: #7FB99B; "
+            "letter-spacing: 1px; margin: 4px 0;'>📈 ANALISIS</div>",
+            unsafe_allow_html=True,
+        )
+
+        if st.button("📈 Trend SO", use_container_width=True, key="pop_trend"):
+            st.session_state["rei_preset"] = COMMANDS["/trend"]
+            st.rerun()
+
+        if st.button("📋 LPJ SO", use_container_width=True, key="pop_lpj"):
+            st.session_state["rei_preset"] = COMMANDS["/lpj"]
+            st.rerun()
+
+        if st.button("🔮 Prediksi", use_container_width=True, key="pop_pred"):
+            st.session_state["rei_preset"] = COMMANDS["/prediksi"]
+            st.rerun()
+
+        if st.button("🔍 Top Item", use_container_width=True, key="pop_item"):
+            st.session_state["rei_preset"] = COMMANDS["/item"]
+            st.rerun()
+
+        if st.button("💡 Insight", use_container_width=True, key="pop_insight"):
+            st.session_state["rei_preset"] = COMMANDS["/insight"]
+            st.rerun()
+
+        # === EXPORT ===
+        st.markdown("---")
+        st.markdown(
+            "<div style='font-size: 10px; color: #7FB99B; "
+            "letter-spacing: 1px; margin: 4px 0;'>📤 EXPORT</div>",
+            unsafe_allow_html=True,
+        )
+
+        if st.button("📄 PDF", use_container_width=True, key="pop_pdf"):
+            _export_rei_pdf(st.session_state["rei_history"], _session_id)
+
+        if st.button("📊 PPT", use_container_width=True, key="pop_ppt"):
+            _export_rei_ppt(st.session_state["rei_history"], _session_id)
+
+        # === UTILITY ===
+        st.markdown("---")
+
+        if st.button("💬 /help", use_container_width=True, key="pop_help"):
+            st.session_state["rei_preset"] = "/help"
+            st.rerun()
+
+        if st.button("🗑️ Reset", use_container_width=True, key="pop_reset"):
+            clear_session("rei", _session_id)
+            st.session_state["rei_history"] = []
+            st.session_state["rei_last_model"] = None
+            st.rerun()
+
+# Handle preset (dari tombol popover)
 if _preset and not _user_msg:
     _user_msg = _preset
-
-if _user_msg:
-    # === PARSE COMMAND ===
-    _parsed = _parse_command(_user_msg)
-
-    # === HANDLE /help ===
-    if _parsed is None:
-        _help_text = (
-            "**📋 Command yang tersedia:**\n\n"
-            "- `/trend` — Analisis trend SO bulan ini\n"
-            "- `/lpj` — Laporan Pertanggungjawaban\n"
-            "- `/prediksi` — Forecast bulan depan\n"
-            "- `/insight` — Insight rak & PIC\n"
-            "- `/item` — Top 10 item selisih terbesar\n"
-            "- `/help` — Tampilkan command ini\n\n"
-            "Atau ketik pertanyaan bebas — Rei bakal jawab."
-        )
-        st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
-        save_message("rei", _session_id, "user", _user_msg)
-        st.session_state["rei_history"].append({"role": "assistant", "content": _help_text})
-        save_message("rei", _session_id, "assistant", _help_text)
-        st.rerun()
-
-    # === SIMPAN USER MSG (yang udah di-parse) ===
-    st.session_state["rei_history"].append({"role": "user", "content": _user_msg})
-    save_message("rei", _session_id, "user", _user_msg)
-
-    with st.chat_message("user", avatar="👤"):
-        st.markdown(_user_msg)
-
-    with st.chat_message("assistant", avatar="📊"):
-        with st.spinner("📊 Rei analisis data..."):
-            _data_context = _build_data_context()
-
-            _result = rei_chat(
-                user_message=_user_msg,
-                conversation_history=st.session_state["rei_history"],
-                data_context=_data_context,
-            )
-
-            _resp = _result.get("text", "")
-            _model = _result.get("model")
-
-            st.markdown(_resp)
-
-            if _model:
-                st.markdown(
-                    f"<div style='text-align: right; margin-top: 4px;'>"
-                    f"<span class='model-badge'>⚙️ {_model}</span></div>",
-                    unsafe_allow_html=True,
-                )
-                st.session_state["rei_last_model"] = _model
-
-            st.session_state["rei_history"].append({"role": "assistant", "content": _resp})
-            save_message("rei", _session_id, "assistant", _resp)
-
-    st.rerun()
 
 
 # =========================================================
