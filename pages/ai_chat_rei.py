@@ -1,13 +1,13 @@
 """
-AI Chat Rei — Analis SO (AI-3) v6
+AI Chat Rei — Analis SO (AI-3) v8
 ===================================
-Layout: WhatsApp-style, minimalis, bubble chat + timestamp
-Changelog v6:
-- Header 1 baris: back + nama + jam + titik 3 (popover)
-- Bubble chat dengan timestamp per pesan
-- Footer DIHAPUS
-- Full screen, no page scroll
-- Popover isi: analisis + export + help + reset
+Layout: WhatsApp-style, full screen, bubble chat + timestamp
+Changelog v8:
+- Header 1 baris: [←] [📊 REI] [⏰ jam] [⋮] — semua sejajar horizontal
+- Bubble chat dengan timestamp asli dari DB (created_at)
+- Restore dialog (modal) untuk load sesi lama
+- New Chat & Hapus Sesi di popover
+- Session ID persistent (gak reset jam 12 malam)
 """
 
 import streamlit as st
@@ -36,6 +36,7 @@ try:
     from modules.ai_rei import rei_chat, rei_analisis
     from modules.chat_memory import (
         save_message, load_messages, get_or_create_session_id, clear_session,
+        new_session_id, get_session_list, set_session_id, load_messages_by_session,
     )
     from modules.yui_rekap import (
         rekap_so, get_top_items, get_items_by_rak,
@@ -100,9 +101,9 @@ def _export_rei_pdf(history, session_id):
 
 def _export_rei_ppt(history, session_id):
     st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
-
+    
 # =========================================================
-# CSS — FULL SCREEN + BUBBLE CHAT
+# CSS — FULL SCREEN + BUBBLE + HEADER
 # =========================================================
 def inject_rei_css():
     st.markdown("""
@@ -139,8 +140,6 @@ def inject_rei_css():
             max-width: 85% !important;
             transition: all 0.2s ease !important;
         }
-
-        /* User — kanan */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
             background: linear-gradient(135deg, rgba(127, 185, 155, 0.85), rgba(232, 177, 137, 0.6)) !important;
             border: 1px solid rgba(127, 185, 155, 0.8) !important;
@@ -148,8 +147,6 @@ def inject_rei_css():
             margin-right: 0 !important;
             border-bottom-right-radius: 4px !important;
         }
-
-        /* Assistant — kiri */
         [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
             background: linear-gradient(135deg, rgba(30, 20, 60, 0.95), rgba(76, 29, 149, 0.85)) !important;
             border: 1px solid rgba(232, 177, 137, 0.6) !important;
@@ -173,6 +170,23 @@ def inject_rei_css():
             padding: 8px !important;
         }
 
+        /* === HEADER 1 BARIS — SEJAJAR === */
+        [data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) {
+            align-items: center !important;
+            gap: 4px !important;
+            margin-bottom: 8px !important;
+            background: linear-gradient(135deg, rgba(30, 20, 60, 0.95), rgba(76, 29, 149, 0.6)) !important;
+            border-bottom: 2px solid rgba(232, 177, 137, 0.6) !important;
+            border-radius: 10px !important;
+            padding: 6px 10px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) button {
+            height: 34px !important;
+            min-height: 34px !important;
+            padding: 0 8px !important;
+        }
+
         /* === MODEL BADGE === */
         .model-badge {
             display: inline-block;
@@ -185,7 +199,7 @@ def inject_rei_css():
             color: #E8B189;
         }
 
-        /* === POPOVER (titik 3) === */
+        /* === POPOVER === */
         [data-testid="stPopover"] > button {
             background: rgba(30, 20, 60, 0.6) !important;
             border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
@@ -193,8 +207,8 @@ def inject_rei_css():
             color: #E8B189 !important;
             font-size: 18px !important;
             font-weight: 900 !important;
-            height: 38px !important;
-            width: 38px !important;
+            height: 34px !important;
+            width: 34px !important;
             padding: 0 !important;
             transition: all 0.2s ease !important;
         }
@@ -217,22 +231,24 @@ def inject_rei_css():
             margin-bottom: 4px !important;
         }
 
-        /* === HEADER TITLE === */
-        .rei-title {
-            font-family: Cinzel, serif;
-            font-size: 16px;
-            font-weight: 900;
-            color: #E8B189;
-            letter-spacing: 1.5px;
-            text-shadow: 0 0 8px rgba(232, 177, 137, 0.5);
-        }
-
         /* === TIMESTAMP BUBBLE === */
         .bubble-time {
             font-family: JetBrains Mono, monospace;
             font-size: 8px;
             color: rgba(245, 230, 211, 0.5);
             margin-top: 2px;
+        }
+
+        /* === DIALOG / MODAL === */
+        [data-testid="stDialog"] {
+            background: rgba(20, 12, 35, 0.98) !important;
+            border: 1.5px solid rgba(232, 177, 137, 0.6) !important;
+            border-radius: 16px !important;
+        }
+        [data-testid="stDialog"] h2 {
+            font-family: Cinzel, serif !important;
+            color: #E8B189 !important;
+            font-size: 18px !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -243,29 +259,32 @@ inject_rei_css()
 if not _REI_OK:
     st.error(f"❌ Gagal import: {_import_error}")
     st.stop()
-    
+
 # =========================================================
-# SESSION STATE
+# SESSION STATE — PAKAI TIMESTAMP ASLI DARI DB
 # =========================================================
 _session_id = get_or_create_session_id("rei")
 
 if "rei_history" not in st.session_state:
     with st.spinner("⏳ Load chat..."):
         _saved = load_messages("rei", _session_id, limit=100)
-    st.session_state["rei_history"] = [
-        {
+
+    st.session_state["rei_history"] = []
+    for _m in _saved:
+        st.session_state["rei_history"].append({
             "role": _m.get("role", "user"),
             "content": _m.get("content", ""),
-            "time": _now_jkt().strftime("%H:%M"),
-        }
-        for _m in _saved
-    ]
+            "time": _m.get("time_wib", "—"),
+        })
 
 if "rei_preset" not in st.session_state:
     st.session_state["rei_preset"] = ""
 
 if "rei_last_model" not in st.session_state:
     st.session_state["rei_last_model"] = None
+
+if "show_restore_dialog" not in st.session_state:
+    st.session_state["show_restore_dialog"] = False
 
 # Welcome
 if not st.session_state["rei_history"]:
@@ -286,14 +305,13 @@ if not st.session_state["rei_history"]:
         "time": _now_jkt().strftime("%H:%M"),
     })
     save_message("rei", _session_id, "assistant", _welcome)
-
-
+    
 # =========================================================
-# HEADER 1 BARIS — Back + Nama + Jam + Titik 3
+# HEADER 1 BARIS — SEJAJAR HORIZONTAL
 # =========================================================
 _time_str = _now_jkt().strftime("%H:%M")
 
-_col_back, _col_title, _col_time, _col_menu = st.columns([1, 5, 2, 1])
+_col_back, _col_title, _col_time, _col_menu = st.columns([1, 4, 2, 1])
 
 with _col_back:
     if st.button("←", key="btn_back_rei", help="Balik ke Dashboard"):
@@ -304,15 +322,18 @@ with _col_back:
 
 with _col_title:
     st.markdown(
-        "<div class='rei-title' style='padding-top: 8px;'>📊 REI</div>",
+        "<div style='font-family: Cinzel, serif; font-size: 16px; font-weight: 900; "
+        "color: #E8B189; letter-spacing: 1.5px; padding-top: 4px; "
+        "text-shadow: 0 0 8px rgba(232, 177, 137, 0.5);'>"
+        "📊 REI</div>",
         unsafe_allow_html=True,
     )
 
 with _col_time:
     st.markdown(
         f"<div style='font-family: JetBrains Mono; font-size: 10px; "
-        f"color: #7FB99B; text-align: right; padding-top: 12px;'>"
-        f"⏰ {_time_str}</div>",
+        f"color: #7FB99B; text-align: right; padding-top: 8px; "
+        f"font-weight: 700;'>⏰ {_time_str}</div>",
         unsafe_allow_html=True,
     )
 
@@ -347,6 +368,23 @@ with _col_menu:
 
         st.divider()
 
+        st.caption("💾 SESSION")
+        if st.button("📂 Restore Chat", use_container_width=True, key="pop_restore"):
+            st.session_state["show_restore_dialog"] = True
+            st.rerun()
+        if st.button("🆕 New Chat", use_container_width=True, key="pop_new"):
+            new_session_id("rei")
+            st.session_state["rei_history"] = []
+            st.session_state["rei_last_model"] = None
+            st.rerun()
+        if st.button("🗑️ Hapus Sesi Ini", use_container_width=True, key="pop_delete"):
+            clear_session("rei", _session_id)
+            st.session_state["rei_history"] = []
+            st.session_state["rei_last_model"] = None
+            st.rerun()
+
+        st.divider()
+
         st.caption("⚙️ SISTEM")
         _total_msg = len(st.session_state["rei_history"])
         _model_str = st.session_state.get("rei_last_model") or "—"
@@ -359,23 +397,101 @@ with _col_menu:
         if st.button("💬 /help", use_container_width=True, key="pop_help"):
             st.session_state["rei_preset"] = "/help"
             st.rerun()
-        if st.button("🗑️ Reset Chat", use_container_width=True, key="pop_reset"):
-            clear_session("rei", _session_id)
-            st.session_state["rei_history"] = []
-            st.session_state["rei_last_model"] = None
+            
+# =========================================================
+# RESTORE DIALOG (MODAL)
+# =========================================================
+@st.dialog("📂 Restore Chat History", width="large")
+def _restore_dialog():
+    st.markdown(
+        "<div style='font-family: Quicksand; font-size: 12px; color: #A89B8E;'>"
+        "Pilih sesi yang mau di-restore. Sesi lama tetap tersimpan di database."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("⏳ Load sesi..."):
+        _sessions = get_session_list("rei", limit=20)
+
+    if not _sessions:
+        st.info("📭 Belum ada sesi lain. Mulai chat dulu ya!")
+        if st.button("Tutup", use_container_width=True):
+            st.session_state["show_restore_dialog"] = False
             st.rerun()
+        return
+
+    st.markdown(f"**Total: {len(_sessions)} sesi**")
+    st.divider()
+
+    for _s in _sessions:
+        _sid = _s["session_id"]
+        _is_current = (_sid == _session_id)
+        _total = _s["total_messages"]
+        _preview = _s["preview"] or "(kosong)"
+
+        from modules.chat_memory import _format_time_wib, _format_date_wib
+        _last = _format_time_wib(_s["last_message_at"])
+        _date = _format_date_wib(_s["last_message_at"])
+
+        _marker = "🟢 **AKTIF**" if _is_current else ""
+
+        with st.container(border=True):
+            _c1, _c2 = st.columns([4, 1])
+            with _c1:
+                st.markdown(
+                    f"**`{_sid}`** {_marker}\n\n"
+                    f"💬 {_total} pesan · 🕐 {_date} {_last}\n\n"
+                    f"> {_preview}..."
+                )
+            with _c2:
+                if _is_current:
+                    st.button(
+                        "Aktif",
+                        key=f"restore_{_sid}",
+                        disabled=True,
+                        use_container_width=True,
+                    )
+                else:
+                    if st.button(
+                        "📂 Restore",
+                        key=f"restore_{_sid}",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        set_session_id("rei", _sid)
+                        _restored = load_messages_by_session("rei", _sid)
+                        st.session_state["rei_history"] = [
+                            {
+                                "role": _m.get("role", "user"),
+                                "content": _m.get("content", ""),
+                                "time": _m.get("time_wib", "—"),
+                            }
+                            for _m in _restored
+                        ]
+                        st.session_state["show_restore_dialog"] = False
+                        st.rerun()
+
+    st.divider()
+    if st.button("❌ Tutup", use_container_width=True):
+        st.session_state["show_restore_dialog"] = False
+        st.rerun()
+
+
+# Trigger dialog
+if st.session_state.get("show_restore_dialog"):
+    _restore_dialog()
 
 # =========================================================
 # CHAT CONTAINER — BUBBLE + TIMESTAMP
 # =========================================================
-_CHAT_HEIGHT = 600  # ubah sesuai kebutuhan HP/desktop
+_CHAT_HEIGHT = 600
 
 _chat_container = st.container(height=_CHAT_HEIGHT, border=False)
 
 with _chat_container:
     for _msg in st.session_state["rei_history"]:
         _role = _msg.get("role", "user")
-        _time_msg = _msg.get("time", _now_jkt().strftime("%H:%M"))
+        _time_msg = _msg.get("time", "—")
 
         with st.chat_message(_role, avatar="👤" if _role == "user" else "📊"):
             st.markdown(_msg.get("content", ""))
@@ -494,7 +610,8 @@ _user_msg = st.chat_input("Tanya Rei...", key="rei_chat_input")
 
 if _preset and not _user_msg:
     _user_msg = _preset
-    
+
+
 # =========================================================
 # CHAT HANDLER
 # =========================================================
@@ -502,7 +619,6 @@ if _user_msg:
     _parsed = _parse_command(_user_msg)
     _time_now = _now_jkt().strftime("%H:%M")
 
-    # Handle /help
     if _parsed is None:
         _help_text = (
             "**📋 Command:**\n\n"
@@ -528,7 +644,6 @@ if _user_msg:
         save_message("rei", _session_id, "assistant", _help_text)
         st.rerun()
 
-    # Simpan user message
     st.session_state["rei_history"].append({
         "role": "user",
         "content": _user_msg,
@@ -583,7 +698,3 @@ if _user_msg:
                 save_message("rei", _session_id, "assistant", _resp)
 
     st.rerun()
-    
-# =========================================================
-# TIDAK ADA FOOTER — full screen
-# =========================================================
