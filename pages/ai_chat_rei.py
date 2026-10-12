@@ -3,13 +3,6 @@ AI Chat Rei — Analis SO (AI-3) v10
 ====================================
 Layout: WhatsApp-style, full screen, bubble chat + timestamp
 Header: Custom Component v2 (STABIL, tombol nempel di header)
-
-Changelog v10:
-- Header pakai st.components.v2.component (Custom Component v2)
-- Tombol ← dan ⋮ NEMPEL di dalam header (position: fixed)
-- Bubble chat + timestamp per pesan
-- Restore dialog (modal) untuk load sesi lama
-- Session persistent (gak reset jam 12 malam)
 """
 
 import streamlit as st
@@ -29,8 +22,6 @@ st.set_page_config(
 CURRENT_THEME = get_theme_by_month()
 render_theme(CURRENT_THEME)
 render_theme_animations(CURRENT_THEME)
-
-
 # =========================================================
 # IMPORT MODULES
 # =========================================================
@@ -70,7 +61,6 @@ def fmt_rp(value):
     except Exception:
         return "Rp 0"
 
-
 # =========================================================
 # COMMAND PARSER
 # =========================================================
@@ -103,10 +93,9 @@ def _export_rei_pdf(history, session_id):
 
 def _export_rei_ppt(history, session_id):
     st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
-
-
+    
 # =========================================================
-# CSS — FULL SCREEN + BUBBLE + POPOVER (header dihandle component)
+# CSS — FULL SCREEN + BUBBLE + POPOVER
 # =========================================================
 def inject_rei_css():
     st.markdown("""
@@ -185,7 +174,7 @@ def inject_rei_css():
             color: #E8B189;
         }
 
-        /* === POPOVER (menu di bawah header) === */
+        /* === POPOVER === */
         [data-testid="stPopover"] > button {
             background: rgba(30, 20, 60, 0.6) !important;
             border: 1.5px solid rgba(232, 177, 137, 0.5) !important;
@@ -245,8 +234,7 @@ inject_rei_css()
 if not _REI_OK:
     st.error(f"❌ Gagal import: {_import_error}")
     st.stop()
-
-
+    
 # =========================================================
 # SESSION STATE — PAKAI TIMESTAMP ASLI DARI DB
 # =========================================================
@@ -296,11 +284,9 @@ if not st.session_state["rei_history"]:
     })
     save_message("rei", _session_id, "assistant", _welcome)
 
-
 # =========================================================
 # HEADER — CUSTOM COMPONENT V2
 # =========================================================
-# Register komponen (di luar function biar gak re-register)
 _rei_header_component = st.components.v2.component(
     name="rei_header",
     html="""
@@ -406,7 +392,6 @@ if _header_result.get("back"):
 if _header_result.get("menu"):
     st.session_state["rei_show_menu"] = not st.session_state["rei_show_menu"]
     st.rerun()
-
 
 # =========================================================
 # POPOVER MENU (muncul kalau tombol ⋮ diklik)
@@ -563,7 +548,7 @@ def _restore_dialog():
                         st.session_state["show_restore_dialog"] = False
                         st.rerun()
 
-  st.divider()
+    st.divider()
     if st.button("❌ Tutup", use_container_width=True):
         st.session_state["show_restore_dialog"] = False
         st.rerun()
@@ -573,7 +558,7 @@ def _restore_dialog():
 if st.session_state.get("show_restore_dialog"):
     _restore_dialog()
 
- # =========================================================
+# =========================================================
 # CHAT CONTAINER — BUBBLE + TIMESTAMP
 # =========================================================
 _CHAT_HEIGHT = 600
@@ -694,7 +679,6 @@ def _build_data_context():
         print(f"[Rei] Gagal build context: {_e}")
         return ""
 
-
 # =========================================================
 # CHAT INPUT
 # =========================================================
@@ -792,3 +776,4 @@ if _user_msg:
                 save_message("rei", _session_id, "assistant", _resp)
 
     st.rerun()
+
