@@ -864,21 +864,35 @@ if st.session_state.get("yui_rekap_hasil"):
                 st.error("❌ Module yui_export gak ada")
             else:
                 with st.spinner("Bikin PDF..."):
-                    _pdf_bytes = export_rekap_pdf(_hasil_for_export)
-        
-                # ✅ Cek kalau hasilnya error string (bukan PDF beneran)
-                if _pdf_bytes and _pdf_bytes.startswith(b"ERROR:"):
-                    _err_text = _pdf_bytes.decode("utf-8", errors="replace")
-                    st.error(f"❌ PDF Error:\n\n```\n{_err_text[:1500]}\n```")
-                elif _pdf_bytes and len(_pdf_bytes) > 500:
-                    st.session_state["yui_export_result"] = {
-                        "type": "pdf",
-                        "bytes": _pdf_bytes,
-                        "filename": f"laporan_so_{_hasil_for_export['periode'].replace(' ', '_')}.pdf",
-                    }
-                    st.rerun()
-                else:
-                    st.error("❌ Gagal bikin PDF. Hasil kosong.")
+                    try:
+                        _pdf_bytes = export_rekap_pdf(_hasil_for_export)
+                
+                        # Tampilkan debug
+                        st.info(
+                            f"🔍 Debug: tipe={type(_pdf_bytes).__name__}, "
+                            f"len={len(_pdf_bytes) if _pdf_bytes else 0}"
+                        )
+                
+                        if _pdf_bytes and _pdf_bytes.startswith(b"ERROR:"):
+                            _err_text = _pdf_bytes.decode("utf-8", errors="replace")
+                            st.error(f"❌ PDF Error dari yui_export:\n\n```\n{_err_text[:1500]}\n```")
+                        elif _pdf_bytes and len(_pdf_bytes) > 500:
+                            st.session_state["yui_export_result"] = {
+                                "type": "pdf",
+                                "bytes": _pdf_bytes,
+                                "filename": f"laporan_so_{_hasil_for_export['periode'].replace(' ', '_')}.pdf",
+                            }
+                            st.rerun()
+                        else:
+                            st.error(
+                                f"❌ Gagal bikin PDF. Hasil kosong.\n\n"
+                                f"Tipe: `{type(_pdf_bytes).__name__}`\n"
+                                f"Panjang: `{len(_pdf_bytes) if _pdf_bytes else 0}` bytes"
+                            )
+                    except Exception as _e_pdf:
+                        import traceback
+                        st.error(f"❌ Exception di export_rekap_pdf: {type(_e_pdf).__name__}: {str(_e_pdf)[:300]}")
+                        st.code(traceback.format_exc(), language="python")
             
     with _c_exp2:
         if st.button("📊 Excel", width="stretch", key="btn_exp_xlsx"):
