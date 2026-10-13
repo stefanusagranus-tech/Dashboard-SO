@@ -3,26 +3,24 @@ Router Yui — Data Entry (AI-2)
 ================================
 Endpoint untuk bot Yui.
 
-Bot ini fokus handle data entry:
+Fokus:
 - Input SO via chat
-- Input SPD via chat
 - Rekap SO
 - List item
-- Export laporan
-
-Flow: Android → FastAPI → Groq/Supabase → balik ke Android
+- Top items
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
-from services.yui_rekap import rekap_so, get_top_items, get_items_by_rak
+
 
 try:
     from services.ai_so_input import (
         yui_chat,
         parse_natural_language,
         parse_file_text,
+        yui_chat_with_context,
     )
     from services.yui_rekap import (
         rekap_so,
@@ -94,14 +92,11 @@ async def yui_health():
 
 
 # =========================================================
-# FIX BUG #4 — Chat dengan intent detection
+# CHAT — dengan intent detection
 # =========================================================
 @router.post("/chat", response_model=ChatResponse)
 async def yui_chat_endpoint(req: ChatRequest):
-    """
-    Endpoint chat Yui dengan intent detection.
-    Rekap → fetch data dulu, baru LLM.
-    """
+    """Endpoint chat Yui dengan intent detection."""
     if not _YUI_OK:
         raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
 
@@ -113,7 +108,7 @@ async def yui_chat_endpoint(req: ChatRequest):
         _history = [{"role": m.role, "content": m.content} for m in req.history]
 
         # ============================================================
-        # INTENT DETECTION — REKAP
+        # INTENT: REKAP
         # ============================================================
         _is_rekap = any(k in _msg for k in [
             "rekap", "rekapan", "total so", "list so",
@@ -128,6 +123,7 @@ async def yui_chat_endpoint(req: ChatRequest):
                 _mode = "minggu_ini"
 
             _data = rekap_so(mode=_mode)
+
             if not _data.get("success"):
                 return ChatResponse(
                     text=f"Waduh gagal rekap Bos: {_data.get('error', 'unknown')[:80]}",
@@ -135,7 +131,6 @@ async def yui_chat_endpoint(req: ChatRequest):
                     error=_data.get("error"),
                 )
 
-            # Build text context yang ringkas
             _list_rak_str = "\n".join([
                 f"- {r['rak_id']}: Rp {r['total']:,.0f} (PIC: {r.get('pic', '-')})"
                 for r in _data.get("list_rak", [])[:15]
@@ -150,42 +145,16 @@ DETAIL RAK:
 {_list_rak_str}
 """
 
-            # Prompt ke LLM — SURUH PAKAI DATA INI, JANGAN NGARANG
-            _prompt = f"""Kamu Yui, Data Entry Specialist Toko C383.
-
-=== DATA REAL DARI DATABASE ===
-{_context}
-=== END DATA ===
-
-Bos: "{req.message}"
-
-TUGAS: Rangkum data di atas jadi balasan singkat (max 8 baris).
-- PAKAI ANGKA DARI DATA DI ATAS, JANGAN NGARANG
-- Sebut periode, total rak, total item, total nominal
-- Kalau nominal negatif, bilang "selisih minus"
-- Gaya: santai, "Oke Bos", "Sip", "Beres"
-- Kalau user minta list, tampilkan list rak
-"""
-
-            _ok, _text, _model, _err = _call_yui_groq(
-                _prompt, function="chat_rekap", temperature=0.3,
+            _resp = yui_chat_with_context(
+                user_message=req.message,
+                data_context=_context,
+                intent="rekap",
+                conversation_history=_history,
             )
 
-            if not _ok:
-                return ChatResponse(
-                    text=f"Data ada tapi gagal format: {str(_err)[:80]}",
-                    intent="rekap",
-                    data={
-                        "total_rak": _data["total_rak"],
-                        "total_item": _data["total_item"],
-                        "total_nominal": _data["total_nominal"],
-                    },
-                    error=_err,
-                )
-
             return ChatResponse(
-                text=_text.strip(),
-                model=_model,
+                text=_resp.get("text", ""),
+                model=_resp.get("model"),
                 intent="rekap",
                 data={
                     "periode": _data["periode"],
@@ -194,11 +163,11 @@ TUGAS: Rangkum data di atas jadi balasan singkat (max 8 baris).
                     "total_nominal": _data["total_nominal"],
                     "list_rak": _data.get("list_rak", [])[:10],
                 },
-                error=None,
+                error=_resp.get("error"),
             )
 
         # ============================================================
-        # INTENT DETECTION — TOP ITEMS
+        # INTENT: TOP ITEMS
         # ============================================================
         _is_top = any(k in _msg for k in [
             "top item", "item minus", "item plus",
@@ -219,66 +188,33 @@ TUGAS: Rangkum data di atas jadi balasan singkat (max 8 baris).
                 ])
                 _context = f"PERIODE: {_data['periode']}\nTOP ITEMS:\n{_items_str}"
 
-                _prompt = f"""Kamu Yui. Data dari database:
-{_context}
-
-Bos: "{req.message}"
-Rangkum jadi balasan singkat (max 10 baris). PAKAI ANGKA DARI DATA."""
-
-                _ok, _text, _model, _err = _call_yui_groq(
-                    _prompt, function="chat_top", temperature=0.3,
+                _resp = yui_chat_with_context(
+                    user_message=req.message,
+                    data_context=_context,
+                    intent="top_items",
+                    conversation_history=_history,
                 )
-                if _ok:
-                    return ChatResponse(
-                        text=_text.strip(),
-                        model=_model,
-                        intent="top_items",
-                        data=_data,
-                    )
+
+                return ChatResponse(
+                    text=_resp.get("text", ""),
+                    model=_resp.get("model"),
+                    intent="top_items",
+                    data=_data,
+                    error=_resp.get("error"),
+                )
 
         # ============================================================
-        # FALLBACK — CHAT BIASA (TANPA DATA)
+        # FALLBACK: CHAT BIASA
         # ============================================================
-        _history_str = ""
-        for _m in _history[-6:]:
-            _history_str += f"{_m.get('role', 'user')}: {_m.get('content', '')}\n"
+        _resp = yui_chat(req.message, _history)
 
-        _prompt = f"""Kamu Yui — Data Entry & Audit Specialist Toko C383.
-
-=== TUGAS ===
-1. Input data SO & SPD
-2. Edit / hapus data
-3. Rekap data FAKTUAL
-4. Filter data
-
-=== BATASAN ===
-- JANGAN analisis trend/insight/rekomendasi
-- Kalau user minta analisis, arahin ke Rei
-- Kalau user minta data, JANGAN NGARANG. Bilang: "Kirim command
-  spesifik Bos — misal 'rekap SO bulan ini' biar aku query database."
-
-Riwayat: {_history_str}
-Bos: "{req.message}"
-
-Balas sebagai Yui, singkat max 6 baris.
-"""
-
-        _ok, _text, _model, _err = _call_yui_groq(
-            _prompt, function="chat", temperature=0.7,
-        )
-
-        if not _ok:
+        if isinstance(_resp, dict):
             return ChatResponse(
-                text=f"Waduh error Bos. ({str(_err)[:50]})",
+                text=_resp.get("text", ""),
+                model=_resp.get("model"),
                 intent="chat",
-                error=_err,
             )
-
-        return ChatResponse(
-            text=_text.strip(),
-            model=_model,
-            intent="chat",
-        )
+        return ChatResponse(text=str(_resp), intent="chat")
 
     except Exception as _e:
         import traceback
@@ -287,28 +223,92 @@ Balas sebagai Yui, singkat max 6 baris.
 
 
 # =========================================================
-# FIX BUG #1 — Parse langsung return, gak dibungkus
+# PARSE — Natural language
 # =========================================================
 @router.post("/parse")
 async def yui_parse_endpoint(req: ParseRequest):
-    """
-    Parse natural language input SO.
-    Response flat (gak double-nested).
-    """
+    """Parse natural language input SO. Response flat."""
     if not _YUI_OK:
         raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
 
     try:
         _parsed = parse_natural_language(req.text, req.rak_list or [])
-        # ✅ FIX: langsung return, jangan dibungkus {"success": True, "data": ...}
         return _parsed
-
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
 # =========================================================
-# FIX BUG #3 — items-by-rak pake fungsi baru
+# REKAP
+# =========================================================
+@router.post("/rekap")
+async def yui_rekap_endpoint(req: RekapRequest):
+    """Rekap SO."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+
+        _tgl_start = None
+        _tgl_end = None
+
+        if req.mode == "custom":
+            if not req.tgl_start or not req.tgl_end:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Mode custom butuh tgl_start dan tgl_end",
+                )
+            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
+            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
+
+        _hasil = rekap_so(
+            mode=req.mode,
+            tgl_start=_tgl_start,
+            tgl_end=_tgl_end,
+        )
+
+        if not _hasil.get("success"):
+            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal rekap"))
+
+        return _hasil
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# TOP ITEMS
+# =========================================================
+@router.post("/top-items")
+async def yui_top_items_endpoint(req: TopItemsRequest):
+    """Top item berdasarkan selisih."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        _hasil = get_top_items(
+            mode=req.mode,
+            limit=req.limit,
+            only_minus=req.only_minus,
+            order=req.order,
+        )
+
+        if not _hasil.get("success"):
+            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal"))
+
+        return _hasil
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# ITEMS BY RAK
 # =========================================================
 @router.get("/items-by-rak/{rak_id}")
 async def yui_items_by_rak_endpoint(rak_id: str):

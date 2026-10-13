@@ -587,6 +587,60 @@ Balas sebagai Yui.
         return {"text": f"Waduh error Bos. ({str(_err)[:50]})", "intent": "chat", "parsed": None}
 
     return {"text": _text.strip(), "intent": "chat", "parsed": None}
+
+# =========================================================
+# 💬 CHAT DENGAN DATA CONTEXT
+# =========================================================
+def yui_chat_with_context(user_message, data_context, intent="chat",
+                          conversation_history=None):
+    """
+    Yui chat dengan data context yang udah di-fetch dari Supabase.
+    Dipakai oleh router /chat ketika user minta rekap/top items.
+    """
+    if not user_message:
+        return {"text": "", "intent": intent, "model": None, "error": None}
+
+    _history_str = ""
+    if conversation_history:
+        for _msg in conversation_history[-6:]:
+            _history_str += f"{_msg.get('role', 'user')}: {_msg.get('content', '')}\n"
+
+    _prompt = f"""Kamu Yui — Data Entry & Audit Specialist Toko C383.
+
+=== DATA REAL DARI DATABASE ===
+{data_context}
+=== END DATA ===
+
+=== ATURAN KERAS ===
+1. WAJIB pakai angka dari data di atas, JANGAN NGARANG
+2. Kalau data kosong, bilang "Gak ada data Bos"
+3. Gaya: santai, "Oke Bos", "Sip", "Beres"
+4. Max 8 baris
+
+Riwayat: {_history_str}
+Bos: "{user_message}"
+
+Balas sebagai Yui.
+"""
+
+    _ok, _text, _model, _err = _call_yui_groq(
+        _prompt, function=f"chat_{intent}", temperature=0.3,
+    )
+
+    if not _ok:
+        return {
+            "text": f"Data ada tapi gagal format: {str(_err)[:80]}",
+            "intent": intent,
+            "model": None,
+            "error": _err,
+        }
+
+    return {
+        "text": _text.strip(),
+        "intent": intent,
+        "model": _model,
+        "error": None,
+    }
     
 # =========================================================
 # 🧠 PARSE NATURAL LANGUAGE
@@ -719,8 +773,9 @@ __all__ = [
     "parse_natural_language",
     "parse_file_text",
     "yui_chat",
+    "yui_chat_with_context",
     "validate_so_data",
     "generate_so_rekap",
     "set_log_buffer",
-    "_regex_fallback",           # ← TAMBAH
+    "_regex_fallback",
 ]
