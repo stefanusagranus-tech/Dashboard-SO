@@ -91,100 +91,119 @@ def _parse_command(text):
 # =========================================================
 # EXPORT PDF (PRODUCTION)
 # =========================================================
+# =========================================================
+# EXPORT PDF (DEBUG VERSION)
+# =========================================================
 def _export_rei_pdf(history, session_id):
-    """Generate PDF laporan analisis SO dari data Rei."""
+    """DEBUG VERSION — tampilkan error di UI."""
+    _debug_info = []
+
     try:
-        from modules.rei_export import generate_rei_pdf
-        from modules.yui_rekap import (
-            rekap_so, get_top_items,
-            _get_net_sales_bulan, _get_total_selisih_bulan,
-        )
+        _debug_info.append("🔍 STEP 1: Import modules...")
+        from modules.rei_export import generate_rei_pdf, ReiPDF, ReiTheme
+        _debug_info.append("   ✅ Import OK")
+
+        _debug_info.append("🔍 STEP 2: Test font loading...")
+        _theme = ReiTheme()
+        _test_pdf = ReiPDF(theme=_theme)
+        _debug_info.append(f"   ✅ ReiPDF init OK")
+        _debug_info.append(f"   font_title={_test_pdf.font_title}")
+        _debug_info.append(f"   font_body={_test_pdf.font_body}")
+        _debug_info.append(f"   font_mono={_test_pdf.font_mono}")
+
+        _debug_info.append("🔍 STEP 3: Test minimal PDF...")
+        _test_pdf.add_page()
+        _test_pdf.set_font(_test_pdf.font_title, "B", 12)
+        _test_pdf.cell(0, 10, "Test", new_x="LMARGIN", new_y="NEXT")
+        _test_bytes = bytes(_test_pdf.output())
+        _debug_info.append(f"   ✅ Minimal PDF works: {len(_test_bytes)} bytes")
+
+        _debug_info.append("🔍 STEP 4: Query data SO...")
+        from modules.yui_rekap import rekap_so, get_top_items, _get_net_sales_bulan, _get_total_selisih_bulan
         from modules.supabase_client import get_supabase
 
-        with st.spinner("📄 Generate PDF..."):
-            # === 1. QUERY DATA ===
-            _rekap = rekap_so(mode="bulan_ini")
-            if not _rekap.get("success"):
-                st.error("❌ Gagal ambil data SO. Coba lagi.")
-                return
+        _rekap = rekap_so(mode="bulan_ini")
+        _debug_info.append(f"   ✅ Rekap: success={_rekap.get('success')}")
 
-            _net_sales = _get_net_sales_bulan()
-            _total_selisih = _get_total_selisih_bulan()
+        _net_sales = _get_net_sales_bulan()
+        _total_selisih = _get_total_selisih_bulan()
+        _debug_info.append(f"   ✅ Net Sales: {_net_sales}")
+        _debug_info.append(f"   ✅ Total Selisih: {_total_selisih}")
 
-            # === 2. HITUNG LOST SALES ===
-            _sb = get_supabase()
-            _now = _now_jkt().date()
-            _start = _now.replace(day=1)
+        _debug_info.append("🔍 STEP 5: Hitung lost sales...")
+        _sb = get_supabase()
+        _now = _now_jkt().date()
+        _start = _now.replace(day=1)
+        _res = _sb.table("so_hasil").select("qty_var, nominal_adjust").gte("so_date", _start.isoformat()).lte("so_date", _now.isoformat()).execute()
+        _rows = _res.data or []
 
-            _res = (
-                _sb.table("so_hasil")
-                .select("qty_var, nominal_adjust")
-                .gte("so_date", _start.isoformat())
-                .lte("so_date", _now.isoformat())
-                .execute()
-            )
-            _rows = _res.data or []
+        _gross = 0
+        _plus = 0
+        for _r in _rows:
+            _qty = int(_r.get("qty_var", 0) or 0)
+            _nom = float(_r.get("nominal_adjust", 0) or 0)
+            if _qty < 0:
+                _gross += abs(_nom)
+            elif _qty > 0:
+                _plus += _nom
 
-            _gross = 0
-            _plus = 0
-            for _r in _rows:
-                _qty = int(_r.get("qty_var", 0) or 0)
-                _nom = float(_r.get("nominal_adjust", 0) or 0)
-                if _qty < 0:
-                    _gross += abs(_nom)
-                elif _qty > 0:
-                    _plus += _nom
+        _net = abs(_gross - _plus)
+        _debug_info.append(f"   ✅ Gross={_gross}, Plus={_plus}, Net={_net}")
 
-            _net = abs(_gross - _plus)
-            _shrinkage = (_net / _net_sales * 100) if _net_sales > 0 else 0
+        _debug_info.append("🔍 STEP 6: Top items & rak...")
+        _top_items_data = get_top_items(mode="bulan_ini", limit=30, only_minus=True)
+        _top_items = _top_items_data.get("items", [])
+        _debug_info.append(f"   ✅ Top Items: {len(_top_items)} item")
 
-            # === 3. TOP ITEMS & RAK ===
-            _top_items_data = get_top_items(mode="bulan_ini", limit=30, only_minus=True)
-            _top_items = _top_items_data.get("items", [])
+        _top_rak = []
+        if _rekap.get("success"):
+            _top_rak = sorted(_rekap.get("list_rak", []), key=lambda x: x["total"])[:10]
+        _debug_info.append(f"   ✅ Top Rak: {len(_top_rak)} rak")
 
-            _top_rak = []
-            if _rekap.get("success"):
-                _top_rak = sorted(_rekap.get("list_rak", []), key=lambda x: x["total"])[:5]
+        _debug_info.append("🔍 STEP 7: Build context...")
+        _ai_analysis = ""
+        for _msg in reversed(st.session_state.get("rei_history", [])):
+            if _msg.get("role") == "assistant":
+                _ai_analysis = _msg.get("content", "")[:2000]
+                break
+        _debug_info.append(f"   ✅ AI Analysis: {len(_ai_analysis)} chars")
 
-            # === 4. AI ANALYSIS DARI CHAT TERAKHIR ===
-            _ai_analysis = ""
-            for _msg in reversed(st.session_state.get("rei_history", [])):
-                if _msg.get("role") == "assistant":
-                    _ai_analysis = _msg.get("content", "")[:2000]
-                    break
+        _btsb_val = _net_sales * 0.0015
 
-            # === 5. BUILD CONTEXT ===
-            _data_context = {
-                "periode": _rekap.get("periode", "-"),
-                "rekap": _rekap,
-                "lost_sales": {
-                    "gross": _gross,
-                    "plus": _plus,
-                    "net": _net,
-                    "shrinkage": _shrinkage,
-                    "net_sales": _net_sales,
-                },
-                "btsb": {
-                    "net_sales": _net_sales,
-                    "btsb": _net_sales * 0.0015,
-                    "total_selisih": _total_selisih,
-                    "nsb": max(0, abs(_total_selisih) - _net_sales * 0.0015),
-                    "status": "PERLU PERHATIAN" if abs(_total_selisih) > _net_sales * 0.0015 else "DALAM TOLERANSI",
-                },
-                "chart_data": _rekap.get("chart_data", []),
-                "top_items": _top_items,
-                "top_rak": _top_rak,
-                "ai_analysis": _ai_analysis,
-            }
+        _data_context = {
+            "periode": _rekap.get("periode", "-"),
+            "rekap": _rekap,
+            "lost_sales": {
+                "gross": _gross,
+                "plus": _plus,
+                "net": _net,
+                "shrinkage": _net / _net_sales * 100 if _net_sales > 0 else 0,
+                "net_sales": _net_sales,
+            },
+            "btsb": {
+                "net_sales": _net_sales,
+                "btsb": _btsb_val,
+                "total_selisih": _total_selisih,
+                "nsb": max(0, abs(_total_selisih) - _btsb_val),
+                "status": "PERLU PERHATIAN" if abs(_total_selisih) > _btsb_val else "DALAM TOLERANSI",
+            },
+            "chart_data": _rekap.get("chart_data", []),
+            "top_items": _top_items,
+            "top_rak": _top_rak,
+            "ai_analysis": _ai_analysis,
+        }
+        _debug_info.append(f"   ✅ Context built")
 
-            # === 6. GENERATE PDF ===
-            _pdf_bytes = generate_rei_pdf(_data_context)
+        _debug_info.append("🔍 STEP 8: Generate full PDF...")
+        _pdf_bytes = generate_rei_pdf(_data_context)
+        _debug_info.append(f"   ✅ PDF generated: {len(_pdf_bytes) if _pdf_bytes else 0} bytes")
 
-            if not _pdf_bytes:
-                st.error("❌ Gagal generate PDF. Cek log Streamlit Cloud.")
-                return
+        # === TAMPILKAN DEBUG ===
+        with st.expander("🔍 Debug Info — SUCCESS", expanded=True):
+            for _d in _debug_info:
+                st.text(_d)
 
-            # === 7. DOWNLOAD BUTTON ===
+        if _pdf_bytes:
             _filename = f"Laporan_SO_C383_{_now_jkt().strftime('%Y%m%d_%H%M')}.pdf"
             st.download_button(
                 label="📥 Download PDF",
@@ -193,12 +212,22 @@ def _export_rei_pdf(history, session_id):
                 mime="application/pdf",
                 use_container_width=True,
                 type="primary",
-                key=f"download_pdf_{_filename}",
             )
-            st.success(f"✅ PDF siap: **{_filename}**")
+            st.success(f"✅ PDF siap: {_filename}")
+        else:
+            st.error("❌ PDF bytes kosong")
 
     except Exception as _e:
-        st.error(f"❌ Error: {str(_e)[:200]}")
+        # === TAMPILKAN DEBUG + ERROR ===
+        with st.expander("🔍 Debug Info — ERROR", expanded=True):
+            for _d in _debug_info:
+                st.text(_d)
+
+        st.error(f"❌ ERROR: {type(_e).__name__}: {str(_e)[:300]}")
+
+        import traceback
+        st.code(traceback.format_exc(), language="python")
+
         print(f"[REI PDF ERROR] {_e}")
         import traceback
         print(traceback.format_exc())
