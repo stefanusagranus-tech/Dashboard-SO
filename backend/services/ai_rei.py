@@ -12,7 +12,7 @@ Rei adalah ANALIS khusus SO:
 Rei BUKAN data entry — itu tugasnya Yui.
 """
 
-import streamlit as st
+import os
 import json
 import re
 from datetime import datetime, date, timedelta
@@ -36,7 +36,7 @@ def _call_gemini(prompt, model="gemini-3.5-flash"):
         from google import genai
         from google.genai import types as genai_types
 
-        _api_key = st.secrets.get("GEMINI_API_KEY_REI", "")
+        _api_key = os.getenv("GEMINI_API_KEY_REI", "")
         if not _api_key:
             return None, "GEMINI_API_KEY_REI kosong"
 
@@ -76,7 +76,7 @@ def _call_groq(prompt, model="openai/gpt-oss-120b"):
     try:
         from groq import Groq
 
-        _api_key = st.secrets.get("GROQ_API_KEY_REI", "")
+        _api_key = os.getenv("GROQ_API_KEY_REI", "")
         if not _api_key:
             return None, "GROQ_API_KEY_REI kosong"
 
@@ -122,7 +122,7 @@ def _call_openrouter(prompt, model="openai/gpt-oss-120b:free"):
     try:
         from openai import OpenAI
 
-        _api_key = st.secrets.get("OPENROUTER_API_KEY_REI", "")
+        _api_key = os.getenv("OPENROUTER_API_KEY_REI", "")
         if not _api_key:
             return None, "OPENROUTER_API_KEY_REI kosong"
 
