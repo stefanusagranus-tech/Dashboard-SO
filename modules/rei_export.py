@@ -65,7 +65,20 @@ def fmt_rp(value):
     except Exception:
         return "Rp 0"
 
-
+def fmt_rp_short(value):
+    """Format Rupiah singkat: Rp 1,2 jt / Rp 399 rb"""
+    try:
+        _v = abs(float(value))
+        if _v >= 1_000_000_000:
+            return f"{_v/1_000_000_000:.1f} M"
+        if _v >= 1_000_000:
+            return f"{_v/1_000_000:.1f} jt"
+        if _v >= 1_000:
+            return f"{_v/1_000:.0f} rb"
+        return f"{int(_v)}"
+    except Exception:
+        return "0"
+        
 def hitung_shrinkage_rate(total_selisih, net_sales):
     """Shrinkage Rate = Total Selisih / Net Sales × 100%"""
     if net_sales <= 0:
@@ -161,40 +174,65 @@ class ReiPDF(FPDF):
         self.multi_cell(0, line_height, text)
         
 # =========================================================
-# CHART
+# CHART — STANDAR JURNAL SINTA
 # =========================================================
-def _chart_to_image(fig, dpi=180):
+def _chart_to_image(fig, dpi=300):
+    """Convert matplotlib figure ke BytesIO — 300 dpi sesuai standar SINTA"""
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight",
-                facecolor="#140C23", edgecolor="none")
+                facecolor="#FFFFFF", edgecolor="none")
     buf.seek(0)
     plt.close(fig)
     return buf
 
 
 def _create_trend_chart(chart_data):
+    """Bikin bar chart sesuai standar jurnal SINTA."""
     if not chart_data:
         return None
 
-    fig, ax = plt.subplots(figsize=(6, 2.8), facecolor="#140C23")
+    # Background putih, 300 dpi untuk kualitas cetak
+    fig, ax = plt.subplots(figsize=(6, 3), facecolor="#FFFFFF")
+
     _labels = [str(c.get("tanggal", ""))[-5:] for c in chart_data]
     _values = [float(c.get("nominal", 0)) for c in chart_data]
-    _colors = ["#7FB99B" if v >= 0 else "#E8B189" for v in _values]
 
-    ax.bar(_labels, _values, color=_colors, edgecolor="#140C23", linewidth=1.2)
-    ax.axhline(y=0, color="#A89B8E", linewidth=0.8, linestyle="--", alpha=0.5)
+    # Warna kontras & solid — biru untuk positif, merah bata untuk negatif
+    _colors = ["#2E86AB" if v >= 0 else "#C73E1D" for v in _values]
 
-    ax.set_facecolor("#1E143C")
-    ax.set_title("Tren Selisih SO (7 Hari Terakhir)", color="#E8B189",
-                 fontsize=10, weight="bold", pad=8)
-    ax.set_ylabel("Nominal (Rp)", color="#F5E6D3", fontsize=8)
-    ax.tick_params(axis="x", colors="#F5E6D3", labelsize=7)
-    ax.tick_params(axis="y", colors="#F5E6D3", labelsize=7)
-    ax.grid(axis="y", color="#A89B8E", alpha=0.15, linewidth=0.4)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["bottom"].set_color("#A89B8E")
-    ax.spines["left"].set_color("#A89B8E")
+    _bars = ax.bar(_labels, _values, color=_colors,
+                   edgecolor="#000000", linewidth=0.5, width=0.6)
+
+    # Garis nol hitam tipis
+    ax.axhline(y=0, color="#000000", linewidth=0.8)
+
+    # Label axis — hitam, jelas
+    ax.set_xlabel("Tanggal", color="#000000", fontsize=9, labelpad=8)
+    ax.set_ylabel("Nominal (Rp)", color="#000000", fontsize=9)
+
+    # Background plot area putih
+    ax.set_facecolor("#FFFFFF")
+
+    # Tick warna hitam
+    ax.tick_params(axis="x", colors="#000000", labelsize=8)
+    ax.tick_params(axis="y", colors="#000000", labelsize=8)
+
+    # Grid horizontal tipis — membantu pembacaan
+    ax.grid(axis="y", color="#CCCCCC", alpha=0.7, linewidth=0.5)
+    ax.set_axisbelow(True)
+
+    # Border hitam minimalis
+    for spine in ax.spines.values():
+        spine.set_color("#000000")
+        spine.set_linewidth(0.5)
+
+    # Value labels di atas bar
+    for _bar, _val in zip(_bars, _values):
+        _y = _val + (max(_values) * 0.03 if _val >= 0 else min(_values) * 0.08)
+        ax.text(_bar.get_x() + _bar.get_width()/2, _y,
+                fmt_rp_short(_val), ha="center",
+                va="bottom" if _val >= 0 else "top",
+                color="#000000", fontsize=7, weight="bold")
 
     fig.tight_layout()
     return _chart_to_image(fig)
@@ -346,20 +384,26 @@ def generate_rei_pdf(data_context):
             "3. Analisis berbasis pola data yang tersedia."
         )
 
-        # ===== HAL 3: HASIL =====
+                # ===== HAL 3: HASIL =====
         _pdf.add_page()
         _pdf.section_title("3. HASIL", space_before=0)
         _pdf.sub_title("3.1 Ringkasan Metrik", space_before=0)
         
-        # === SET WARNA DASAR TABLE — HITAM DI PUTIH ===
-        _pdf.set_fill_color(255, 255, 255)   # Background putih
-        _pdf.set_text_color(0, 0, 0)          # Teks hitam
-        _pdf.set_draw_color(150, 150, 150)    # Garis abu-abu
+        # === JUDUL TABEL (di atas, rata kiri — SINTA) ===
+        _pdf.set_font(_pdf.font_body, "B", 9)
+        _pdf.set_text_color(0, 0, 0)
+        _pdf.cell(0, 5, "Tabel 1. Ringkasan Metrik Stock Opname", new_x="LMARGIN", new_y="NEXT")
+        _pdf.ln(1)
+        
+        # === SET DASAR TABEL ===
+        _pdf.set_fill_color(255, 255, 255)
+        _pdf.set_text_color(0, 0, 0)
+        _pdf.set_draw_color(100, 100, 100)
         
         _headings = FontFace(
             family=_pdf.font_title, emphasis="BOLD",
-            color=(0, 0, 0),              # teks hitam
-            fill_color=(220, 220, 220),   # header abu-abu terang
+            color=(0, 0, 0),
+            fill_color=(230, 230, 230),
             size_pt=8,
         )
         
@@ -368,10 +412,11 @@ def generate_rei_pdf(data_context):
             headings_style=_headings,
             line_height=5.5,
             first_row_as_headings=True,
-            borders_layout="MINIMAL",
-            cell_fill_color=(255, 255, 255),   # ← FIX: paksa body cell putih
-            cell_fill_mode="ALL",              # ← FIX: apply ke semua cell
+            borders_layout="HORIZONTAL_LINES",
+            cell_fill_color=(255, 255, 255),
+            cell_fill_mode="ALL",
             text_align=("LEFT", "RIGHT", "CENTER"),
+            padding=1.5,
         ) as _t:
             _row = _t.row()
             _row.cell("Metrik"); _row.cell("Nilai"); _row.cell("Status")
@@ -392,25 +437,42 @@ def generate_rei_pdf(data_context):
             _row.cell("NSB"); _row.cell(fmt_rp(_btsb.get("nsb", 0)))
             _row.cell("DIBEBANKAN" if _btsb.get("nsb", 0) > 0 else "NOL")
         
-        _pdf.sub_title("3.2 Tren Selisih 7 Hari", space_before=3)
+        # === CHART ===
+        _pdf.sub_title("3.2 Tren Selisih 7 Hari", space_before=4)
+        
+        # Judul chart (di bawah grafik — SINTA)
         _chart_data = data_context.get("chart_data", [])
         if _chart_data:
             _trend_img = _create_trend_chart(_chart_data)
             if _trend_img:
                 _pdf.image(_trend_img, x=30, w=150)
-                _pdf.ln(1)
+                _pdf.ln(2)
+                # Caption di bawah grafik
+                _pdf.set_font(_pdf.font_body, "I", 8)
+                _pdf.set_text_color(80, 80, 80)
+                _pdf.cell(0, 5, "Gambar 1. Tren Selisih SO 7 Hari Terakhir", align="C",
+                          new_x="LMARGIN", new_y="NEXT")
         
-        _pdf.sub_title("3.3 Top 10 Item Selisih Terbesar", space_before=3)
+        # === TOP ITEM ===
+        _pdf.sub_title("3.3 Top 10 Item Selisih Terbesar", space_before=4)
+        
+        # Judul tabel
+        _pdf.set_font(_pdf.font_body, "B", 9)
+        _pdf.set_text_color(0, 0, 0)
+        _pdf.cell(0, 5, "Tabel 2. Top 10 Item dengan Selisih Terbesar", new_x="LMARGIN", new_y="NEXT")
+        _pdf.ln(1)
+        
         if _top_items:
             with _pdf.table(
                 col_widths=(78, 18, 32, 32),
                 headings_style=_headings,
                 line_height=5,
                 first_row_as_headings=True,
-                borders_layout="MINIMAL",
-                cell_fill_color=(255, 255, 255),   # ← FIX
-                cell_fill_mode="ALL",              # ← FIX
+                borders_layout="HORIZONTAL_LINES",
+                cell_fill_color=(255, 255, 255),
+                cell_fill_mode="ALL",
                 text_align=("LEFT", "CENTER", "RIGHT", "CENTER"),
+                padding=1.2,
             ) as _t:
                 _row = _t.row()
                 _row.cell("Nama Produk"); _row.cell("Rak"); _row.cell("Nominal"); _row.cell("PIC")
@@ -421,17 +483,25 @@ def generate_rei_pdf(data_context):
                     _row.cell(fmt_rp(abs(_it.get("nominal_adjust", 0))))
                     _row.cell(str(_it.get("pic", "-")))
         
-        _pdf.sub_title("3.4 Top 5 Rak Selisih Tertinggi", space_before=3)
+        # === TOP RAK ===
+        _pdf.sub_title("3.4 Top 5 Rak Selisih Tertinggi", space_before=4)
+        
+        _pdf.set_font(_pdf.font_body, "B", 9)
+        _pdf.set_text_color(0, 0, 0)
+        _pdf.cell(0, 5, "Tabel 3. Top 5 Rak dengan Selisih Tertinggi", new_x="LMARGIN", new_y="NEXT")
+        _pdf.ln(1)
+        
         if _top_rak:
             with _pdf.table(
                 col_widths=(28, 40, 45, 30),
                 headings_style=_headings,
                 line_height=5,
                 first_row_as_headings=True,
-                borders_layout="MINIMAL",
-                cell_fill_color=(255, 255, 255),   # ← FIX
-                cell_fill_mode="ALL",              # ← FIX
+                borders_layout="HORIZONTAL_LINES",
+                cell_fill_color=(255, 255, 255),
+                cell_fill_mode="ALL",
                 text_align=("CENTER", "LEFT", "RIGHT", "CENTER"),
+                padding=1.2,
             ) as _t:
                 _row = _t.row()
                 _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal"); _row.cell("Jml Item")
