@@ -44,10 +44,11 @@ _allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 # 1. CORS dulu
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
+    allow_origin_regex=".*",          # ← REGEX allow semua origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # 2. Auth middleware setelah CORS
