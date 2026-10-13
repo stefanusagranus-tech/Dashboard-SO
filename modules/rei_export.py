@@ -383,7 +383,8 @@ def generate_rei_pdf(data_context):
         # Lanjut ke Part 2
         return _rei_pdf_part2(
             _pdf, _theme, _lost, _btsb, _sh, _status,
-            _top_rak, _top_items, _btsb.get("nsb", 0), _total_selisih_abs, _net_sales
+            _top_rak, _top_items, _btsb.get("nsb", 0), _total_selisih_abs,
+            _net_sales, data_context  # ← TAMBAH INI
         )
     
     except Exception as _e:
@@ -396,7 +397,8 @@ def generate_rei_pdf(data_context):
 # MAIN EXPORT — PART 2 (Halaman 3-5)
 # =========================================================
 def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
-                   _top_rak, _top_items, _nsb_val, _total_selisih_abs, _net_sales):
+                   _top_rak, _top_items, _nsb_val, _total_selisih_abs,
+                   _net_sales, data_context):
     try:
         # ===== HAL 3: HASIL — RINGKASAN + TOP 10 RAK =====
         _pdf.add_page()
