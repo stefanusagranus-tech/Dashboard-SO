@@ -109,12 +109,15 @@ class ReiPDF(FPDF):
             ("Serif", ""):    "DejaVuSerifCondensed.ttf",
             ("Serif", "B"):   "DejaVuSerifCondensed-Bold.ttf",
             ("Serif", "I"):   "DejaVuSerif-Italic.ttf",
+            ("Serif", "BI"):  "DejaVuSerif-BoldItalic.ttf",     # ← tambah
             ("Sans", ""):     "DejaVuSansCondensed.ttf",
             ("Sans", "B"):    "DejaVuSansCondensed-Bold.ttf",
             ("Sans", "I"):    "DejaVuSans-Oblique.ttf",
+            ("Sans", "BI"):   "DejaVuSans-BoldOblique.ttf",     # ← tambah
             ("Mono", ""):     "DejaVuSansMono.ttf",
             ("Mono", "B"):    "DejaVuSansMono-Bold.ttf",
-            ("Mono", "I"):    "DejaVuSansMono-Oblique.ttf",
+            ("Mono", "I"):    "DejaVuSansMono-Oblique.ttf",     # ← tambah
+            ("Mono", "BI"):   "DejaVuSansMono-BoldOblique.ttf", # ← tambah
         }
 
         _loaded = 0
