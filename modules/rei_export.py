@@ -180,6 +180,7 @@ class ReiPDF(FPDF):
 
     def section_title(self, text, space_before=3):
         self.ln(space_before)
+        self.set_x(self.l_margin)  # ← TAMBAH
         self.set_font(self.font_title, "B", 12)
         self.set_text_color(*self.theme.GOLD)
         self.cell(0, 7, text, new_x="LMARGIN", new_y="NEXT")
@@ -187,17 +188,20 @@ class ReiPDF(FPDF):
 
     def sub_title(self, text, space_before=3):
         self.ln(space_before)
+        self.set_x(self.l_margin)  # ← TAMBAH
         self.set_font(self.font_body, "B", 10)
         self.set_text_color(*self.theme.SAGE)
         self.cell(0, 6, text, new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
     def body_text(self, text, line_height=4.5):
+        self.set_x(self.l_margin)  # ← TAMBAH
         self.set_font(self.font_body, "", 9)
         self.set_text_color(*self.theme.TEXT_DARK)
         self.multi_cell(0, line_height, text)
 
     def table_caption(self, text):
+        self.set_x(self.l_margin)  # ← TAMBAH
         self.set_font(self.font_body, "B", 8)
         self.set_text_color(60, 60, 60)
         self.cell(0, 4, text, new_x="LMARGIN", new_y="NEXT")
