@@ -185,23 +185,17 @@ def get_ai_name_display(ai_name):
 
 def get_ai_api_key(ai_name):
     """
-    ✅ Ambil API key dari Streamlit secrets berdasarkan ai_name.
+    ✅ Ambil API key dari environment variable berdasarkan ai_name.
     Kalau key spesifik gak ada, fallback ke GROQ_API_KEY.
     """
-    import streamlit as st
+    import os
 
     _cfg = get_ai_config(ai_name)
     _secret_name = _cfg.get("api_key_secret", "GROQ_API_KEY")
 
-    try:
-        _key = st.secrets.get(_secret_name, "")
-        if _key:
-            return _key
-    except Exception:
-        pass
+    _key = os.getenv(_secret_name, "")
+    if _key:
+        return _key
 
     # Fallback ke key utama
-    try:
-        return st.secrets.get("GROQ_API_KEY", "")
-    except Exception:
-        return ""
+    return os.getenv("GROQ_API_KEY", "")

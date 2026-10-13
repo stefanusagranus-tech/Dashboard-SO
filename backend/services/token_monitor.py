@@ -1,7 +1,12 @@
 """
-Token Monitor — Advanced Usage Tracking
-========================================
+Token Monitor — Advanced Usage Tracking v2 (Backend Edition)
+==============================================================
 Monitoring token per AI, per fungsi, per model.
+
+Changelog v2:
+- Hapus dependency streamlit (st.session_state → in-memory global dict)
+- Hapus render_usage_dashboard() — UI dipindah ke Streamlit page
+- Cocok buat FastAPI backend
 
 Fitur:
 - record_usage_v2()      → Catat detail per AI & fungsi
@@ -9,7 +14,6 @@ Fitur:
 - check_quota_warning()  → Warning kalau >80%
 - check_auto_pause()     → Auto-pause kalau >90%
 - export_usage_csv()     → Export history ke CSV
-- render_usage_dashboard() → UI monitoring lengkap + trend chart
 """
 
 import csv
@@ -29,6 +33,12 @@ from services.ai_config import (
 
 
 # =========================================================
+# 🌐 GLOBAL STORAGE (pengganti st.session_state)
+# =========================================================
+_USAGE_TRACKER = {}
+
+
+# =========================================================
 # 🔧 HELPER
 # =========================================================
 def _now_jkt():
@@ -40,9 +50,8 @@ def _today_key():
 
 
 def _ensure_tracker():
-    if "usage_tracker_v2" not in st.session_state:
-        st.session_state["usage_tracker_v2"] = {}
-    return st.session_state["usage_tracker_v2"]
+    global _USAGE_TRACKER
+    return _USAGE_TRACKER
 
 
 def _ensure_day_entry(today=None):
@@ -55,8 +64,7 @@ def _ensure_day_entry(today=None):
             "total": {"requests": 0, "in_tok": 0, "out_tok": 0, "errors": 0},
         }
     return _t[_key]
-
-
+    
 # =========================================================
 # 📝 RECORD USAGE
 # =========================================================
@@ -106,7 +114,6 @@ def record_usage_v2(
     _day["total"]["out_tok"] += output_tokens
     if not success:
         _day["total"]["errors"] += 1
-
 
 # =========================================================
 # 📊 GET USAGE
@@ -170,7 +177,6 @@ def check_quota_warning(ai_name):
 def check_auto_pause(ai_name):
     return get_ai_quota_pct(ai_name) >= QUOTA_PAUSE_THRESHOLD
 
-
 # =========================================================
 # 📤 EXPORT CSV
 # =========================================================
@@ -213,168 +219,28 @@ def export_usage_csv(days=30):
 
 
 # =========================================================
-# 🎨 RENDER DASHBOARD
+# 📊 GET ALL USAGE (buat Streamlit dashboard)
 # =========================================================
-def render_usage_dashboard():
-    """Render dashboard monitoring token lengkap."""
-    st.markdown("### 📊 Token Monitor")
+def get_all_usage_data():
+    """
+    Return semua data usage tracker.
+    Dipake Streamlit page buat render dashboard.
+    """
+    return _ensure_tracker()
 
-    _day = get_usage_today()
-    _total = _day["total"]
-
-    # === OVERVIEW ===
-    _col1, _col2, _col3, _col4 = st.columns(4)
-    with _col1:
-        st.metric("📤 Total Requests", _total["requests"])
-    with _col2:
-        st.metric("📥 Input Tokens", f"{_total['in_tok']:,}".replace(",", "."))
-    with _col3:
-        st.metric("📤 Output Tokens", f"{_total['out_tok']:,}".replace(",", "."))
-    with _col4:
-        st.metric("❌ Errors", _total["errors"])
-
-    st.markdown("---")
-
-    # === PER AI BREAKDOWN ===
-    st.markdown("#### 🤖 Per AI")
-
-    _has_data = False
-    for _ai_name in AI_CONFIG.keys():
-        _cfg = get_ai_config(_ai_name)
-        if not _cfg.get("enabled", False) and _ai_name not in _day["ais"]:
-            continue
-
-        _has_data = True
-        _usage = get_ai_usage(_ai_name)
-        _pct = get_ai_quota_pct(_ai_name)
-        _warning = check_quota_warning(_ai_name)
-        _display = get_ai_name_display(_ai_name)
-
-        with st.expander(f"{_display} — {_pct:.1f}% quota", expanded=True):
-            _c1, _c2, _c3, _c4 = st.columns(4)
-            with _c1:
-                st.metric("Requests", f"{_usage['requests']} / {get_ai_daily_limit(_ai_name)}")
-            with _c2:
-                st.metric("Input", f"{_usage['in_tok']:,}".replace(",", "."))
-            with _c3:
-                st.metric("Output", f"{_usage['out_tok']:,}".replace(",", "."))
-            with _c4:
-                st.metric("Errors", _usage["errors"])
-
-            st.progress(min(1.0, _pct / 100))
-
-            _level = _warning["level"]
-            _msg = _warning["message"]
-            if _level == "paused":
-                st.error(_msg)
-            elif _level == "warning":
-                st.warning(_msg)
-            elif _level == "moderate":
-                st.info(_msg)
-            else:
-                st.success(_msg)
-
-            _fns = _usage.get("functions", {})
-            if _fns:
-                st.markdown("**📋 Breakdown per Fungsi:**")
-                for _fn, _data in _fns.items():
-                    st.write(
-                        f"- `{_fn}`: {_data['requests']} req, "
-                        f"{_data['in_tok']} in, {_data['out_tok']} out"
-                    )
-
-    if not _has_data:
-        st.info("📭 Belum ada data usage hari ini.")
-
-    st.markdown("---")
-
-    # === PER MODEL ===
-    st.markdown("#### 🤖 Per Model")
-    if _day["models"]:
-        for _model, _data in _day["models"].items():
-            _limit = get_model_limit(_model)
-            _pct_m = min(100.0, (_data["requests"] / _limit["rpd"] * 100) if _limit["rpd"] > 0 else 0)
-            st.write(f"**`{_model}`** — {_data['requests']} req ({_pct_m:.1f}% dari {_limit['rpd']})")
-    else:
-        st.info("📭 Belum ada data model hari ini.")
-
-    st.markdown("---")
-
-    # === TREND 7 HARI ===
-    st.markdown("#### 📈 Trend 7 Hari Terakhir")
-
-    _history = get_usage_history(days=7)
-    _dates = []
-    _reqs = []
-    _err_counts = []
-
-    for _h in _history:
-        _dates.append(_h["tanggal"][5:])
-        _dt = _h["data"]
-        if _dt:
-            _reqs.append(_dt["total"]["requests"])
-            _err_counts.append(_dt["total"]["errors"])
-        else:
-            _reqs.append(0)
-            _err_counts.append(0)
-
-    try:
-        import plotly.graph_objects as go
-
-        _fig = go.Figure()
-        _fig.add_trace(go.Bar(
-            x=_dates, y=_reqs, name="Requests",
-            marker_color="#7FB99B", text=_reqs, textposition="outside",
-        ))
-        _fig.add_trace(go.Bar(
-            x=_dates, y=_err_counts, name="Errors",
-            marker_color="#E88B8B", text=_err_counts, textposition="outside",
-        ))
-        _fig.update_layout(
-            barmode="group",
-            height=320,
-            margin=dict(l=10, r=10, t=30, b=30),
-            plot_bgcolor="rgba(10, 22, 18, 0.4)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#E8B189", family="JetBrains Mono", size=10),
-            xaxis=dict(
-                gridcolor="rgba(232, 177, 137, 0.15)",
-                type="category",
-                tickmode="array",
-                tickvals=_dates,
-                ticktext=_dates,
-            ),
-            yaxis=dict(
-                gridcolor="rgba(232, 177, 137, 0.15)",
-                rangemode="tozero",
-                dtick=1,
-            ),
-            legend=dict(font=dict(color="#E8B189")),
-        )
-        st.plotly_chart(_fig, use_container_width=True, key="chart_usage_trend")
-    except Exception as _e_chart:
-        st.warning(f"⚠️ Chart gagal render: {_e_chart}")
-
-    st.markdown("---")
-
-    # === RESET INFO ===
-    _now = _now_jkt()
-    _tomorrow_7 = (_now + timedelta(days=1)).replace(hour=7, minute=0, second=0, microsecond=0)
-    _delta = _tomorrow_7 - _now
-    _hours = int(_delta.total_seconds() // 3600)
-    _mins = int((_delta.total_seconds() % 3600) // 60)
-    st.info(f"⏰ **Reset quota dalam:** {_hours} jam {_mins} menit (07:00 WIB besok)")
-
-    st.markdown("---")
-
-    # === EXPORT CSV ===
-    st.markdown("#### 📥 Export Usage")
-    _csv_bytes = export_usage_csv(days=30)
-    st.download_button(
-        label="📥 Download Usage (CSV, 30 hari)",
-        data=_csv_bytes,
-        file_name=f"usage_{_today_key()}.csv",
-        mime="text/csv",
-        use_container_width=True,
-        key="btn_export_usage_csv",
-    )
+# =========================================================
+# EXPORT
+# =========================================================
+__all__ = [
+    "record_usage_v2",
+    "get_usage_today",
+    "get_usage_by_date",
+    "get_usage_history",
+    "get_ai_usage",
+    "get_ai_daily_limit",
+    "get_ai_quota_pct",
+    "check_quota_warning",
+    "check_auto_pause",
+    "export_usage_csv",
+    "get_all_usage_data",
+]

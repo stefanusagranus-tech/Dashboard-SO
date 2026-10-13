@@ -15,6 +15,7 @@ Kode shift:
 import pandas as pd
 import re
 import io
+import os
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
@@ -385,7 +386,7 @@ def save_master_shift(tanggal, shift_map, sumber="chat", catatan=""):
                 "sumber": str(sumber),
                 "chat_text": str(catatan)[:500],
                 "jumlah_update": len(_rows),
-                "updated_by": st.session_state.get("username", "admin"),
+                "updated_by": os.getenv("username", "admin"),
             }).execute()
         except Exception:
             pass

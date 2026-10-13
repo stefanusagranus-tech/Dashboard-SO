@@ -222,7 +222,7 @@ def _safe_float(val):
 
 def _parse_via_gemini(file_text, context=None):
     """Parse PDF text pake Gemini."""
-    import streamlit as st
+    import os
     
     try:
         from google import genai
@@ -234,7 +234,7 @@ def _parse_via_gemini(file_text, context=None):
     _ctx = context or {}
 
     try:
-        _api_key = st.secrets.get("GEMINI_API_KEY", "")
+        _api_key = os.getenv("GEMINI_API_KEY", "")
         if not _api_key:
             _log("[Yui] GEMINI_API_KEY kosong")
             return None

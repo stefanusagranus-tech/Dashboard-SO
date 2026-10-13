@@ -179,7 +179,7 @@ def _call_kurumi_groq_raw(prompt):
 
 
 def _call_kurumi(prompt, hard_timeout=90, function="chat", temperature=0.85):
-    from modules.token_monitor import record_usage_v2, check_auto_pause
+    from services.token_monitor import record_usage_v2, check_auto_pause
 
     if check_auto_pause("ai-0"):
         return False, "", None, "Auto-pause: quota Kurumi hampir habis"
@@ -1010,7 +1010,7 @@ def _get_report_context(start_date, end_date):
 # =========================================================
 def _get_kurumi_quota_info():
     try:
-        from modules.token_monitor import get_ai_usage, get_ai_daily_limit
+        from services.token_monitor import get_ai_usage, get_ai_daily_limit
 
         _usage = get_ai_usage("ai-0")
         _limit = get_ai_daily_limit("ai-0")
