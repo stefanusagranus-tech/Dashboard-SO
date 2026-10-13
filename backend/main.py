@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from routers import kurumi, hana, yui, rei
+from routers import kurumi, hana, yui, rei, config
 
 # Import auth middleware
 from middleware.auth import AuthMiddleware
@@ -61,6 +61,7 @@ app.include_router(kurumi.router)
 app.include_router(hana.router)
 app.include_router(yui.router)
 app.include_router(rei.router)
+app.include_router(config.router)          # ← BARIS BARU
 
 
 # =========================================================

@@ -28,6 +28,8 @@ PUBLIC_PATHS = {
     "/redoc",
     "/openapi.json",
     "/api/bots",
+    "/api/config",
+    "/api/config/",
 }
 
 # Prefix yang TIDAK butuh API key
