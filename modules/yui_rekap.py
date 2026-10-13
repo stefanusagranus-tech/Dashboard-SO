@@ -345,7 +345,14 @@ def get_top_items(
     limit=10, order="desc", only_minus=True,
     pic_filter=None, rak_filter=None,
 ):
-    """..."""
+    """
+    Ambil top N item SO berdasarkan nominal_adjust.
+    
+    Args:
+        only_minus: 
+            - True  → cuma item minus (qty_var < 0), sort minus terbesar
+            - False → cuma item plus  (qty_var > 0), sort plus terbesar
+    """
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
@@ -366,15 +373,18 @@ def get_top_items(
             .lte("so_date", _end_str)
         )
 
+        # === FILTER MINUS / PLUS ===
         if only_minus:
-            _q = _q.lt("qty_var", 0)
+            _q = _q.lt("qty_var", 0)     # minus doang
+        else:
+            _q = _q.gt("qty_var", 0)     # ← FIX: plus doang
+
         if pic_filter:
             _q = _q.eq("pic", pic_filter.upper())
         if rak_filter:
             _q = _q.eq("rak_id", rak_filter.upper())
 
-        # ⚠️ JANGAN pakai .order() — fetch semua dulu, sort di Python
-        _q = _q.limit(2000)  # safety cap
+        _q = _q.limit(2000)
 
         _res = _q.execute()
         _items = _res.data if _res.data else []
@@ -384,13 +394,13 @@ def get_top_items(
             _it["qty_var"] = int(_it.get("qty_var") or 0)
             _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
 
-        # === SORT DI PYTHON ===
+        # === SORT ===
         if only_minus:
-            # Minus terbesar (paling negatif) dulu
-            _items.sort(key=lambda x: x["nominal_adjust"])  # ascending = -80000 dulu
+            # Minus terbesar (paling negatif) dulu — ascending
+            _items.sort(key=lambda x: x["nominal_adjust"])
         else:
-            # Sort by ABS value descending (item paling "signifikan")
-            _items.sort(key=lambda x: abs(x["nominal_adjust"]), reverse=True)
+            # Plus terbesar dulu — descending
+            _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
 
         # Limit
         _items = _items[:limit]
@@ -409,20 +419,3 @@ def get_top_items(
         import traceback
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "items": []}
-        
-def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini"):
-    """
-    Ambil semua item SO di rak tertentu (buat 'list item di rak S11').
-    
-    Returns:
-        dict: {"success": bool, "items": list, "total_nominal": float, ...}
-    """
-    return get_top_items(
-        tgl_start=tgl_start,
-        tgl_end=tgl_end,
-        mode=mode,
-        limit=1000,        # semua item
-        order="desc",
-        only_minus=False,  # include plus juga
-        rak_filter=rak_id,
-    )
