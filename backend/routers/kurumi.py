@@ -7,13 +7,14 @@ Bot ini adalah LEADER — bisa jawab semua, tapi fokusnya:
 - Rangkum laporan (hari/minggu/bulan)
 - Kirim laporan (text/PDF/Excel)
 - Chat general
-
-Flow: Android → FastAPI → Groq → balik ke Android
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from typing import Optional, Any
+from typing import Optional
+
+# Rate limiter
+from middleware.rate_limit import limiter
 
 # Import service
 try:
@@ -63,7 +64,7 @@ class ReportRequest(BaseModel):
 
 
 # =========================================================
-# ENDPOINTS
+# HEALTH
 # =========================================================
 @router.get("/health")
 async def kurumi_health():
@@ -76,8 +77,12 @@ async def kurumi_health():
     }
 
 
+# =========================================================
+# CHAT
+# =========================================================
 @router.post("/chat", response_model=ChatResponse)
-async def kurumi_chat_endpoint(req: ChatRequest):
+@limiter.limit("20/minute")
+async def kurumi_chat_endpoint(request: Request, req: ChatRequest):
     """
     Endpoint chat Kurumi.
     
@@ -85,10 +90,7 @@ async def kurumi_chat_endpoint(req: ChatRequest):
     {
         "message": "Rangkum hari ini dong",
         "session_id": "kurumi_20261013_140500",
-        "history": [
-            {"role": "user", "content": "Halo"},
-            {"role": "assistant", "content": "Halo Bos!"}
-        ]
+        "history": [...]
     }
     """
     if not _KURUMI_OK:
@@ -105,7 +107,6 @@ async def kurumi_chat_endpoint(req: ChatRequest):
 
         _resp = kurumi_chat_response(req.message, _history)
 
-        # Handle dict atau string response
         if isinstance(_resp, dict):
             _text = _resp.get("text", "")
             _file = _resp.get("file")
@@ -121,8 +122,12 @@ async def kurumi_chat_endpoint(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
+# =========================================================
+# SUMMARIZE
+# =========================================================
 @router.post("/summarize", response_model=ChatResponse)
-async def kurumi_summarize_endpoint(req: SummarizeRequest):
+@limiter.limit("30/minute")
+async def kurumi_summarize_endpoint(request: Request, req: SummarizeRequest):
     """
     Endpoint rangkum Kurumi.
     
@@ -146,8 +151,12 @@ async def kurumi_summarize_endpoint(req: SummarizeRequest):
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
+# =========================================================
+# REPORT
+# =========================================================
 @router.post("/report")
-async def kurumi_report_endpoint(req: ReportRequest):
+@limiter.limit("10/minute")
+async def kurumi_report_endpoint(request: Request, req: ReportRequest):
     """
     Endpoint generate laporan.
     
@@ -169,7 +178,6 @@ async def kurumi_report_endpoint(req: ReportRequest):
         if not _report.get("success"):
             raise HTTPException(status_code=500, detail=_report.get("content", "Gagal generate"))
 
-        # Return base64 buat file, atau text langsung
         import base64
         _content = _report.get("content")
 
@@ -190,3 +198,4 @@ async def kurumi_report_endpoint(req: ReportRequest):
         raise
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
+        
