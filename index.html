@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="halloween-dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a0e2e">
+    <title>Dashboard SO C383</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ========================================================= -->
+<!-- LOGIN SCREEN -->
+<!-- ========================================================= -->
+<div id="loginScreen" class="screen active">
+    <div class="login-container">
+        <div class="login-logo">🎃</div>
+        <h1 class="login-title">Dashboard SO C383</h1>
+        <p class="login-subtitle">Stock Opname Assistant</p>
+
+        <div class="pin-display">
+            <span class="pin-dot" data-index="0"></span>
+            <span class="pin-dot" data-index="1"></span>
+            <span class="pin-dot" data-index="2"></span>
+            <span class="pin-dot" data-index="3"></span>
+            <span class="pin-dot" data-index="4"></span>
+            <span class="pin-dot" data-index="5"></span>
+        </div>
+
+        <div class="pin-keypad">
+            <button class="pin-key" data-num="1">1</button>
+            <button class="pin-key" data-num="2">2</button>
+            <button class="pin-key" data-num="3">3</button>
+            <button class="pin-key" data-num="4">4</button>
+            <button class="pin-key" data-num="5">5</button>
+            <button class="pin-key" data-num="6">6</button>
+            <button class="pin-key" data-num="7">7</button>
+            <button class="pin-key" data-num="8">8</button>
+            <button class="pin-key" data-num="9">9</button>
+            <button class="pin-key pin-key-empty"></button>
+            <button class="pin-key" data-num="0">0</button>
+            <button class="pin-key pin-key-back" data-action="back">←</button>
+        </div>
+
+        <p class="pin-hint">Default PIN: 123456</p>
+        <p id="pinError" class="pin-error"></p>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- HOME SCREEN -->
+<!-- ========================================================= -->
+<div id="homeScreen" class="screen">
+    <div class="home-header">
+        <div class="home-header-title">
+            <span class="home-logo">🎃</span>
+            <span>Dashboard SO C383</span>
+        </div>
+        <button class="theme-toggle" onclick="toggleTheme()">
+            <span id="themeIcon">🌙</span>
+        </button>
+    </div>
+
+    <div class="home-content">
+        <div class="home-greeting">
+            <h2>Halo, Bos! 👋</h2>
+            <p>Mau ngapain hari ini?</p>
+        </div>
+
+        <div class="home-cards">
+            <button class="home-card" onclick="goToChatScreen()">
+                <div class="home-card-icon">📦</div>
+                <div class="home-card-info">
+                    <div class="home-card-title">Chat dengan AI</div>
+                    <div class="home-card-subtitle">Yui, Hana, Rei, Kurumi</div>
+                </div>
+                <div class="home-card-arrow">→</div>
+            </button>
+
+            <button class="home-card" onclick="goToSettingsScreen()">
+                <div class="home-card-icon">⚙️</div>
+                <div class="home-card-info">
+                    <div class="home-card-title">Pengaturan</div>
+                    <div class="home-card-subtitle">API key, tema, info</div>
+                </div>
+                <div class="home-card-arrow">→</div>
+            </button>
+
+            <button class="home-card" onclick="goToStreamlitScreen()">
+                <div class="home-card-icon">🌐</div>
+                <div class="home-card-info">
+                    <div class="home-card-title">Web Streamlit</div>
+                    <div class="home-card-subtitle">PDF, PPT, Master Shift</div>
+                </div>
+                <div class="home-card-arrow">→</div>
+            </button>
+        </div>
+
+        <div class="home-footer">
+            <span>v1.0.0 — Dashboard SO C383</span>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- CHAT SCREEN -->
+<!-- ========================================================= -->
+<div id="chatScreen" class="screen">
+    <div class="chat-header">
+        <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
+        <div class="chat-header-bot">
+            <span id="chatBotEmoji">📦</span>
+            <span id="chatBotName">Yui</span>
+        </div>
+        <button class="theme-toggle" onclick="toggleTheme()">
+            <span id="themeIcon2">🌙</span>
+        </button>
+    </div>
+
+    <div id="chatMessages" class="chat-messages"></div>
+
+    <div class="chat-input-area">
+        <textarea id="chatInput" class="chat-input" rows="1" placeholder="Ketik pesan..."></textarea>
+        <button id="chatSend" class="chat-send" onclick="sendMessage()">📤</button>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- SIDEBAR (buat chat screen) -->
+<!-- ========================================================= -->
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">🎃 Dashboard SO C383</div>
+    </div>
+
+    <div class="sidebar-menu">
+        <button class="sidebar-item" onclick="goToHomeScreen()">
+            <span>🏠</span> <span>Home</span>
+        </button>
+
+        <div class="sidebar-divider"></div>
+
+        <button class="sidebar-item bot-item" data-bot="yui" onclick="switchBot('yui')">
+            <span>📦</span> <span>Yui — Data Entry</span>
+        </button>
+        <button class="sidebar-item bot-item" data-bot="hana" onclick="switchBot('hana')">
+            <span>🌸</span> <span>Hana — Master Shift</span>
+        </button>
+        <button class="sidebar-item bot-item" data-bot="rei" onclick="switchBot('rei')">
+            <span>📊</span> <span>Rei — Analisis</span>
+        </button>
+        <button class="sidebar-item bot-item" data-bot="kurumi" onclick="switchBot('kurumi')">
+            <span>🎀</span> <span>Kurumi — Chief</span>
+        </button>
+
+        <div class="sidebar-divider"></div>
+
+        <button class="sidebar-item" onclick="goToSettingsScreen()">
+            <span>⚙️</span> <span>Pengaturan</span>
+        </button>
+        <button class="sidebar-item" onclick="goToStreamlitScreen()">
+            <span>🌐</span> <span>Web Streamlit</span>
+        </button>
+
+        <div class="sidebar-divider"></div>
+
+        <button class="sidebar-item" onclick="toggleTheme(); toggleSidebar();">
+            <span id="sidebarThemeIcon">🌙</span> <span>Ganti Tema</span>
+        </button>
+        <button class="sidebar-item" onclick="clearCurrentChat()">
+            <span>🗑️</span> <span>Hapus Chat Bot Ini</span>
+        </button>
+        <button class="sidebar-item sidebar-item-danger" onclick="logout()">
+            <span>🚪</span> <span>Logout</span>
+        </button>
+    </div>
+</aside>
+
+<!-- ========================================================= -->
+<!-- SETTINGS SCREEN -->
+<!-- ========================================================= -->
+<div id="settingsScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Pengaturan</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+
+    <div class="settings-content">
+        <div class="settings-group">
+            <div class="settings-group-title">🔑 API Key</div>
+            <div class="settings-item">
+                <div class="settings-item-value" id="settingsApiKey">so_c383_***</div>
+            </div>
+            <button class="settings-btn" onclick="changeApiKey()">Ganti API Key</button>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">🔐 PIN</div>
+            <button class="settings-btn" onclick="changePin()">Ganti PIN</button>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">🎨 Tema</div>
+            <div class="settings-theme-row">
+                <button class="theme-option" data-theme="halloween-dark" onclick="setTheme('halloween-dark')">
+                    🌙 Dark
+                </button>
+                <button class="theme-option" data-theme="halloween-light" onclick="setTheme('halloween-light')">
+                    ☀️ Light
+                </button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">ℹ️ Info</div>
+            <div class="settings-item">
+                <div class="settings-label">Versi</div>
+                <div class="settings-item-value">1.0.0</div>
+            </div>
+            <div class="settings-item">
+                <div class="settings-label">Backend</div>
+                <div class="settings-item-value">dashboard-so.fastapicloud.dev</div>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">🗑️ Data</div>
+            <button class="settings-btn settings-btn-danger" onclick="resetAllChat()">
+                Reset Semua Chat
+            </button>
+        </div>
+
+        <div class="settings-group">
+            <button class="settings-btn settings-btn-danger" onclick="logout()">
+                🚪 Logout
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- STREAMLIT SCREEN -->
+<!-- ========================================================= -->
+<div id="streamlitScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Web Streamlit</div>
+        <button class="screen-header-action" onclick="openStreamlitInBrowser()" title="Buka di browser">
+            🌐
+        </button>
+    </div>
+
+    <div class="streamlit-content">
+        <div class="streamlit-loading">
+            <div class="spinner"></div>
+            <p>Loading Streamlit...</p>
+        </div>
+        <iframe id="streamlitFrame"
+                src="about:blank"
+                class="streamlit-frame"
+                allow="camera; microphone; clipboard-read; clipboard-write">
+        </iframe>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
