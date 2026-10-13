@@ -658,13 +658,6 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         # ===== HAL 6: PEMBAHASAN DETAIL (4P + EXTERNAL) =====
         _pdf.add_page()
         _pdf.section_title("6. PEMBAHASAN DETAIL", space_before=0)
-
-        # === 6.1 ANALISIS INTERNAL (4P) ===
-        _pdf.sub_title("6.1 Analisis Internal (People, Place, Product, Process)", space_before=0)
-
-        # ===== HAL 6: PEMBAHASAN DETAIL (4P + EXTERNAL) =====
-        _pdf.add_page()
-        _pdf.section_title("6. PEMBAHASAN DETAIL", space_before=0)
         
         # === 6.1 ANALISIS INTERNAL (4P) ===
         _pdf.sub_title("6.1 Analisis Internal (People, Place, Product, Process)", space_before=0)
