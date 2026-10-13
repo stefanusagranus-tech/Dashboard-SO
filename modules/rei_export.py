@@ -467,42 +467,40 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
             _row.cell("NSB"); _row.cell(fmt_rp(_btsb.get("nsb", 0)))
             _row.cell("DIBEBANKAN" if _btsb.get("nsb", 0) > 0 else "NOL")
 
-            # ==== 3.2 TOP 10 RAK SELISIH TERTINGGI ====
-            _pdf.sub_title("3.2 Top 10 Rak Selisih Tertinggi", space_before=6)
-            _pdf.set_font(_pdf.font_body, "B", 8)
-            _pdf.set_text_color(60, 60, 60)
-            _pdf.cell(0, 4, "Tabel 2. Top 10 Rak dengan Selisih Tertinggi",
-                      new_x="LMARGIN", new_y="NEXT")
-            _pdf.ln(1)
-            
-            if _top_rak:
-                # === HITUNG TOTAL ===
-                _total_rak_nominal = sum(abs(_r.get("total", 0)) for _r in _top_rak[:10])
-            
-                with _pdf.table(
-                    col_widths=(35, 50, 60),   # ← cuma 3 kolom
-                    headings_style=_headings,
-                    line_height=5.5,
-                    first_row_as_headings=True,
-                    borders_layout="HORIZONTAL_LINES",
-                    cell_fill_color=(255, 255, 255),
-                    cell_fill_mode="ALL",
-                    text_align=("CENTER", "LEFT", "RIGHT"),
-                    padding=1.2,
-                ) as _t:
+        # ==== 3.2 TOP 10 RAK SELISIH TERTINGGI ====   ← KELUAR DARI with TABLE
+        _pdf.sub_title("3.2 Top 10 Rak Selisih Tertinggi", space_before=6)
+        _pdf.set_font(_pdf.font_body, "B", 8)
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.cell(0, 4, "Tabel 2. Top 10 Rak dengan Selisih Tertinggi",
+                  new_x="LMARGIN", new_y="NEXT")
+        _pdf.ln(1)
+
+        if _top_rak:
+            _total_rak_nominal = sum(abs(_r.get("total", 0)) for _r in _top_rak[:10])
+
+            with _pdf.table(
+                col_widths=(35, 50, 60),
+                headings_style=_headings,
+                line_height=5.5,
+                first_row_as_headings=True,
+                borders_layout="HORIZONTAL_LINES",
+                cell_fill_color=(255, 255, 255),
+                cell_fill_mode="ALL",
+                text_align=("CENTER", "LEFT", "RIGHT"),
+                padding=1.2,
+            ) as _t:
+                _row = _t.row()
+                _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal")
+                for _r in _top_rak[:10]:
                     _row = _t.row()
-                    _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal")
-                    for _r in _top_rak[:10]:
-                        _row = _t.row()
-                        _row.cell(str(_r.get("rak_id", "-")))
-                        _row.cell(str(_r.get("pic", "-")))
-                        _row.cell(fmt_rp_neg(_r.get("total", 0)))
-                        
-                    # === BARIS TOTAL ===
-                    _row = _t.row()
-                    _row.cell("TOTAL")
-                    _row.cell("")
-                    _row.cell(f"-Rp {int(_total_rak_nominal):,}".replace(",", "."))
+                    _row.cell(str(_r.get("rak_id", "-")))
+                    _row.cell(str(_r.get("pic", "-")))
+                    _row.cell(fmt_rp_neg(_r.get("total", 0)))
+
+                _row = _t.row()
+                _row.cell("TOTAL")
+                _row.cell("")
+                _row.cell(f"-Rp {int(_total_rak_nominal):,}".replace(",", "."))
 
         # ===== HAL 4: TOP 10 ITEM + CHART =====
         _pdf.add_page()
@@ -663,4 +661,4 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
         print(f"[REI PDF PART2 ERROR] {_e}")
         import traceback
         print(traceback.format_exc())
-        raise  # ← TAMBAH INI
+        raise
