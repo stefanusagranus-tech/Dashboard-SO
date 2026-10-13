@@ -6,7 +6,7 @@ Semua fungsi di sini cuma baca data (read-only).
 import pandas as pd
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-imporr html
+import html
 
 from services.supabase_client import get_supabase
 
