@@ -224,7 +224,101 @@ def _export_rei_pdf(history, session_id):
         raise
 
 def _export_rei_ppt(history, session_id):
-    st.info("🚧 **Export PPT belum diimplementasikan.** Coming soon!")
+    """Generate PPT laporan analisis SO dari data Rei."""
+    try:
+        from modules.rei_export_ppt import generate_rei_ppt
+        from modules.yui_rekap import (
+            rekap_so, get_top_items,
+            _get_net_sales_bulan, _get_total_selisih_bulan,
+        )
+        from modules.supabase_client import get_supabase
+
+        with st.spinner("📊 Generate PPT..."):
+            # === QUERY DATA (sama kayak PDF) ===
+            _rekap = rekap_so(mode="bulan_ini")
+            if not _rekap.get("success"):
+                st.error("❌ Gagal ambil data SO.")
+                return
+
+            _net_sales = _get_net_sales_bulan()
+            _total_selisih = _get_total_selisih_bulan()
+
+            _sb = get_supabase()
+            _now = _now_jkt().date()
+            _start = _now.replace(day=1)
+
+            _res = (
+                _sb.table("so_hasil")
+                .select("qty_var, nominal_adjust")
+                .gte("so_date", _start.isoformat())
+                .lte("so_date", _now.isoformat())
+                .execute()
+            )
+            _rows = _res.data or []
+
+            _gross = 0
+            _plus = 0
+            for _r in _rows:
+                _qty = int(_r.get("qty_var", 0) or 0)
+                _nom = float(_r.get("nominal_adjust", 0) or 0)
+                if _qty < 0:
+                    _gross += abs(_nom)
+                elif _qty > 0:
+                    _plus += _nom
+
+            _net = abs(_gross - _plus)
+            _shrinkage = (_net / _net_sales * 100) if _net_sales > 0 else 0
+
+            _top_items_data = get_top_items(mode="bulan_ini", limit=30, only_minus=True)
+            _top_items = _top_items_data.get("items", [])
+            _top_rak = sorted(_rekap.get("list_rak", []), key=lambda x: x["total"])[:10] if _rekap.get("success") else []
+
+            _btsb_val = _net_sales * 0.0015
+
+            _data_context = {
+                "periode": _rekap.get("periode", "-"),
+                "rekap": _rekap,
+                "lost_sales": {
+                    "gross": _gross,
+                    "plus": _plus,
+                    "net": _net,
+                    "shrinkage": _shrinkage,
+                    "net_sales": _net_sales,
+                },
+                "btsb": {
+                    "net_sales": _net_sales,
+                    "btsb": _btsb_val,
+                    "total_selisih": _total_selisih,
+                    "nsb": max(0, abs(_total_selisih) - _btsb_val),
+                    "status": "PERLU PERHATIAN" if abs(_total_selisih) > _btsb_val else "DALAM TOLERANSI",
+                },
+                "top_rak": _top_rak,
+                "top_items": _top_items,
+            }
+
+            _ppt_bytes = generate_rei_ppt(_data_context)
+
+            if not _ppt_bytes:
+                st.error("❌ Gagal generate PPT. Cek log.")
+                return
+
+            _filename = f"Presentasi_SO_C383_{_now_jkt().strftime('%Y%m%d_%H%M')}.pptx"
+            st.download_button(
+                label="📥 Download PPT",
+                data=_ppt_bytes,
+                file_name=_filename,
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                use_container_width=True,
+                type="primary",
+                key=f"download_ppt_{_filename}",
+            )
+            st.success(f"✅ PPT siap: **{_filename}**")
+
+    except Exception as _e:
+        st.error(f"❌ Error: {str(_e)[:200]}")
+        print(f"[REI PPT ERROR] {_e}")
+        import traceback
+        print(traceback.format_exc())
     
 # =========================================================
 # CSS — FULL SCREEN + BUBBLE + POPOVER
