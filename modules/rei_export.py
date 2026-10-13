@@ -94,7 +94,7 @@ def status_shrinkage(shrinkage_rate, btsb_pct=0.15):
         return "PERHATIAN"
     return "AMAN"
     
-    # =========================================================
+# =========================================================
 # PDF CLASS
 # =========================================================
 class ReiPDF(FPDF):
@@ -175,7 +175,7 @@ class ReiPDF(FPDF):
         self.set_text_color(*self.theme.TEXT_DARK)
         self.multi_cell(0, line_height, text)
         
-        # =========================================================
+# =========================================================
 # CHART — STANDAR SINTA
 # =========================================================
 def _chart_to_image(fig, dpi=300):
@@ -266,7 +266,7 @@ def _generate_rekomendasi(data_context):
 
     return _rekom
     
-    # =========================================================
+# =========================================================
 # MAIN EXPORT — PART 1
 # =========================================================
 def generate_rei_pdf(data_context):
@@ -388,8 +388,8 @@ def generate_rei_pdf(data_context):
         import traceback
         print(traceback.format_exc())
         return None
-        
-    # =========================================================
+
+# =========================================================
 # MAIN EXPORT — PART 2 (Halaman 3-5)
 # =========================================================
 def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
