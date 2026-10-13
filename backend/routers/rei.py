@@ -13,9 +13,12 @@ Bot ini fokus analisis:
 Flow: Android → FastAPI → Gemini/Groq/OpenRouter → balik ke Android
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional
+
+# Rate limiter
+from middleware.rate_limit import limiter
 
 
 try:
@@ -57,7 +60,7 @@ class AnalisisRequest(BaseModel):
 
 
 # =========================================================
-# ENDPOINTS
+# HEALTH
 # =========================================================
 @router.get("/health")
 async def rei_health():
@@ -70,8 +73,12 @@ async def rei_health():
     }
 
 
+# =========================================================
+# CHAT
+# =========================================================
 @router.post("/chat", response_model=ChatResponse)
-async def rei_chat_endpoint(req: ChatRequest):
+@limiter.limit("15/minute")
+async def rei_chat_endpoint(request: Request, req: ChatRequest):
     """
     Endpoint chat Rei.
     
@@ -104,8 +111,12 @@ async def rei_chat_endpoint(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
+# =========================================================
+# ANALISIS
+# =========================================================
 @router.post("/analisis", response_model=ChatResponse)
-async def rei_analisis_endpoint(req: AnalisisRequest):
+@limiter.limit("15/minute")
+async def rei_analisis_endpoint(request: Request, req: AnalisisRequest):
     """
     Endpoint analisis (single-turn, tanpa history).
     

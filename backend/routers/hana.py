@@ -9,13 +9,14 @@ Bot ini fokus handle jadwal shift:
 - Hapus shift
 - Saran pengganti
 - Chat general tentang shift
-
-Flow: Android → FastAPI → Groq → balik ke Android
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional
+
+# Rate limiter
+from middleware.rate_limit import limiter
 
 
 try:
@@ -74,7 +75,7 @@ class ConflictRequest(BaseModel):
 
 
 # =========================================================
-# ENDPOINTS
+# HEALTH
 # =========================================================
 @router.get("/health")
 async def hana_health():
@@ -87,8 +88,12 @@ async def hana_health():
     }
 
 
+# =========================================================
+# CHAT
+# =========================================================
 @router.post("/chat", response_model=ChatResponse)
-async def hana_chat_endpoint(req: ChatRequest):
+@limiter.limit("20/minute")
+async def hana_chat_endpoint(request: Request, req: ChatRequest):
     """
     Endpoint chat Hana.
     
@@ -121,8 +126,12 @@ async def hana_chat_endpoint(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
+# =========================================================
+# PARSE
+# =========================================================
 @router.post("/parse")
-async def hana_parse_endpoint(req: ParseRequest):
+@limiter.limit("30/minute")
+async def hana_parse_endpoint(request: Request, req: ParseRequest):
     """
     Parse natural language jadi struktur shift.
     
@@ -134,7 +143,6 @@ async def hana_parse_endpoint(req: ParseRequest):
     try:
         _parsed = parse_shift_update(req.text)
 
-        # Convert date object ke string biar JSON-serializable
         if "tanggal" in _parsed and hasattr(_parsed["tanggal"], "isoformat"):
             _parsed["tanggal"] = _parsed["tanggal"].isoformat()
 
@@ -150,8 +158,12 @@ async def hana_parse_endpoint(req: ParseRequest):
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
+# =========================================================
+# SUGGEST
+# =========================================================
 @router.post("/suggest")
-async def hana_suggest_endpoint(req: SuggestRequest):
+@limiter.limit("30/minute")
+async def hana_suggest_endpoint(request: Request, req: SuggestRequest):
     """
     Saran pengganti kalau ada yang libur.
     
@@ -167,10 +179,7 @@ async def hana_suggest_endpoint(req: SuggestRequest):
         if req.tanggal:
             _tgl = datetime.strptime(req.tanggal, "%Y-%m-%d").date()
 
-        # Pakai versi AI-text
         _text = ai_suggest_pengganti_text(req.nama_libur, _tgl)
-
-        # Plus structured data
         _structured = suggest_pengganti(req.nama_libur, _tgl)
 
         return {
@@ -183,8 +192,12 @@ async def hana_suggest_endpoint(req: SuggestRequest):
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
+# =========================================================
+# CONFLICT
+# =========================================================
 @router.post("/conflict")
-async def hana_conflict_endpoint(req: ConflictRequest):
+@limiter.limit("30/minute")
+async def hana_conflict_endpoint(request: Request, req: ConflictRequest):
     """
     Cek konflik shift.
     
@@ -201,10 +214,7 @@ async def hana_conflict_endpoint(req: ConflictRequest):
 
         _tgl = datetime.strptime(req.tanggal, "%Y-%m-%d").date()
 
-        # Pakai versi AI-text
         _text = ai_check_conflict_text(_tgl, req.shift_map)
-
-        # Plus structured issues
         _issues = check_conflict(_tgl, req.shift_map)
 
         return {
