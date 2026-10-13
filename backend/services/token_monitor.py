@@ -14,7 +14,6 @@ Fitur:
 
 import csv
 import io
-import streamlit as st
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 

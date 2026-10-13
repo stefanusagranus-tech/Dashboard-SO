@@ -16,7 +16,6 @@ import io
 import json
 import re
 import concurrent.futures
-import streamlit as st
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
@@ -26,14 +25,14 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
-from modules.ai_config import get_ai_api_key, get_ai_config
-from modules.master_shift_handler import (
+from services.ai_config import get_ai_api_key, get_ai_config
+from services.master_shift_handler import (
     load_personil_master,
     get_shift_hari_ini,
     KODE_SHIFT,
 )
-from modules.supabase_client import get_supabase
-from modules.pdf_report import generate_pdf
+from services.supabase_client import get_supabase
+from services.pdf_report import generate_pdf
 
 
 # =========================================================
@@ -1663,7 +1662,7 @@ KALAU NSB > BTSB: sebutkan beban karyawan (KAT 50%, PRA 30%, KSR 20%).
             _so_raw = _get_so_raw_data(start_date, end_date)
 
             # ✅ EXTRA STATS buat card metric + grafik
-            from modules.supabase_client import get_supabase as _get_sb
+            from services.supabase_client import get_supabase as _get_sb
             _sb = _get_sb()
 
             _rak_res = _sb.table("rak_master").select("status_so").execute()
