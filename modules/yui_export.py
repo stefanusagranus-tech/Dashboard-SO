@@ -22,6 +22,7 @@ from fpdf import FPDF
 WARNA = {
     "sage": (151, 179, 174),
     "sage_light": (210, 224, 211),
+    "sage_deep": (95, 122, 117),              # ← TAMBAH: sage gelap
     "peach": (240, 221, 214),
     "salmon": (242, 195, 185),
     "beige": (214, 203, 191),
@@ -30,6 +31,8 @@ WARNA = {
     "white": (255, 255, 255),
     "red": (200, 50, 50),
     "green": (50, 150, 50),
+    "terracotta_light": (232, 213, 201),      # ← TAMBAH: pastel terracotta
+    "highlight": (237, 232, 222),             # ← TAMBAH: highlight cream
 }
 
 CHART_COLORS = [
@@ -657,10 +660,12 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         _output = _pdf.output()
         return bytes(_output) if isinstance(_output, bytearray) else _output
     except Exception as e:
-        print(f"[EXPORT_PDF ERROR] {e}")
         import traceback
+        print(f"[EXPORT_PDF ERROR] {e}")
         print(traceback.format_exc())
-        return None
+        # Return error dalam bytes biar caller bisa nampilin di UI
+        _err = f"ERROR:{type(e).__name__}: {str(e)[:500]}"
+        return _err.encode("utf-8")
         
 
 # =========================================================
