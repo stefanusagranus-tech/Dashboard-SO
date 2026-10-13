@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
-from modules.supabase_client import get_supabase
+from services.supabase_client import get_supabase
 
 
 def _now_jkt():

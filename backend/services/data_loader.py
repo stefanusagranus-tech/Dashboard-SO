@@ -8,7 +8,7 @@ Semua fungsi read-only — untuk write/update, lihat modules/supabase_client.py
 
 import streamlit as st
 import pandas as pd
-from modules.supabase_client import get_supabase
+from services.supabase_client import get_supabase
 
 
 # =========================================================================

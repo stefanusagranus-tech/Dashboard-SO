@@ -17,8 +17,8 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
-from modules.ai_config import get_ai_api_key, get_ai_config
-from modules.token_monitor import record_usage_v2, check_auto_pause
+from services.ai_config import get_ai_api_key, get_ai_config
+from services.token_monitor import record_usage_v2, check_auto_pause
 
 
 # =========================================================

@@ -52,7 +52,7 @@ def _format_date_wib(created_at_str):
 def save_message(ai_name, session_id, role, content, file_metadata=None):
     """Simpan 1 pesan ke Supabase."""
     try:
-        from modules.supabase_client import get_supabase
+        from services.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb:
             return False
@@ -76,7 +76,7 @@ def save_message(ai_name, session_id, role, content, file_metadata=None):
 def save_messages_bulk(ai_name, session_id, messages):
     """Simpan banyak pesan sekaligus (bulk)."""
     try:
-        from modules.supabase_client import get_supabase
+        from services.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb or not messages:
             return False
@@ -106,7 +106,7 @@ def save_messages_bulk(ai_name, session_id, messages):
 def load_messages(ai_name, session_id, limit=100):
     """Load chat history dari Supabase — LENGKAP dengan timestamp asli."""
     try:
-        from modules.supabase_client import get_supabase
+        from services.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb:
             return []
@@ -135,7 +135,7 @@ def load_messages(ai_name, session_id, limit=100):
 def load_recent_messages(ai_name, session_id, limit=10):
     """Load N pesan terakhir (buat context AI)."""
     try:
-        from modules.supabase_client import get_supabase
+        from services.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb:
             return []
@@ -165,7 +165,7 @@ def load_messages_by_session(ai_name, session_id):
 def get_session_list(ai_name, limit=20):
     """Ambil daftar session_id yang ada di DB buat AI tertentu."""
     try:
-        from modules.supabase_client import get_supabase
+        from services.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb:
             return []
@@ -215,7 +215,7 @@ def get_session_list(ai_name, limit=20):
 def get_session_info(ai_name, session_id):
     """Info singkat satu session."""
     try:
-        from modules.supabase_client import get_supabase
+        from services.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb:
             return None
@@ -256,7 +256,7 @@ def get_session_info(ai_name, session_id):
 def clear_session(ai_name, session_id):
     """Hapus semua chat history untuk session tertentu."""
     try:
-        from modules.supabase_client import get_supabase
+        from services.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb:
             return False

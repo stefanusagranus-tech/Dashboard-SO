@@ -24,7 +24,7 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
-from modules.master_shift_handler import (
+from services.master_shift_handler import (
     KODE_SHIFT,
     KEYWORD_TO_KODE,
     load_personil_master,
@@ -33,9 +33,9 @@ from modules.master_shift_handler import (
     parse_chat_update,
     save_master_shift,       # ✅ Tambahin kalau belum ada
 )
-from modules.supabase_client import get_supabase
-from modules.ai_config import get_ai_api_key
-from modules.token_monitor import record_usage_v2, check_auto_pause
+from services.supabase_client import get_supabase
+from services.ai_config import get_ai_api_key
+from servics.token_monitor import record_usage_v2, check_auto_pause
 
 
 # =========================================================

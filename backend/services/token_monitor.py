@@ -18,7 +18,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from modules.ai_config import (
+from services.ai_config import (
     AI_CONFIG,
     GROQ_LIMITS,
     QUOTA_WARNING_THRESHOLD,
