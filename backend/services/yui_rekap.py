@@ -6,6 +6,7 @@ Semua fungsi di sini cuma baca data (read-only).
 import pandas as pd
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+imporr html
 
 from services.supabase_client import get_supabase
 
@@ -337,21 +338,51 @@ def cek_rak_belum_so(tanggal=None):
         print(f"[CEK_RAK_BELUM ERROR] {e}")
         return []
     
+import html  # ← TAMBAH di atas file
+
+
 # =========================================================
-# TOP ITEMS — untuk Yui & Rei
+# HELPER — Clean HTML entity
+# =========================================================
+def _clean_text(s):
+    """Unescape HTML entity (&#39; → ', &amp; → &)."""
+    if not s:
+        return s
+    try:
+        return html.unescape(str(s))
+    except Exception:
+        return str(s)
+
+
+def _clean_item(it):
+    """Clean field nama_produk di item."""
+    if isinstance(it, dict):
+        if "nama_produk" in it:
+            it["nama_produk"] = _clean_text(it["nama_produk"])
+        if "pic" in it and it["pic"]:
+            it["pic"] = _clean_text(it["pic"])
+    return it
+
+
+# =========================================================
+# TOP ITEMS — FIX Bug #2 (HTML entity) + support show_all
 # =========================================================
 def get_top_items(
     tgl_start=None, tgl_end=None, mode="bulan_ini",
-    limit=10, order="desc", only_minus=True,
+    limit=10, order="desc",
+    only_minus=True,
+    show_all=False,          # ✅ BARU: True = tampil semua (minus + plus)
     pic_filter=None, rak_filter=None,
 ):
     """
     Ambil top N item SO berdasarkan nominal_adjust.
-    
+
     Args:
-        only_minus: 
-            - True  → cuma item minus (qty_var < 0), sort minus terbesar
-            - False → cuma item plus  (qty_var > 0), sort plus terbesar
+        only_minus:
+            - True  → cuma item minus (qty_var < 0)
+            - False → cuma item plus (qty_var > 0)
+        show_all:
+            - True  → SEMUA item (minus + plus), override only_minus
     """
     try:
         _sb = _get_supabase_safe()
@@ -373,11 +404,13 @@ def get_top_items(
             .lte("so_date", _end_str)
         )
 
-        # === FILTER MINUS / PLUS ===
-        if only_minus:
-            _q = _q.lt("qty_var", 0)     # minus doang
-        else:
-            _q = _q.gt("qty_var", 0)     # ← FIX: plus doang
+        # === FILTER ===
+        if not show_all:
+            if only_minus:
+                _q = _q.lt("qty_var", 0)
+            else:
+                _q = _q.gt("qty_var", 0)
+        # kalau show_all=True → no filter qty_var
 
         if pic_filter:
             _q = _q.eq("pic", pic_filter.upper())
@@ -389,20 +422,21 @@ def get_top_items(
         _res = _q.execute()
         _items = _res.data if _res.data else []
 
-        # Konversi tipe
+        # Konversi tipe + clean HTML
         for _it in _items:
             _it["qty_var"] = int(_it.get("qty_var") or 0)
             _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
+            _clean_item(_it)   # ✅ FIX Bug #2
 
         # === SORT ===
-        if only_minus:
-            # Minus terbesar (paling negatif) dulu — ascending
-            _items.sort(key=lambda x: x["nominal_adjust"])
+        if show_all:
+            # Sort by abs nominal (terbesar dulu)
+            _items.sort(key=lambda x: abs(x["nominal_adjust"]), reverse=True)
+        elif only_minus:
+            _items.sort(key=lambda x: x["nominal_adjust"])   # minus terbesar dulu
         else:
-            # Plus terbesar dulu — descending
             _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
 
-        # Limit
         _items = _items[:limit]
 
         return {
@@ -420,15 +454,15 @@ def get_top_items(
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "items": []}
 
+
 # =========================================================
-# GET ITEMS BY RAK
+# GET ITEMS BY RAK — FIX Bug #3
 # =========================================================
-def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini"):
+def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None,
+                     mode="bulan_ini", show_all=True):
     """
-    Ambil semua item SO di rak tertentu (buat 'list item di rak S11').
-    
-    Returns:
-        dict: {"success": bool, "items": list, "total_nominal": float, ...}
+    Ambil semua item SO di rak tertentu.
+    Default show_all=True (minus + plus).
     """
     return get_top_items(
         tgl_start=tgl_start,
@@ -437,5 +471,6 @@ def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini"):
         limit=1000,
         order="desc",
         only_minus=False,
+        show_all=show_all,          # ✅ FIX Bug #3
         rak_filter=rak_id,
     )
