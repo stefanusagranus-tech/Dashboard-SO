@@ -1,15 +1,13 @@
 """
-Chat Memory — Persistent Chat History v2
+Chat Memory — Persistent Chat History v3
 ==========================================
 Simpan & load chat history dari Supabase.
 Digunakan oleh semua AI (Kurumi, Hana, Yui, Rei, dll).
 
-Changelog v2:
-- Session ID pakai timestamp (gak auto-reset jam 12 malam)
-- Tambah get_session_list() buat restore
-- Tambah load_messages_by_session()
-- Tambah get_session_info()
-- Tambah delete_session()
+Changelog v3:
+- FIX: typo set_session_id() — tambah {ai_name}
+- FIX: session persistent via st.query_params (URL)
+- Session ID gak hilang pas refresh / hard refresh
 - Timestamp pakai created_at asli dari DB
 """
 
@@ -27,7 +25,6 @@ def _format_time_wib(created_at_str):
     if not created_at_str:
         return "—"
     try:
-        # Handle format "2026-10-12T22:30:00+00:00" atau "2026-10-12T22:30:00Z"
         _s = str(created_at_str).replace("Z", "+00:00")
         _dt = datetime.fromisoformat(_s)
         _dt_wib = _dt.astimezone(ZoneInfo("Asia/Jakarta"))
@@ -48,7 +45,6 @@ def _format_date_wib(created_at_str):
         return _dt_wib.strftime("%d/%m/%Y")
     except Exception:
         return "—"
-
 
 # =========================================================================
 # SAVE MESSAGE
@@ -105,22 +101,10 @@ def save_messages_bulk(ai_name, session_id, messages):
 
 
 # =========================================================================
-# LOAD MESSAGES (dengan timestamp asli dari DB)
+# LOAD MESSAGES
 # =========================================================================
 def load_messages(ai_name, session_id, limit=100):
-    """
-    Load chat history dari Supabase — LENGKAP dengan timestamp asli.
-    
-    Returns:
-        list[dict]: [{
-            "role": str,
-            "content": str,
-            "file_metadata": dict|None,
-            "created_at": str (ISO UTC),
-            "time_wib": str (HH:MM),
-            "date_wib": str (DD/MM/YYYY),
-        }]
-    """
+    """Load chat history dari Supabase — LENGKAP dengan timestamp asli."""
     try:
         from modules.supabase_client import get_supabase
         _sb = get_supabase()
@@ -137,7 +121,6 @@ def load_messages(ai_name, session_id, limit=100):
 
         _data = _res.data or []
 
-        # Tambah timestamp WIB yang udah di-format
         for _msg in _data:
             _created = _msg.get("created_at")
             _msg["time_wib"] = _format_time_wib(_created)
@@ -172,29 +155,21 @@ def load_recent_messages(ai_name, session_id, limit=10):
         return []
 
 
+def load_messages_by_session(ai_name, session_id):
+    """Load semua pesan dari session tertentu (buat restore)."""
+    return load_messages(ai_name, session_id, limit=500)
+
 # =========================================================================
 # SESSION LIST — BUAT RESTORE
 # =========================================================================
 def get_session_list(ai_name, limit=20):
-    """
-    Ambil daftar session_id yang ada di DB buat AI tertentu.
-    
-    Returns:
-        list[dict]: [{
-            "session_id": str,
-            "first_message_at": str,
-            "last_message_at": str,
-            "total_messages": int,
-            "preview": str (50 char pertama),
-        }]
-    """
+    """Ambil daftar session_id yang ada di DB buat AI tertentu."""
     try:
         from modules.supabase_client import get_supabase
         _sb = get_supabase()
         if not _sb:
             return []
 
-        # Ambil semua session_id unik + hitung pesan
         _res = _sb.table("ai_chat_history") \
             .select("session_id, created_at, content") \
             .eq("ai_name", str(ai_name)) \
@@ -206,7 +181,6 @@ def get_session_list(ai_name, limit=20):
         if not _rows:
             return []
 
-        # Group by session_id
         _sessions = {}
         for _row in _rows:
             _sid = _row.get("session_id", "")
@@ -221,16 +195,12 @@ def get_session_list(ai_name, limit=20):
                     "preview": "",
                 }
             _sessions[_sid]["total_messages"] += 1
-            # update last
             _sessions[_sid]["last_message_at"] = _row.get("created_at")
-            # update first
             if _row.get("created_at") < _sessions[_sid]["first_message_at"]:
                 _sessions[_sid]["first_message_at"] = _row.get("created_at")
-            # preview: isi pesan pertama yang user
             if not _sessions[_sid]["preview"] and _row.get("content"):
                 _sessions[_sid]["preview"] = str(_row["content"])[:50]
 
-        # Sort by last message
         _result = sorted(
             _sessions.values(),
             key=lambda x: x.get("last_message_at") or "",
@@ -280,11 +250,6 @@ def get_session_info(ai_name, session_id):
         return None
 
 
-def load_messages_by_session(ai_name, session_id):
-    """Load semua pesan dari session tertentu (buat restore)."""
-    return load_messages(ai_name, session_id, limit=500)
-
-
 # =========================================================================
 # CLEAR / DELETE
 # =========================================================================
@@ -313,22 +278,56 @@ def delete_session(ai_name, session_id):
 
 
 # =========================================================================
-# SESSION ID HELPER
+# SESSION ID HELPER — PERSISTENT via QUERY PARAM
 # =========================================================================
+def _update_query_param(ai_name, session_id):
+    """Update session ID di URL query param."""
+    try:
+        st.query_params[f"{ai_name}_session"] = session_id
+    except Exception as e:
+        print(f"[QUERY_PARAM UPDATE ERROR] {e}")
+
+
+def _get_query_param(ai_name):
+    """Ambil session ID dari URL query param."""
+    try:
+        return st.query_params.get(f"{ai_name}_session")
+    except Exception:
+        return None
+
+
 def get_or_create_session_id(ai_name):
     """
-    Session ID persistent — pakai timestamp, GAK auto-reset jam 12 malam.
+    Session ID persistent — pakai timestamp + URL query param.
     Format: {ai_name}_{YYYYMMDD_HHMMSS}
     
-    Cuma reset kalau user klik "New Chat" (panggil new_session_id()).
+    Priority:
+    1. Cek dari URL query param (?{ai_name}_session=xxx) ← PERSISTENT
+    2. Cek dari st.session_state
+    3. Bikin baru kalau gak ada
+    
+    Session ID gak hilang pas refresh / hard refresh.
     """
     _key = f"session_id_{ai_name}"
 
-    if _key not in st.session_state:
-        _now = _now_jkt()
-        st.session_state[_key] = f"{ai_name}_{_now.strftime('%Y%m%d_%H%M%S')}"
+    # === 1. Cek dari query param (URL) — PRIORITAS UTAMA ===
+    _qp_session = _get_query_param(ai_name)
+    if _qp_session:
+        st.session_state[_key] = _qp_session
+        return _qp_session
 
-    return st.session_state[_key]
+    # === 2. Cek dari st.session_state ===
+    if _key in st.session_state:
+        _sess = st.session_state[_key]
+        _update_query_param(ai_name, _sess)
+        return _sess
+
+    # === 3. Bikin baru ===
+    _now = _now_jkt()
+    _new_id = f"{ai_name}_{_now.strftime('%Y%m%d_%H%M%S')}"
+    st.session_state[_key] = _new_id
+    _update_query_param(ai_name, _new_id)
+    return _new_id
 
 
 def new_session_id(ai_name):
@@ -339,10 +338,15 @@ def new_session_id(ai_name):
     _now = _now_jkt()
     _new_id = f"{ai_name}_{_now.strftime('%Y%m%d_%H%M%S')}"
     st.session_state[f"session_id_{ai_name}"] = _new_id
+    _update_query_param(ai_name, _new_id)
     return _new_id
 
 
 def set_session_id(ai_name, session_id):
-    """Set session_id aktif ke session tertentu (buat restore)."""
+    """
+    Set session_id aktif ke session tertentu (buat restore).
+    FIX: tambah {ai_name} di key session_state + update URL.
+    """
     st.session_state[f"session_id_{ai_name}"] = session_id
+    _update_query_param(ai_name, session_id)
     return session_id
