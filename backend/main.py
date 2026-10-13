@@ -6,8 +6,6 @@ Backend API untuk 4 bot: Kurumi, Hana, Yui, Rei.
 Arsitektur:
 - Android frontend (Kotlin) → HTTP → FastAPI → Groq/Gemini/Supabase
 - API Keys disimpan di environment variables, TIDAK di-expose ke client
-
-Deploy: Render / Railway
 """
 
 import os
@@ -21,6 +19,9 @@ load_dotenv()
 
 # Import routers
 from routers import kurumi, hana, yui, rei
+
+# Import auth middleware
+from middleware.auth import AuthMiddleware
 
 
 # =========================================================
@@ -36,10 +37,11 @@ app = FastAPI(
 
 
 # =========================================================
-# CORS — biar Android bisa akses
+# MIDDLEWARE
 # =========================================================
 _allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
+# 1. CORS dulu
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
@@ -47,6 +49,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 2. Auth middleware setelah CORS
+app.add_middleware(AuthMiddleware)
 
 
 # =========================================================
@@ -59,7 +64,7 @@ app.include_router(rei.router)
 
 
 # =========================================================
-# HEALTH CHECK
+# HEALTH & INFO
 # =========================================================
 @app.get("/")
 async def root():
