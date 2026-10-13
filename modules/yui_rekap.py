@@ -419,3 +419,23 @@ def get_top_items(
         import traceback
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "items": []}
+
+# =========================================================
+# GET ITEMS BY RAK
+# =========================================================
+def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini"):
+    """
+    Ambil semua item SO di rak tertentu (buat 'list item di rak S11').
+    
+    Returns:
+        dict: {"success": bool, "items": list, "total_nominal": float, ...}
+    """
+    return get_top_items(
+        tgl_start=tgl_start,
+        tgl_end=tgl_end,
+        mode=mode,
+        limit=1000,
+        order="desc",
+        only_minus=False,
+        rak_filter=rak_id,
+    )
