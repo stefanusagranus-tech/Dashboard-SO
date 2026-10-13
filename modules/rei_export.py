@@ -385,12 +385,12 @@ def generate_rei_pdf(data_context):
             _pdf, _theme, _lost, _btsb, _sh, _status,
             _top_rak, _top_items, _btsb.get("nsb", 0), _total_selisih_abs, _net_sales
         )
-
+    
     except Exception as _e:
-        print(f"[REI EXPORT PDF ERROR] {_e}")
+        print(f"[REI PDF PART2 ERROR] {_e}")
         import traceback
         print(traceback.format_exc())
-        return None
+        raise  # ← TAMBAH INI
 
 # =========================================================
 # MAIN EXPORT — PART 2 (Halaman 3-5)
@@ -639,4 +639,4 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
         print(f"[REI PDF PART2 ERROR] {_e}")
         import traceback
         print(traceback.format_exc())
-        return None
+        raise  # ← TAMBAH INI
