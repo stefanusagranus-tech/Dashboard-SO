@@ -656,6 +656,7 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         _pdf.sub_title("6.1 Analisis Internal (People, Place, Product, Process)", space_before=0)
 
         # 6.1.1 PEOPLE
+        _pdf.set_x(18)  # ← TAMBAH INI — reset x ke margin kiri
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "A. People (Manusia)", new_x="LMARGIN", new_y="NEXT")
@@ -669,6 +670,7 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         )
 
         # 6.1.2 PLACE
+        _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "B. Place (Tempat/Rak)", new_x="LMARGIN", new_y="NEXT")
@@ -683,6 +685,7 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         )
 
         # 6.1.3 PRODUCT
+        _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "C. Product (Produk)", new_x="LMARGIN", new_y="NEXT")
@@ -698,6 +701,7 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         )
 
         # 6.1.4 PROCESS
+        _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "D. Process (Proses)", new_x="LMARGIN", new_y="NEXT")
@@ -714,6 +718,7 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         _pdf.sub_title("6.2 Analisis External", space_before=4)
 
         # 6.2.1 PENERIMAAN BARANG
+        _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "A. Penerimaan Barang dari Supplier/DC", new_x="LMARGIN", new_y="NEXT")
@@ -726,6 +731,7 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         )
 
         # 6.2.2 PENGUTILAN
+        _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "B. Pengutilan (Shrinkage Eksternal)", new_x="LMARGIN", new_y="NEXT")
@@ -739,6 +745,7 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         )
 
         # 6.2.3 FAKTOR EXTERNAL LAIN
+        _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "C. Faktor External Lain", new_x="LMARGIN", new_y="NEXT")
