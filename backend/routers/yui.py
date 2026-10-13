@@ -10,10 +10,10 @@ Fokus:
 - Top items
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from typing import Optional
-
+from fastapi import APIRouter, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from middleware.rate_limit import limiter, get_real_ip
 
 try:
     from services.ai_so_input import (
@@ -95,8 +95,12 @@ async def yui_health():
 # CHAT — dengan intent detection
 # =========================================================
 @router.post("/chat", response_model=ChatResponse)
-async def yui_chat_endpoint(req: ChatRequest):
-    """Endpoint chat Yui dengan intent detection."""
+@limiter.limit("20/minute")
+async def yui_chat_endpoint(request: Request, req: ChatRequest):
+    """
+    Endpoint chat Yui dengan intent detection.
+    Rekap → fetch data dulu, baru LLM.
+    """
     if not _YUI_OK:
         raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
 
