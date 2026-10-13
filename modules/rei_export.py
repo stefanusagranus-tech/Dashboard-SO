@@ -114,7 +114,7 @@ def hitung_shrinkage_rate(total_selisih, net_sales):
 def status_shrinkage(shrinkage_rate, btsb_pct=0.15):
     if shrinkage_rate > btsb_pct:
         return "PERHATIAN"
-    return "AMAN".
+    return "AMAN"
 
 # =========================================================
 # PDF CLASS
