@@ -1,12 +1,12 @@
 """
-Rei Export — PDF Generator (Jurnal Ilmiah SINTA Style)
-=======================================================
-Generate PDF laporan analisis SO dengan standar jurnal SINTA.
+Rei Export — PDF Generator (Jurnal SINTA Style)
+================================================
+Layout 5 halaman, compact, SINTA compliant.
 
-Standar yang diterapkan:
-- Tabel: garis horizontal saja (border layout MINIMAL)
-- Warna tabel: gradasi abu-abu, hindari warna mencolok
-- Font: Serif untuk judul, Sans untuk body
+Standar SINTA:
+- Tabel: garis horizontal saja, judul di atas tabel
+- Gambar: judul di bawah gambar, 300 dpi
+- Warna: kontras, netral
 
 BTSB Alfamart: 0,15% dari Net Sales
 Shrinkage Rate = Total Selisih / Net Sales × 100%
@@ -43,10 +43,10 @@ class ReiTheme:
     TEXT_MUTED_DARK = (110, 110, 120)
     RED = (200, 50, 50)
     GREEN = (40, 160, 80)
-    # Warna tabel SINTA — gradasi abu-abu
-    TABLE_HEADER_BG = (220, 220, 220)
+    # Tabel SINTA — gradasi abu-abu
+    TABLE_HEADER_BG = (230, 230, 230)
     TABLE_HEADER_TEXT = (0, 0, 0)
-    TABLE_BORDER = (150, 150, 150)
+    TABLE_BORDER = (100, 100, 100)
 
 
 def _now_jkt():
@@ -65,6 +65,7 @@ def fmt_rp(value):
     except Exception:
         return "Rp 0"
 
+
 def fmt_rp_short(value):
     """Format Rupiah singkat: Rp 1,2 jt / Rp 399 rb"""
     try:
@@ -78,7 +79,8 @@ def fmt_rp_short(value):
         return f"{int(_v)}"
     except Exception:
         return "0"
-        
+
+
 def hitung_shrinkage_rate(total_selisih, net_sales):
     """Shrinkage Rate = Total Selisih / Net Sales × 100%"""
     if net_sales <= 0:
@@ -92,7 +94,7 @@ def status_shrinkage(shrinkage_rate, btsb_pct=0.15):
         return "PERHATIAN"
     return "AMAN"
     
-# =========================================================
+    # =========================================================
 # PDF CLASS
 # =========================================================
 class ReiPDF(FPDF):
@@ -173,11 +175,11 @@ class ReiPDF(FPDF):
         self.set_text_color(*self.theme.TEXT_DARK)
         self.multi_cell(0, line_height, text)
         
-# =========================================================
-# CHART — STANDAR JURNAL SINTA
+        # =========================================================
+# CHART — STANDAR SINTA
 # =========================================================
 def _chart_to_image(fig, dpi=300):
-    """Convert matplotlib figure ke BytesIO — 300 dpi sesuai standar SINTA"""
+    """Convert matplotlib figure ke BytesIO — 300 dpi sesuai SINTA"""
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight",
                 facecolor="#FFFFFF", edgecolor="none")
@@ -186,47 +188,37 @@ def _chart_to_image(fig, dpi=300):
     return buf
 
 
-def _create_trend_chart(chart_data):
+def _create_trend_chart(chart_data, title=None):
     """Bikin bar chart sesuai standar jurnal SINTA."""
     if not chart_data:
         return None
 
-    # Background putih, 300 dpi untuk kualitas cetak
+    _n_hari = len(chart_data)
+    if title is None:
+        title = f"Tren Selisih SO {_n_hari} Hari Terakhir"
+
     fig, ax = plt.subplots(figsize=(6, 3), facecolor="#FFFFFF")
 
     _labels = [str(c.get("tanggal", ""))[-5:] for c in chart_data]
     _values = [float(c.get("nominal", 0)) for c in chart_data]
-
-    # Warna kontras & solid — biru untuk positif, merah bata untuk negatif
     _colors = ["#2E86AB" if v >= 0 else "#C73E1D" for v in _values]
 
     _bars = ax.bar(_labels, _values, color=_colors,
                    edgecolor="#000000", linewidth=0.5, width=0.6)
 
-    # Garis nol hitam tipis
     ax.axhline(y=0, color="#000000", linewidth=0.8)
-
-    # Label axis — hitam, jelas
     ax.set_xlabel("Tanggal", color="#000000", fontsize=9, labelpad=8)
     ax.set_ylabel("Nominal (Rp)", color="#000000", fontsize=9)
-
-    # Background plot area putih
     ax.set_facecolor("#FFFFFF")
-
-    # Tick warna hitam
     ax.tick_params(axis="x", colors="#000000", labelsize=8)
     ax.tick_params(axis="y", colors="#000000", labelsize=8)
-
-    # Grid horizontal tipis — membantu pembacaan
     ax.grid(axis="y", color="#CCCCCC", alpha=0.7, linewidth=0.5)
     ax.set_axisbelow(True)
 
-    # Border hitam minimalis
     for spine in ax.spines.values():
         spine.set_color("#000000")
         spine.set_linewidth(0.5)
 
-    # Value labels di atas bar
     for _bar, _val in zip(_bars, _values):
         _y = _val + (max(_values) * 0.03 if _val >= 0 else min(_values) * 0.08)
         ax.text(_bar.get_x() + _bar.get_width()/2, _y,
@@ -236,8 +228,9 @@ def _create_trend_chart(chart_data):
 
     fig.tight_layout()
     return _chart_to_image(fig)
-    
-    # =========================================================
+
+
+# =========================================================
 # REKOMENDASI
 # =========================================================
 def _generate_rekomendasi(data_context):
@@ -384,29 +377,47 @@ def generate_rei_pdf(data_context):
             "3. Analisis berbasis pola data yang tersedia."
         )
 
-                # ===== HAL 3: HASIL =====
+        # Lanjut ke Part 2
+        return _rei_pdf_part2(
+            _pdf, _theme, _lost, _btsb, _sh, _status,
+            _top_rak, _top_items, _btsb.get("nsb", 0), _total_selisih_abs, _net_sales
+        )
+
+    except Exception as _e:
+        print(f"[REI EXPORT PDF ERROR] {_e}")
+        import traceback
+        print(traceback.format_exc())
+        return None
+        
+    # =========================================================
+# MAIN EXPORT — PART 2 (Halaman 3-5)
+# =========================================================
+def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
+                   _top_rak, _top_items, _nsb_val, _total_selisih_abs, _net_sales):
+    try:
+        # ===== HAL 3: HASIL — RINGKASAN + TOP 10 RAK =====
         _pdf.add_page()
         _pdf.section_title("3. HASIL", space_before=0)
-        _pdf.sub_title("3.1 Ringkasan Metrik", space_before=0)
-        
-        # === JUDUL TABEL (di atas, rata kiri — SINTA) ===
-        _pdf.set_font(_pdf.font_body, "B", 9)
-        _pdf.set_text_color(0, 0, 0)
-        _pdf.cell(0, 5, "Tabel 1. Ringkasan Metrik Stock Opname", new_x="LMARGIN", new_y="NEXT")
+
+        # ==== 3.1 RINGKASAN METRIK ====
+        _pdf.sub_title("3.1 Ringkasan Metrik", space_before=2)
+        _pdf.set_font(_pdf.font_body, "B", 8)
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.cell(0, 4, "Tabel 1. Ringkasan Metrik Stock Opname",
+                  new_x="LMARGIN", new_y="NEXT")
         _pdf.ln(1)
-        
-        # === SET DASAR TABEL ===
+
         _pdf.set_fill_color(255, 255, 255)
         _pdf.set_text_color(0, 0, 0)
         _pdf.set_draw_color(100, 100, 100)
-        
+
         _headings = FontFace(
             family=_pdf.font_title, emphasis="BOLD",
             color=(0, 0, 0),
             fill_color=(230, 230, 230),
             size_pt=8,
         )
-        
+
         with _pdf.table(
             col_widths=(60, 65, 45),
             headings_style=_headings,
@@ -436,35 +447,50 @@ def generate_rei_pdf(data_context):
             _row = _t.row()
             _row.cell("NSB"); _row.cell(fmt_rp(_btsb.get("nsb", 0)))
             _row.cell("DIBEBANKAN" if _btsb.get("nsb", 0) > 0 else "NOL")
-        
-        # === CHART ===
-        _pdf.sub_title("3.2 Tren Selisih 7 Hari", space_before=4)
-        
-        # Judul chart (di bawah grafik — SINTA)
-        _chart_data = data_context.get("chart_data", [])
-        if _chart_data:
-            _trend_img = _create_trend_chart(_chart_data)
-            if _trend_img:
-                _pdf.image(_trend_img, x=30, w=150)
-                _pdf.ln(2)
-                # Caption di bawah grafik
-                _pdf.set_font(_pdf.font_body, "I", 8)
-                _pdf.set_text_color(80, 80, 80)
-                _pdf.cell(0, 5, "Gambar 1. Tren Selisih SO 7 Hari Terakhir", align="C",
-                          new_x="LMARGIN", new_y="NEXT")
-        
-        # === TOP ITEM ===
-        _pdf.sub_title("3.3 Top 10 Item Selisih Terbesar", space_before=4)
-        
-        # Judul tabel
-        _pdf.set_font(_pdf.font_body, "B", 9)
-        _pdf.set_text_color(0, 0, 0)
-        _pdf.cell(0, 5, "Tabel 2. Top 10 Item dengan Selisih Terbesar", new_x="LMARGIN", new_y="NEXT")
+
+        # ==== 3.2 TOP 10 RAK SELISIH TERTINGGI ====
+        _pdf.sub_title("3.2 Top 10 Rak Selisih Tertinggi", space_before=6)
+        _pdf.set_font(_pdf.font_body, "B", 8)
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.cell(0, 4, "Tabel 2. Top 10 Rak dengan Selisih Tertinggi",
+                  new_x="LMARGIN", new_y="NEXT")
         _pdf.ln(1)
-        
+
+        if _top_rak:
+            with _pdf.table(
+                col_widths=(28, 40, 45, 30),
+                headings_style=_headings,
+                line_height=5.5,
+                first_row_as_headings=True,
+                borders_layout="HORIZONTAL_LINES",
+                cell_fill_color=(255, 255, 255),
+                cell_fill_mode="ALL",
+                text_align=("CENTER", "LEFT", "RIGHT", "CENTER"),
+                padding=1.2,
+            ) as _t:
+                _row = _t.row()
+                _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal"); _row.cell("Jml Item")
+                for _r in _top_rak[:10]:
+                    _row = _t.row()
+                    _row.cell(str(_r.get("rak_id", "-")))
+                    _row.cell(str(_r.get("pic", "-")))
+                    _row.cell(fmt_rp(abs(_r.get("total", 0))))
+                    _row.cell(str(_r.get("total_item", 0)))
+
+        # ===== HAL 4: TOP 10 ITEM + CHART =====
+        _pdf.add_page()
+
+        # ==== 3.3 TOP 10 ITEM SELISIH TERBESAR ====
+        _pdf.sub_title("3.3 Top 10 Item Selisih Terbesar", space_before=0)
+        _pdf.set_font(_pdf.font_body, "B", 8)
+        _pdf.set_text_color(60, 60, 60)
+        _pdf.cell(0, 4, "Tabel 3. Top 10 Item dengan Selisih Terbesar",
+                  new_x="LMARGIN", new_y="NEXT")
+        _pdf.ln(1)
+
         if _top_items:
             with _pdf.table(
-                col_widths=(78, 18, 32, 32),
+                col_widths=(75, 20, 35, 30),
                 headings_style=_headings,
                 line_height=5,
                 first_row_as_headings=True,
@@ -478,58 +504,27 @@ def generate_rei_pdf(data_context):
                 _row.cell("Nama Produk"); _row.cell("Rak"); _row.cell("Nominal"); _row.cell("PIC")
                 for _it in _top_items[:10]:
                     _row = _t.row()
-                    _row.cell(_clean_text(_it.get("nama_produk", "-"))[:36])
+                    _row.cell(_clean_text(_it.get("nama_produk", "-"))[:34])
                     _row.cell(str(_it.get("rak_id", "-")))
                     _row.cell(fmt_rp(abs(_it.get("nominal_adjust", 0))))
                     _row.cell(str(_it.get("pic", "-")))
-        
-        # === TOP RAK ===
-        _pdf.sub_title("3.4 Top 5 Rak Selisih Tertinggi", space_before=4)
-        
-        _pdf.set_font(_pdf.font_body, "B", 9)
-        _pdf.set_text_color(0, 0, 0)
-        _pdf.cell(0, 5, "Tabel 3. Top 5 Rak dengan Selisih Tertinggi", new_x="LMARGIN", new_y="NEXT")
-        _pdf.ln(1)
-        
-        if _top_rak:
-            with _pdf.table(
-                col_widths=(28, 40, 45, 30),
-                headings_style=_headings,
-                line_height=5,
-                first_row_as_headings=True,
-                borders_layout="HORIZONTAL_LINES",
-                cell_fill_color=(255, 255, 255),
-                cell_fill_mode="ALL",
-                text_align=("CENTER", "LEFT", "RIGHT", "CENTER"),
-                padding=1.2,
-            ) as _t:
-                _row = _t.row()
-                _row.cell("Rak"); _row.cell("PIC"); _row.cell("Nominal"); _row.cell("Jml Item")
-                for _r in _top_rak[:5]:
-                    _row = _t.row()
-                    _row.cell(str(_r.get("rak_id", "-")))
-                    _row.cell(str(_r.get("pic", "-")))
-                    _row.cell(fmt_rp(abs(_r.get("total", 0))))
-                    _row.cell(str(_r.get("total_item", 0)))
 
-        # Lanjut ke Part 2
-        return _rei_pdf_part2(
-            _pdf, _theme, _lost, _btsb, _sh, _status,
-            _top_rak, _top_items, _btsb.get("nsb", 0), _total_selisih_abs
-        )
+        # ==== 3.4 CHART TREN ====
+        _pdf.sub_title("3.4 Tren Selisih Harian", space_before=6)
 
-    except Exception as _e:
-        print(f"[REI EXPORT PDF ERROR] {_e}")
-        import traceback
-        print(traceback.format_exc())
-        return None
-        
-        # =========================================================
-# MAIN EXPORT — PART 2 (Halaman 4)
-# =========================================================
-def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
-                   _top_rak, _top_items, _nsb_val, _total_selisih_abs):
-    try:
+        _chart_data = data_context.get("chart_data", [])
+        if _chart_data:
+            _n_hari = len(_chart_data)
+            _trend_img = _create_trend_chart(_chart_data)
+            if _trend_img:
+                _pdf.image(_trend_img, x=25, w=160)
+                _pdf.ln(1)
+                _pdf.set_font(_pdf.font_body, "I", 8)
+                _pdf.set_text_color(80, 80, 80)
+                _pdf.cell(0, 4, f"Gambar 1. Tren Selisih SO {_n_hari} Hari Terakhir",
+                          align="C", new_x="LMARGIN", new_y="NEXT")
+
+        # ===== HAL 5: PEMBAHASAN + KESIMPULAN =====
         _pdf.add_page()
         _pdf.section_title("4. PEMBAHASAN", space_before=0)
 
@@ -600,7 +595,7 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
             f"1. Shrinkage Rate periode ini {_sh:.4f}%, "
             f"{'di atas' if _sh > 0.15 else 'dalam'} toleransi BTSB 0,15%.\n"
             f"2. Total Selisih {fmt_rp(_total_selisih_abs)} dari Net Sales "
-            f"{fmt_rp(_lost.get('net_sales', 0))}.\n"
+            f"{fmt_rp(_net_sales)}.\n"
             f"3. NSB sebesar {fmt_rp(_nsb_val)} "
             f"{'menjadi beban' if _nsb_val > 0 else 'tidak menjadi beban'}.\n"
             f"4. Konsentrasi selisih pada rak "
@@ -642,4 +637,3 @@ def _rei_pdf_part2(_pdf, _theme, _lost, _btsb, _sh, _status,
         import traceback
         print(traceback.format_exc())
         return None
-        
