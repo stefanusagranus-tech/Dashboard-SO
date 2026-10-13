@@ -22,7 +22,7 @@ import os
 import io
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
+import html
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -57,9 +57,13 @@ def _now_jkt():
 
 
 def _clean_text(text):
+    """Bersihin HTML entity & karakter aneh."""
     if not text:
         return "-"
-    return str(text).replace("&#39;", "'").replace("&amp;", "&").replace("&quot;", '"')
+    _t = str(text)
+    _t = html.unescape(_t)          # handle SEMUA entity: &#39;, &amp;, &quot;, dll
+    _t = " ".join(_t.split())       # hapus spasi berlebih
+    return _t
 
 
 def fmt_rp(value):
@@ -194,8 +198,10 @@ class ReiPDF(FPDF):
         self.cell(0, 6, text, new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
-    def body_text(self, text, line_height=4.5):
-        self.set_x(self.l_margin)  # ← TAMBAH
+    def body_text(self, text, line_height=4.5, space_before=0):
+        if space_before > 0:
+            self.ln(space_before)
+        self.set_x(self.l_margin)
         self.set_font(self.font_body, "", 9)
         self.set_text_color(*self.theme.TEXT_DARK)
         self.multi_cell(0, line_height, text)
@@ -280,11 +286,12 @@ def _analisis_plus_minus(top_minus, top_plus):
         for _plu in list(_overlap)[:5]:
             _hasil["overlap_items"].append({
                 "plu": _plu,
-                "nama_minus": _minus_plu[_plu].get("nama_produk", "-"),
-                "rak_minus": _minus_plu[_plu].get("rak_id", "-"),
-                "nama_plus": _plus_plu[_plu].get("nama_produk", "-"),
-                "rak_plus": _plus_plu[_plu].get("rak_id", "-"),
+                "nama_minus": _clean_text(_minus_plu[_plu].get("nama_produk", "-")),
+                "rak_minus": _clean_text(_minus_plu[_plu].get("rak_id", "-")),
+                "nama_plus": _clean_text(_plus_plu[_plu].get("nama_produk", "-")),
+                "rak_plus": _clean_text(_plus_plu[_plu].get("rak_id", "-")),
             })
+            
         _hasil["insight"] = (
             f"Ditemukan {len(_overlap)} item yang muncul di KEDUA kategori "
             f"(minus dan plus). Ini indikasi kuat terjadinya salah scan — "
@@ -655,8 +662,15 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
         # === 6.1 ANALISIS INTERNAL (4P) ===
         _pdf.sub_title("6.1 Analisis Internal (People, Place, Product, Process)", space_before=0)
 
+        # ===== HAL 6: PEMBAHASAN DETAIL (4P + EXTERNAL) =====
+        _pdf.add_page()
+        _pdf.section_title("6. PEMBAHASAN DETAIL", space_before=0)
+        
+        # === 6.1 ANALISIS INTERNAL (4P) ===
+        _pdf.sub_title("6.1 Analisis Internal (People, Place, Product, Process)", space_before=0)
+        
         # 6.1.1 PEOPLE
-        _pdf.set_x(18)  # ← TAMBAH INI — reset x ke margin kiri
+        _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "A. People (Manusia)", new_x="LMARGIN", new_y="NEXT")
@@ -668,8 +682,9 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
             "PIC yang sama dapat mengindikasikan perlunya pelatihan prosedur scan atau "
             "evaluasi beban kerja, bukan secara otomatis menyimpulkan kelalaian."
         )
-
+        
         # 6.1.2 PLACE
+        _pdf.ln(2)
         _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
@@ -683,13 +698,14 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
             f"(2) potensi scan ganda saat restock, dan "
             f"(3) kemungkinan barang jatuh/terselip di belakang display."
         )
-
+        
         # 6.1.3 PRODUCT
+        _pdf.ln(2)
         _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
         _pdf.cell(0, 5, "C. Product (Produk)", new_x="LMARGIN", new_y="NEXT")
-        _top_prod = _top_items[0].get("nama_produk", "-") if _top_items else "-"
+        _top_prod = _clean_text(_top_items[0].get("nama_produk", "-")) if _top_items else "-"
         _top_prod_nom = abs(_top_items[0].get("nominal_adjust", 0)) if _top_items else 0
         _pdf.body_text(
             f"Item dengan selisih tertinggi adalah '{_top_prod}' dengan nilai "
@@ -699,8 +715,9 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
             f"volume rendah) diawasi ketat, kategori C (nilai rendah, volume tinggi) "
             f"cukup monitoring berkala."
         )
-
+        
         # 6.1.4 PROCESS
+        _pdf.ln(2)
         _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
@@ -713,10 +730,10 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
             "(4) retur barang yang tidak diproses dengan benar. "
             "Evaluasi SOP diperlukan pada tahap penerimaan, penempatan, dan penjualan."
         )
-
+        
         # === 6.2 ANALISIS EXTERNAL ===
-        _pdf.sub_title("6.2 Analisis External", space_before=4)
-
+        _pdf.sub_title("6.2 Analisis External", space_before=5)
+        
         # 6.2.1 PENERIMAAN BARANG
         _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
@@ -729,8 +746,9 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
             "(3) keterlambatan input ke sistem setelah barang diterima. "
             "Verifikasi DO vs fisik wajib dilakukan sebelum barang masuk ke rak."
         )
-
+        
         # 6.2.2 PENGUTILAN
+        _pdf.ln(2)
         _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
@@ -743,8 +761,9 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
             "(3) selisih yang konsisten pada periode waktu tertentu. "
             "Diperlukan koordinasi dengan tim keamanan untuk investigasi lebih lanjut."
         )
-
+        
         # 6.2.3 FAKTOR EXTERNAL LAIN
+        _pdf.ln(2)
         _pdf.set_x(18)
         _pdf.set_font(_pdf.font_body, "B", 9)
         _pdf.set_text_color(*_theme.SAGE)
@@ -757,28 +776,29 @@ def _rei_pdf_part3(_pdf, _theme, _lost, _btsb, _sh, _status,
             "(4) sistem POS yang tidak sinkron dengan server pusat. "
             "Evaluasi berkala pada setiap faktor diperlukan untuk memastikan akurasi data."
         )
-
+        
         # === 6.3 ANALISIS PLUS vs MINUS ===
-        _pdf.sub_title("6.3 Analisis Item Plus vs Minus", space_before=4)
-
+        _pdf.sub_title("6.3 Analisis Item Plus vs Minus", space_before=5)
+        
         _analisis = _analisis_plus_minus(_top_items, _top_items_plus)
         _pdf.body_text(_analisis.get("insight", "Analisis tidak tersedia."))
-
+        
         if _analisis.get("overlap_items"):
             _pdf.ln(2)
+            _pdf.set_x(18)
             _pdf.set_font(_pdf.font_body, "B", 9)
             _pdf.set_text_color(60, 60, 60)
             _pdf.cell(0, 5, "Item yang muncul di kedua kategori:", new_x="LMARGIN", new_y="NEXT")
             _pdf.set_font(_pdf.font_body, "", 8)
             _pdf.set_text_color(*_theme.TEXT_DARK)
             for _it in _analisis["overlap_items"]:
+                _pdf.set_x(18)
                 _pdf.cell(
                     0, 4.5,
                     f"  • PLU {_it['plu']}: {_it['nama_minus'][:30]} "
                     f"(minus di {_it['rak_minus']}, plus di {_it['rak_plus']})",
                     new_x="LMARGIN", new_y="NEXT"
                 )
-
         # ===== HAL 7: KESIMPULAN + AUDIT CATATAN + SUMBER DATA =====
         _pdf.add_page()
         _pdf.section_title("7. KESIMPULAN", space_before=0)
