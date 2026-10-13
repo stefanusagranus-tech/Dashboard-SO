@@ -22,7 +22,7 @@ from routers import kurumi, hana, yui, rei, config
 
 # Import auth middleware
 from middleware.auth import AuthMiddleware
-
+from middleware.rate_limit import setup_rate_limit      # ← BARU
 
 # =========================================================
 # APP INIT
@@ -53,6 +53,9 @@ app.add_middleware(
 # 2. Auth middleware setelah CORS
 app.add_middleware(AuthMiddleware)
 
+# 3. Rate limiting
+setup_rate_limit(app)                     # ← BARU
+
 
 # =========================================================
 # ROUTERS
@@ -61,8 +64,7 @@ app.include_router(kurumi.router)
 app.include_router(hana.router)
 app.include_router(yui.router)
 app.include_router(rei.router)
-app.include_router(config.router)          # ← BARIS BARU
-
+app.include_router(config.router)
 
 # =========================================================
 # HEALTH & INFO
