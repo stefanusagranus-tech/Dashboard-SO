@@ -2,18 +2,15 @@
 Router Yui — Data Entry (AI-2)
 ================================
 Endpoint untuk bot Yui.
-
-Fokus:
-- Input SO via chat
-- Rekap SO
-- List item
-- Top items
+Fokus: input SO, rekap SO, list item, top items.
 """
 
 from fastapi import APIRouter, HTTPException, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from middleware.rate_limit import limiter, get_real_ip
+from pydantic import BaseModel, Field
+from typing import Optional
+
+from middleware.rate_limit import limiter
+
 
 try:
     from services.ai_so_input import (
@@ -78,7 +75,7 @@ class TopItemsRequest(BaseModel):
 
 
 # =========================================================
-# ENDPOINTS
+# HEALTH
 # =========================================================
 @router.get("/health")
 async def yui_health():
@@ -223,105 +220,4 @@ DETAIL RAK:
     except Exception as _e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-
-# =========================================================
-# PARSE — Natural language
-# =========================================================
-@router.post("/parse")
-async def yui_parse_endpoint(req: ParseRequest):
-    """Parse natural language input SO. Response flat."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        _parsed = parse_natural_language(req.text, req.rak_list or [])
-        return _parsed
-    except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-
-# =========================================================
-# REKAP
-# =========================================================
-@router.post("/rekap")
-async def yui_rekap_endpoint(req: RekapRequest):
-    """Rekap SO."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        from datetime import datetime
-
-        _tgl_start = None
-        _tgl_end = None
-
-        if req.mode == "custom":
-            if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Mode custom butuh tgl_start dan tgl_end",
-                )
-            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
-            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
-        _hasil = rekap_so(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-        )
-
-        if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal rekap"))
-
-        return _hasil
-
-    except HTTPException:
-        raise
-    except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-
-# =========================================================
-# TOP ITEMS
-# =========================================================
-@router.post("/top-items")
-async def yui_top_items_endpoint(req: TopItemsRequest):
-    """Top item berdasarkan selisih."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        _hasil = get_top_items(
-            mode=req.mode,
-            limit=req.limit,
-            only_minus=req.only_minus,
-            order=req.order,
-        )
-
-        if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal"))
-
-        return _hasil
-
-    except HTTPException:
-        raise
-    except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-
-# =========================================================
-# ITEMS BY RAK
-# =========================================================
-@router.get("/items-by-rak/{rak_id}")
-async def yui_items_by_rak_endpoint(rak_id: str):
-    """List item di rak tertentu — semua item (minus + plus)."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        _hasil = get_items_by_rak(rak_id, mode="bulan_ini", show_all=True)
-        return _hasil
-    except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
