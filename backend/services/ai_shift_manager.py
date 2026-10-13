@@ -11,10 +11,10 @@ Fitur:
 4. chat_response()            → Q&A bebas tentang shift
 """
 
+import os                                           # ← TAMBAH
 import json
 import re
 import concurrent.futures
-import streamlit as st
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 
@@ -24,19 +24,18 @@ try:
 except ImportError:
     GROQ_AVAILABLE = False
 
-from services.master_shift_handler import (
+from services.master_shift_handler import (          # ← FIX
     KODE_SHIFT,
     KEYWORD_TO_KODE,
     load_personil_master,
     load_master_shift_matrix,
     get_shift_hari_ini,
     parse_chat_update,
-    save_master_shift,       # ✅ Tambahin kalau belum ada
+    save_master_shift,
 )
-from services.supabase_client import get_supabase
-from services.ai_config import get_ai_api_key
-from servics.token_monitor import record_usage_v2, check_auto_pause
-
+from services.supabase_client import get_supabase    # ← FIX
+from services.ai_config import get_ai_api_key        # ← FIX
+from services.token_monitor import record_usage_v2, check_auto_pause    # ← FIX
 
 # =========================================================
 # 🔧 MODEL PRIORITY — GROQ
