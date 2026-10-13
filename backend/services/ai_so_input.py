@@ -637,7 +637,70 @@ def validate_so_data(data, rak_master_df=None):
         _warnings.append("Tanggal belum diisi")
 
     return {"valid": len(_errors) == 0, "errors": _errors, "warnings": _warnings}
+# =========================================================
+# 📄 LAYER 4: REGEX FALLBACK
+# =========================================================
+def _regex_fallback(file_text):
+    """
+    Fallback: extract SO pake regex sederhana.
+    Buat kasus di mana semua LLM gagal tapi text masih terstruktur.
+    """
+    if not file_text:
+        return None
 
+    _items = []
+    _text = str(file_text)
+
+    # Pattern: PLU (min 3 digit) ... nama ... qty
+    # Contoh: "123456 WOW SPAGETI 51 51 0 5333.58"
+    _pattern = re.compile(
+        r'(\d{3,})\s+'              # PLU
+        r'([A-Za-z][A-Za-z0-9\s\'\.\-/]{2,60}?)\s+'  # Nama produk
+        r'(-?\d+)\s+'               # Qty sistem
+        r'(-?\d+)\s+'               # Qty fisik
+        r'(-?\d+)\s+'               # Qty var
+        r'(-?[\d.,]+)',             # Nominal
+        re.MULTILINE,
+    )
+
+    for _match in _pattern.finditer(_text):
+        try:
+            _plu = _match.group(1).strip()
+            _nama = _match.group(2).strip()
+            _qty_sist = _safe_int(_match.group(3))
+            _qty_fis = _safe_int(_match.group(4))
+            _qty_var = _safe_int(_match.group(5))
+            _nominal = _safe_float(_match.group(6))
+
+            if not _plu or len(_plu) < 3:
+                continue
+            if not _nama or len(_nama) < 2:
+                continue
+
+            _items.append({
+                "rak_id": "UNKNOWN",
+                "plu": _plu,
+                "nama_produk": _nama[:120],
+                "qty_sistem": _qty_sist,
+                "qty_fisik": _qty_fis,
+                "qty_var": _qty_var,
+                "nominal_adjust": _nominal,
+                "pic": None,
+            })
+        except Exception:
+            continue
+
+    if not _items:
+        return None
+
+    return {
+        "tanggal": None,
+        "items": _items,
+        "items_by_rak": {},
+        "total_nominal": sum(i["nominal_adjust"] for i in _items),
+        "rak_id": None,
+        "pic": None,
+    }
 
 # =========================================================
 # 📊 REKAP
@@ -659,4 +722,5 @@ __all__ = [
     "validate_so_data",
     "generate_so_rekap",
     "set_log_buffer",
+    "_regex_fallback",           # ← TAMBAH
 ]
