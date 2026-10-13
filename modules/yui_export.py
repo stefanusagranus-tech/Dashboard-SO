@@ -334,10 +334,12 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
             import traceback
             print(traceback.format_exc())
 
+        # Cari fungsi _sf() di dalam export_rekap_pdf
         def _sf(style="", size=10):
             try:
                 if _use_dejavu:
-                    _pdf.set_font("DejaVuSansCondensed", style=style, size=size)
+                    # PERBAIKAN: Gunakan "DejaVu", bukan "DejaVuSansCondensed"
+                    _pdf.set_font("DejaVu", style=style, size=size)
                 else:
                     _pdf.set_font("Helvetica", style=style, size=size)
             except Exception:
@@ -356,11 +358,13 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
             _pdf.set_text_color(*WARNA["dark"])
             _pdf.ln(9)
 
+        # Cari fungsi _watermark() di dalam export_rekap_pdf
         def _watermark():
             _pdf.set_y(-25)
             _sf(style="I", size=7)
             _pdf.set_text_color(180, 180, 180)
-            _pdf.cell(0, 5, "Dokumen di-generate otomatis oleh Yui — Dashboard SO Toko C383",
+            # PERBAIKAN: Ganti em-dash (—) menjadi hyphen (-)
+            _pdf.cell(0, 5, "Dokumen di-generate otomatis oleh Yui - Dashboard SO Toko C383",
                       align="C", new_x="LMARGIN", new_y="NEXT")
             _pdf.set_text_color(*WARNA["dark"])
 
