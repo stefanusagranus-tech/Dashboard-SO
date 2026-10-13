@@ -4,21 +4,26 @@ Supabase Client
 Koneksi ke Supabase (PostgreSQL) untuk Dashboard SO.
 """
 
+import os
+from functools import lru_cache
 from supabase import create_client, Client
 import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
-@st.cache_resource(show_spinner=False)
+@lru_cache(maxsize=1)
 def get_supabase() -> Client:
     """
-    Bikin koneksi Supabase (cached).
-    Baca dari st.secrets["supabase"].
+    Bikin koneksi Supabase (cached via lru_cache).
+    Baca dari environment variables.
     """
     try:
-        _url = st.secrets["supabase"]["url"]
-        _key = st.secrets["supabase"]["key"]
+        _url = os.getenv("SUPABASE_URL", "")
+        _key = os.getenv("SUPABASE_KEY", "")
+        if not _url or not _key:
+            print(f"[SUPABASE CONN ERROR] SUPABASE_URL atau SUPABASE_KEY kosong")
+            return None
         return create_client(_url, _key)
     except Exception as e:
         print(f"[SUPABASE CONN ERROR] {e}")
