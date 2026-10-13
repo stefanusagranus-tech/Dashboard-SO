@@ -211,16 +211,35 @@ async function loadMiniDashboard() {
     const progressLabel = document.getElementById("progressLabel");
     const runningText = document.getElementById("runningText");
 
+    // 🔥 DEBUG — liat URL & key sebelum fetch
+    const _url = `${CONFIG.BACKEND_URL}/api/yui/rekap`;
+    const _key = getApiKey();
+
+    alert(
+        `DEBUG INFO:\n\n` +
+        `URL: ${_url}\n\n` +
+        `Key prefix: ${_key.substring(0, 15)}...\n` +
+        `Key length: ${_key.length}\n` +
+        `Backend: ${CONFIG.BACKEND_URL}`
+    );
+
     try {
-        // Fetch rekap bulan ini (biar dapet data)
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/rekap`, {
+        const resp = await fetch(_url, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-API-Key": getApiKey(),
+                "X-API-Key": _key,
             },
             body: JSON.stringify({ mode: "bulan_ini" }),
         });
+
+        // 🔥 DEBUG — liat response status
+        alert(
+            `RESPONSE:\n\n` +
+            `Status: ${resp.status}\n` +
+            `Status text: ${resp.statusText}\n` +
+            `Final URL: ${resp.url}`
+        );
 
         if (!resp.ok) {
             throw new Error(`HTTP ${resp.status}`);
@@ -232,15 +251,12 @@ async function loadMiniDashboard() {
         const totalItem = data.total_item || 0;
         const totalNominal = data.total_nominal || 0;
 
-        // Total rak dari master (default 145, dari config)
         const totalRakMaster = 145;
         const persen = totalRakMaster > 0 ? (totalRak / totalRakMaster) * 100 : 0;
 
-        // Update stats
         if (statRak) statRak.textContent = `${totalRak}/${totalRakMaster}`;
         if (statItem) statItem.textContent = totalItem;
         if (statNominal) {
-            // Format: -399K atau -1.2M
             const abs = Math.abs(totalNominal);
             let formatted = "";
             if (abs >= 1_000_000) formatted = `${(totalNominal / 1_000_000).toFixed(1)}M`;
@@ -249,13 +265,11 @@ async function loadMiniDashboard() {
             statNominal.textContent = `Rp ${formatted}`;
         }
 
-        // Progress
         if (progressFill) progressFill.style.width = `${Math.min(persen, 100)}%`;
         if (progressLabel) {
             progressLabel.textContent = `${persen.toFixed(1)}% dari target ${CONFIG.TARGET_SO_PERSEN}%`;
         }
 
-        // Running text
         if (runningText) {
             const runningParts = [];
             runningParts.push(`📦 Yui: ${totalRak} rak SO bulan ini`);
@@ -275,27 +289,17 @@ async function loadMiniDashboard() {
 
     } catch (err) {
         console.error("[Dashboard] Error:", err);
+
+        // 🔥 DEBUG — error detail
+        alert(`ERROR CATCH:\n\nName: ${err.name}\nMessage: ${err.message}`);
+
         if (statRak) statRak.textContent = "—";
         if (statItem) statItem.textContent = "—";
         if (statNominal) statNominal.textContent = "—";
         if (progressLabel) progressLabel.textContent = "Gagal load data";
-        if (runningText) runningText.textContent = `⚠️ Gagal load data: ${err.message}`;
+        if (runningText) runningText.textContent = `⚠️ Gagal: ${err.name} — ${err.message}`;
     }
 }
-
-function startDashboardAutoRefresh() {
-    stopDashboardAutoRefresh();
-    // Refresh tiap 5 menit
-    dashboardRefreshInterval = setInterval(loadMiniDashboard, 5 * 60 * 1000);
-}
-
-function stopDashboardAutoRefresh() {
-    if (dashboardRefreshInterval) {
-        clearInterval(dashboardRefreshInterval);
-        dashboardRefreshInterval = null;
-    }
-}
-
 
 // =========================================================
 // PIN LOGIN
