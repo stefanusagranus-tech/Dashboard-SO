@@ -320,14 +320,19 @@ def export_rekap_pdf(hasil, net_sales=0, filename="rekap_so.pdf"):
         _use_dejavu = False
         try:
             if os.path.exists(_font_reg) and os.path.exists(_font_bold):
-                _pdf.add_font(fname=_font_reg)
-                _pdf.add_font(fname=_font_bold, style="B")
+                # ✅ FIX: add_font BUTUH family name
+                _pdf.add_font("DejaVu", "", _font_reg)
+                _pdf.add_font("DejaVu", "B", _font_bold)
                 _use_dejavu = True
-                print("[PDF] Pakai DejaVu font")
+                print(f"[PDF] ✅ Pakai DejaVu: {_font_reg}")
             else:
-                print(f"[PDF] Font gak ada: {_font_reg} / {_font_bold}")
+                print(f"[PDF] ❌ Font gak ada:")
+                print(f"     Regular: {_font_reg} (exists={os.path.exists(_font_reg)})")
+                print(f"     Bold:    {_font_bold} (exists={os.path.exists(_font_bold)})")
         except Exception as _e:
-            print(f"[PDF] Gagal load DejaVu: {_e}")
+            print(f"[PDF] ❌ Gagal load DejaVu: {_e}")
+            import traceback
+            print(traceback.format_exc())
 
         def _sf(style="", size=10):
             try:
