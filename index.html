@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id" data-theme="halloween-dark">
+<html lang="id" data-theme="halloween-dark" data-time-theme="malam">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -13,6 +13,11 @@
 <!-- LOGIN SCREEN -->
 <!-- ========================================================= -->
 <div id="loginScreen" class="screen active">
+    <!-- Dekorasi Halloween -->
+    <div class="bat bat-1">🦇</div>
+    <div class="bat bat-2">🦇</div>
+    <div class="bat bat-3">🦇</div>
+
     <div class="login-container">
         <div class="login-logo">🎃</div>
         <h1 class="login-title">Dashboard SO C383</h1>
@@ -48,9 +53,14 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- HOME SCREEN -->
+<!-- HOME SCREEN (UPDATE v1.1) -->
 <!-- ========================================================= -->
 <div id="homeScreen" class="screen">
+
+    <!-- Dekorasi Halloween -->
+    <div class="bat bat-1">🦇</div>
+    <div class="bat bat-2">🦇</div>
+
     <div class="home-header">
         <div class="home-header-title">
             <span class="home-logo">🎃</span>
@@ -62,11 +72,45 @@
     </div>
 
     <div class="home-content">
-        <div class="home-greeting">
-            <h2>Halo, Bos! 👋</h2>
-            <p>Mau ngapain hari ini?</p>
+
+        <!-- JAM LIVE -->
+        <div class="live-clock">
+            <div class="clock-time" id="clockTime">--:--</div>
+            <div class="clock-date" id="clockDate">Loading...</div>
+            <div class="clock-greeting" id="clockGreeting">Selamat Datang</div>
         </div>
 
+        <!-- MINI DASHBOARD -->
+        <div class="mini-dashboard" id="miniDashboard">
+            <div class="mini-title">📊 RINGKASAN HARI INI</div>
+            <div class="mini-stats">
+                <div class="stat">
+                    <div class="stat-value" id="statRak">--</div>
+                    <div class="stat-label">Rak SO</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statItem">--</div>
+                    <div class="stat-label">Item</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statNominal">--</div>
+                    <div class="stat-label">Selisih</div>
+                </div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <div class="progress-label" id="progressLabel">Memuat data...</div>
+        </div>
+
+        <!-- RUNNING TEXT -->
+        <div class="running-text">
+            <div class="running-inner" id="runningText">
+                🎃 Memuat info terbaru...
+            </div>
+        </div>
+
+        <!-- MENU CARDS -->
         <div class="home-cards">
             <button class="home-card" onclick="goToChatScreen()">
                 <div class="home-card-icon">📦</div>
@@ -97,13 +141,13 @@
         </div>
 
         <div class="home-footer">
-            <span>v1.0.0 — Dashboard SO C383</span>
+            <span>v1.1.0 — Dashboard SO C383</span>
         </div>
     </div>
 </div>
 
 <!-- ========================================================= -->
-<!-- CHAT SCREEN -->
+<!-- CHAT SCREEN (sama kayak sebelumnya) -->
 <!-- ========================================================= -->
 <div id="chatScreen" class="screen">
     <div class="chat-header">
@@ -126,7 +170,7 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- SIDEBAR (buat chat screen) -->
+<!-- SIDEBAR -->
 <!-- ========================================================= -->
 <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
@@ -212,13 +256,18 @@
                     ☀️ Light
                 </button>
             </div>
+            <div class="settings-item" style="margin-top: 10px;">
+                <div class="settings-label">Auto Tema Jam</div>
+                <div class="settings-item-value" id="autoThemeValue">Aktif</div>
+            </div>
+            <button class="settings-btn" onclick="toggleAutoTheme()">Toggle Auto Tema</button>
         </div>
 
         <div class="settings-group">
             <div class="settings-group-title">ℹ️ Info</div>
             <div class="settings-item">
                 <div class="settings-label">Versi</div>
-                <div class="settings-item-value">1.0.0</div>
+                <div class="settings-item-value">1.1.0</div>
             </div>
             <div class="settings-item">
                 <div class="settings-label">Backend</div>
@@ -242,7 +291,7 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- STREAMLIT SCREEN -->
+<!-- STREAMLIT SCREEN (UPDATE: WebView + tombol browser) -->
 <!-- ========================================================= -->
 <div id="streamlitScreen" class="screen">
     <div class="screen-header">
@@ -254,9 +303,10 @@
     </div>
 
     <div class="streamlit-content">
-        <div class="streamlit-loading">
+        <div class="streamlit-loading" id="streamlitLoading">
             <div class="spinner"></div>
             <p>Loading Streamlit...</p>
+            <p class="streamlit-hint">Kalau gak muncul, klik 🌐 di kanan atas</p>
         </div>
         <iframe id="streamlitFrame"
                 src="about:blank"

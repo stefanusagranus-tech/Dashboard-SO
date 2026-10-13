@@ -1,4 +1,9 @@
 /* =========================================================
+   DASHBOARD SO C383 — STYLE v1.1
+   Halloween Theme + Auto Time Theme + Upgrade Visual
+   ========================================================= */
+
+/* =========================================================
    RESET & VARIABEL
    ========================================================= */
 * {
@@ -8,36 +13,43 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-:root {
-    /* Halloween Dark (default) */
-    --bg-primary: #1a0e2e;
-    --bg-secondary: #251643;
-    --bg-tertiary: #2f1b52;
-    --bg-card: #2a1848;
+/* =========================================================
+   TEMA HALOWEEN DARK (default malam)
+   ========================================================= */
+:root,
+[data-theme="halloween-dark"] {
+    --bg-primary: #14082a;
+    --bg-secondary: #1e0f3e;
+    --bg-tertiary: #2a1652;
+    --bg-card: #241345;
+    --bg-gradient: linear-gradient(135deg, #14082a 0%, #1e0f3e 50%, #2a1652 100%);
 
     --text-primary: #f5f0ff;
-    --text-secondary: #b8a8d9;
+    --text-secondary: #c4b0e6;
     --text-muted: #7a6b99;
 
     --accent-orange: #ff8c42;
     --accent-purple: #a259ff;
     --accent-pumpkin: #ff6b1a;
     --accent-glow: #ff8c42;
+    --accent-teal: #06d6a0;
 
     --border-color: #3d2960;
     --border-hover: #5c3f8a;
+    --border-glow: rgba(255, 140, 66, 0.5);
 
-    --bubble-user-bg: #ff8c42;
-    --bubble-user-text: #1a0e2e;
-    --bubble-ai-bg: #2f1b52;
+    --bubble-user-bg: linear-gradient(135deg, #ff8c42, #ff6b1a);
+    --bubble-user-text: #14082a;
+    --bubble-ai-bg: #2a1652;
     --bubble-ai-text: #f5f0ff;
 
     --danger: #e63946;
     --success: #06d6a0;
 
-    --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
-    --shadow-lg: 0 8px 32px rgba(162, 89, 255, 0.3);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.4);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
+    --shadow-lg: 0 8px 32px rgba(162, 89, 255, 0.4);
+    --shadow-glow: 0 0 24px rgba(255, 140, 66, 0.35);
 
     --radius-sm: 8px;
     --radius-md: 12px;
@@ -47,11 +59,15 @@
     --font-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* =========================================================
+   TEMA HALOWEEN LIGHT
+   ========================================================= */
 [data-theme="halloween-light"] {
     --bg-primary: #faf5ff;
     --bg-secondary: #f0e6ff;
     --bg-tertiary: #e5d9ff;
     --bg-card: #ffffff;
+    --bg-gradient: linear-gradient(135deg, #faf5ff 0%, #f0e6ff 50%, #e5d9ff 100%);
 
     --text-primary: #1a0e2e;
     --text-secondary: #4a3a6b;
@@ -61,11 +77,13 @@
     --accent-purple: #7c3aed;
     --accent-pumpkin: #ff5722;
     --accent-glow: #ff8c42;
+    --accent-teal: #08916d;
 
     --border-color: #d4c5e8;
     --border-hover: #a259ff;
+    --border-glow: rgba(255, 107, 26, 0.4);
 
-    --bubble-user-bg: #ff6b1a;
+    --bubble-user-bg: linear-gradient(135deg, #ff6b1a, #ff5722);
     --bubble-user-text: #ffffff;
     --bubble-ai-bg: #f0e6ff;
     --bubble-ai-text: #1a0e2e;
@@ -73,6 +91,42 @@
     --shadow-sm: 0 2px 8px rgba(122, 89, 255, 0.15);
     --shadow-md: 0 4px 16px rgba(122, 89, 255, 0.2);
     --shadow-lg: 0 8px 32px rgba(162, 89, 255, 0.25);
+    --shadow-glow: 0 0 20px rgba(255, 107, 26, 0.3);
+}
+
+/* =========================================================
+   AUTO TEMA JAM
+   ========================================================= */
+
+/* PAGI (05:00-11:00) — Cerah, accent biru-orange */
+[data-time-theme="pagi"] {
+    --accent-orange: #ff9f43;
+    --accent-purple: #54a0ff;
+    --accent-glow: #54a0ff;
+    --bg-gradient: linear-gradient(135deg, #1a1e3e 0%, #243056 100%);
+}
+
+/* SIANG (11:00-15:00) — Terang, accent kuning */
+[data-time-theme="siang"] {
+    --accent-orange: #feca57;
+    --accent-purple: #ff9f43;
+    --accent-glow: #feca57;
+}
+
+/* SORE (15:00-18:00) — Sunset, accent orange-merah */
+[data-time-theme="sore"] {
+    --accent-orange: #ff6b1a;
+    --accent-purple: #ee5253;
+    --accent-glow: #ff6b1a;
+    --bg-gradient: linear-gradient(135deg, #2a0f1e 0%, #3d1428 100%);
+}
+
+/* MALAM (18:00-05:00) — Halloween full */
+[data-time-theme="malam"] {
+    --accent-orange: #ff8c42;
+    --accent-purple: #a259ff;
+    --accent-glow: #ff8c42;
+    --bg-gradient: linear-gradient(135deg, #14082a 0%, #1e0f3e 50%, #2a1652 100%);
 }
 
 /* =========================================================
@@ -85,11 +139,13 @@ html, body {
 
 body {
     font-family: var(--font-main);
-    background: var(--bg-primary);
+    background: var(--bg-gradient);
+    background-attachment: fixed;
     color: var(--text-primary);
-    transition: background 0.3s, color 0.3s;
+    transition: background 0.5s, color 0.3s;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 /* =========================================================
@@ -100,12 +156,42 @@ body {
     position: fixed;
     inset: 0;
     flex-direction: column;
-    background: var(--bg-primary);
+    background: var(--bg-gradient);
     z-index: 1;
+    animation: screenFadeIn 0.3s ease-out;
 }
 
 .screen.active {
     display: flex;
+}
+
+@keyframes screenFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* =========================================================
+   DEKORASI HALLOWEEN — BAT FLYING
+   ========================================================= */
+.bat {
+    position: fixed;
+    font-size: 24px;
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+    animation: batFly 12s ease-in-out infinite;
+}
+
+.bat-1 { top: 15%; left: -10%; animation-delay: 0s; }
+.bat-2 { top: 25%; left: -10%; animation-delay: 4s; font-size: 20px; }
+.bat-3 { top: 10%; left: -10%; animation-delay: 8s; font-size: 18px; }
+
+@keyframes batFly {
+    0%   { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+    10%  { opacity: 0.4; }
+    50%  { transform: translate(50vw, 15vh) rotate(10deg); opacity: 0.5; }
+    90%  { opacity: 0.3; }
+    100% { transform: translate(110vw, -5vh) rotate(-10deg); opacity: 0; }
 }
 
 /* =========================================================
@@ -114,7 +200,6 @@ body {
 #loginScreen {
     justify-content: center;
     align-items: center;
-    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
 }
 
 .login-container {
@@ -122,30 +207,38 @@ body {
     max-width: 400px;
     padding: 30px 24px;
     text-align: center;
+    position: relative;
+    z-index: 2;
 }
 
 .login-logo {
-    font-size: 72px;
+    font-size: 84px;
     margin-bottom: 16px;
-    animation: pulse 2s ease-in-out infinite;
+    animation: pumpkinFloat 3s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px var(--accent-glow));
 }
 
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
+@keyframes pumpkinFloat {
+    0%, 100% { transform: translateY(0) rotate(-2deg); }
+    50% { transform: translateY(-12px) rotate(2deg); }
 }
 
 .login-title {
     font-size: 28px;
-    font-weight: 700;
-    color: var(--accent-orange);
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     margin-bottom: 4px;
+    letter-spacing: -0.5px;
 }
 
 .login-subtitle {
     font-size: 14px;
     color: var(--text-secondary);
     margin-bottom: 32px;
+    letter-spacing: 0.5px;
 }
 
 .pin-display {
@@ -167,7 +260,8 @@ body {
 .pin-dot.filled {
     background: var(--accent-orange);
     border-color: var(--accent-orange);
-    box-shadow: 0 0 12px var(--accent-glow);
+    box-shadow: 0 0 16px var(--accent-glow);
+    transform: scale(1.15);
 }
 
 .pin-keypad {
@@ -189,12 +283,13 @@ body {
     cursor: pointer;
     transition: all 0.15s;
     font-family: inherit;
+    box-shadow: var(--shadow-sm);
 }
 
 .pin-key:active {
     background: var(--accent-purple);
-    transform: scale(0.95);
-    box-shadow: 0 0 20px var(--accent-glow);
+    transform: scale(0.92);
+    box-shadow: var(--shadow-glow);
 }
 
 .pin-key-empty {
@@ -231,6 +326,9 @@ body {
     padding: 16px 20px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 2;
 }
 
 .home-header-title {
@@ -238,12 +336,14 @@ body {
     align-items: center;
     gap: 10px;
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-primary);
+    text-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
 }
 
 .home-logo {
     font-size: 24px;
+    animation: pumpkinFloat 3s ease-in-out infinite;
 }
 
 .theme-toggle {
@@ -258,40 +358,207 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
+    box-shadow: var(--shadow-sm);
 }
 
 .theme-toggle:active {
     background: var(--accent-purple);
     transform: scale(0.9);
+    box-shadow: var(--shadow-glow);
 }
 
 .home-content {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 24px 20px;
+    padding: 20px;
     overflow-y: auto;
+    position: relative;
+    z-index: 2;
+    gap: 16px;
 }
 
-.home-greeting {
-    margin-bottom: 28px;
+.home-content::-webkit-scrollbar {
+    width: 4px;
 }
 
-.home-greeting h2 {
-    font-size: 24px;
-    margin-bottom: 6px;
-    color: var(--text-primary);
+.home-content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
 }
 
-.home-greeting p {
-    font-size: 14px;
+/* =========================================================
+   JAM LIVE
+   ========================================================= */
+.live-clock {
+    text-align: center;
+    padding: 16px 12px;
+}
+
+.clock-time {
+    font-size: 48px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -2px;
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(255, 140, 66, 0.2);
+}
+
+.clock-date {
+    font-size: 13px;
     color: var(--text-secondary);
+    margin-top: 6px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
 }
 
+.clock-greeting {
+    font-size: 15px;
+    color: var(--accent-orange);
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+/* =========================================================
+   MINI DASHBOARD
+   ========================================================= */
+.mini-dashboard {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    overflow: hidden;
+}
+
+.mini-dashboard::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple), var(--accent-orange));
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 0% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.mini-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+}
+
+.mini-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.stat {
+    text-align: center;
+    padding: 8px 4px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--accent-orange);
+    line-height: 1.1;
+    text-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
+    word-break: break-all;
+}
+
+.stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple));
+    border-radius: 4px;
+    transition: width 0.8s ease-out;
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.progress-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* =========================================================
+   RUNNING TEXT
+   ========================================================= */
+.running-text {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 10px 0;
+    overflow: hidden;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+}
+
+.running-text::before {
+    content: "📢";
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 16px;
+    z-index: 2;
+    background: var(--bg-card);
+    padding-right: 8px;
+}
+
+.running-inner {
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding-left: 40px;
+    animation: scrollText 25s linear infinite;
+    display: inline-block;
+}
+
+@keyframes scrollText {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+}
+
+/* =========================================================
+   HOME CARDS
+   ========================================================= */
 .home-cards {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
 }
 
 .home-card {
@@ -303,21 +570,38 @@ body {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.25s;
     font-family: inherit;
     text-align: left;
     color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.home-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 0%, rgba(255, 140, 66, 0.08) 100%);
+    opacity: 0;
+    transition: opacity 0.3s;
 }
 
 .home-card:active {
     border-color: var(--accent-orange);
     transform: scale(0.98);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-glow);
+}
+
+.home-card:active::before {
+    opacity: 1;
 }
 
 .home-card-icon {
     font-size: 32px;
     flex-shrink: 0;
+    filter: drop-shadow(0 0 8px rgba(255, 140, 66, 0.3));
 }
 
 .home-card-info {
@@ -329,7 +613,7 @@ body {
 
 .home-card-title {
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-primary);
 }
 
@@ -342,6 +626,11 @@ body {
     font-size: 20px;
     color: var(--accent-orange);
     font-weight: 700;
+    transition: transform 0.3s;
+}
+
+.home-card:active .home-card-arrow {
+    transform: translateX(4px);
 }
 
 .home-footer {
@@ -371,6 +660,8 @@ body {
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
     gap: 12px;
+    backdrop-filter: blur(10px);
+    z-index: 2;
 }
 
 .hamburger-btn {
@@ -397,7 +688,7 @@ body {
     align-items: center;
     gap: 8px;
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-primary);
 }
 
@@ -412,7 +703,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    background: var(--bg-primary);
+    background: transparent;
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -433,12 +724,13 @@ body {
     line-height: 1.5;
     word-wrap: break-word;
     white-space: pre-wrap;
-    animation: bubbleFade 0.2s ease-out;
+    animation: bubbleIn 0.25s ease-out;
+    box-shadow: var(--shadow-sm);
 }
 
-@keyframes bubbleFade {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+@keyframes bubbleIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .bubble-user {
@@ -446,6 +738,7 @@ body {
     background: var(--bubble-user-bg);
     color: var(--bubble-user-text);
     border-bottom-right-radius: 4px;
+    box-shadow: var(--shadow-sm), 0 0 16px rgba(255, 140, 66, 0.2);
 }
 
 .bubble-ai {
@@ -453,6 +746,7 @@ body {
     background: var(--bubble-ai-bg);
     color: var(--bubble-ai-text);
     border-bottom-left-radius: 4px;
+    border: 1px solid var(--border-color);
 }
 
 .bubble-time {
@@ -460,6 +754,7 @@ body {
     color: var(--text-muted);
     margin-top: 2px;
     align-self: flex-end;
+    padding: 0 4px;
 }
 
 .bubble-time-ai {
@@ -478,6 +773,7 @@ body {
     border-radius: 50%;
     background: var(--accent-orange);
     animation: bounce 1.4s infinite ease-in-out;
+    box-shadow: 0 0 8px var(--accent-glow);
 }
 
 .bubble-loading span:nth-child(2) { animation-delay: 0.2s; }
@@ -514,6 +810,7 @@ body {
 
 .chat-input:focus {
     border-color: var(--accent-orange);
+    box-shadow: 0 0 12px rgba(255, 140, 66, 0.2);
 }
 
 .chat-input::placeholder {
@@ -525,7 +822,7 @@ body {
     height: 44px;
     border: none;
     border-radius: 50%;
-    background: var(--accent-orange);
+    background: var(--bubble-user-bg);
     color: var(--text-primary);
     font-size: 18px;
     cursor: pointer;
@@ -534,16 +831,18 @@ body {
     justify-content: center;
     transition: all 0.2s;
     flex-shrink: 0;
+    box-shadow: 0 0 16px rgba(255, 140, 66, 0.4);
 }
 
 .chat-send:active {
     transform: scale(0.9);
-    background: var(--accent-pumpkin);
+    box-shadow: 0 0 24px rgba(255, 140, 66, 0.7);
 }
 
 .chat-send:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    box-shadow: none;
 }
 
 /* =========================================================
@@ -557,6 +856,7 @@ body {
     z-index: 100;
     opacity: 0;
     transition: opacity 0.3s;
+    backdrop-filter: blur(2px);
 }
 
 .sidebar-overlay.active {
@@ -579,6 +879,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5);
 }
 
 .sidebar.open {
@@ -597,6 +898,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    text-shadow: 0 0 12px rgba(255, 140, 66, 0.4);
 }
 
 .sidebar-menu {
@@ -629,6 +931,7 @@ body {
     background: var(--bg-tertiary);
     border-left: 3px solid var(--accent-orange);
     padding-left: 17px;
+    box-shadow: inset 0 0 20px rgba(255, 140, 66, 0.1);
 }
 
 .sidebar-item span:first-child {
@@ -657,6 +960,7 @@ body {
     padding: 14px 16px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
 }
 
 .back-btn,
@@ -683,7 +987,7 @@ body {
 .screen-title {
     flex: 1;
     font-size: 17px;
-    font-weight: 600;
+    font-weight: 700;
     text-align: center;
     color: var(--text-primary);
 }
@@ -724,6 +1028,7 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    box-shadow: var(--shadow-sm);
 }
 
 .settings-label {
@@ -751,6 +1056,7 @@ body {
     cursor: pointer;
     font-family: inherit;
     transition: all 0.2s;
+    box-shadow: var(--shadow-sm);
 }
 
 .settings-btn:active {
@@ -785,7 +1091,7 @@ body {
 .theme-option.active {
     border-color: var(--accent-orange);
     background: var(--bg-tertiary);
-    box-shadow: 0 0 16px rgba(255, 140, 66, 0.3);
+    box-shadow: 0 0 20px rgba(255, 140, 66, 0.35);
 }
 
 /* =========================================================
@@ -812,11 +1118,17 @@ body {
     text-align: center;
     color: var(--text-secondary);
     z-index: 1;
-    pointer-events: none;
+    padding: 20px;
 }
 
 .streamlit-loading.hidden {
     display: none;
+}
+
+.streamlit-hint {
+    font-size: 12px;
+    color: var(--accent-orange);
+    margin-top: 12px;
 }
 
 .spinner {
@@ -827,6 +1139,7 @@ body {
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin: 0 auto 12px;
+    box-shadow: 0 0 20px rgba(255, 140, 66, 0.3);
 }
 
 @keyframes spin {
@@ -841,5 +1154,452 @@ body {
 }
 
 .fade-in {
-    animation: bubbleFade 0.3s ease-out;
+    animation: bubbleIn 0.3s ease-out;
 }
+/* =========================================================
+   TEMA WAKTU — LANJUTAN (Override Full per Waktu)
+   ========================================================= */
+
+/* =========================================================
+   PAGI (05:00 - 11:00) — Cerah, Segar
+   ========================================================= */
+[data-time-theme="pagi"][data-theme="halloween-dark"] {
+    --bg-primary: #1a1e3e;
+    --bg-secondary: #242a56;
+    --bg-tertiary: #2f3768;
+    --bg-card: #262c5c;
+    --bg-gradient: linear-gradient(135deg, #1a1e3e 0%, #242a56 50%, #2f3768 100%);
+
+    --accent-orange: #ffa94d;
+    --accent-purple: #54a0ff;
+    --accent-pumpkin: #ff8c42;
+    --accent-glow: #54a0ff;
+
+    --border-color: #3d4788;
+    --border-glow: rgba(84, 160, 255, 0.5);
+
+    --bubble-user-bg: linear-gradient(135deg, #54a0ff, #2e86de);
+    --bubble-user-text: #ffffff;
+    --bubble-ai-bg: #2f3768;
+    --bubble-ai-text: #e8f0ff;
+
+    --shadow-glow: 0 0 24px rgba(84, 160, 255, 0.35);
+}
+
+[data-time-theme="pagi"][data-theme="halloween-light"] {
+    --bg-primary: #f0f7ff;
+    --bg-secondary: #e0efff;
+    --bg-tertiary: #d0e5ff;
+    --bg-card: #ffffff;
+    --bg-gradient: linear-gradient(135deg, #f0f7ff 0%, #e0efff 50%, #d0e5ff 100%);
+
+    --accent-orange: #ff8c42;
+    --accent-purple: #2e86de;
+    --accent-glow: #2e86de;
+
+    --bubble-user-bg: linear-gradient(135deg, #54a0ff, #2e86de);
+    --bubble-user-text: #ffffff;
+    --bubble-ai-bg: #e0efff;
+    --bubble-ai-text: #1a1e3e;
+}
+
+/* =========================================================
+   SIANG (11:00 - 15:00) — Terang, Energik
+   ========================================================= */
+[data-time-theme="siang"][data-theme="halloween-dark"] {
+    --bg-primary: #2a1f0e;
+    --bg-secondary: #3a2c18;
+    --bg-tertiary: #4a3a20;
+    --bg-card: #3d2f18;
+    --bg-gradient: linear-gradient(135deg, #2a1f0e 0%, #3a2c18 50%, #4a3a20 100%);
+
+    --accent-orange: #feca57;
+    --accent-purple: #ff9f43;
+    --accent-pumpkin: #ff8c42;
+    --accent-glow: #feca57;
+
+    --border-color: #5c4a30;
+    --border-glow: rgba(254, 202, 87, 0.5);
+
+    --bubble-user-bg: linear-gradient(135deg, #feca57, #ff9f43);
+    --bubble-user-text: #2a1f0e;
+    --bubble-ai-bg: #4a3a20;
+    --bubble-ai-text: #fff8e6;
+
+    --shadow-glow: 0 0 24px rgba(254, 202, 87, 0.35);
+}
+
+[data-time-theme="siang"][data-theme="halloween-light"] {
+    --bg-primary: #fffdf5;
+    --bg-secondary: #fff8e0;
+    --bg-tertiary: #fff2c7;
+    --bg-card: #ffffff;
+    --bg-gradient: linear-gradient(135deg, #fffdf5 0%, #fff8e0 50%, #fff2c7 100%);
+
+    --accent-orange: #ff8c42;
+    --accent-purple: #f39c12;
+    --accent-glow: #f39c12;
+
+    --bubble-user-bg: linear-gradient(135deg, #feca57, #f39c12);
+    --bubble-user-text: #2a1f0e;
+    --bubble-ai-bg: #fff8e0;
+    --bubble-ai-text: #2a1f0e;
+}
+
+/* =========================================================
+   SORE (15:00 - 18:00) — Sunset, Warm
+   ========================================================= */
+[data-time-theme="sore"][data-theme="halloween-dark"] {
+    --bg-primary: #2a0f1e;
+    --bg-secondary: #3d1428;
+    --bg-tertiary: #4d1a34;
+    --bg-card: #3d1428;
+    --bg-gradient: linear-gradient(135deg, #2a0f1e 0%, #3d1428 50%, #4d1a34 100%);
+
+    --accent-orange: #ff6b1a;
+    --accent-purple: #ee5253;
+    --accent-pumpkin: #ff4f1f;
+    --accent-glow: #ff6b1a;
+
+    --border-color: #6b2a42;
+    --border-glow: rgba(238, 82, 83, 0.5);
+
+    --bubble-user-bg: linear-gradient(135deg, #ff6b1a, #ee5253);
+    --bubble-user-text: #ffffff;
+    --bubble-ai-bg: #4d1a34;
+    --bubble-ai-text: #ffe6e6;
+
+    --shadow-glow: 0 0 24px rgba(238, 82, 83, 0.4);
+}
+
+[data-time-theme="sore"][data-theme="halloween-light"] {
+    --bg-primary: #fff5f0;
+    --bg-secondary: #ffe6db;
+    --bg-tertiary: #ffd6c2;
+    --bg-card: #ffffff;
+    --bg-gradient: linear-gradient(135deg, #fff5f0 0%, #ffe6db 50%, #ffd6c2 100%);
+
+    --accent-orange: #ff4f1f;
+    --accent-purple: #d63031;
+    --accent-glow: #ff4f1f;
+
+    --bubble-user-bg: linear-gradient(135deg, #ff6b1a, #d63031);
+    --bubble-user-text: #ffffff;
+    --bubble-ai-bg: #ffe6db;
+    --bubble-ai-text: #2a0f1e;
+}
+
+/* =========================================================
+   MALAM (18:00 - 05:00) — Halloween Full
+   ========================================================= */
+[data-time-theme="malam"][data-theme="halloween-dark"] {
+    --bg-primary: #14082a;
+    --bg-secondary: #1e0f3e;
+    --bg-tertiary: #2a1652;
+    --bg-card: #241345;
+    --bg-gradient: linear-gradient(135deg, #14082a 0%, #1e0f3e 50%, #2a1652 100%);
+
+    --accent-orange: #ff8c42;
+    --accent-purple: #a259ff;
+    --accent-pumpkin: #ff6b1a;
+    --accent-glow: #ff8c42;
+
+    --border-color: #3d2960;
+    --border-glow: rgba(255, 140, 66, 0.5);
+
+    --bubble-user-bg: linear-gradient(135deg, #ff8c42, #ff6b1a);
+    --bubble-user-text: #14082a;
+    --bubble-ai-bg: #2a1652;
+    --bubble-ai-text: #f5f0ff;
+
+    --shadow-glow: 0 0 24px rgba(255, 140, 66, 0.4);
+}
+
+[data-time-theme="malam"][data-theme="halloween-light"] {
+    --bg-primary: #1a0e2e;
+    --bg-secondary: #251643;
+    --bg-tertiary: #2f1b52;
+    --bg-card: #2a1848;
+    --bg-gradient: linear-gradient(135deg, #1a0e2e 0%, #251643 100%);
+
+    --text-primary: #f5f0ff;
+    --text-secondary: #c4b0e6;
+
+    --accent-orange: #ff8c42;
+    --accent-purple: #a259ff;
+
+    --border-color: #3d2960;
+
+    --bubble-user-bg: linear-gradient(135deg, #ff8c42, #ff6b1a);
+    --bubble-user-text: #1a0e2e;
+    --bubble-ai-bg: #2f1b52;
+    --bubble-ai-text: #f5f0ff;
+}
+
+/* =========================================================
+   ANIMASI TAMBAHAN — GLOW PULSE
+   ========================================================= */
+@keyframes glowPulse {
+    0%, 100% { box-shadow: var(--shadow-sm), 0 0 16px rgba(255, 140, 66, 0.2); }
+    50% { box-shadow: var(--shadow-sm), 0 0 32px rgba(255, 140, 66, 0.5); }
+}
+
+.glow-pulse {
+    animation: glowPulse 3s ease-in-out infinite;
+}
+
+/* =========================================================
+   SMOOTH TRANSITIONS (biar tema ganti enak diliat)
+   ========================================================= */
+body,
+.screen,
+.home-header,
+.chat-header,
+.screen-header,
+.home-card,
+.settings-item,
+.settings-btn,
+.chat-input,
+.sidebar,
+.bubble-ai,
+.mini-dashboard,
+.running-text,
+.live-clock {
+    transition: background 0.5s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* =========================================================
+   RESPONSIVE — HP KECIL (max 360px)
+   ========================================================= */
+@media (max-width: 360px) {
+    .clock-time {
+        font-size: 40px;
+    }
+
+    .stat-value {
+        font-size: 17px;
+    }
+
+    .login-logo {
+        font-size: 64px;
+    }
+
+    .login-title {
+        font-size: 22px;
+    }
+
+    .pin-key {
+        font-size: 20px;
+    }
+
+    .home-card {
+        padding: 14px 16px;
+    }
+
+    .home-card-icon {
+        font-size: 26px;
+    }
+
+    .home-card-title {
+        font-size: 14px;
+    }
+
+    .home-card-subtitle {
+        font-size: 11px;
+    }
+
+    .bubble {
+        font-size: 13px;
+        max-width: 88%;
+    }
+
+    .sidebar {
+        width: 240px;
+    }
+}
+
+/* =========================================================
+   RESPONSIVE — HP BESAR (min 428px)
+   ========================================================= */
+@media (min-width: 428px) {
+    .clock-time {
+        font-size: 56px;
+    }
+
+    .stat-value {
+        font-size: 24px;
+    }
+
+    .home-card {
+        padding: 20px 24px;
+    }
+
+    .home-card-icon {
+        font-size: 36px;
+    }
+
+    .bubble {
+        font-size: 15px;
+    }
+}
+
+/* =========================================================
+   RESPONSIVE — TABLET (min 600px)
+   ========================================================= */
+@media (min-width: 600px) {
+    .home-content {
+        max-width: 600px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .settings-content {
+        max-width: 600px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .chat-messages {
+        max-width: 700px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .chat-input-area {
+        max-width: 700px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .mini-stats {
+        gap: 20px;
+    }
+
+    .stat-value {
+        font-size: 28px;
+    }
+}
+
+/* =========================================================
+   DARK MODE — HP (auto override kalau HP di dark mode & kita di light theme)
+   ========================================================= */
+@media (prefers-color-scheme: dark) {
+    [data-theme="halloween-light"][data-time-theme="malam"] {
+        /* Kalau user pilih light tapi HP-nya dark mode + malam
+           tetap pakai light theme, cuma lebih soft */
+        --bg-primary: #f0e6ff;
+        --bg-secondary: #e5d9ff;
+        --text-primary: #1a0e2e;
+    }
+}
+
+/* =========================================================
+   SCROLLBAR GLOBAL (subtle)
+   ========================================================= */
+::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-orange);
+}
+
+/* =========================================================
+   PRINT / SAFE AREA (HP dengan notch)
+   ========================================================= */
+@supports (padding: env(safe-area-inset-top)) {
+    .chat-header,
+    .home-header,
+    .screen-header {
+        padding-top: calc(14px + env(safe-area-inset-top));
+    }
+
+    .chat-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+}
+
+/* =========================================================
+   NO SELECT (biar gak select text waktu tap-tap)
+   ========================================================= */
+.home-card,
+.theme-toggle,
+.pin-key,
+.hamburger-btn,
+.chat-send,
+.sidebar-item,
+.settings-btn,
+.back-btn,
+.screen-header-action {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* =========================================================
+   SIDEBAR ANIMASI MASUK
+   ========================================================= */
+.sidebar-item {
+    animation: sidebarItemIn 0.3s ease-out backwards;
+}
+
+.sidebar-item:nth-child(1) { animation-delay: 0.05s; }
+.sidebar-item:nth-child(2) { animation-delay: 0.08s; }
+.sidebar-item:nth-child(3) { animation-delay: 0.11s; }
+.sidebar-item:nth-child(4) { animation-delay: 0.14s; }
+.sidebar-item:nth-child(5) { animation-delay: 0.17s; }
+
+@keyframes sidebarItemIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* =========================================================
+   RUNNING TEXT PAUSE ON HOVER (biar bisa dibaca)
+   ========================================================= */
+.running-text:hover .running-inner {
+    animation-play-state: paused;
+}
+
+/* =========================================================
+   EFEK GLOW DI BUBBLE USER
+   ========================================================= */
+.bubble-user {
+    position: relative;
+    overflow: hidden;
+}
+
+.bubble-user::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    animation: bubbleShine 3s ease-in-out infinite;
+}
+
+@keyframes bubbleShine {
+    0%, 100% { left: -100%; }
+    50% { left: 100%; }
+}
+
+/* =========================================================
+   END OF STYLE v1.1
+   ========================================================= */

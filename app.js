@@ -1,5 +1,6 @@
 /* =========================================================
-   DASHBOARD SO C383 — APP LOGIC
+   DASHBOARD SO C383 — APP LOGIC v1.1
+   Tambah: Jam Live, Auto Time Theme, Mini Dashboard, Running Text
    ========================================================= */
 
 // =========================================================
@@ -7,10 +8,11 @@
 // =========================================================
 const CONFIG = {
     BACKEND_URL: "https://dashboard-so.fastapicloud.dev",
-    STREAMLIT_URL: "https://dashboard-so.streamlit.app",
-    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkV",  // ⚠️ GANTI DENGAN KEY LO
+    STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
+    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkV",  // ⚠️ GANTI KALAU KEY LO BEDA
     DEFAULT_PIN: "123456",
-    APP_VERSION: "1.0.0",
+    APP_VERSION: "1.1.0",
+    TARGET_SO_PERSEN: 70,  // Target SO 70%
 };
 
 const BOTS = {
@@ -26,42 +28,57 @@ const BOTS = {
 // =========================================================
 let pinInput = "";
 let currentBot = "yui";
-let chatHistories = {};  // { yui: [...], hana: [...], ... }
+let chatHistories = {};
+let clockInterval = null;
+let dashboardRefreshInterval = null;
+let autoThemeEnabled = true;
 
 
 // =========================================================
-// INIT — saat app pertama dibuka
+// INIT
 // =========================================================
 function initApp() {
-    // Cek apakah udah login
     const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
 
-    // Load histories
     loadChatHistories();
 
-    // Load theme
+    // Auto theme setting
+    autoThemeEnabled = localStorage.getItem("so_auto_theme") !== "false";
+
+    // Theme
     const savedTheme = localStorage.getItem("so_theme") || "halloween-dark";
     setTheme(savedTheme);
 
-    // Update API key display
-    updateApiKeyDisplay();
+    // Time theme
+    updateTimeTheme();
 
-    // Update PIN hint
+    // API Key display
+    updateApiKeyDisplay();
+    updateAutoThemeDisplay();
+
+    // PIN hint
     const savedPin = localStorage.getItem("so_pin");
     if (savedPin) {
-        document.querySelector(".pin-hint").textContent = "";
+        const hint = document.querySelector(".pin-hint");
+        if (hint) hint.textContent = "";
     }
 
-    // Redirect ke home kalau udah login
+    // Show screen
     if (isLoggedIn) {
         showScreen("homeScreen");
+        startLiveClock();
+        loadMiniDashboard();
+        startDashboardAutoRefresh();
     } else {
         showScreen("loginScreen");
     }
 
-    // Bind event listeners
+    // Bind
     bindPinKeypad();
     bindChatInput();
+
+    // Auto update time theme tiap 1 menit
+    setInterval(updateTimeTheme, 60 * 1000);
 }
 
 
@@ -77,16 +94,25 @@ function showScreen(screenId) {
 function goToHomeScreen() {
     closeSidebar();
     showScreen("homeScreen");
+    // Refresh dashboard + start clock
+    startLiveClock();
+    loadMiniDashboard();
+    startDashboardAutoRefresh();
 }
 
 function goToChatScreen() {
+    // Stop clock refresh biar hemat
+    stopDashboardAutoRefresh();
     showScreen("chatScreen");
-    renderChatHistory();
+    // Set bot default
+    if (!currentBot || !BOTS[currentBot]) currentBot = "yui";
+    switchBot(currentBot);
 }
 
 function goToSettingsScreen() {
     closeSidebar();
     updateApiKeyDisplay();
+    updateAutoThemeDisplay();
     showScreen("settingsScreen");
 }
 
@@ -98,7 +124,181 @@ function goToStreamlitScreen() {
 
 
 // =========================================================
-// PIN — LOGIN
+// JAM LIVE
+// =========================================================
+function startLiveClock() {
+    updateClock();
+    if (clockInterval) clearInterval(clockInterval);
+    clockInterval = setInterval(updateClock, 1000);
+}
+
+function updateClock() {
+    const now = new Date();
+
+    // Jam
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const clockTime = document.getElementById("clockTime");
+    if (clockTime) clockTime.textContent = `${hh}:${mm}`;
+
+    // Tanggal
+    const hari = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    const clockDate = document.getElementById("clockDate");
+    if (clockDate) {
+        clockDate.textContent = `${hari[now.getDay()]}, ${now.getDate()} ${bulan[now.getMonth()]} ${now.getFullYear()}`;
+    }
+
+    // Greeting
+    const hour = now.getHours();
+    let greeting = "Selamat Malam";
+    let emoji = "🌙";
+    if (hour >= 5 && hour < 11) { greeting = "Selamat Pagi"; emoji = "🌅"; }
+    else if (hour >= 11 && hour < 15) { greeting = "Selamat Siang"; emoji = "☀️"; }
+    else if (hour >= 15 && hour < 18) { greeting = "Selamat Sore"; emoji = "🌆"; }
+    else { greeting = "Selamat Malam"; emoji = "🌙"; }
+
+    const clockGreeting = document.getElementById("clockGreeting");
+    if (clockGreeting) clockGreeting.textContent = `${greeting}, Bos! ${emoji}`;
+}
+
+
+// =========================================================
+// AUTO TIME THEME
+// =========================================================
+function updateTimeTheme() {
+    if (!autoThemeEnabled) return;
+
+    const hour = new Date().getHours();
+    let timeTheme = "malam";
+
+    if (hour >= 5 && hour < 11) timeTheme = "pagi";
+    else if (hour >= 11 && hour < 15) timeTheme = "siang";
+    else if (hour >= 15 && hour < 18) timeTheme = "sore";
+    else timeTheme = "malam";
+
+    document.documentElement.setAttribute("data-time-theme", timeTheme);
+    console.log(`[TimeTheme] ${timeTheme} (jam: ${hour})`);
+}
+
+function toggleAutoTheme() {
+    autoThemeEnabled = !autoThemeEnabled;
+    localStorage.setItem("so_auto_theme", String(autoThemeEnabled));
+    updateAutoThemeDisplay();
+
+    if (autoThemeEnabled) {
+        updateTimeTheme();
+        alert("✅ Auto tema jam aktif");
+    } else {
+        alert("❌ Auto tema jam dimatikan");
+    }
+}
+
+function updateAutoThemeDisplay() {
+    const el = document.getElementById("autoThemeValue");
+    if (el) el.textContent = autoThemeEnabled ? "Aktif" : "Nonaktif";
+}
+
+
+// =========================================================
+// MINI DASHBOARD — Fetch dari /api/yui/rekap
+// =========================================================
+async function loadMiniDashboard() {
+    const statRak = document.getElementById("statRak");
+    const statItem = document.getElementById("statItem");
+    const statNominal = document.getElementById("statNominal");
+    const progressFill = document.getElementById("progressFill");
+    const progressLabel = document.getElementById("progressLabel");
+    const runningText = document.getElementById("runningText");
+
+    try {
+        // Fetch rekap bulan ini (biar dapet data)
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/rekap`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": getApiKey(),
+            },
+            body: JSON.stringify({ mode: "bulan_ini" }),
+        });
+
+        if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+
+        const totalRak = data.total_rak || 0;
+        const totalItem = data.total_item || 0;
+        const totalNominal = data.total_nominal || 0;
+
+        // Total rak dari master (default 145, dari config)
+        const totalRakMaster = 145;
+        const persen = totalRakMaster > 0 ? (totalRak / totalRakMaster) * 100 : 0;
+
+        // Update stats
+        if (statRak) statRak.textContent = `${totalRak}/${totalRakMaster}`;
+        if (statItem) statItem.textContent = totalItem;
+        if (statNominal) {
+            // Format: -399K atau -1.2M
+            const abs = Math.abs(totalNominal);
+            let formatted = "";
+            if (abs >= 1_000_000) formatted = `${(totalNominal / 1_000_000).toFixed(1)}M`;
+            else if (abs >= 1_000) formatted = `${(totalNominal / 1_000).toFixed(0)}K`;
+            else formatted = totalNominal.toFixed(0);
+            statNominal.textContent = `Rp ${formatted}`;
+        }
+
+        // Progress
+        if (progressFill) progressFill.style.width = `${Math.min(persen, 100)}%`;
+        if (progressLabel) {
+            progressLabel.textContent = `${persen.toFixed(1)}% dari target ${CONFIG.TARGET_SO_PERSEN}%`;
+        }
+
+        // Running text
+        if (runningText) {
+            const runningParts = [];
+            runningParts.push(`📦 Yui: ${totalRak} rak SO bulan ini`);
+            runningParts.push(`💰 Total selisih: Rp ${totalNominal.toLocaleString("id-ID")}`);
+            runningParts.push(`📊 Total item: ${totalItem}`);
+            runningParts.push(`⚙️ Target SO: ${CONFIG.TARGET_SO_PERSEN}%`);
+
+            const now = new Date();
+            const hour = now.getHours();
+            if (hour < 11) runningParts.push(`🌅 Selamat pagi, semangat SO hari ini!`);
+            else if (hour < 15) runningParts.push(`☀️ Selamat siang, cek data SO!`);
+            else if (hour < 18) runningParts.push(`🌆 Selamat sore, cek progress SO!`);
+            else runningParts.push(`🌙 Selamat malam, jangan lupa SO besok!`);
+
+            runningText.textContent = runningParts.join("  •  ");
+        }
+
+    } catch (err) {
+        console.error("[Dashboard] Error:", err);
+        if (statRak) statRak.textContent = "—";
+        if (statItem) statItem.textContent = "—";
+        if (statNominal) statNominal.textContent = "—";
+        if (progressLabel) progressLabel.textContent = "Gagal load data";
+        if (runningText) runningText.textContent = `⚠️ Gagal load data: ${err.message}`;
+    }
+}
+
+function startDashboardAutoRefresh() {
+    stopDashboardAutoRefresh();
+    // Refresh tiap 5 menit
+    dashboardRefreshInterval = setInterval(loadMiniDashboard, 5 * 60 * 1000);
+}
+
+function stopDashboardAutoRefresh() {
+    if (dashboardRefreshInterval) {
+        clearInterval(dashboardRefreshInterval);
+        dashboardRefreshInterval = null;
+    }
+}
+
+
+// =========================================================
+// PIN LOGIN
 // =========================================================
 function bindPinKeypad() {
     document.querySelectorAll(".pin-key").forEach(btn => {
@@ -120,34 +320,30 @@ function bindPinKeypad() {
 
 function updatePinDisplay() {
     document.querySelectorAll(".pin-dot").forEach((dot, idx) => {
-        if (idx < pinInput.length) {
-            dot.classList.add("filled");
-        } else {
-            dot.classList.remove("filled");
-        }
+        dot.classList.toggle("filled", idx < pinInput.length);
     });
 }
 
 function checkPinComplete() {
     const pinError = document.getElementById("pinError");
-    pinError.textContent = "";
+    if (pinError) pinError.textContent = "";
 
     if (pinInput.length === 6) {
         setTimeout(() => {
             const validPin = localStorage.getItem("so_pin") || CONFIG.DEFAULT_PIN;
 
             if (pinInput === validPin) {
-                // PIN benar — login
                 pinInput = "";
                 updatePinDisplay();
                 localStorage.setItem("so_logged_in", "true");
                 showScreen("homeScreen");
+                startLiveClock();
+                loadMiniDashboard();
+                startDashboardAutoRefresh();
             } else {
-                // PIN salah
-                pinError.textContent = "❌ PIN salah, coba lagi";
+                if (pinError) pinError.textContent = "❌ PIN salah, coba lagi";
                 pinInput = "";
                 updatePinDisplay();
-                // Vibrate kalau didukung
                 if (navigator.vibrate) navigator.vibrate(200);
             }
         }, 200);
@@ -164,6 +360,8 @@ function logout() {
     pinInput = "";
     updatePinDisplay();
     closeSidebar();
+    stopDashboardAutoRefresh();
+    if (clockInterval) clearInterval(clockInterval);
     showScreen("loginScreen");
 }
 
@@ -181,10 +379,8 @@ function setTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("so_theme", theme);
 
-    // Update icon
-    const icons = ["themeIcon", "themeIcon2"];
     const isDark = theme === "halloween-dark";
-    icons.forEach(id => {
+    ["themeIcon", "themeIcon2"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = isDark ? "🌙" : "☀️";
     });
@@ -192,7 +388,6 @@ function setTheme(theme) {
     const sidebarIcon = document.getElementById("sidebarThemeIcon");
     if (sidebarIcon) sidebarIcon.textContent = isDark ? "🌙" : "☀️";
 
-    // Update theme options active state
     document.querySelectorAll(".theme-option").forEach(opt => {
         opt.classList.toggle("active", opt.getAttribute("data-theme") === theme);
     });
@@ -207,19 +402,16 @@ function toggleSidebar() {
     const overlay = document.getElementById("sidebarOverlay");
     const isOpen = sidebar.classList.contains("open");
 
-    if (isOpen) {
-        closeSidebar();
-    } else {
+    if (isOpen) closeSidebar();
+    else {
         sidebar.classList.add("open");
         overlay.classList.add("active");
     }
 }
 
 function closeSidebar() {
-    const sidebar = document.getElementById("sidebar");
-    const overlay = document.getElementById("sidebarOverlay");
-    sidebar.classList.remove("open");
-    overlay.classList.remove("active");
+    document.getElementById("sidebar").classList.remove("open");
+    document.getElementById("sidebarOverlay").classList.remove("active");
 }
 
 
@@ -230,26 +422,21 @@ function switchBot(botId) {
     if (!BOTS[botId]) return;
     currentBot = botId;
 
-    // Update header
     const bot = BOTS[botId];
     document.getElementById("chatBotEmoji").textContent = bot.emoji;
     document.getElementById("chatBotName").textContent = bot.name;
 
-    // Update sidebar active
     document.querySelectorAll(".bot-item").forEach(item => {
         item.classList.toggle("active", item.getAttribute("data-bot") === botId);
     });
 
-    // Render history
     renderChatHistory();
-
-    // Close sidebar
     closeSidebar();
 }
 
 
 // =========================================================
-// CHAT HISTORIES (localStorage)
+// CHAT HISTORIES
 // =========================================================
 function loadChatHistories() {
     try {
@@ -259,7 +446,6 @@ function loadChatHistories() {
         chatHistories = {};
     }
 
-    // Init kalau kosong
     Object.keys(BOTS).forEach(botId => {
         if (!chatHistories[botId]) chatHistories[botId] = [];
     });
@@ -269,7 +455,7 @@ function saveChatHistories() {
     try {
         localStorage.setItem("so_chat_histories", JSON.stringify(chatHistories));
     } catch (e) {
-        console.error("Gagal save chat history:", e);
+        console.error("Gagal save history:", e);
     }
 }
 
@@ -297,8 +483,7 @@ function resetAllChat() {
 function updateApiKeyDisplay() {
     const el = document.getElementById("settingsApiKey");
     if (!el) return;
-    const key = localStorage.getItem("so_api_key") || CONFIG.API_KEY;
-    // Sensor key
+    const key = getApiKey();
     const masked = key.length > 14
         ? key.substring(0, 10) + "..." + key.substring(key.length - 6)
         : "***";
@@ -343,17 +528,21 @@ function changePin() {
 // =========================================================
 function loadStreamlit() {
     const iframe = document.getElementById("streamlitFrame");
-    const loading = document.querySelector(".streamlit-loading");
+    const loading = document.getElementById("streamlitLoading");
+    if (!iframe) return;
 
-    if (!iframe || iframe.src !== "about:blank") return;
+    // Reset ke blank dulu
+    iframe.src = "about:blank";
+    if (loading) loading.classList.remove("hidden");
 
-    loading.classList.remove("hidden");
-    iframe.src = CONFIG.STREAMLIT_URL;
-
-    // Hide loading setelah 3 detik (asumsi streamlit loaded)
     setTimeout(() => {
-        loading.classList.add("hidden");
-    }, 3000);
+        iframe.src = CONFIG.STREAMLIT_URL;
+
+        // Hide loading setelah 4 detik
+        setTimeout(() => {
+            if (loading) loading.classList.add("hidden");
+        }, 4000);
+    }, 100);
 }
 
 function openStreamlitInBrowser() {
@@ -365,7 +554,6 @@ function openStreamlitInBrowser() {
 // BOOT
 // =========================================================
 document.addEventListener("DOMContentLoaded", initApp);
-
 /* =========================================================
    CHAT — MESSAGE HANDLING
    ========================================================= */
@@ -377,13 +565,13 @@ function bindChatInput() {
     const input = document.getElementById("chatInput");
     if (!input) return;
 
-    // Auto-resize textarea
+    // Auto-resize
     input.addEventListener("input", () => {
         input.style.height = "auto";
         input.style.height = Math.min(input.scrollHeight, 100) + "px";
     });
 
-    // Enter = kirim, Shift+Enter = newline
+    // Enter = kirim
     input.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -403,12 +591,11 @@ async function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
 
-    // Clear input
     input.value = "";
     input.style.height = "auto";
     sendBtn.disabled = true;
 
-    // Add user message
+    // Push user message
     const userMsg = {
         role: "user",
         content: text,
@@ -419,16 +606,15 @@ async function sendMessage() {
     renderChatHistory();
     scrollToBottom();
 
-    // Show loading
+    // Loading
     showLoadingBubble();
 
-    // Send to backend
     try {
         const bot = BOTS[currentBot];
 
-        // Build history (max 6 messages terakhir)
+        // History max 6 pesan terakhir (exclude yang barusan)
         const history = chatHistories[currentBot]
-            .slice(-7, -1)  // exclude yang barusan dikirim
+            .slice(-7, -1)
             .map(m => ({ role: m.role, content: m.content }));
 
         const response = await fetch(`${CONFIG.BACKEND_URL}${bot.endpoint}`, {
@@ -444,7 +630,6 @@ async function sendMessage() {
             }),
         });
 
-        // Remove loading
         hideLoadingBubble();
 
         if (!response.ok) {
@@ -456,7 +641,6 @@ async function sendMessage() {
         const data = await response.json();
         const aiText = data.text || "(kosong)";
 
-        // Add AI response
         const aiMsg = {
             role: "assistant",
             content: aiText,
@@ -501,7 +685,6 @@ function renderChatHistory() {
     const history = chatHistories[currentBot] || [];
 
     if (history.length === 0) {
-        // Welcome message
         const bot = BOTS[currentBot];
         container.innerHTML = `
             <div class="bubble bubble-ai">
@@ -530,7 +713,6 @@ ${getWelcomeText(currentBot)}
             bubble.style.borderLeft = "3px solid var(--danger)";
         }
 
-        // Render markdown-like: bold, code block
         bubble.innerHTML = formatMessage(msg.content);
 
         const time = document.createElement("div");
@@ -552,6 +734,10 @@ let loadingEl = null;
 function showLoadingBubble() {
     const container = document.getElementById("chatMessages");
     if (!container) return;
+
+    // Hapus dulu kalau ada
+    const old = document.getElementById("loadingBubble");
+    if (old) old.remove();
 
     loadingEl = document.createElement("div");
     loadingEl.className = "bubble bubble-ai bubble-loading";
@@ -606,11 +792,17 @@ function formatMessage(text) {
     // Bold **text**
     html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
 
+    // Italic *text*
+    html = html.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<i>$1</i>");
+
     // Inline code `code`
-    html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
+    html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
 
     // Bullet points
     html = html.replace(/^[\-\*]\s+(.+)$/gm, "• $1");
+
+    // Numbered list
+    html = html.replace(/^(\d+)\.\s+(.+)$/gm, "$1. $2");
 
     return html;
 }
@@ -638,19 +830,7 @@ function getWelcomeText(botId) {
 
 
 // =========================================================
-// OVERRIDE goToChatScreen (biar render history)
-// =========================================================
-const _origGoToChatScreen = goToChatScreen;
-goToChatScreen = function() {
-    _origGoToChatScreen();
-    // Set bot default kalau belum
-    if (!currentBot || !BOTS[currentBot]) currentBot = "yui";
-    switchBot(currentBot);
-};
-
-
-// =========================================================
-// AUTO LOGOUT KALAU IDLE 30 MENIT (opsional)
+// IDLE AUTO LOGOUT 30 MENIT
 // =========================================================
 let idleTimer;
 function resetIdleTimer() {
@@ -668,3 +848,20 @@ function resetIdleTimer() {
     document.addEventListener(evt, resetIdleTimer, { passive: true });
 });
 resetIdleTimer();
+
+
+// =========================================================
+// AUTO REFRESH MINI DASHBOARD — tiap 5 menit (kalau di home)
+// =========================================================
+setInterval(() => {
+    const homeScreen = document.getElementById("homeScreen");
+    if (homeScreen && homeScreen.classList.contains("active")) {
+        console.log("[Dashboard] Auto refresh");
+        loadMiniDashboard();
+    }
+}, 5 * 60 * 1000);
+
+
+// =========================================================
+// END OF APP v1.1
+// =========================================================
