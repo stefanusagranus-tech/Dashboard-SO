@@ -676,12 +676,7 @@ def get_shift_hari_ini(tanggal=None):
 def chat_response(user_message, conversation_history=None):
     """
     Hana chat response dengan intent detection.
-    
-    Intent yang dideteksi:
-    - update_shift: user minta atur/update/hapus shift → return preview + tombol konfirmasi
-    - query_shift: user tanya jadwal → return data jadwal
-    - suggest: user minta saran pengganti
-    - chat: chat biasa
+    Versi FINAL — sudah diperbaiki untuk mendeteksi multi-shift.
     """
     if not user_message:
         return {"text": "", "intent": "chat", "parsed": None, "engine": None}
@@ -689,19 +684,21 @@ def chat_response(user_message, conversation_history=None):
     _text_lower = str(user_message).lower().strip()
 
     # ============================================================
-    # INTENT 1 — UPDATE SHIFT
+    # INTENT 1 — UPDATE SHIFT (termasuk multi-shift)
     # ============================================================
+    # Deteksi apakah ini perintah update (ada kata kerja atau ada kata shift)
     _update_keywords = [
         "atur", "set", "ubah", "ganti", "pindah", "masuk",
         "libur", "cuti", "off",
     ]
     _shift_keywords = ["pagi", "siang", "malam", "libur", "off", "cuti"]
 
-    _is_update = any(k in _text_lower for k in _update_keywords)
+    # Cek apakah ada kata kunci update ATAU kata kunci shift
+    _is_update = any(k in _text_lower for k in _update_keywords) or any(k in _text_lower for k in _shift_keywords)
 
-    # Kalau ada kata shift + ada action → update
     if _is_update:
         try:
+            # Panggil parser yang sudah ada
             _parsed = parse_shift_update(user_message)
 
             # Kalau ada items → trigger konfirmasi
