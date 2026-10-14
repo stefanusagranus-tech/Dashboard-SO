@@ -1221,26 +1221,22 @@ function renderConfirmBubble(msg, idx) {
     const bubble = document.createElement("div");
     bubble.className = "bubble bubble-ai bubble-confirm";
 
-    if (msg.resolved) {
-        bubble.classList.add("resolved");
-    }
+    if (msg.resolved) bubble.classList.add("resolved");
 
     const data = msg.confirmData;
     const items = data.items || [];
     const itemsCount = items.length;
 
-    // Compact: tampil 3 pertama + ringkasan sisa
     const showAll = itemsCount <= 3;
     const displayItems = showAll ? items : items.slice(0, 3);
     const remaining = itemsCount - 3;
 
-    // Compact item — 1 baris
     const itemsHtml = displayItems.map(it => 
-        `<span class="confirm-item">👤 ${it.nama} → ${it.shift_nama || it.kode_shift}</span>`
+        `<div class="confirm-item">👤 ${it.nama} → ${it.shift_nama || it.kode_shift}</div>`
     ).join("");
 
     const moreHtml = !showAll 
-        ? `<span class="confirm-more">+ ${remaining} lainnya</span>` 
+        ? `<div class="confirm-more">+ ${remaining} lainnya</div>` 
         : "";
 
     let actionsHtml = "";
@@ -1249,12 +1245,8 @@ function renderConfirmBubble(msg, idx) {
     if (!msg.resolved) {
         actionsHtml = `
             <div class="confirm-actions">
-                <button class="confirm-btn confirm-btn-cancel" onclick="handleConfirmCancel(${idx})">
-                    ❌ Batal
-                </button>
-                <button class="confirm-btn confirm-btn-save" onclick="handleConfirmSave(${idx})" id="confirmBtnSave_${idx}">
-                    ✅ Simpan
-                </button>
+                <button class="confirm-btn confirm-btn-cancel" onclick="handleConfirmCancel(${idx})">❌ Batal</button>
+                <button class="confirm-btn confirm-btn-save" onclick="handleConfirmSave(${idx})" id="confirmBtnSave_${idx}">✅ Simpan</button>
             </div>
         `;
     } else if (msg.resolvedStatus === "saved") {
@@ -1262,18 +1254,13 @@ function renderConfirmBubble(msg, idx) {
     } else if (msg.resolvedStatus === "cancelled") {
         statusHtml = `<div class="confirm-status confirm-status-cancelled">❌ Dibatalkan</div>`;
     } else if (msg.resolvedStatus === "error") {
-        statusHtml = `<div class="confirm-status confirm-status-error">⚠️ Gagal disimpan</div>`;
+        statusHtml = `<div class="confirm-status confirm-status-error">⚠️ Gagal</div>`;
     }
 
     bubble.innerHTML = `
         <div class="confirm-title">🌸 KONFIRMASI UPDATE</div>
-        <div class="confirm-detail">
-            📅 ${formatTanggalShort(data.tanggal)} • 👥 ${itemsCount} orang
-        </div>
-        <div class="confirm-items-list">
-            ${itemsHtml}
-            ${moreHtml}
-        </div>
+        <div class="confirm-detail">📅 ${formatTanggalShort(data.tanggal)} • 👥 ${itemsCount} orang</div>
+        <div class="confirm-items-list">${itemsHtml}${moreHtml}</div>
         ${actionsHtml}
         ${statusHtml}
     `;
