@@ -872,14 +872,15 @@ body {
 .chat-messages {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    background: var(--bg-gradient);
-    background-attachment: fixed;
+    background: var(--bg-primary);          /* ← solid dulu */
     position: relative;
     isolation: isolate;
+    min-height: 0;
 }
 
 /* Animated gradient overlay */
@@ -891,7 +892,7 @@ body {
         radial-gradient(circle at 20% 30%, rgba(255, 140, 66, 0.08) 0%, transparent 50%),
         radial-gradient(circle at 80% 70%, rgba(162, 89, 255, 0.08) 0%, transparent 50%);
     pointer-events: none;
-    z-index: -1;
+    z-index: 0;                              /* ← FIX: di atas bg, di bawah bubble */
     animation: bgGradientShift 15s ease-in-out infinite;
 }
 
@@ -917,7 +918,7 @@ body {
     line-height: 200px;
     opacity: 0.025;
     pointer-events: none;
-    z-index: -1;
+    z-index: 0;                              /* ← FIX */
     overflow: hidden;
     animation: floatDots 30s linear infinite;
     white-space: pre-wrap;
@@ -936,16 +937,23 @@ body {
     gap: 8px;
     animation: bubbleSlideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.chat-message-wrapper {
+    position: relative;
+    z-index: 1;                              /* ← FIX */
 }
 
 .chat-message-wrapper.user {
     flex-direction: row-reverse;
-    align-self: flex-end;
+    justify-content: flex-start;
 }
 
 .chat-message-wrapper.ai {
     flex-direction: row;
-    align-self: flex-start;
+    justify-content: flex-start;
 }
 
 @keyframes bubbleSlideIn {
@@ -1005,16 +1013,18 @@ body {
    BUBBLE CHAT v1.5 — UPGRADE
    ========================================================= */
 .bubble {
-    max-width: 80%;
+    max-width: calc(100% - 60px);      /* beri ruang buat avatar + gap */
     padding: 10px 14px;
     border-radius: var(--radius-lg);
     font-size: 14px;
     line-height: 1.5;
     word-wrap: break-word;
-    white-space: pre-wrap;
+    white-space: normal;                /* ← FIX: normal, biar gak kepotong */
     box-shadow: var(--shadow-sm);
     position: relative;
     transition: transform 0.2s;
+    display: inline-block;
+    box-sizing: border-box;
 }
 
 .bubble:active {
@@ -2836,19 +2846,37 @@ body {
 }
 
 .bubble-user {
-    align-self: flex-end;
-    background: var(--bubble-user-bg);
-    color: var(--bubble-user-text);
+    background: linear-gradient(135deg, 
+        #ff8c42 0%, 
+        #ff6b1a 50%,
+        #ffa94d 100%);
+    background-size: 200% 100%;
+    color: #1a0e2e;
     border-bottom-right-radius: 4px;
-    box-shadow: var(--shadow-sm), 0 0 16px rgba(255, 140, 66, 0.2);
+    box-shadow: 
+        var(--shadow-sm),
+        0 0 16px rgba(255, 140, 66, 0.25),
+        inset 0 1px 2px rgba(255, 255, 255, 0.3);
+    font-weight: 600;
+    animation: bubbleGradient 6s ease-in-out infinite;
+    word-break: normal;
+    white-space: normal;
+    text-align: left;
 }
 
 .bubble-ai {
-    align-self: flex-start;
-    background: var(--bubble-ai-bg);
+    background: linear-gradient(135deg,
+            var(--bubble-ai-bg) 0%,
+            rgba(162, 89, 255, 0.08) 100%);
     color: var(--bubble-ai-text);
     border-bottom-left-radius: 4px;
     border: 1px solid var(--border-color);
+    box-shadow:
+        var(--shadow-sm),
+        inset 0 0 20px rgba(162, 89, 255, 0.05);
+    word-break: normal;
+    white-space: normal;
+    text-align: left;
 }
 
 .bubble-time {

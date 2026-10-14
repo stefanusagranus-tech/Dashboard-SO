@@ -1389,7 +1389,9 @@ ${getWelcomeText(currentBot)}
         bubbleWrapper.style.gap = "2px";
         bubbleWrapper.style.maxWidth = "100%";
         bubbleWrapper.style.minWidth = "0";
-        bubbleWrapper.style.flex = "1";
+        bubbleWrapper.style.flexShrink = "0";      // ← FIX: jangan ngambil sisa
+        bubbleWrapper.style.flexGrow = "0";        // ← FIX
+        bubbleWrapper.style.alignItems = isUser ? "flex-end" : "flex-start";
 
         // === KALAU PESAN KONFIRMASI ===
         if (msg.isConfirm && msg.confirmData) {
