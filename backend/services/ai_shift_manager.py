@@ -229,31 +229,49 @@ def parse_shift_update(text: str, today=None) -> dict:
         if not _shift_detected:
             _shift_detected = "O"  # default: libur
 
-        # Cari nama yang ada di teks
+        # === KATA YANG BUKAN NAMA (stopwords) ===
+        _stopwords = {
+            "PAGI", "SIANG", "MALAM", "LIBUR", "OFF", "CUTI", "MASUK",
+            "BESOK", "HARI", "INI", "LUSA", "KEMARIN", "SKRG", "SEKARANG",
+            "KE", "DAN", "YANG", "ATUR", "SET", "UBAH", "GANTI", "PINDAH",
+            "MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU",
+            "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
+            "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER",
+            "JAN", "FEB", "MAR", "APR", "JUN", "JUL", "AGU", "SEP", "OKT", "NOV", "DES",
+            "DEPAN", "NEXT", "TODAY", "TOMORROW",
+        }
+        
+        # === FIX: Cari nama yang ada di teks, exclude stopwords ===
         for _nama in _personil_names:
-            if _nama in _text_lower.upper():
-                _items.append({
-                    "nama": _nama,
-                    "kode_shift": _shift_detected,
-                    "shift_nama": SHIFT_MAP[_shift_detected],
-                })
-
-        # Kalau gak ada nama di DB, tapi ada nama "umum" di teks
+            # Cek whole word match (bukan substring)
+            _pattern = r'\b' + re.escape(_nama) + r'\b'
+            if re.search(_pattern, _text_lower.upper()):
+                if _nama not in _stopwords:
+                    _items.append({
+                        "nama": _nama,
+                        "kode_shift": _shift_detected,
+                        "shift_nama": SHIFT_MAP[_shift_detected],
+                    })
+        
+        # === FIX: Fallback pakai regex, exclude stopwords ===
         if not _items:
-            _match = re.search(r'(?:atur|set|ubah|ganti)\s+([a-z\s,]+?)\s+(?:ke|jadi|masuk|libur|cuti|off)', _text_lower)
+            _match = re.search(
+                r'(?:atur|set|ubah|ganti|pindah)\s+([a-z\s,]+?)\s+(?:ke|jadi|masuk|libur|cuti|off|pagi|siang|malam)',
+                _text_lower
+            )
             if _match:
                 _names_str = _match.group(1)
                 _names = re.split(r'[,\s]+dan\s+|,\s*|\s+dan\s+', _names_str)
                 for _nama in _names:
                     _nama = _nama.strip().upper()
                     _nama = re.sub(r'[^A-Z\s]', '', _nama).strip()
-                    if _nama and len(_nama) > 1:
+                    # Skip kalau kosong, kepanjangan, atau stopword
+                    if _nama and 2 <= len(_nama) <= 15 and _nama not in _stopwords:
                         _items.append({
                             "nama": _nama,
                             "kode_shift": _shift_detected,
                             "shift_nama": SHIFT_MAP[_shift_detected],
                         })
-
     return {
         "tanggal": _tgl,
         "tanggal_list": [_tgl],
