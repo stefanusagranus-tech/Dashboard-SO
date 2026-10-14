@@ -15,18 +15,29 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 
-# Rate limiter
 from middleware.rate_limit import limiter
 
 
 try:
     from services.ai_shift_manager import (
+        # Fungsi lama
         chat_response,
         parse_shift_update,
         suggest_pengganti,
         ai_suggest_pengganti_text,
         check_conflict,
         ai_check_conflict_text,
+        # Fungsi baru v2
+        save_shift,
+        save_batch,
+        get_master_shift,
+        check_konflik,
+        add_personil,
+        delete_personil,
+        get_personil_aktif,
+        get_shift_hari_ini,
+        parse_tanggal,
+        SHIFT_MAP,
     )
     _HANA_OK = True
     _import_error = None
@@ -73,7 +84,37 @@ class ConflictRequest(BaseModel):
     tanggal: str = Field(..., description="Tanggal (YYYY-MM-DD)")
     shift_map: dict = Field(..., description="Mapping nama -> kode shift")
 
+# =========================================================
+# SCHEMA v2 — CRUD Shift & Personil
+# =========================================================
+class SaveShiftRequest(BaseModel):
+    tanggal: str = Field(..., description="Tanggal (YYYY-MM-DD) atau natural language")
+    nama: str = Field(..., description="Nama personil")
+    kode_shift: str = Field(..., description="P7, S15, M22, O, CUTI")
+    action: str = Field("update", description="'update' atau 'delete'")
+    force: bool = Field(False, description="Force delete (hapus history)")
 
+
+class SaveBatchRequest(BaseModel):
+    tanggal: str = Field(..., description="Tanggal (YYYY-MM-DD) atau natural language")
+    items: list[dict] = Field(..., description="List {nama, kode_shift}")
+
+
+class MasterShiftQuery(BaseModel):
+    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
+    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+    nama_filter: Optional[str] = Field(None, description="Filter 1 personil")
+
+
+class PersonilRequest(BaseModel):
+    nama: str = Field(..., description="Nama personil")
+    urutan: Optional[int] = Field(None, description="Urutan (opsional)")
+
+
+class DeletePersonilRequest(BaseModel):
+    nama: str = Field(..., description="Nama personil")
+    force: bool = Field(False, description="True: hard delete + history")
+    
 # =========================================================
 # HEALTH
 # =========================================================
@@ -223,6 +264,183 @@ async def hana_conflict_endpoint(request: Request, req: ConflictRequest):
             "issues": _issues,
             "has_conflict": len(_issues) > 0,
         }
+
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+# =========================================================
+# SAVE SHIFT — 1 shift
+# =========================================================
+@router.post("/save-shift")
+@limiter.limit("30/minute")
+async def hana_save_shift_endpoint(request: Request, req: SaveShiftRequest):
+    """Simpan/update/hapus 1 shift."""
+    if not _HANA_OK:
+        raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
+
+    try:
+        # Parse tanggal natural
+        from datetime import datetime
+        _tgl = req.tanggal
+        # Kalau bukan format YYYY-MM-DD, parse natural
+        if not (len(_tgl) == 10 and _tgl[4] == "-"):
+            _tgl = parse_tanggal(_tgl)
+
+        _res = save_shift(
+            tanggal=_tgl,
+            nama=req.nama,
+            kode_shift=req.kode_shift,
+            action=req.action,
+            force=req.force,
+        )
+
+        if not _res.get("success"):
+            raise HTTPException(status_code=400, detail=_res.get("message", "Gagal"))
+
+        return _res
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# SAVE BATCH — banyak shift sekaligus
+# =========================================================
+@router.post("/save-batch")
+@limiter.limit("20/minute")
+async def hana_save_batch_endpoint(request: Request, req: SaveBatchRequest):
+    """Simpan banyak shift sekaligus."""
+    if not _HANA_OK:
+        raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
+
+    try:
+        _tgl = req.tanggal
+        if not (len(_tgl) == 10 and _tgl[4] == "-"):
+            _tgl = parse_tanggal(_tgl)
+
+        _res = save_batch(items=req.items, tanggal=_tgl)
+
+        if not _res.get("success"):
+            raise HTTPException(status_code=400, detail=_res.get("message", "Gagal"))
+
+        return _res
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# GET MASTER SHIFT — list + filter
+# =========================================================
+@router.post("/master-shift")
+@limiter.limit("60/minute")
+async def hana_master_shift_endpoint(request: Request, req: MasterShiftQuery):
+    """Ambil daftar shift dari Supabase."""
+    if not _HANA_OK:
+        raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
+
+    try:
+        _res = get_master_shift(
+            tgl_start=req.tgl_start,
+            tgl_end=req.tgl_end,
+            nama_filter=req.nama_filter,
+        )
+
+        if not _res.get("success"):
+            raise HTTPException(status_code=500, detail=_res.get("error", "Gagal"))
+
+        return _res
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# GET PERSONIL — list aktif
+# =========================================================
+@router.get("/personil")
+@limiter.limit("60/minute")
+async def hana_personil_endpoint(request: Request):
+    """List semua personil aktif."""
+    if not _HANA_OK:
+        raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
+
+    try:
+        _res = get_personil_aktif()
+        return {
+            "success": True,
+            "data": _res,
+            "total": len(_res),
+        }
+
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# PERSONIL — ADD / DELETE
+# =========================================================
+@router.post("/personil/add")
+@limiter.limit("20/minute")
+async def hana_personil_add_endpoint(request: Request, req: PersonilRequest):
+    """Tambah personil baru."""
+    if not _HANA_OK:
+        raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
+
+    try:
+        _res = add_personil(nama=req.nama, urutan=req.urutan)
+
+        if not _res.get("success"):
+            raise HTTPException(status_code=400, detail=_res.get("message", "Gagal"))
+
+        return _res
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+@router.post("/personil/delete")
+@limiter.limit("20/minute")
+async def hana_personil_delete_endpoint(request: Request, req: DeletePersonilRequest):
+    """Hapus personil (soft/hard delete)."""
+    if not _HANA_OK:
+        raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
+
+    try:
+        _res = delete_personil(nama=req.nama, force=req.force)
+
+        if not _res.get("success"):
+            raise HTTPException(status_code=400, detail=_res.get("message", "Gagal"))
+
+        return _res
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# SHIFT HARI INI — untuk running text
+# =========================================================
+@router.get("/shift-hari-ini")
+@limiter.limit("60/minute")
+async def hana_shift_hari_ini_endpoint(request: Request):
+    """Ambil ringkasan shift hari ini."""
+    if not _HANA_OK:
+        raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
+
+    try:
+        _res = get_shift_hari_ini()
+        return _res
 
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
