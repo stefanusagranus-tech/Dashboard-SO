@@ -3854,5 +3854,115 @@ body {
 }
 
 /* =========================================================
+   STREAMLIT REDIRECT SCREEN (v2.1)
+   ========================================================= */
+.streamlit-redirect {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    background: var(--bg-gradient);
+    min-height: 100%;
+}
+
+.streamlit-redirect-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    padding: 40px 28px;
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(255, 140, 66, 0.15);
+    position: relative;
+    overflow: hidden;
+}
+
+.streamlit-redirect-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple), var(--accent-orange));
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+}
+
+.streamlit-redirect-icon {
+    font-size: 72px;
+    margin-bottom: 16px;
+    animation: pumpkinFloat 3s ease-in-out infinite;
+    filter: drop-shadow(0 0 24px var(--accent-glow));
+    line-height: 1;
+}
+
+.streamlit-redirect-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+}
+
+.streamlit-redirect-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 24px;
+    font-weight: 500;
+}
+
+.streamlit-redirect-btn {
+    width: 100%;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-pumpkin));
+    border: none;
+    border-radius: var(--radius-md);
+    color: #fff;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 0 24px rgba(255, 140, 66, 0.4);
+    letter-spacing: 0.5px;
+}
+
+.streamlit-redirect-btn:active {
+    transform: scale(0.97);
+    box-shadow: 0 0 36px rgba(255, 140, 66, 0.6);
+}
+
+.streamlit-redirect-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+/* Responsive HP kecil */
+@media (max-width: 360px) {
+    .streamlit-redirect-card {
+        padding: 32px 20px;
+    }
+    .streamlit-redirect-icon {
+        font-size: 56px;
+    }
+    .streamlit-redirect-title {
+        font-size: 18px;
+    }
+    .streamlit-redirect-desc {
+        font-size: 12px;
+    }
+    .streamlit-redirect-btn {
+        padding: 14px 20px;
+        font-size: 14px;
+    }
+}
+
+/* =========================================================
    END OF STYLE v2.1
    ========================================================= */

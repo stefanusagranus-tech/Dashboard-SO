@@ -672,28 +672,28 @@ function changePin() {
 
 
 // =========================================================
-// STREAMLIT
+// STREAMLIT — External Browser Only
+// Streamlit Cloud pake auth redirect yg gak works di WebView
+// Solusi: buka di browser eksternal
 // =========================================================
 function loadStreamlit() {
-    const iframe = document.getElementById("streamlitFrame");
-    const loading = document.getElementById("streamlitLoading");
-    if (!iframe) return;
-
-    iframe.src = "about:blank";
-    if (loading) loading.classList.remove("hidden");
-
-    setTimeout(() => {
-        iframe.src = CONFIG.STREAMLIT_URL;
-
-        setTimeout(() => {
-            if (loading) loading.classList.add("hidden");
-        }, 4000);
-    }, 100);
+    console.log("[Streamlit] Screen shown — user will click button to open in browser");
+    // Nggak perlu load iframe lagi — langsung tampilkan halaman redirect
 }
 
 function openStreamlitInBrowser() {
-    window.open(CONFIG.STREAMLIT_URL, "_blank");
+    console.log("[Streamlit] Opening:", CONFIG.STREAMLIT_URL);
+    
+    // Coba buka di browser eksternal
+    try {
+        window.open(CONFIG.STREAMLIT_URL, "_blank");
+    } catch (e) {
+        // Fallback: redirect via location
+        console.error("[Streamlit] window.open failed:", e);
+        window.location.href = CONFIG.STREAMLIT_URL;
+    }
 }
+
 // =========================================================
 // MASTER SHIFT v1.3 — LOAD & RENDER
 // =========================================================

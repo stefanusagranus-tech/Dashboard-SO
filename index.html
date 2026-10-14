@@ -842,7 +842,7 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- STREAMLIT SCREEN -->
+<!-- STREAMLIT SCREEN — External Browser Only -->
 <!-- ========================================================= -->
 <div id="streamlitScreen" class="screen">
     <div class="screen-header">
@@ -853,17 +853,20 @@
         </button>
     </div>
 
-    <div class="streamlit-content">
-        <div class="streamlit-loading" id="streamlitLoading">
-            <div class="spinner"></div>
-            <p>Loading Streamlit...</p>
-            <p class="streamlit-hint">Kalau gak muncul, klik 🌐 di kanan atas</p>
+    <div class="streamlit-content streamlit-redirect">
+        <div class="streamlit-redirect-card">
+            <div class="streamlit-redirect-icon">🌐</div>
+            <h2 class="streamlit-redirect-title">Buka di Browser</h2>
+            <p class="streamlit-redirect-desc">
+                Streamlit perlu dibuka di browser eksternal karena butuh cookie & auth session.
+            </p>
+            <button class="streamlit-redirect-btn" onclick="openStreamlitInBrowser()">
+                🚀 Buka Streamlit
+            </button>
+            <p class="streamlit-redirect-hint">
+                Fitur: PDF Report, PPT Export, Master Shift
+            </p>
         </div>
-        <iframe id="streamlitFrame"
-                src="about:blank"
-                class="streamlit-frame"
-                allow="camera; microphone; clipboard-read; clipboard-write">
-        </iframe>
     </div>
 </div>
 
