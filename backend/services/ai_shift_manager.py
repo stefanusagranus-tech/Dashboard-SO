@@ -1,7 +1,7 @@
 """
-AI Shift Manager — Hana (AI-1) v3
+AI Shift Manager — Hana (AI-1) v4
 ====================================
-Logic untuk master shift: parse, save, read, delete.
+Logic untuk master shift: parse (Groq AI + fallback), save, read, delete.
 Fungsi lengkap untuk Hana — Master Shift Specialist.
 """
 
@@ -63,30 +63,20 @@ SHIFT_EMOJI = {
 
 
 # =========================================================
-# STOPWORDS — kata yang BUKAN nama personil
+# STOPWORDS
 # =========================================================
 STOPWORDS = {
-    # Shift
     "PAGI", "SIANG", "MALAM", "MALEM", "MLM", "SORE", "SOREMALEM",
-    # Status
     "LIBUR", "OFF", "CUTI", "MASUK", "IZIN", "SAKIT",
-    # Kata kerja
     "ATUR", "SET", "UBAH", "GANTI", "PINDAH", "PIND", "JADWAL", "SHIFT",
-    # Waktu
     "BESOK", "ESOK", "LUSA", "KEMARIN", "HARI", "INI", "ITU", "SKRG",
     "SEKARANG", "TODAY", "TOMORROW", "NEXT", "DEPAN", "LALU", "NANTI",
-    # Keterangan
     "KE", "DAN", "YANG", "DI", "PADA", "UNTUK", "DENGAN", "BUAT", "TO",
-    # Hari
-    "MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "JUMAT",
-    "SABTU", "AHAD", "JUMAAT",
-    # Bulan
+    "MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "AHAD", "JUMAAT",
     "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
     "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER",
     "JAN", "FEB", "MAR", "APR", "JUN", "JUL", "AGU", "SEP", "OKT", "NOV", "DES",
-    # Nama bot
     "BOS", "HANA", "YUI", "REI", "KURUMI",
-    # Keterangan tambahan
     "YA", "OKE", "OK", "BAIK", "SIAP", "MOHON", "TOLONG",
     "KALAU", "JIKA", "BILA", "APAKAH", "APA", "SIAPA", "BAGAIMANA", "GIMANA",
     "SEMUA", "SEMUANYA", "ORANG", "KARYAWAN", "TIM", "ANAK",
@@ -97,40 +87,22 @@ STOPWORDS = {
 # PARSE TANGGAL NATURAL
 # =========================================================
 def parse_tanggal(text: str, today=None) -> date:
-    """
-    Parse teks tanggal natural jadi `date`.
-    
-    Support:
-    - "hari ini", "today"
-    - "besok", "esok", "tomorrow"
-    - "lusa"
-    - "kemarin"
-    - "senin", "selasa", ..., "minggu" (hari terdekat ke depan)
-    - "senin depan"
-    - "20 okt", "20 oktober", "20-10", "20/10", "20/10/2026"
-    - "oktober", "okt" (bulan ini)
-    - Default: hari ini kalau gak ada tanggal
-    """
+    """Parse teks tanggal natural jadi date."""
     _today = today or _now_jkt().date()
     _text = str(text).lower().strip()
 
-    # === HARI INI ===
     if any(k in _text for k in ["hari ini", "today", "skrg", "sekarang"]):
         return _today
 
-    # === BESOK ===
     if any(k in _text for k in ["besok", "esok", "tomorrow", "bsk"]):
         return _today + timedelta(days=1)
 
-    # === LUSA ===
     if "lusa" in _text:
         return _today + timedelta(days=2)
 
-    # === KEMARIN ===
     if "kemarin" in _text:
         return _today - timedelta(days=1)
 
-    # === NAMA HARI ===
     _hari_map = {
         "senin": 0, "selasa": 1, "rabu": 2, "kamis": 3,
         "jumat": 4, "jum'at": 4, "sabtu": 5, "minggu": 6, "ahad": 6,
@@ -144,7 +116,6 @@ def parse_tanggal(text: str, today=None) -> date:
                 _days_ahead += 7
             return _today + timedelta(days=_days_ahead)
 
-    # === TANGGAL ANGKA ===
     _bulan_map = {
         "jan": 1, "januari": 1, "feb": 2, "februari": 2,
         "mar": 3, "maret": 3, "apr": 4, "april": 4,
@@ -157,8 +128,7 @@ def parse_tanggal(text: str, today=None) -> date:
     _match = re.search(r'(\d{1,2})\s+([a-z]+)', _text)
     if _match:
         _day = int(_match.group(1))
-        _bulan_str = _match.group(2)
-        _month = _bulan_map.get(_bulan_str)
+        _month = _bulan_map.get(_match.group(2))
         if _month:
             _year = _today.year
             if _month < _today.month:
@@ -181,12 +151,95 @@ def parse_tanggal(text: str, today=None) -> date:
             pass
 
     return _today
-    
+
+
+def _parse_tanggal_list(text, today):
+    """Parse multi-hari: 'besok dan lusa', 'senin, selasa'."""
+    _t = text.lower()
+    _result = []
+
+    if "besok" in _t and "lusa" in _t:
+        _result = [today + timedelta(days=1), today + timedelta(days=2)]
+    elif "lusa" in _t:
+        _result = [today + timedelta(days=2)]
+    elif "besok" in _t or "bsk" in _t:
+        _result = [today + timedelta(days=1)]
+    elif "hari ini" in _t or re.search(r'\bini\b', _t):
+        _result = [today]
+
+    # Match DD/MM/YYYY
+    for _m in re.finditer(r'\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b', text):
+        try:
+            _d, _mo = int(_m.group(1)), int(_m.group(2))
+            _y = _m.group(3)
+            _y = int(_y) + 2000 if _y and int(_y) < 100 else (int(_y) if _y else today.year)
+            _result.append(date(_y, _mo, _d))
+        except Exception:
+            pass
+
+    # Nama hari
+    _hari_map = {
+        "senin": 0, "selasa": 1, "rabu": 2, "kamis": 3,
+        "jumat": 4, "sabtu": 5, "minggu": 6,
+    }
+    for _hari, _idx in _hari_map.items():
+        if re.search(rf'\b{_hari}\b', _t):
+            _days_ahead = (_idx - today.weekday()) % 7
+            if _days_ahead == 0:
+                _days_ahead = 7
+            _result.append(today + timedelta(days=_days_ahead))
+
+    if not _result:
+        _result = [today]
+
+    # Dedupe & sort
+    _seen = set()
+    _unique = []
+    for _d in sorted(_result):
+        if _d not in _seen:
+            _seen.add(_d)
+            _unique.append(_d)
+
+    return _unique
+
+
+def _parse_tanggal_detect_label(text):
+    """Label tanggal untuk display."""
+    _t = text.lower()
+    _labels = []
+    if "hari ini" in _t or re.search(r'\bini\b', _t):
+        _labels.append("hari ini")
+    if "besok" in _t or "bsk" in _t:
+        _labels.append("besok")
+    if "lusa" in _t:
+        _labels.append("lusa")
+    return " & ".join(_labels) if _labels else "hari ini"
+
+
+# =========================================================
+# HELPER — JSON Extract
+# =========================================================
+def _extract_json(text):
+    """Extract JSON dari response AI."""
+    if not text:
+        return None
+    _text = str(text).strip()
+    _text = re.sub(r'^```(?:json)?\s*', '', _text)
+    _text = re.sub(r'\s*```$', '', _text)
+    _match = re.search(r'\{[\s\S]*\}', _text)
+    if not _match:
+        return None
+    try:
+        return json.loads(_match.group(0))
+    except Exception:
+        return None
+
+
 # =========================================================
 # GET PERSONIL AKTIF
 # =========================================================
 def get_personil_aktif() -> list:
-    """Ambil semua personil aktif dari Supabase."""
+    """Ambil semua personil aktif."""
     try:
         _sb = get_supabase()
         if _sb is None:
@@ -199,171 +252,24 @@ def get_personil_aktif() -> list:
 
 
 # =========================================================
-# PARSE SHIFT UPDATE — v3 (handle format kompleks)
+# HELPER — Build Context
 # =========================================================
-def parse_shift_update(text: str, today=None) -> dict:
-    """
-    Parse natural language jadi struktur shift.
-    Versi FINAL v4 — handle multi-klausa.
-    """
-    _today = today or _now_jkt().date()
-    _tgl = parse_tanggal(text, _today)
+def _build_personil_context():
+    """Konteks daftar personil aktif."""
+    try:
+        _personil = get_personil_aktif()
+        if not _personil:
+            return "Belum ada personil aktif."
+        _list = [p["nama"] for p in _personil]
+        return "Personil aktif: " + ", ".join(_list)
+    except Exception:
+        return "Gagal load personil."
 
-    _items = []
-    _text_lower = str(text).lower().strip()
-    _text_upper = str(text).upper()
-
-    _personil_list = get_personil_aktif()
-    _personil_names = [p["nama"].upper() for p in _personil_list]
-
-    if not _personil_names:
-        return {"tanggal": _tgl, "tanggal_list": [_tgl], "items": [], "raw": text}
-
-    # Mapping keyword → kode
-    _shift_kw_map = [
-        ("pagi", "P7"),
-        ("siang", "S15"),
-        ("malam", "M22"),
-        ("malem", "M22"),
-        ("mlm", "M22"),
-        ("sore", "S15"),
-        ("libur", "O"),
-        ("off", "O"),
-        ("cuti", "CUTI"),
-    ]
-
-    # =========================================================
-    # STEP 1: Split text by keyword "atur/set/ubah/ganti" + koma
-    # =========================================================
-    _segments = re.split(
-        r'[,\.]|\batur\b|\bset\b|\bubah\b|\bganti\b|\bpindah\b|\bjadwal\b',
-        _text_lower
-    )
-    _segments = [s.strip() for s in _segments if s.strip()]
-
-    _found_any = False
-
-    # =========================================================
-    # STEP 2: Untuk tiap segmen, split lagi by "dan"
-    # =========================================================
-    _sub_segments = []
-    for _seg in _segments:
-        # Split by "dan" sebagai pemisah klausa
-        _parts = re.split(r'\s+dan\s+|\s*,\s*', _seg)
-        for _p in _parts:
-            _p = _p.strip()
-            if _p and len(_p) >= 3:
-                _sub_segments.append(_p)
-
-    # =========================================================
-    # STEP 3: Parse tiap sub-segment
-    # =========================================================
-    for _seg in _sub_segments:
-        # Cari keyword shift (pertama ketemu)
-        _kode_detected = None
-        _kw_position = None
-
-        for _kw, _kode in _shift_kw_map:
-            _match = re.search(r'\b' + re.escape(_kw) + r'\b', _seg)
-            if _match:
-                _kode_detected = _kode
-                _kw_position = _match.start()
-                break
-
-        # Cari nama personil di segmen ini
-        _found_names = []
-        for _nama_db in _personil_names:
-            if re.search(r'\b' + re.escape(_nama_db.lower()) + r'\b', _seg):
-                _found_names.append(_nama_db)
-
-        # Kalau gak ada keyword shift tapi ada nama → pakai shift dari segmen sebelumnya (context)
-        if not _kode_detected and _found_names:
-            # Cari shift terakhir yang di-set
-            if _items:
-                _last_kode = _items[-1]["kode_shift"]
-                for _nama in _found_names:
-                    if _nama not in [it["nama"] for it in _items]:
-                        _items.append({
-                            "nama": _nama,
-                            "kode_shift": _last_kode,
-                            "shift_nama": SHIFT_MAP[_last_kode],
-                        })
-                        _found_any = True
-            continue
-
-        # Kalau ada keyword + ada nama → tambahkan
-        if _kode_detected and _found_names:
-            for _nama in _found_names:
-                if _nama not in [it["nama"] for it in _items]:
-                    _items.append({
-                        "nama": _nama,
-                        "kode_shift": _kode_detected,
-                        "shift_nama": SHIFT_MAP[_kode_detected],
-                    })
-                    _found_any = True
-
-    # =========================================================
-    # FALLBACK
-    # =========================================================
-    if not _found_any:
-        _log("Strategy v4 failed, using fallback")
-
-        _shift_detected = "O"
-        for _kw, _kode in _shift_kw_map:
-            if re.search(r'\b' + re.escape(_kw) + r'\b', _text_lower):
-                _shift_detected = _kode
-                break
-
-        for _nama_db in _personil_names:
-            if re.search(r'\b' + re.escape(_nama_db) + r'\b', _text_upper):
-                _items.append({
-                    "nama": _nama_db,
-                    "kode_shift": _shift_detected,
-                    "shift_nama": SHIFT_MAP[_shift_detected],
-                })
-
-    # Filter duplikat & stopwords
-    _final = []
-    _seen = set()
-    for _it in _items:
-        _n = _it.get("nama", "").upper().strip()
-        if not _n or len(_n) < 2 or len(_n) > 20:
-            continue
-        if _n in STOPWORDS:
-            continue
-        if _n in _seen:
-            continue
-        _final.append({
-            "nama": _n,
-            "kode_shift": _it["kode_shift"],
-            "shift_nama": _it["shift_nama"],
-        })
-        _seen.add(_n)
-
-    return {
-        "tanggal": _tgl,
-        "tanggal_list": [_tgl],
-        "items": _final,
-        "raw": text,
-    }
-    
 # =========================================================
 # SAVE SHIFT — dengan deteksi konflik
 # =========================================================
 def save_shift(tanggal, nama, kode_shift, action="update", force=False):
-    """
-    Simpan/update/hapus shift.
-    
-    Args:
-        tanggal: date atau str YYYY-MM-DD
-        nama: str
-        kode_shift: "P7" | "S15" | "M22" | "O" | "CUTI"
-        action: "update" (insert/update) | "delete"
-        force: True kalau mau hapus history (force delete personil)
-    
-    Returns:
-        {"success": bool, "message": str, "data": dict}
-    """
+    """Simpan/update/hapus shift."""
     try:
         _sb = get_supabase()
         if _sb is None:
@@ -376,16 +282,14 @@ def save_shift(tanggal, nama, kode_shift, action="update", force=False):
 
         _nama = str(nama).upper().strip()
 
-        # === ACTION: DELETE ===
         if action == "delete":
-            _res = _sb.table("master_shift").delete().eq("tanggal", _tgl_str).eq("nama", _nama).execute()
+            _sb.table("master_shift").delete().eq("tanggal", _tgl_str).eq("nama", _nama).execute()
             return {
                 "success": True,
                 "message": f"✅ Shift {_nama} tanggal {_tgl_str} dihapus",
                 "data": {"nama": _nama, "tanggal": _tgl_str, "action": "delete"},
             }
 
-        # === ACTION: UPDATE/INSERT ===
         _kode = str(kode_shift).upper().strip()
         if _kode not in SHIFT_MAP:
             return {"success": False, "message": f"Kode shift '{_kode}' tidak valid"}
@@ -418,12 +322,11 @@ def save_shift(tanggal, nama, kode_shift, action="update", force=False):
                     "data": {"nama": _nama, "tanggal": _tgl_str, "kode_shift": _kode, "status": "no_change"},
                 }
 
-            _res = _sb.table("master_shift").update(_row_data).eq("id", _row_id).execute()
+            _sb.table("master_shift").update(_row_data).eq("id", _row_id).execute()
             _msg = f"✅ Shift {_nama} diupdate: {SHIFT_MAP.get(_old_kode, _old_kode)} → {SHIFT_MAP[_kode]}"
-
         else:
             _row_data["created_at"] = _now_jkt().isoformat()
-            _res = _sb.table("master_shift").insert(_row_data).execute()
+            _sb.table("master_shift").insert(_row_data).execute()
             _msg = f"✅ Shift {_nama} disimpan: {SHIFT_MAP[_kode]}"
 
         return {
@@ -444,16 +347,10 @@ def save_shift(tanggal, nama, kode_shift, action="update", force=False):
 
 
 # =========================================================
-# SAVE BATCH — simpan banyak shift sekaligus
+# SAVE BATCH
 # =========================================================
 def save_batch(items, tanggal):
-    """
-    Simpan banyak shift sekaligus.
-    
-    Args:
-        items: [{"nama": "REZA", "kode_shift": "S15"}, ...]
-        tanggal: date atau str
-    """
+    """Simpan banyak shift sekaligus."""
     _saved = 0
     _errors = []
 
@@ -558,7 +455,6 @@ def check_konflik(nama, tanggal, kode_shift_baru):
                     "kode_lama": _kode_lama,
                     "shift_lama": SHIFT_MAP.get(_kode_lama, "?"),
                     "shift_baru": SHIFT_MAP.get(kode_shift_baru, "?"),
-                    "message": f"⚠️ {_nama} udah shift {SHIFT_MAP.get(_kode_lama, '?')}, ganti ke {SHIFT_MAP.get(kode_shift_baru, '?')}?",
                 }
 
         return {"ada_konflik": False}
@@ -646,7 +542,7 @@ def delete_personil(nama, force=False):
 
 
 # =========================================================
-# AMBIL SHIFT HARI INI — untuk running text
+# GET SHIFT HARI INI — untuk running text
 # =========================================================
 def get_shift_hari_ini(tanggal=None):
     """Ambil ringkasan shift hari ini, grouped by kode."""
@@ -667,6 +563,380 @@ def get_shift_hari_ini(tanggal=None):
         "grouped": _grouped,
         "total": len(_res.get("data", [])),
     }
+
+# =========================================================
+# PARSE SHIFT UPDATE — v4 (Groq AI + Fallback)
+# =========================================================
+def parse_shift_update(text: str, today=None) -> dict:
+    """
+    Parse natural language jadi struktur shift.
+    STRATEGI: Groq AI dulu → fallback rule-based.
+    
+    Return:
+    {
+        "tanggal": date,
+        "tanggal_list": [date, ...],
+        "items": [{"nama", "kode_shift", "shift_nama"}, ...],
+        "raw": str,
+    }
+    """
+    _today = today or _now_jkt().date()
+
+    if not text or not str(text).strip():
+        return {
+            "tanggal": _today,
+            "tanggal_list": [_today],
+            "items": [],
+            "raw": str(text),
+        }
+
+    # =========================================================
+    # STEP 1: COBA GROQ AI
+    # =========================================================
+    if GROQ_AVAILABLE:
+        _ai_result = _parse_with_groq(str(text), _today)
+        if _ai_result and _ai_result.get("success"):
+            return _ai_result["data"]
+
+    # =========================================================
+    # STEP 2: FALLBACK RULE-BASED
+    # =========================================================
+    _log("Groq failed, using rule-based fallback")
+    return _parse_rule_based(str(text), _today)
+
+
+# =========================================================
+# PARSE DENGAN GROQ AI
+# =========================================================
+def _parse_with_groq(text, today):
+    """Parse pakai Groq AI."""
+    try:
+        # Build context
+        _personil = get_personil_aktif()
+        if not _personil:
+            return {"success": False, "error": "Tidak ada personil aktif"}
+
+        _personil_names = [p["nama"] for p in _personil]
+        _personil_str = ", ".join(_personil_names)
+
+        # Shift context hari ini
+        _shift_ctx = _build_shift_context(today)
+
+        # Prompt
+        _prompt = f"""Kamu Hana 🌸, asisten HR untuk Toko C383.
+Tugasmu: parse pesan user jadi JSON (BUKAN ngobrol).
+
+KONTEKS HARI INI:
+- Tanggal: {today.isoformat()} ({today.strftime('%A')})
+- Personil aktif: {_personil_str}
+
+{_shift_ctx}
+
+KODE SHIFT VALID:
+- P7 = Pagi
+- S15 = Siang
+- M22 = Malam
+- O = Libur
+- CUTI = Cuti
+
+PESAN USER:
+\"\"\"{text}\"\"\"
+
+ATURAN PARSING:
+1. Deteksi mode: "update" (default) atau "delete" (kalau ada kata hapus/delete/buang)
+2. Deteksi tanggal (BISA MULTIPLE):
+   - "hari ini" / "ini" → hari ini
+   - "besok" → besok
+   - "lusa" → lusa
+   - "besok dan lusa" → 2 tanggal
+   - "senin, selasa" → hari-hari itu
+   - "DD/MM" atau "DD-MM" → tanggal eksplisit
+   - Kalau gak ada tanggal → hari ini
+3. Parse SEMUA nama personil yang disebutkan (multi-nama pakai "dan", ",", "&")
+4. Assign kode shift yang sesuai:
+   - "pagi" → P7
+   - "siang" → S15
+   - "malam" → M22
+   - "libur"/"off" → O
+   - "cuti" → CUTI
+5. STRIP kata umum dari nama: "hari", "ini", "besok", "lusa", "tanggal", "dan", "atau", "yang", "mau", "ganti", "jadi", "shift", "atur", "set", "ubah"
+6. Nama personil di-UPPERCASE
+7. Kalau nama gak match personil aktif, TETAP masukkan tapi kasih warning
+
+CONTOH INPUT → OUTPUT:
+
+Input: "Atur Kusdewi dan Adel siang, Atur Ilham dan Reza libur"
+Output:
+{{
+  "mode": "update",
+  "tanggal_list": ["{today.isoformat()}"],
+  "tanggal_detect": "hari ini",
+  "shift_map": {{
+    "KUSDEWI": "S15",
+    "ADEL": "S15",
+    "ILHAM": "O",
+    "REZA": "O"
+  }},
+  "reasoning": "Kusdewi & Adel shift siang, Ilham & Reza libur"
+}}
+
+Input: "Pagi: Pandu, Tika. Siang: Reza"
+Output:
+{{
+  "mode": "update",
+  "tanggal_list": ["{today.isoformat()}"],
+  "tanggal_detect": "hari ini",
+  "shift_map": {{
+    "PANDU": "P7",
+    "TIKA": "P7",
+    "REZA": "S15"
+  }},
+  "reasoning": "Pandu & Tika pagi, Reza siang"
+}}
+
+Input: "Besok Zaki cuti"
+Output:
+{{
+  "mode": "update",
+  "tanggal_list": ["{(today + timedelta(days=1)).isoformat()}"],
+  "tanggal_detect": "besok",
+  "shift_map": {{"ZAKI": "CUTI"}},
+  "reasoning": "Zaki cuti besok"
+}}
+
+Kalau mode=delete, "shift_map" kosong & isi "delete_targets" (list nama).
+Output HANYA JSON, gak ada text lain.
+"""
+
+        # Call Groq
+        _ok, _resp_text, _model, _err = _call_hana_groq(
+            _prompt,
+            function="parse",
+            temperature=0.1,  # low temperature — lebih akurat
+        )
+
+        if not _ok:
+            return {"success": False, "error": f"Groq error: {_err}"}
+
+        # Extract JSON
+        _data = _extract_json(_resp_text)
+        if not _data:
+            _log(f"AI response bukan JSON: {_resp_text[:200]}")
+            return {"success": False, "error": "AI response bukan JSON valid"}
+
+        # Parse tanggal list
+        _tgl_list = _parse_tanggal_list_from_response(
+            _data.get("tanggal_list"),
+            today,
+        )
+
+        # Parse shift_map → items
+        _shift_map = _data.get("shift_map") or {}
+        _items = []
+
+        for _nama, _kode in _shift_map.items():
+            _nama_clean = str(_nama).strip().upper()
+
+            # Strip stopwords dari nama
+            for _sw in ["HARI", "INI", "BESOK", "LUSA", "TANGGAL", "DAN", "ATAU", "YANG", "SHIFT"]:
+                _nama_clean = _nama_clean.replace(_sw, "").strip()
+
+            _kode_clean = str(_kode).strip().upper()
+            if _kode_clean not in SHIFT_MAP:
+                continue
+            if not _nama_clean or _nama_clean in STOPWORDS:
+                continue
+
+            _items.append({
+                "nama": _nama_clean,
+                "kode_shift": _kode_clean,
+                "shift_nama": SHIFT_MAP[_kode_clean],
+            })
+
+        return {
+            "success": True,
+            "data": {
+                "tanggal": _tgl_list[0],
+                "tanggal_list": _tgl_list,
+                "tanggal_detect": _data.get("tanggal_detect", "hari ini"),
+                "items": _items,
+                "raw": text,
+                "engine": f"groq ({_model})",
+                "ai_reasoning": _data.get("reasoning", ""),
+            },
+        }
+
+    except Exception as e:
+        _log(f"_parse_with_groq error: {e}")
+        return {"success": False, "error": str(e)[:150]}
+
+
+# =========================================================
+# PARSE TANGGAL LIST — dari AI response
+# =========================================================
+def _parse_tanggal_list_from_response(tgl_list_str, fallback):
+    """Convert list string ISO tanggal jadi list date."""
+    _result = []
+    if tgl_list_str:
+        for _tgl_str in tgl_list_str:
+            try:
+                _result.append(datetime.strptime(str(_tgl_str), "%Y-%m-%d").date())
+            except Exception:
+                pass
+
+    if not _result:
+        return [fallback]
+
+    # Dedupe & sort
+    _seen = set()
+    _unique = []
+    for _d in sorted(_result):
+        if _d not in _seen:
+            _seen.add(_d)
+            _unique.append(_d)
+
+    return _unique
+
+
+# =========================================================
+# BUILD SHIFT CONTEXT — buat prompt
+# =========================================================
+def _build_shift_context(today):
+    """Buat context shift hari ini."""
+    try:
+        _tgl_str = today.isoformat() if hasattr(today, "isoformat") else str(today)[:10]
+        _res = get_master_shift(tgl_start=_tgl_str, tgl_end=_tgl_str)
+
+        if not _res.get("success") or not _res.get("data"):
+            return f"Belum ada shift untuk {_tgl_str}."
+
+        _grouped = {}
+        for _row in _res["data"]:
+            _kode = _row.get("kode_shift", "O")
+            _grouped.setdefault(_kode, []).append(_row["nama"])
+
+        _lines = [f"SHIFT HARI INI ({_tgl_str}):"]
+        for _kode in ["P7", "S15", "M22", "O", "CUTI"]:
+            if _kode in _grouped:
+                _label = SHIFT_MAP.get(_kode, _kode)
+                _lines.append(f"- {_label} ({_kode}): {', '.join(_grouped[_kode])}")
+        return "\n".join(_lines)
+    except Exception as e:
+        return f"Gagal load shift: {e}"
+
+
+# =========================================================
+# FALLBACK — RULE-BASED PARSER
+# =========================================================
+def _parse_rule_based(text, today):
+    """Fallback parser pakai regex."""
+    _tgl_list = _parse_tanggal_list(text, today)
+    _tgl = _tgl_list[0]
+
+    _items = []
+    _text_lower = str(text).lower()
+    _text_upper = str(text).upper()
+
+    _personil_list = get_personil_aktif()
+    _personil_names = [p["nama"].upper() for p in _personil_list]
+
+    if not _personil_names:
+        return {
+            "tanggal": _tgl,
+            "tanggal_list": _tgl_list,
+            "items": [],
+            "raw": text,
+        }
+
+    # Mapping keyword shift
+    _shift_kw_map = [
+        ("pagi", "P7"),
+        ("siang", "S15"),
+        ("malam", "M22"),
+        ("malem", "M22"),
+        ("mlm", "M22"),
+        ("sore", "S15"),
+        ("libur", "O"),
+        ("off", "O"),
+        ("cuti", "CUTI"),
+    ]
+
+    # Split by "atur/set/ubah" + koma
+    _clauses = re.split(
+        r'[,\.]|\batur\b|\bset\b|\bubah\b|\bganti\b|\bpindah\b|\bjadwal\b',
+        _text_lower
+    )
+    _clauses = [c.strip() for c in _clauses if c.strip()]
+
+    _found_any = False
+
+    for _clause in _clauses:
+        if len(_clause) < 3:
+            continue
+
+        # Cari keyword shift
+        _kode_detected = None
+        for _kw, _kode in _shift_kw_map:
+            if re.search(r'\b' + re.escape(_kw) + r'\b', _clause):
+                _kode_detected = _kode
+                break
+
+        if not _kode_detected:
+            continue
+
+        # Cari SEMUA nama di klausa
+        _names_in_clause = []
+        for _nama_db in _personil_names:
+            if re.search(r'\b' + re.escape(_nama_db.lower()) + r'\b', _clause):
+                _names_in_clause.append(_nama_db)
+
+        if not _names_in_clause:
+            continue
+
+        # Apply ke semua nama
+        for _nama in _names_in_clause:
+            if _nama not in [it["nama"] for it in _items]:
+                _items.append({
+                    "nama": _nama,
+                    "kode_shift": _kode_detected,
+                    "shift_nama": SHIFT_MAP[_kode_detected],
+                })
+                _found_any = True
+
+    # Fallback terakhir
+    if not _found_any:
+        _shift_detected = "O"
+        for _kw, _kode in _shift_kw_map:
+            if re.search(r'\b' + re.escape(_kw) + r'\b', _text_lower):
+                _shift_detected = _kode
+                break
+
+        for _nama_db in _personil_names:
+            if re.search(r'\b' + re.escape(_nama_db) + r'\b', _text_upper):
+                _items.append({
+                    "nama": _nama_db,
+                    "kode_shift": _shift_detected,
+                    "shift_nama": SHIFT_MAP[_shift_detected],
+                })
+
+    # Filter duplikat
+    _final = []
+    _seen = set()
+    for _it in _items:
+        _n = _it.get("nama", "").upper().strip()
+        if not _n or _n in STOPWORDS or _n in _seen:
+            continue
+        _final.append(_it)
+        _seen.add(_n)
+
+    return {
+        "tanggal": _tgl,
+        "tanggal_list": _tgl_list,
+        "items": _final,
+        "raw": text,
+        "engine": "rule-based-fallback",
+    }
+
 # =========================================================
 # CHAT HANA — fungsi utama
 # =========================================================
@@ -675,9 +945,9 @@ def chat_response(user_message, conversation_history=None):
     Hana chat response dengan intent detection.
     
     Intent:
-    - confirm_shift: update shift → return preview + tombol konfirmasi
+    - confirm_shift: update shift → return preview + data konfirmasi
     - query_shift: tanya jadwal → return data jadwal
-    - chat: fallback LLM
+    - chat: fallback LLM (chat biasa)
     """
     if not user_message:
         return {"text": "", "intent": "chat", "parsed": None, "engine": None}
@@ -685,7 +955,7 @@ def chat_response(user_message, conversation_history=None):
     _text_lower = str(user_message).lower().strip()
 
     # ============================================================
-    # INTENT 1 — UPDATE SHIFT (termasuk multi-shift)
+    # INTENT 1 — UPDATE SHIFT
     # ============================================================
     _update_keywords = [
         "atur", "set", "ubah", "ganti", "pindah", "masuk",
@@ -693,7 +963,10 @@ def chat_response(user_message, conversation_history=None):
     ]
     _shift_keywords = ["pagi", "siang", "malam", "malem", "libur", "off", "cuti"]
 
-    _is_update = any(k in _text_lower for k in _update_keywords) or any(k in _text_lower for k in _shift_keywords)
+    _is_update = (
+        any(k in _text_lower for k in _update_keywords)
+        or any(k in _text_lower for k in _shift_keywords)
+    )
 
     if _is_update:
         try:
@@ -702,33 +975,31 @@ def chat_response(user_message, conversation_history=None):
             if _parsed.get("items") and len(_parsed["items"]) > 0:
                 _items = _parsed["items"]
                 _tgl = _parsed["tanggal"]
+                _engine = _parsed.get("engine", "unknown")
 
                 _tgl_str = _tgl.strftime("%d %b %Y") if hasattr(_tgl, "strftime") else str(_tgl)
 
-                _items_preview = []
-                for _it in _items:
-                    _items_preview.append(
-                        f"  • {_it['nama']} → {_it['shift_nama']}"
-                    )
-                _items_str = "\n".join(_items_preview)
-
+                # Build text preview (short)
                 _count = len(_items)
-                _text = f"""Oke Bos, aku catat {_count} perubahan shift:
+                _text = f"Oke Bos, aku catat {_count} perubahan shift. Cek detailnya ya! 🌸"
 
-📅 Tanggal: {_tgl_str}
-{_items_str}
-
-Konfirmasi update?"""
+                # Extract kode shift untuk loadMiniDashboard compatibility
+                _shift_map = {it["nama"]: it["kode_shift"] for it in _items}
 
                 return {
-                    "text": _text.strip(),
+                    "text": _text,
                     "intent": "confirm_shift",
                     "parsed": {
                         "tanggal": _tgl.isoformat() if hasattr(_tgl, "isoformat") else str(_tgl)[:10],
+                        "tanggal_list": [
+                            t.isoformat() if hasattr(t, "isoformat") else str(t)[:10]
+                            for t in _parsed.get("tanggal_list", [_tgl])
+                        ],
                         "items": _items,
+                        "shift_map": _shift_map,
                         "raw": user_message,
                     },
-                    "engine": "intent_detection",
+                    "engine": _engine,
                     "needs_confirm": True,
                 }
         except Exception as _e:
@@ -793,17 +1064,21 @@ Konfirmasi update?"""
         for _msg in conversation_history[-6:]:
             _history_str += f"{_msg.get('role', 'user')}: {_msg.get('content', '')}\n"
 
-    _prompt = f"""Kamu Hana — Master Shift Specialist Toko C383.
+    _personil_ctx = _build_personil_context()
 
-=== TUGAS KAMU ===
-1. Cek jadwal shift (hari ini, besok, minggu ini)
-2. Update / pindah / hapus shift
-3. Saran pengganti kalau ada yang libur
-4. Cek konflik jadwal
+    _prompt = f"""Kamu Hana 🌸 — Master Shift Specialist Toko C383.
+
+=== TUGAS ===
+1. Cek jadwal shift
+2. Update / hapus shift
+3. Saran pengganti
+4. Cek konflik
 
 === PERSONA ===
-Personal yang profesional tapi santai. Panggil user "Bos".
-Pakai emoji 🌸 secukupnya. Bales singkat, max 6 baris.
+Ceria, ramah, profesional. Panggil user "Bos".
+Pakai emoji 🌸 secukupnya. Max 6 baris.
+
+{_personil_ctx}
 
 Riwayat:
 {_history_str}
@@ -892,7 +1167,7 @@ Mau aku atur salah satu buat gantiin?"""
 
 
 # =========================================================
-# CHECK CONFLICT (versi lama, return list)
+# CHECK CONFLICT
 # =========================================================
 def check_conflict(tanggal, shift_map):
     """Cek konflik shift, return list of issues."""
@@ -946,7 +1221,7 @@ Mau aku bantu fix?"""
 
 
 # =========================================================
-# HELPER — Call Groq
+# HELPER — Call Groq (TETAP)
 # =========================================================
 def _call_hana_groq(prompt, hard_timeout=90, function="chat", temperature=0.7):
     """Call Groq API untuk Hana."""
@@ -1027,28 +1302,44 @@ def _call_hana_groq(prompt, hard_timeout=90, function="chat", temperature=0.7):
         _log(f"_call_hana_groq error: {e}")
         return False, "", None, str(e)[:200]
 
-
 # =========================================================
 # EXPORT
 # =========================================================
 __all__ = [
+    # Konstanta
     "SHIFT_MAP",
     "SHIFT_MAP_REVERSE",
     "SHIFT_EMOJI",
     "STOPWORDS",
+
+    # Parser
     "parse_tanggal",
     "parse_shift_update",
+
+    # Personil
     "get_personil_aktif",
+    "add_personil",
+    "delete_personil",
+
+    # Shift CRUD
     "save_shift",
     "save_batch",
     "get_master_shift",
     "check_konflik",
-    "add_personil",
-    "delete_personil",
     "get_shift_hari_ini",
+
+    # Chat
     "chat_response",
+
+    # Suggest & Conflict
     "suggest_pengganti",
     "ai_suggest_pengganti_text",
     "check_conflict",
     "ai_check_conflict_text",
 ]
+
+
+# =========================================================
+# END OF FILE
+# =========================================================
+_log("✅ AI Shift Manager v4 loaded")
