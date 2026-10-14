@@ -1,3 +1,4 @@
+# Force redeploy 2026-10-14 08:15
 """
 AI Shift Manager — Hana (AI-1) v2
 ====================================
