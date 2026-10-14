@@ -599,3 +599,111 @@ def get_rak_status(mode="bulan_ini", tgl_start=None, tgl_end=None):
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "list_rak": []}
         
+# =========================================================
+# GET SPD LIST — List Sales Per Day + delta
+# =========================================================
+def get_spd_list(mode="bulan_ini", tgl_start=None, tgl_end=None):
+    """
+    Ambil list SPD (Sales Per Day) + delta vs hari sebelumnya.
+    
+    Returns:
+        {
+            "success": bool,
+            "periode": "...",
+            "total_spd": float,
+            "total_hari": int,
+            "avg_spd": float,
+            "list_spd": [
+                {
+                    "tanggal": "2026-10-01",
+                    "spd": 16425771.0,
+                    "delta_nominal": 0,
+                    "delta_persen": 0,
+                    "trend": "flat"  # "up" | "down" | "flat"
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        _sb = _get_supabase_safe()
+        if _sb is None:
+            return {"success": False, "error": "Supabase gak konek", "list_spd": []}
+
+        # Tentukan periode
+        if mode == "custom" and tgl_start and tgl_end:
+            _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
+            _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
+        else:
+            _start, _end = get_periode_range(mode)
+            _start_str = _start.isoformat()[:10]
+            _end_str = _end.isoformat()[:10]
+
+        # Query spd_harian
+        _res = (
+            _sb.table("spd_harian")
+            .select("tanggal, spd, keterangan, pic")
+            .gte("tanggal", _start_str)
+            .lte("tanggal", _end_str)
+            .order("tanggal", desc=False)
+            .execute()
+        )
+        _rows = _res.data if _res.data else []
+
+        # Build list + delta
+        _list_spd = []
+        _prev_spd = None
+
+        for _row in _rows:
+            _spd = float(_row.get("spd") or 0)
+
+            _delta_nominal = 0
+            _delta_persen = 0
+            _trend = "flat"
+
+            if _prev_spd is not None and _prev_spd > 0:
+                _delta_nominal = _spd - _prev_spd
+                _delta_persen = (_delta_nominal / _prev_spd) * 100
+
+                if _delta_nominal > 0:
+                    _trend = "up"
+                elif _delta_nominal < 0:
+                    _trend = "down"
+                else:
+                    _trend = "flat"
+
+            _list_spd.append({
+                "tanggal": _row.get("tanggal", ""),
+                "spd": _spd,
+                "spd_formatted": f"Rp {_spd:,.0f}".replace(",", "."),
+                "delta_nominal": _delta_nominal,
+                "delta_persen": round(_delta_persen, 2),
+                "trend": _trend,
+                "keterangan": _row.get("keterangan") or "",
+                "pic": _row.get("pic") or "-",
+            })
+
+            _prev_spd = _spd
+
+        # Total & avg
+        _total_spd = sum(it["spd"] for it in _list_spd)
+        _total_hari = len(_list_spd)
+        _avg_spd = _total_spd / _total_hari if _total_hari > 0 else 0
+
+        return {
+            "success": True,
+            "periode": f"{_start_str} s/d {_end_str}",
+            "tgl_start": _start_str,
+            "tgl_end": _end_str,
+            "total_spd": _total_spd,
+            "total_hari": _total_hari,
+            "avg_spd": _avg_spd,
+            "list_spd": _list_spd,
+        }
+
+    except Exception as e:
+        print(f"[GET_SPD_LIST ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)[:200], "list_spd": []}
+        

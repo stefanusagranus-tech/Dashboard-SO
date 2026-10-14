@@ -2732,6 +2732,315 @@ body {
 .rak-nominal-plus {
     color: #06d6a0;
 }
+
+/* =========================================================
+   SPD LIST SCREEN v1.5
+   ========================================================= */
+#spdListScreen {
+    display: none;
+    flex-direction: column;
+}
+
+#spdListScreen.active {
+    display: flex;
+}
+
+.spd-list-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    z-index: 1;
+}
+
+/* =========================================================
+   SPD PERIOD TABS
+   ========================================================= */
+.spd-period-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    flex-shrink: 0;
+}
+
+.spd-period-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.spd-period-tab {
+    flex-shrink: 0;
+    padding: 9px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s;
+    white-space: nowrap;
+}
+
+.spd-period-tab:active {
+    transform: scale(0.96);
+}
+
+.spd-period-tab.active {
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-pumpkin));
+    border-color: var(--accent-orange);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(255, 140, 66, 0.4);
+}
+
+/* =========================================================
+   SPD SUMMARY CARD
+   ========================================================= */
+.spd-summary-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 18px 16px;
+    box-shadow: var(--shadow-md), 0 0 30px rgba(255, 140, 66, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.spd-summary-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple), var(--accent-orange));
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+}
+
+.spd-summary-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-bottom: 10px;
+}
+
+.spd-summary-total {
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--accent-orange);
+    letter-spacing: -0.8px;
+    line-height: 1.1;
+    text-shadow: 0 0 20px rgba(255, 140, 66, 0.3);
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+
+.spd-summary-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 14px;
+}
+
+.spd-summary-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.spd-summary-stat {
+    text-align: center;
+}
+
+.spd-summary-stat-value {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    word-break: break-all;
+}
+
+.spd-summary-stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+}
+
+/* =========================================================
+   SPD LIST
+   ========================================================= */
+.spd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.spd-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s;
+    position: relative;
+}
+
+.spd-item:active {
+    transform: scale(0.99);
+    border-color: var(--accent-orange);
+}
+
+.spd-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.spd-item-tgl {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.spd-item-spd {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-primary);
+    text-align: right;
+    letter-spacing: -0.3px;
+    word-break: break-all;
+}
+
+.spd-item-delta-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+}
+
+/* Delta badge */
+.spd-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: var(--radius-xl);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.spd-delta-up {
+    background: rgba(6, 214, 160, 0.15);
+    color: #06d6a0;
+    border: 1px solid rgba(6, 214, 160, 0.3);
+}
+
+.spd-delta-down {
+    background: rgba(238, 82, 83, 0.15);
+    color: #ee5253;
+    border: 1px solid rgba(238, 82, 83, 0.3);
+}
+
+.spd-delta-flat {
+    background: rgba(122, 107, 153, 0.15);
+    color: var(--text-muted);
+    border: 1px solid rgba(122, 107, 153, 0.3);
+}
+
+/* Keterangan */
+.spd-item-ket {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: var(--radius-sm);
+    border-left: 2px solid var(--accent-orange);
+    line-height: 1.5;
+}
+
+/* PIC */
+.spd-item-pic {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+/* =========================================================
+   RESPONSIVE — HP KECIL
+   ========================================================= */
+@media (max-width: 360px) {
+    .spd-list-content {
+        padding: 12px 14px 30px;
+        gap: 12px;
+    }
+    .spd-period-tab {
+        padding: 8px 12px;
+        font-size: 11px;
+    }
+    .spd-summary-total {
+        font-size: 22px;
+    }
+    .spd-summary-stat-value {
+        font-size: 14px;
+    }
+    .spd-item-spd {
+        font-size: 13px;
+    }
+    .spd-delta {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+}
+
+/* =========================================================
+   RESPONSIVE — HP BESAR
+   ========================================================= */
+@media (min-width: 428px) {
+    .spd-list-content {
+        padding: 20px 24px 50px;
+    }
+    .spd-period-tab {
+        padding: 11px 18px;
+        font-size: 13px;
+    }
+    .spd-summary-total {
+        font-size: 32px;
+    }
+    .spd-item-spd {
+        font-size: 16px;
+    }
+}
+
+/* =========================================================
+   RESPONSIVE — TABLET
+   ========================================================= */
+@media (min-width: 600px) {
+    .spd-list-content {
+        max-width: 700px;
+        margin: 0 auto;
+        width: 100%;
+    }
+}
+
 /* =========================================================
    END OF STYLE v2.0
    ========================================================= */

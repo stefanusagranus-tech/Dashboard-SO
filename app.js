@@ -1221,6 +1221,222 @@ function renderRakList() {
 }
 
 // =========================================================
+// SPD LIST SCREEN v1.5
+// =========================================================
+let spdListData = [];
+let spdPeriodCurrent = "bulan_ini";
+
+function goToSpdListScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("spdListScreen");
+    loadSpdList();
+}
+
+
+// =========================================================
+// SPD LIST — Set Period
+// =========================================================
+function setSpdPeriod(period) {
+    spdPeriodCurrent = period;
+
+    document.querySelectorAll(".spd-period-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
+    });
+
+    const customRow = document.getElementById("spdCustomDateRow");
+    if (customRow) {
+        if (period === "custom") customRow.classList.remove("hidden");
+        else customRow.classList.add("hidden");
+    }
+
+    loadSpdList();
+}
+
+
+// =========================================================
+// SPD LIST — Helper: Date Range
+// =========================================================
+function getSpdDateRange() {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (spdPeriodCurrent === "bulan_ini") {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (spdPeriodCurrent === "bulan_lalu") {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (spdPeriodCurrent === "custom") {
+        const s = document.getElementById("spdCustomStart");
+        const e = document.getElementById("spdCustomEnd");
+        if (s && s.value) start = new Date(s.value);
+        if (e && e.value) end = new Date(e.value);
+    }
+
+    return { start, end };
+}
+
+
+// =========================================================
+// SPD LIST — Load
+// =========================================================
+async function loadSpdList() {
+    const container = document.getElementById("spdList");
+    if (!container) return;
+
+    // Loading
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat data SPD...</p>
+        </div>
+    `;
+
+    try {
+        const _key = getApiKey();
+        const range = getSpdDateRange();
+        const startStr = range.start.toISOString().slice(0, 10);
+        const endStr = range.end.toISOString().slice(0, 10);
+
+        // Body request
+        const body = { mode: spdPeriodCurrent };
+        if (spdPeriodCurrent === "custom") {
+            body.tgl_start = startStr;
+            body.tgl_end = endStr;
+        }
+
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/spd-list`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Gagal load SPD");
+        }
+
+        spdListData = data.list_spd || [];
+
+        // Update summary
+        renderSpdSummary(data);
+
+        // Render list
+        renderSpdList();
+
+    } catch (err) {
+        console.error("[SpdList] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load data: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
+    }
+}
+
+
+// =========================================================
+// SPD LIST — Render Summary
+// =========================================================
+function renderSpdSummary(data) {
+    const elTotal = document.getElementById("spdSummaryTotal");
+    const elMeta = document.getElementById("spdSummaryMeta");
+    const elHari = document.getElementById("spdSummaryHari");
+    const elAvg = document.getElementById("spdSummaryAvg");
+
+    const totalSpd = data.total_spd || 0;
+    const totalHari = data.total_hari || 0;
+    const avgSpd = data.avg_spd || 0;
+    const periode = data.periode || "—";
+
+    if (elTotal) elTotal.textContent = formatRupiahFull(totalSpd);
+    if (elMeta) elMeta.textContent = `📅 ${periode}`;
+    if (elHari) elHari.textContent = totalHari;
+    if (elAvg) elAvg.textContent = formatRupiahFull(avgSpd);
+}
+
+
+// =========================================================
+// SPD LIST — Render List
+// =========================================================
+function renderSpdList() {
+    const container = document.getElementById("spdList");
+    if (!container) return;
+
+    if (!spdListData || spdListData.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">💰</span>
+                <p>Belum ada data SPD di periode ini</p>
+            </div>
+        `;
+        return;
+    }
+
+    const html = spdListData.map(item => {
+        const tgl = item.tanggal;
+        const spdText = formatRupiahFull(item.spd);
+        const deltaNominal = item.delta_nominal || 0;
+        const deltaPersen = item.delta_persen || 0;
+        const trend = item.trend || "flat";
+
+        // Format delta
+        let deltaHtml = "";
+        if (trend === "flat") {
+            deltaHtml = `<span class="spd-delta spd-delta-flat">— Flat</span>`;
+        } else {
+            const arrow = trend === "up" ? "↑" : "↓";
+            const sign = deltaNominal >= 0 ? "+" : "";
+            const deltaNominalText = `${sign}${formatRupiahFull(deltaNominal)}`;
+            const deltaPersenText = `${sign}${deltaPersen.toFixed(2)}%`;
+
+            const deltaClass = trend === "up" ? "spd-delta-up" : "spd-delta-down";
+            deltaHtml = `<span class="spd-delta ${deltaClass}">${arrow} ${deltaNominalText} (${deltaPersenText})</span>`;
+        }
+
+        // Keterangan (kalau ada)
+        const ket = item.keterangan || "";
+        const ketHtml = ket
+            ? `<div class="spd-item-ket">📝 ${escapeHtml(ket.substring(0, 80))}${ket.length > 80 ? "..." : ""}</div>`
+            : "";
+
+        // PIC (kalau ada)
+        const pic = item.pic || "-";
+        const picHtml = pic && pic !== "-"
+            ? `<div class="spd-item-pic">👤 ${escapeHtml(pic)}</div>`
+            : "";
+
+        return `
+            <div class="spd-item">
+                <div class="spd-item-header">
+                    <div class="spd-item-tgl">📅 ${formatTanggalLong(tgl)}</div>
+                    <div class="spd-item-spd">${spdText}</div>
+                </div>
+                <div class="spd-item-delta-row">
+                    ${deltaHtml}
+                </div>
+                ${ketHtml}
+                ${picHtml}
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+// =========================================================
 // MODAL KONFIRMASI UPDATE SHIFT v1.4
 // =========================================================
 function openConfirmShiftModal(data) {

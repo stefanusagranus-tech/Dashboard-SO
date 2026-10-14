@@ -86,11 +86,12 @@
                     <div class="stat-label">TOTAL RAK</div>
                     <div class="stat-tap-hint">Tap untuk detail →</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-icon">💰</div>
-                    <div class="stat-value" id="statSpd">--</div>
-                    <div class="stat-label">SPD</div>
-                </div>
+                    <div class="stat stat-clickable" onclick="goToSpdListScreen()">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-value" id="statSpd">--</div>
+                        <div class="stat-label">SPD</div>
+                        <div class="stat-tap-hint">Tap untuk detail →</div>
+                    </div>
                 <div class="stat">
                     <div class="stat-icon">📉</div>
                     <div class="stat-value" id="statNominal">--</div>
@@ -239,6 +240,65 @@
 
         <!-- SUMMARY -->
         <div class="shift-summary" id="shiftSummary"></div>
+
+    </div>
+</div>
+<!-- ========================================================= -->
+<!-- SPD LIST SCREEN — Sales Per Day v1.5 -->
+<!-- ========================================================= -->
+<div id="spdListScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Sales Per Day</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+
+    <div class="spd-list-content">
+
+        <!-- PERIODE TABS -->
+        <div class="spd-period-tabs">
+            <button class="spd-period-tab active" data-period="bulan_ini" onclick="setSpdPeriod('bulan_ini')">
+                📅 Bulan Ini
+            </button>
+            <button class="spd-period-tab" data-period="bulan_lalu" onclick="setSpdPeriod('bulan_lalu')">
+                🗓️ Bulan Lalu
+            </button>
+            <button class="spd-period-tab" data-period="custom" onclick="setSpdPeriod('custom')">
+                🔍 Custom
+            </button>
+        </div>
+
+        <!-- CUSTOM DATE (hidden default) -->
+        <div class="custom-date-row hidden" id="spdCustomDateRow">
+            <input type="date" id="spdCustomStart" class="date-input" onchange="loadSpdList()">
+            <span class="date-separator">s/d</span>
+            <input type="date" id="spdCustomEnd" class="date-input" onchange="loadSpdList()">
+        </div>
+
+        <!-- SUMMARY CARD -->
+        <div class="spd-summary-card" id="spdSummaryCard">
+            <div class="spd-summary-title">💰 TOTAL SPD</div>
+            <div class="spd-summary-total" id="spdSummaryTotal">--</div>
+            <div class="spd-summary-meta" id="spdSummaryMeta">Memuat...</div>
+            <div class="spd-summary-stats">
+                <div class="spd-summary-stat">
+                    <div class="spd-summary-stat-value" id="spdSummaryHari">--</div>
+                    <div class="spd-summary-stat-label">Hari</div>
+                </div>
+                <div class="spd-summary-stat">
+                    <div class="spd-summary-stat-value" id="spdSummaryAvg">--</div>
+                    <div class="spd-summary-stat-label">Rata-rata</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LIST SPD -->
+        <div id="spdList" class="spd-list">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Memuat data SPD...</p>
+            </div>
+        </div>
 
     </div>
 </div>

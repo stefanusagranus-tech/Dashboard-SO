@@ -474,3 +474,49 @@ async def yui_rak_status_endpoint(request: Request, req: RakStatusRequest):
         raise
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+# =========================================================
+# GET SPD LIST
+# =========================================================
+class SpdListRequest(BaseModel):
+    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'custom'")
+    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
+    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
+
+
+@router.post("/spd-list")
+@limiter.limit("30/minute")
+async def yui_spd_list_endpoint(request: Request, req: SpdListRequest):
+    """List SPD (Sales Per Day) + delta."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+
+        _tgl_start = None
+        _tgl_end = None
+
+        if req.mode == "custom":
+            if not req.tgl_start or not req.tgl_end:
+                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
+            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
+
+        from services.yui_rekap import get_spd_list
+
+        _hasil = get_spd_list(
+            mode=req.mode,
+            tgl_start=_tgl_start,
+            tgl_end=_tgl_end,
+        )
+
+        if not _hasil.get("success"):
+            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load SPD"))
+
+        return _hasil
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
