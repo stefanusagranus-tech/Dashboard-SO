@@ -479,19 +479,21 @@ body {
 .mini-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-bottom: 16px;
+    gap: 6px;                 /* ← gap dikecilin dari 10px */
+    margin-bottom: 14px;
     position: relative;
     z-index: 1;
 }
 
 .stat {
     text-align: center;
-    padding: 12px 6px;
+    padding: 10px 4px;        /* ← padding horizontal dikecilin */
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     transition: all 0.3s;
+    min-width: 0;             /* ← KUNCI: biar boleh shrink */
+    overflow: hidden;         /* ← KUNCI: biar gak overflow */
 }
 
 .stat:active {
@@ -500,25 +502,45 @@ body {
 }
 
 .stat-icon {
-    font-size: 18px;
-    margin-bottom: 6px;
+    font-size: 16px;          /* ← dikecilin dikit */
+    margin-bottom: 4px;
+    line-height: 1;
 }
 
 .stat-value {
-    font-size: 18px;
+    font-size: clamp(13px, 4.2vw, 17px);   /* ← RESPONSIVE! */
     font-weight: 800;
     color: var(--accent-orange);
     line-height: 1.1;
     letter-spacing: -0.5px;
+    white-space: nowrap;      /* ← biar gak wrap */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 20px;
 }
 
 .stat-label {
-    font-size: 9px;
+    font-size: 8px;           /* ← dikecilin */
     color: var(--text-muted);
-    margin-top: 4px;
+    margin-top: 3px;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.5px;
     font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Tap hint — KECILIN banget biar gak makan space */
+.stat-tap-hint {
+    font-size: 7px;
+    color: var(--accent-orange);
+    margin-top: 2px;
+    opacity: 0.7;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* =========================================================
@@ -527,14 +549,15 @@ body {
 .status-bar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
+    gap: 10px;                /* ← 12px → 10px */
+    padding: 10px 12px;       /* ← dikit dikecilin */
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     margin-bottom: 14px;
     position: relative;
     overflow: hidden;
+    min-height: 60px;         /* ← biar konsisten */
 }
 
 .status-bar::before {

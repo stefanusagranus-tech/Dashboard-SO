@@ -3,12 +3,10 @@ Yui Rekap — Query & rekap data SO untuk Yui.
 Semua fungsi di sini cuma baca data (read-only).
 """
 
+import os
 import pandas as pd
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-import html
-
-from services.supabase_client import get_supabase
 
 
 def _now_jkt():
@@ -18,6 +16,7 @@ def _now_jkt():
 def _get_supabase_safe():
     """Ambil Supabase client, return None kalau gagal."""
     try:
+        from services.supabase_client import get_supabase
         return get_supabase()
     except Exception as e:
         print(f"[YUI_REKAP] Gagal ambil Supabase: {e}")
@@ -46,6 +45,12 @@ def get_periode_range(mode="hari_ini", tgl_start=None, tgl_end=None):
         else:
             _end = _today.replace(month=_today.month + 1, day=1) - timedelta(days=1)
         return _start, _end
+
+    if mode == "bulan_lalu":
+        _first_this = _today.replace(day=1)
+        _last_prev = _first_this - timedelta(days=1)
+        _start = _last_prev.replace(day=1)
+        return _start, _last_prev
 
     if mode == "custom" and tgl_start and tgl_end:
         return tgl_start, tgl_end
@@ -101,7 +106,7 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
         _total_rak = int(_df["rak_id"].nunique())
         _total_nominal = float(_df["nominal_adjust"].sum())
 
-        # === QUERY so_hasil (untuk total item + items by rak) ===
+        # === QUERY so_hasil ===
         _res2 = (
             _sb.table("so_hasil")
             .select("*")
@@ -112,13 +117,11 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
         _hasil_rows = _res2.data if _res2.data else []
         _total_item = len(_hasil_rows)
 
-        # Group items by rak
         _items_by_rak = {}
         for _r in _hasil_rows:
             _rak = _r.get("rak_id", "UNKNOWN")
             _items_by_rak.setdefault(_rak, []).append(_r)
 
-        # === LIST RAK (summary) ===
         _list_rak = []
         for _rak, _grp in _df.groupby("rak_id"):
             _list_rak.append({
@@ -129,7 +132,6 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
             })
         _list_rak.sort(key=lambda x: x["total"])
 
-        # === CHART DATA (per hari) ===
         _chart_data = []
         for _tgl, _grp in _df.groupby("so_date"):
             _chart_data.append({
@@ -139,10 +141,7 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
             })
         _chart_data.sort(key=lambda x: x["tanggal"])
 
-        # === SALES PERIODE ===
         _sales_periode = _get_sales_periode(_start, _end)
-
-        # === RAK NAMES ===
         _rak_names = _get_rak_names()
 
         return {
@@ -172,7 +171,6 @@ def rekap_so(mode="hari_ini", tgl_start=None, tgl_end=None, pic_filter=None):
 # SALES PERIODE
 # =========================================================
 def _get_sales_periode(tgl_start, tgl_end):
-    """Ambil total SPD (sales) pada rentang tanggal."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
@@ -187,9 +185,7 @@ def _get_sales_periode(tgl_start, tgl_end):
         )
 
         if _res.data:
-            _total = sum(float(r.get("spd", 0) or 0) for r in _res.data)
-            print(f"[SALES_PERIODE] {_total} ({len(_res.data)} hari)")
-            return _total
+            return sum(float(r.get("spd", 0) or 0) for r in _res.data)
         return 0
     except Exception as e:
         print(f"[SALES_PERIODE ERROR] {e}")
@@ -200,7 +196,6 @@ def _get_sales_periode(tgl_start, tgl_end):
 # RAK NAMES
 # =========================================================
 def _get_rak_names():
-    """Ambil mapping rak_id -> rak_name dari rak_master."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
@@ -216,10 +211,9 @@ def _get_rak_names():
 
 
 # =========================================================
-# BULANAN (legacy, dipakai Dashboard)
+# LEGACY — BULANAN
 # =========================================================
 def _get_net_sales_bulan(bulan=None, tahun=None):
-    """Hitung net sales bulanan dari spd_harian."""
     try:
         _now = _now_jkt()
         _bulan = bulan or _now.month
@@ -238,7 +232,6 @@ def _get_net_sales_bulan(bulan=None, tahun=None):
 
 
 def _get_total_selisih_bulan(bulan=None, tahun=None):
-    """Hitung total selisih (abs) 1 bulan dari so_rak_harian."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
@@ -272,7 +265,6 @@ def _get_total_selisih_bulan(bulan=None, tahun=None):
 
 
 def _get_total_rak_bulan(bulan=None, tahun=None):
-    """Hitung jumlah rak unik yang di-SO bulan ini."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
@@ -308,7 +300,6 @@ def _get_total_rak_bulan(bulan=None, tahun=None):
 # CEK RAK BELUM SO
 # =========================================================
 def cek_rak_belum_so(tanggal=None):
-    """List rak yang belum di-SO pada tanggal tertentu."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
@@ -337,53 +328,16 @@ def cek_rak_belum_so(tanggal=None):
     except Exception as e:
         print(f"[CEK_RAK_BELUM ERROR] {e}")
         return []
-    
-import html  # ← TAMBAH di atas file
 
 
 # =========================================================
-# HELPER — Clean HTML entity
-# =========================================================
-def _clean_text(s):
-    """Unescape HTML entity (&#39; → ', &amp; → &)."""
-    if not s:
-        return s
-    try:
-        return html.unescape(str(s))
-    except Exception:
-        return str(s)
-
-
-def _clean_item(it):
-    """Clean field nama_produk di item."""
-    if isinstance(it, dict):
-        if "nama_produk" in it:
-            it["nama_produk"] = _clean_text(it["nama_produk"])
-        if "pic" in it and it["pic"]:
-            it["pic"] = _clean_text(it["pic"])
-    return it
-
-
-# =========================================================
-# TOP ITEMS — FIX Bug #2 (HTML entity) + support show_all
+# TOP ITEMS
 # =========================================================
 def get_top_items(
     tgl_start=None, tgl_end=None, mode="bulan_ini",
-    limit=10, order="desc",
-    only_minus=True,
-    show_all=False,          # ✅ BARU: True = tampil semua (minus + plus)
+    limit=10, order="desc", only_minus=True,
     pic_filter=None, rak_filter=None,
 ):
-    """
-    Ambil top N item SO berdasarkan nominal_adjust.
-
-    Args:
-        only_minus:
-            - True  → cuma item minus (qty_var < 0)
-            - False → cuma item plus (qty_var > 0)
-        show_all:
-            - True  → SEMUA item (minus + plus), override only_minus
-    """
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
@@ -404,13 +358,10 @@ def get_top_items(
             .lte("so_date", _end_str)
         )
 
-        # === FILTER ===
-        if not show_all:
-            if only_minus:
-                _q = _q.lt("qty_var", 0)
-            else:
-                _q = _q.gt("qty_var", 0)
-        # kalau show_all=True → no filter qty_var
+        if only_minus:
+            _q = _q.lt("qty_var", 0)
+        else:
+            _q = _q.gt("qty_var", 0)
 
         if pic_filter:
             _q = _q.eq("pic", pic_filter.upper())
@@ -418,22 +369,15 @@ def get_top_items(
             _q = _q.eq("rak_id", rak_filter.upper())
 
         _q = _q.limit(2000)
-
         _res = _q.execute()
         _items = _res.data if _res.data else []
 
-        # Konversi tipe + clean HTML
         for _it in _items:
             _it["qty_var"] = int(_it.get("qty_var") or 0)
             _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
-            _clean_item(_it)   # ✅ FIX Bug #2
 
-        # === SORT ===
-        if show_all:
-            # Sort by abs nominal (terbesar dulu)
-            _items.sort(key=lambda x: abs(x["nominal_adjust"]), reverse=True)
-        elif only_minus:
-            _items.sort(key=lambda x: x["nominal_adjust"])   # minus terbesar dulu
+        if only_minus:
+            _items.sort(key=lambda x: x["nominal_adjust"])
         else:
             _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
 
@@ -456,14 +400,9 @@ def get_top_items(
 
 
 # =========================================================
-# GET ITEMS BY RAK — FIX Bug #3
+# GET ITEMS BY RAK
 # =========================================================
-def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None,
-                     mode="bulan_ini", show_all=True):
-    """
-    Ambil semua item SO di rak tertentu.
-    Default show_all=True (minus + plus).
-    """
+def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini", show_all=True):
     return get_top_items(
         tgl_start=tgl_start,
         tgl_end=tgl_end,
@@ -471,50 +410,20 @@ def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None,
         limit=1000,
         order="desc",
         only_minus=False,
-        show_all=show_all,          # ✅ FIX Bug #3
         rak_filter=rak_id,
     )
 
+
 # =========================================================
-# GET RAK STATUS — List semua rak: sudah/belum SO
+# GET RAK STATUS — Fitur #1
 # =========================================================
 def get_rak_status(mode="bulan_ini", tgl_start=None, tgl_end=None):
-    """
-    Ambil status semua rak: sudah SO atau belum.
-    
-    Returns:
-        {
-            "success": bool,
-            "total_rak": int,
-            "sudah_so": int,
-            "belum_so": int,
-            "persen": float,
-            "list_rak": [
-                {
-                    "rak_id": "Q51",
-                    "rak_name": "...",
-                    "status": "SUDAH" | "BELUM",
-                    "tgl_so": "2026-10-14",
-                    "nominal": -28000,
-                    "pic": "PANDU"
-                },
-                ...
-            ]
-        }
-    """
+    """List semua rak: sudah/belum SO."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
-            return {"success": False, "error": "Supabase gak konek", "list_rak": []}
+            return {"success": False, "error": "Supabase gak konek"}
 
-        # === 1. Ambil semua rak dari master ===
-        _res_master = _sb.table("rak_master").select("rak_id, rak_name").execute()
-        _all_rak = _res_master.data if _res_master.data else []
-
-        if not _all_rak:
-            return {"success": True, "total_rak": 0, "sudah_so": 0, "belum_so": 0, "persen": 0, "list_rak": []}
-
-        # === 2. Tentukan periode ===
         if mode == "custom" and tgl_start and tgl_end:
             _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
             _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
@@ -523,7 +432,12 @@ def get_rak_status(mode="bulan_ini", tgl_start=None, tgl_end=None):
             _start_str = _start.isoformat()[:10]
             _end_str = _end.isoformat()[:10]
 
-        # === 3. Ambil data SO ===
+        # Master rak
+        _res_master = _sb.table("rak_master").select("rak_id, rak_name").execute()
+        _master = _res_master.data if _res_master.data else []
+        _master_map = {r["rak_id"]: r.get("rak_name", "") for r in _master}
+
+        # SO per rak dalam periode
         _res_so = (
             _sb.table("so_rak_harian")
             .select("rak_id, so_date, nominal_adjust, pic")
@@ -533,104 +447,73 @@ def get_rak_status(mode="bulan_ini", tgl_start=None, tgl_end=None):
         )
         _so_rows = _res_so.data if _res_so.data else []
 
-        # === 4. Map rak → data SO (ambil tanggal terakhir kalau ada multiple) ===
         _so_map = {}
-        for _row in _so_rows:
-            _rak = _row.get("rak_id", "")
-            if not _rak:
-                continue
-            # Ambil data dengan tanggal terbaru
-            if _rak not in _so_map or _row.get("so_date", "") > _so_map[_rak].get("so_date", ""):
-                _so_map[_rak] = _row
+        for r in _so_rows:
+            _rid = r.get("rak_id")
+            if _rid and _rid not in _so_map:
+                _so_map[_rid] = {
+                    "tgl_so": r.get("so_date"),
+                    "nominal": float(r.get("nominal_adjust") or 0),
+                    "pic": r.get("pic") or "-",
+                }
+            elif _rid:
+                _so_map[_rid]["nominal"] += float(r.get("nominal_adjust") or 0)
 
-        # === 5. Build list ===
         _list_rak = []
-        _sudah_so = 0
-        _belum_so = 0
+        _sudah = 0
+        _belum = 0
 
-        for _rak in _all_rak:
-            _rak_id = _rak.get("rak_id", "")
-            _rak_name = _rak.get("rak_name", "")
-            _so_data = _so_map.get(_rak_id)
-
-            if _so_data:
-                _sudah_so += 1
+        for r in _master:
+            _rid = r["rak_id"]
+            if _rid in _so_map:
+                _info = _so_map[_rid]
                 _list_rak.append({
-                    "rak_id": _rak_id,
-                    "rak_name": _rak_name,
+                    "rak_id": _rid,
+                    "rak_name": r.get("rak_name", ""),
                     "status": "SUDAH",
-                    "tgl_so": _so_data.get("so_date", ""),
-                    "nominal": float(_so_data.get("nominal_adjust") or 0),
-                    "pic": _so_data.get("pic") or "-",
+                    "tgl_so": _info["tgl_so"],
+                    "nominal": _info["nominal"],
+                    "pic": _info["pic"],
                 })
+                _sudah += 1
             else:
-                _belum_so += 1
                 _list_rak.append({
-                    "rak_id": _rak_id,
-                    "rak_name": _rak_name,
+                    "rak_id": _rid,
+                    "rak_name": r.get("rak_name", ""),
                     "status": "BELUM",
                     "tgl_so": None,
                     "nominal": 0,
                     "pic": None,
                 })
+                _belum += 1
 
-        # === 6. Sort: yang BELUM dulu, terus yang SUDAH (minimal nominal) ===
-        _list_rak.sort(key=lambda x: (
-            0 if x["status"] == "BELUM" else 1,  # BELUM dulu
-            x["rak_id"],                          # abjad
-        ))
-
-        _total_rak = len(_all_rak)
-        _persen = (_sudah_so / _total_rak * 100) if _total_rak > 0 else 0
+        _list_rak.sort(key=lambda x: (x["status"] != "SUDAH", x["rak_id"]))
 
         return {
             "success": True,
             "periode": f"{_start_str} s/d {_end_str}",
-            "total_rak": _total_rak,
-            "sudah_so": _sudah_so,
-            "belum_so": _belum_so,
-            "persen": round(_persen, 2),
+            "total_rak": len(_master),
+            "sudah_so": _sudah,
+            "belum_so": _belum,
             "list_rak": _list_rak,
         }
-
     except Exception as e:
         print(f"[GET_RAK_STATUS ERROR] {e}")
         import traceback
         print(traceback.format_exc())
-        return {"success": False, "error": str(e)[:200], "list_rak": []}
-        
+        return {"success": False, "error": str(e)[:200]}
+
+
 # =========================================================
-# GET SPD LIST — List Sales Per Day + delta
+# GET SPD LIST — Fitur #2
 # =========================================================
 def get_spd_list(mode="bulan_ini", tgl_start=None, tgl_end=None):
-    """
-    Ambil list SPD (Sales Per Day) + delta vs hari sebelumnya.
-    
-    Returns:
-        {
-            "success": bool,
-            "periode": "...",
-            "total_spd": float,
-            "total_hari": int,
-            "avg_spd": float,
-            "list_spd": [
-                {
-                    "tanggal": "2026-10-01",
-                    "spd": 16425771.0,
-                    "delta_nominal": 0,
-                    "delta_persen": 0,
-                    "trend": "flat"  # "up" | "down" | "flat"
-                },
-                ...
-            ]
-        }
-    """
+    """List SPD per hari + delta."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
-            return {"success": False, "error": "Supabase gak konek", "list_spd": []}
+            return {"success": False, "error": "Supabase gak konek"}
 
-        # Tentukan periode
         if mode == "custom" and tgl_start and tgl_end:
             _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
             _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
@@ -639,24 +522,21 @@ def get_spd_list(mode="bulan_ini", tgl_start=None, tgl_end=None):
             _start_str = _start.isoformat()[:10]
             _end_str = _end.isoformat()[:10]
 
-        # Query spd_harian
         _res = (
             _sb.table("spd_harian")
             .select("tanggal, spd, keterangan, pic")
             .gte("tanggal", _start_str)
             .lte("tanggal", _end_str)
-            .order("tanggal", desc=False)
+            .order("tanggal")
             .execute()
         )
         _rows = _res.data if _res.data else []
 
-        # Build list + delta
         _list_spd = []
         _prev_spd = None
 
-        for _row in _rows:
-            _spd = float(_row.get("spd") or 0)
-
+        for r in _rows:
+            _spd = float(r.get("spd") or 0)
             _delta_nominal = 0
             _delta_persen = 0
             _trend = "flat"
@@ -664,81 +544,51 @@ def get_spd_list(mode="bulan_ini", tgl_start=None, tgl_end=None):
             if _prev_spd is not None and _prev_spd > 0:
                 _delta_nominal = _spd - _prev_spd
                 _delta_persen = (_delta_nominal / _prev_spd) * 100
-
                 if _delta_nominal > 0:
                     _trend = "up"
                 elif _delta_nominal < 0:
                     _trend = "down"
-                else:
-                    _trend = "flat"
 
             _list_spd.append({
-                "tanggal": _row.get("tanggal", ""),
+                "tanggal": r.get("tanggal"),
                 "spd": _spd,
-                "spd_formatted": f"Rp {_spd:,.0f}".replace(",", "."),
                 "delta_nominal": _delta_nominal,
-                "delta_persen": round(_delta_persen, 2),
+                "delta_persen": _delta_persen,
                 "trend": _trend,
-                "keterangan": _row.get("keterangan") or "",
-                "pic": _row.get("pic") or "-",
+                "keterangan": r.get("keterangan") or "",
+                "pic": r.get("pic") or "-",
             })
-
             _prev_spd = _spd
 
-        # Total & avg
-        _total_spd = sum(it["spd"] for it in _list_spd)
+        _total_spd = sum(x["spd"] for x in _list_spd)
         _total_hari = len(_list_spd)
         _avg_spd = _total_spd / _total_hari if _total_hari > 0 else 0
 
         return {
             "success": True,
             "periode": f"{_start_str} s/d {_end_str}",
-            "tgl_start": _start_str,
-            "tgl_end": _end_str,
             "total_spd": _total_spd,
             "total_hari": _total_hari,
             "avg_spd": _avg_spd,
             "list_spd": _list_spd,
         }
-
     except Exception as e:
         print(f"[GET_SPD_LIST ERROR] {e}")
         import traceback
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "list_spd": []}
-        
-    # =========================================================
-# GET TOP RAK — Ranking rak by nominal adjust
+
+
+# =========================================================
+# GET TOP RAK — Fitur #3
 # =========================================================
 def get_top_rak(mode="bulan_ini", tgl_start=None, tgl_end=None, limit=500):
-    """
-    Ambil ranking rak berdasarkan nominal_adjust (minus terbesar dulu).
-    
-    Returns:
-        {
-            "success": bool,
-            "periode": "...",
-            "total_rak": int,
-            "total_nominal": float,
-            "list_rak": [
-                {
-                    "rak_id": "S17",
-                    "rak_name": "...",
-                    "tgl_so": "2026-10-12",
-                    "pic": "PANDU",
-                    "nominal_adjust": -59403.83,
-                    "total_item": 15,
-                },
-                ...
-            ]
-        }
-    """
+    """Ranking rak by nominal_adjust."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
-            return {"success": False, "error": "Supabase gak konek", "list_rak": []}
+            return {"success": False, "error": "Supabase gak konek"}
 
-        # Tentukan periode
         if mode == "custom" and tgl_start and tgl_end:
             _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
             _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
@@ -747,76 +597,49 @@ def get_top_rak(mode="bulan_ini", tgl_start=None, tgl_end=None, limit=500):
             _start_str = _start.isoformat()[:10]
             _end_str = _end.isoformat()[:10]
 
-        # Query so_rak_harian
         _res = (
             _sb.table("so_rak_harian")
-            .select("rak_id, so_date, nominal_adjust, pic, total_item")
+            .select("rak_id, so_date, nominal_adjust, pic")
             .gte("so_date", _start_str)
             .lte("so_date", _end_str)
             .execute()
         )
         _rows = _res.data if _res.data else []
 
-        if not _rows:
-            return {
-                "success": True,
-                "periode": f"{_start_str} s/d {_end_str}",
-                "total_rak": 0,
-                "total_nominal": 0,
-                "list_rak": [],
-            }
-
-        # Aggregate per rak (ambil tanggal terbaru)
         _rak_map = {}
-        for _row in _rows:
-            _rak_id = _row.get("rak_id", "")
-            if not _rak_id:
+        for r in _rows:
+            _rid = r.get("rak_id")
+            if not _rid:
                 continue
-            
-            _nominal = float(_row.get("nominal_adjust") or 0)
-            _tgl = _row.get("so_date", "")
-            
-            # Ambil entry dengan tanggal terbaru
-            if _rak_id not in _rak_map or _tgl > _rak_map[_rak_id].get("so_date", ""):
-                _rak_map[_rak_id] = {
-                    "rak_id": _rak_id,
-                    "rak_name": "",
-                    "tgl_so": _tgl,
-                    "pic": _row.get("pic") or "-",
-                    "nominal_adjust": _nominal,
-                    "total_item": int(_row.get("total_item") or 0),
+            _nom = float(r.get("nominal_adjust") or 0)
+            if _rid not in _rak_map:
+                _rak_map[_rid] = {
+                    "rak_id": _rid,
+                    "nominal_adjust": _nom,
+                    "tgl_so": r.get("so_date"),
+                    "pic": r.get("pic") or "-",
+                    "total_item": 0,
                 }
+            else:
+                _rak_map[_rid]["nominal_adjust"] += _nom
+                if r.get("so_date") and (not _rak_map[_rid]["tgl_so"] or r["so_date"] > _rak_map[_rid]["tgl_so"]):
+                    _rak_map[_rid]["tgl_so"] = r["so_date"]
 
-        # Ambil rak_name dari rak_master
-        try:
-            _res_master = _sb.table("rak_master").select("rak_id, rak_name").execute()
-            _master_map = {r["rak_id"]: r.get("rak_name", "") for r in (_res_master.data or [])}
-            for _rak_id, _data in _rak_map.items():
-                _data["rak_name"] = _master_map.get(_rak_id, "")
-        except Exception:
-            pass
-
-        # Convert ke list
         _list_rak = list(_rak_map.values())
-
-        # Sort: minus terbesar dulu (ascending — karena minus)
         _list_rak.sort(key=lambda x: x["nominal_adjust"])
 
-        # Limit
-        _list_rak = _list_rak[:limit]
+        if limit:
+            _list_rak = _list_rak[:limit]
 
-        _total_nominal = sum(r["nominal_adjust"] for r in _list_rak)
+        _total_nominal = sum(x["nominal_adjust"] for x in _list_rak)
 
         return {
             "success": True,
             "periode": f"{_start_str} s/d {_end_str}",
-            "tgl_start": _start_str,
-            "tgl_end": _end_str,
             "total_rak": len(_list_rak),
             "total_nominal": _total_nominal,
             "list_rak": _list_rak,
         }
-
     except Exception as e:
         print(f"[GET_TOP_RAK ERROR] {e}")
         import traceback
@@ -825,46 +648,15 @@ def get_top_rak(mode="bulan_ini", tgl_start=None, tgl_end=None, limit=500):
 
 
 # =========================================================
-# GET ITEMS BY RAK — Extended (untuk detail rak)
+# GET ITEMS BY RAK EXTENDED — Fitur #3 Detail
 # =========================================================
 def get_items_by_rak_extended(rak_id, mode="bulan_ini", tgl_start=None, tgl_end=None):
-    """
-    Ambil detail item di rak tertentu (minus + plus).
-    Sort: minus terbesar → plus terbesar.
-    
-    Returns:
-        {
-            "success": bool,
-            "rak_id": "S17",
-            "tgl_so": "2026-10-12",
-            "pic": "PANDU",
-            "total_minus": -59403.83,
-            "total_plus": 5000,
-            "total_nominal": -54403.83,
-            "count_minus": 10,
-            "count_plus": 5,
-            "items": [
-                {
-                    "plu": "320875",
-                    "nama_produk": "...",
-                    "rak_id": "S17",
-                    "qty_sistem": 10,
-                    "qty_fisik": 5,
-                    "qty_var": -5,
-                    "nominal_adjust": -92342.3,
-                    "pic": "REZA",
-                    "so_date": "2026-10-10",
-                },
-                ...
-            ]
-        }
-    """
+    """Detail item di rak tertentu (minus + plus)."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
-            return {"success": False, "error": "Supabase gak konek", "items": []}
+            return {"success": False, "error": "Supabase gak konek"}
 
-        # Periode
         if mode == "custom" and tgl_start and tgl_end:
             _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
             _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
@@ -873,106 +665,59 @@ def get_items_by_rak_extended(rak_id, mode="bulan_ini", tgl_start=None, tgl_end=
             _start_str = _start.isoformat()[:10]
             _end_str = _end.isoformat()[:10]
 
-        # Query so_hasil by rak
         _res = (
             _sb.table("so_hasil")
-            .select("plu, nama_produk, rak_id, qty_sistem, qty_fisik, qty_var, nominal_adjust, pic, so_date")
-            .eq("rak_id", str(rak_id).upper())
+            .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
+            .eq("rak_id", rak_id.upper())
             .gte("so_date", _start_str)
             .lte("so_date", _end_str)
-            .order("nominal_adjust", desc=False)  # minus dulu
-            .limit(2000)
             .execute()
         )
         _items = _res.data if _res.data else []
 
-        # Konversi tipe + clean HTML
         for _it in _items:
-            _it["qty_sistem"] = int(_it.get("qty_sistem") or 0)
-            _it["qty_fisik"] = int(_it.get("qty_fisik") or 0)
             _it["qty_var"] = int(_it.get("qty_var") or 0)
             _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
-            _it["nama_produk"] = _clean_text(_it.get("nama_produk", ""))
 
-        # Hitung total minus & plus
-        _minus = [_it for _it in _items if _it["nominal_adjust"] < 0]
-        _plus = [_it for _it in _items if _it["nominal_adjust"] > 0]
-        _zero = [_it for _it in _items if _it["nominal_adjust"] == 0]
+        _total_minus = sum(x["nominal_adjust"] for x in _items if x["nominal_adjust"] < 0)
+        _total_plus = sum(x["nominal_adjust"] for x in _items if x["nominal_adjust"] > 0)
+        _total_net = _total_minus + _total_plus
 
-        _total_minus = sum(_it["nominal_adjust"] for _it in _minus)
-        _total_plus = sum(_it["nominal_adjust"] for _it in _plus)
-        _total_nominal = _total_minus + _total_plus
-
-        # Ambil data rak (tgl & pic terbaru)
-        _tgl_so = ""
-        _pic = "-"
-        if _items:
-            _tgl_so = max((_it.get("so_date", "") for _it in _items), default="")
-            # Ambil PIC dari item terbaru
-            for _it in _items:
-                if _it.get("so_date") == _tgl_so:
-                    _pic = _it.get("pic") or "-"
-                    break
-
-        # Sort: minus terbesar → plus terbesar
-        # Sudah ke-sort dari query (asc), minus di awal, plus di akhir
+        _pic = _items[0]["pic"] if _items else "-"
+        _tgl_so = _items[0]["so_date"] if _items else None
 
         return {
             "success": True,
-            "rak_id": str(rak_id).upper(),
+            "rak_id": rak_id.upper(),
+            "periode": f"{_start_str} s/d {_end_str}",
             "tgl_so": _tgl_so,
             "pic": _pic,
             "total_minus": _total_minus,
             "total_plus": _total_plus,
-            "total_nominal": _total_nominal,
-            "count_minus": len(_minus),
-            "count_plus": len(_plus),
-            "count_zero": len(_zero),
+            "total_nominal": _total_net,
             "total_item": len(_items),
             "items": _items,
         }
-
     except Exception as e:
-        print(f"[GET_ITEMS_BY_RAK_EXTENDED ERROR] {e}")
+        print(f"[GET_ITEMS_BY_RAK_EXT ERROR] {e}")
         import traceback
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "items": []}
 
 
 # =========================================================
-# GET TOP ITEMS — Extended (untuk Top Item tab)
+# GET TOP ITEMS EXTENDED — Fitur #3 Search + Sort
 # =========================================================
 def get_top_items_extended(
-    mode="bulan_ini",
-    tgl_start=None, tgl_end=None,
-    limit=None,
-    search="",
-    order_by="nominal_desc",
+    mode="bulan_ini", tgl_start=None, tgl_end=None,
+    limit=None, search="", order_by="nominal_desc",
 ):
-    """
-    Ambil semua item dengan search & sort.
-    
-    Args:
-        mode: "bulan_ini" / "bulan_lalu" / "custom"
-        limit: None = semua, atau angka
-        search: cari by PLU atau nama produk
-        order_by: "nominal_desc" | "nominal_asc" | "tanggal_desc" | "tanggal_asc"
-    
-    Returns:
-        {
-            "success": bool,
-            "periode": "...",
-            "total_items": int,
-            "total_nominal": float,
-            "items": [...]
-        }
-    """
+    """Top items extended — search + sort."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
             return {"success": False, "error": "Supabase gak konek", "items": []}
 
-        # Periode
         if mode == "custom" and tgl_start and tgl_end:
             _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
             _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
@@ -981,72 +726,210 @@ def get_top_items_extended(
             _start_str = _start.isoformat()[:10]
             _end_str = _end.isoformat()[:10]
 
-        # Query
         _q = (
             _sb.table("so_hasil")
-            .select("plu, nama_produk, rak_id, qty_sistem, qty_fisik, qty_var, nominal_adjust, pic, so_date")
+            .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
             .gte("so_date", _start_str)
             .lte("so_date", _end_str)
+            .lt("qty_var", 0)  # default minus
         )
 
-        # Filter cuma yang ada selisih
-        _q = _q.neq("nominal_adjust", 0)
-
-        # Limit untuk optimasi (ambil lebih banyak buat search)
-        _q = _q.limit(5000)
-
-        _res = _q.execute()
+        _res = _q.limit(5000).execute()
         _items = _res.data if _res.data else []
 
-        # Konversi tipe + clean HTML
         for _it in _items:
-            _it["qty_sistem"] = int(_it.get("qty_sistem") or 0)
-            _it["qty_fisik"] = int(_it.get("qty_fisik") or 0)
             _it["qty_var"] = int(_it.get("qty_var") or 0)
             _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
-            _it["nama_produk"] = _clean_text(_it.get("nama_produk", ""))
 
-        # Filter search
-        if search and str(search).strip():
-            _search_lower = str(search).strip().lower()
+        # Search
+        if search:
+            _s = search.lower()
             _items = [
-                _it for _it in _items
-                if (
-                    _search_lower in str(_it.get("plu", "")).lower()
-                    or _search_lower in str(_it.get("nama_produk", "")).lower()
-                )
+                it for it in _items
+                if _s in (it.get("plu") or "").lower()
+                or _s in (it.get("nama_produk") or "").lower()
             ]
 
         # Sort
         if order_by == "nominal_desc":
-            _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
+            _items.sort(key=lambda x: x["nominal_adjust"])
         elif order_by == "nominal_asc":
-            _items.sort(key=lambda x: x["nominal_adjust"])
+            _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
         elif order_by == "tanggal_desc":
-            _items.sort(key=lambda x: x.get("so_date", ""), reverse=True)
+            _items.sort(key=lambda x: x.get("so_date") or "", reverse=True)
         elif order_by == "tanggal_asc":
-            _items.sort(key=lambda x: x.get("so_date", ""))
-        else:
-            _items.sort(key=lambda x: x["nominal_adjust"])
+            _items.sort(key=lambda x: x.get("so_date") or "")
 
-        # Limit
-        if limit and limit > 0:
+        if limit:
             _items = _items[:limit]
 
-        _total_nominal = sum(_it["nominal_adjust"] for _it in _items)
+        _total_nominal = sum(x["nominal_adjust"] for x in _items)
+
+        return {
+            "success": True,
+            "periode": f"{_start_str} s/d {_end_str}",
+            "total_items": len(_items),
+            "total_nominal": _total_nominal,
+            "items": _items,
+        }
+    except Exception as e:
+        print(f"[GET_TOP_ITEMS_EXT ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)[:200], "items": []}
+
+
+# =========================================================
+# GET STATUS ANALYSIS — Fitur #4
+# =========================================================
+def get_status_analysis(mode="bulan_ini", tgl_start=None, tgl_end=None):
+    """
+    Analisis status SO: NSB, BTSB, NSB Personil, Status.
+
+    Returns:
+        {
+            "success": bool,
+            "periode": "...",
+            "net_sales": 185628812,
+            "total_adjust": -399320,
+            "btsb_persen": 0.15,
+            "btsb_rupiah": 278443,
+            "nsb_personil": 120877,
+            "persen": 0.215,
+            "status": "bahaya" | "waspada" | "aman",
+            "status_label": "BAHAYA",
+            "status_emoji": "🚨",
+            "status_color": "merah",
+            "rekomendasi": "...",
+            "adjust_untuk_aman": 120877,
+        }
+    """
+    try:
+        _sb = _get_supabase_safe()
+        if _sb is None:
+            return {"success": False, "error": "Supabase gak konek"}
+
+        # Tentukan periode
+        if mode == "custom" and tgl_start and tgl_end:
+            _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
+            _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
+        else:
+            _start, _end = get_periode_range(mode)
+            _start_str = _start.isoformat()[:10]
+            _end_str = _end.isoformat()[:10]
+
+        # 1. NET SALES
+        _res_spd = (
+            _sb.table("spd_harian")
+            .select("spd")
+            .gte("tanggal", _start_str)
+            .lte("tanggal", _end_str)
+            .execute()
+        )
+        _spd_rows = _res_spd.data if _res_spd.data else []
+        _net_sales = sum(float(r.get("spd") or 0) for r in _spd_rows)
+
+        # 2. TOTAL ADJUST
+        _res_so = (
+            _sb.table("so_rak_harian")
+            .select("nominal_adjust")
+            .gte("so_date", _start_str)
+            .lte("so_date", _end_str)
+            .execute()
+        )
+        _so_rows = _res_so.data if _res_so.data else []
+        _total_adjust = sum(float(r.get("nominal_adjust") or 0) for r in _so_rows)
+
+        # 3. BTSB & NSB PERSONIL
+        _btsb_persen = 0.15
+        _btsb_rupiah = (_net_sales * _btsb_persen) / 100 if _net_sales > 0 else 0
+
+        _total_adjust_abs = abs(_total_adjust)
+        _nsb_personil = _total_adjust_abs - _btsb_rupiah
+
+        _persen = (_total_adjust_abs / _net_sales * 100) if _net_sales > 0 else 0
+
+        # 4. STATUS
+        _status_key = "aman"
+        _status_label = "AMAN"
+        _status_emoji = "✅"
+        _status_color = "hijau"
+        _persen_bahaya = 0.15
+        _persen_waspada = 0.13
+
+        if _persen > _persen_bahaya:
+            _status_key = "bahaya"
+            _status_label = "BAHAYA"
+            _status_emoji = "🚨"
+            _status_color = "merah"
+        elif _persen >= _persen_waspada:
+            _status_key = "waspada"
+            _status_label = "WASPADA"
+            _status_emoji = "⚠️"
+            _status_color = "kuning"
+
+        # 5. REKOMENDASI
+        _rekomendasi = ""
+        _adjust_untuk_aman = 0
+
+        if _status_key == "bahaya":
+            _target_persen = _persen_waspada
+            _target_adjust_max = (_target_persen / 100) * _net_sales
+            _adjust_untuk_aman = max(0, _total_adjust_abs - _target_adjust_max)
+
+            if _adjust_untuk_aman > 0:
+                _rekomendasi = (
+                    f"Status BAHAYA. Beban NSB personil: Rp {_nsb_personil:,.0f}.\n"
+                    f"Disarankan adjust plus minimal Rp {_adjust_untuk_aman:,.0f} "
+                    f"agar status kembali ke WASPADA."
+                )
+            else:
+                _rekomendasi = "Status BAHAYA. Segera lakukan adjust plus untuk menurunkan selisih."
+
+        elif _status_key == "waspada":
+            _target_persen = _persen_waspada
+            _target_adjust_max = (_target_persen / 100) * _net_sales
+            _adjust_untuk_aman = max(0, _total_adjust_abs - _target_adjust_max)
+
+            _rekomendasi = (
+                f"Status WASPADA. Beban NSB personil: Rp {_nsb_personil:,.0f}.\n"
+                f"Disarankan adjust plus minimal Rp {_adjust_untuk_aman:,.0f} "
+                f"agar status kembali ke AMAN."
+            )
+
+        else:
+            _target_persen = _persen_bahaya
+            _target_adjust_max = (_target_persen / 100) * _net_sales
+            _sisa_ruang = max(0, _target_adjust_max - _total_adjust_abs)
+
+            _rekomendasi = (
+                f"Status AMAN. Selisih saat ini di bawah BTSB.\n"
+                f"Masih bisa melakukan adjust selisih sebesar Rp {_sisa_ruang:,.0f} "
+                f"sebelum masuk BAHAYA."
+            )
 
         return {
             "success": True,
             "periode": f"{_start_str} s/d {_end_str}",
             "tgl_start": _start_str,
             "tgl_end": _end_str,
-            "total_items": len(_items),
-            "total_nominal": _total_nominal,
-            "items": _items,
+            "net_sales": _net_sales,
+            "total_adjust": _total_adjust,
+            "total_adjust_abs": _total_adjust_abs,
+            "btsb_persen": _btsb_persen,
+            "btsb_rupiah": _btsb_rupiah,
+            "nsb_personil": _nsb_personil,
+            "persen": round(_persen, 3),
+            "status": _status_key,
+            "status_label": _status_label,
+            "status_emoji": _status_emoji,
+            "status_color": _status_color,
+            "rekomendasi": _rekomendasi,
+            "adjust_untuk_aman": _adjust_untuk_aman,
         }
 
     except Exception as e:
-        print(f"[GET_TOP_ITEMS_EXTENDED ERROR] {e}")
+        print(f"[GET_STATUS_ANALYSIS ERROR] {e}")
         import traceback
         print(traceback.format_exc())
-        return {"success": False, "error": str(e)[:200], "items": []}
+        return {"success": False, "error": str(e)[:200]}
