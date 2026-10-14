@@ -358,10 +358,11 @@ def get_top_items(
             .lte("so_date", _end_str)
         )
 
+        # === FILTER MINUS / PLUS (by nominal, bukan qty) ===
         if only_minus:
-            _q = _q.lt("qty_var", 0)
+            _q = _q.lt("nominal_adjust", 0)     # minus doang
         else:
-            _q = _q.gt("qty_var", 0)
+            _q = _q.gt("nominal_adjust", 0)     # plus doang
 
         if pic_filter:
             _q = _q.eq("pic", pic_filter.upper())
@@ -731,7 +732,7 @@ def get_top_items_extended(
             .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
             .gte("so_date", _start_str)
             .lte("so_date", _end_str)
-            .lt("qty_var", 0)  # default minus
+            .lt("nominal_adjust", 0)  # default minus
         )
 
         _res = _q.limit(5000).execute()
