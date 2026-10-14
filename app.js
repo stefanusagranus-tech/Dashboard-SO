@@ -1366,32 +1366,25 @@ ${getWelcomeText(currentBot)}
         // Wrapper untuk bubble + avatar
         const wrapper = document.createElement("div");
         wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
-
+        
         // ============================================================
         // AVATAR
         // ============================================================
         const avatar = document.createElement("div");
         if (isUser) {
             avatar.className = "chat-avatar avatar-user";
-            avatar.textContent = "👤";  // User avatar (bisa diganti nanti)
+            avatar.textContent = "👤";
         } else {
             avatar.className = "chat-avatar";
-            avatar.textContent = bot.emoji;  // Bot emoji (bisa diganti foto nanti)
+            avatar.textContent = bot.emoji;
         }
         wrapper.appendChild(avatar);
-
+        
         // ============================================================
-        // BUBBLE CONTENT WRAPPER
+        // BUBBLE CONTENT WRAPPER (ini yang isi bubble + timestamp)
         // ============================================================
         const bubbleWrapper = document.createElement("div");
-        bubbleWrapper.style.display = "flex";
-        bubbleWrapper.style.flexDirection = "column";
-        bubbleWrapper.style.gap = "2px";
-        bubbleWrapper.style.maxWidth = "100%";
-        bubbleWrapper.style.minWidth = "0";
-        bubbleWrapper.style.flexShrink = "0";      // ← FIX: jangan ngambil sisa
-        bubbleWrapper.style.flexGrow = "0";        // ← FIX
-        bubbleWrapper.style.alignItems = isUser ? "flex-end" : "flex-start";
+        bubbleWrapper.className = `bubble-content ${isUser ? "user" : "ai"}`;
 
         // === KALAU PESAN KONFIRMASI ===
         if (msg.isConfirm && msg.confirmData) {
