@@ -1339,16 +1339,20 @@ function renderChatHistory() {
     if (!container) return;
 
     const history = chatHistories[currentBot] || [];
+    const bot = BOTS[currentBot];
 
+    // Empty state — welcome bubble
     if (history.length === 0) {
-        const bot = BOTS[currentBot];
         container.innerHTML = `
-            <div class="bubble bubble-ai">
+            <div class="chat-message-wrapper ai">
+                <div class="chat-avatar">${bot.emoji}</div>
+                <div class="bubble bubble-ai bubble-welcome">
 Halo Bos! 👋
 
 Aku <b>${bot.emoji} ${bot.name}</b> — ${bot.role}.
 
 ${getWelcomeText(currentBot)}
+                </div>
             </div>
         `;
         return;
@@ -1357,41 +1361,120 @@ ${getWelcomeText(currentBot)}
     container.innerHTML = "";
 
     history.forEach((msg, idx) => {
+        const isUser = msg.role === "user";
+
+        // Wrapper untuk bubble + avatar
         const wrapper = document.createElement("div");
-        wrapper.style.display = "flex";
-        wrapper.style.flexDirection = "column";
-        wrapper.style.gap = "4px";
+        wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
+
+        // ============================================================
+        // AVATAR
+        // ============================================================
+        const avatar = document.createElement("div");
+        if (isUser) {
+            avatar.className = "chat-avatar avatar-user";
+            avatar.textContent = "👤";  // User avatar (bisa diganti nanti)
+        } else {
+            avatar.className = "chat-avatar";
+            avatar.textContent = bot.emoji;  // Bot emoji (bisa diganti foto nanti)
+        }
+        wrapper.appendChild(avatar);
+
+        // ============================================================
+        // BUBBLE CONTENT WRAPPER
+        // ============================================================
+        const bubbleWrapper = document.createElement("div");
+        bubbleWrapper.style.display = "flex";
+        bubbleWrapper.style.flexDirection = "column";
+        bubbleWrapper.style.gap = "2px";
+        bubbleWrapper.style.maxWidth = "100%";
+        bubbleWrapper.style.minWidth = "0";
+        bubbleWrapper.style.flex = "1";
 
         // === KALAU PESAN KONFIRMASI ===
         if (msg.isConfirm && msg.confirmData) {
             const confirmBubble = renderConfirmBubble(msg, idx);
-            wrapper.appendChild(confirmBubble);
+            bubbleWrapper.appendChild(confirmBubble);
         } else {
             // === BUBBLE BIASA ===
             const bubble = document.createElement("div");
-            bubble.className = `bubble bubble-${msg.role === "user" ? "user" : "ai"}`;
+            bubble.className = `bubble bubble-${isUser ? "user" : "ai"}`;
 
-            if (msg.isError) {
-                bubble.style.borderLeft = "3px solid var(--danger)";
-            } else if (msg.isSuccess) {
+            // Custom class berdasarkan tipe pesan
+            if (msg.isSuccess) {
                 bubble.classList.add("bubble-success");
+            } else if (msg.isError) {
+                bubble.classList.add("bubble-error");
             } else if (msg.isCancel) {
                 bubble.classList.add("bubble-error");
+            } else if (msg.isConfirmTrigger) {
+                bubble.classList.add("bubble-confirm-trigger");
             }
 
-            bubble.innerHTML = formatMessage(msg.content);
-            wrapper.appendChild(bubble);
+            // Render content
+            if (msg.isSuccess && msg.content.includes("🌸")) {
+                // Custom render untuk success + shift summary
+                bubble.innerHTML = formatSuccessMessage(msg.content);
+            } else {
+                bubble.innerHTML = formatMessage(msg.content);
+            }
+
+            bubbleWrapper.appendChild(bubble);
         }
 
+        // === TIMESTAMP ===
         const time = document.createElement("div");
-        time.className = `bubble-time ${msg.role === "assistant" ? "bubble-time-ai" : ""}`;
+        time.className = `bubble-time ${!isUser ? "bubble-time-ai" : ""}`;
         time.textContent = formatTime(msg.timestamp);
 
-        wrapper.appendChild(time);
+        bubbleWrapper.appendChild(time);
+        wrapper.appendChild(bubbleWrapper);
         container.appendChild(wrapper);
     });
 }
 
+
+// =========================================================
+// HELPER — Format Success Message
+// =========================================================
+function formatSuccessMessage(text) {
+    if (!text) return "";
+
+    // Split by line
+    const lines = text.split("\n");
+    let html = "";
+    let inSummary = false;
+    let summaryLines = [];
+
+    lines.forEach(line => {
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith("✅")) {
+            // Header success
+            html += `<div class="success-header">${escapeHtml(trimmed)}</div>`;
+        } else if (trimmed.startsWith("🌸")) {
+            // Start shift summary
+            inSummary = true;
+            summaryLines = [];
+        } else if (inSummary && trimmed) {
+            // Item dalam summary
+            summaryLines.push(trimmed);
+        } else if (trimmed) {
+            html += `<div style="margin-top: 4px;">${escapeHtml(trimmed)}</div>`;
+        }
+    });
+
+    // Render summary
+    if (summaryLines.length > 0) {
+        html += `<div class="shift-summary-chat">`;
+        summaryLines.forEach(line => {
+            html += `<div class="shift-summary-chat-line">${escapeHtml(line)}</div>`;
+        });
+        html += `</div>`;
+    }
+
+    return html;
+}
 
 // =========================================================
 // RENDER BUBBLE KONFIRMASI
