@@ -3295,6 +3295,169 @@ function renderStatusRekomendasi(data) {
         elCard.classList.add(`status-rekomendasi-${status}`);
     }
 }
+// =========================================================
+// HANDLE TOMBOL BACK ANDROID
+// Screen lain → balik ke Home
+// Home → muncul modal konfirmasi exit
+// =========================================================
+let exitModalShown = false;
+
+window.addEventListener("popstate", function(event) {
+    console.log("[Back] Back button pressed");
+    
+    // Cek screen aktif
+    const activeScreen = document.querySelector(".screen.active");
+    if (!activeScreen) return;
+    
+    const screenId = activeScreen.id;
+    
+    // ============================================
+    // CEK DULU: sidebar kebuka?
+    // ============================================
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar && sidebar.classList.contains("open")) {
+        console.log("[Back] Sidebar open — closing sidebar");
+        event.preventDefault();
+        closeSidebar();
+        pushBackGuard();
+        return;
+    }
+    
+    // ============================================
+    // CEK: modal kebuka (selain exit modal)?
+    // ============================================
+    const modalOpen = document.querySelector(".modal-overlay.active:not(#exitModal)");
+    if (modalOpen) {
+        console.log("[Back] Modal open — closing modal");
+        event.preventDefault();
+        modalOpen.classList.remove("active");
+        pushBackGuard();
+        return;
+    }
+    
+    // ============================================
+    // CEK: exit modal udah tampil?
+    // ============================================
+    if (exitModalShown) {
+        // Pencet back lagi waktu modal muncul = force exit
+        console.log("[Back] Exit modal shown — forcing exit");
+        event.preventDefault();
+        forceExitApp();
+        return;
+    }
+    
+    // ============================================
+    // HOME / LOGIN → munculin modal exit
+    // ============================================
+    if (screenId === "homeScreen" || screenId === "loginScreen") {
+        console.log("[Back] At main screen — showing exit modal");
+        event.preventDefault();
+        showExitModal();
+        pushBackGuard();
+        return;
+    }
+    
+    // ============================================
+    // SCREEN LAIN → balik ke Home (silent)
+    // ============================================
+    console.log("[Back] Not at home — navigating to home from:", screenId);
+    event.preventDefault();
+    
+    // Kalau di rakDetail, balik ke topMinus dulu (opsional — biar konsisten)
+    // Kalau lo mau langsung ke home, hapus blok ini
+    if (screenId === "rakDetailScreen") {
+        goToTopMinusScreen();
+        pushBackGuard();
+        return;
+    }
+    
+    // Default: balik ke home
+    goToHomeScreen();
+    pushBackGuard();
+});
+
+
+// =========================================================
+// EXIT MODAL — SHOW / CLOSE / CONFIRM
+// =========================================================
+function showExitModal() {
+    console.log("[Exit] Showing exit modal");
+    exitModalShown = true;
+    
+    const modal = document.getElementById("exitModal");
+    if (modal) {
+        modal.classList.add("active");
+    }
+}
+
+function closeExitModal() {
+    console.log("[Exit] Modal closed (Batal)");
+    exitModalShown = false;
+    
+    const modal = document.getElementById("exitModal");
+    if (modal) {
+        modal.classList.remove("active");
+    }
+    
+    // Re-push guard biar back bisa di-intercept lagi
+    pushBackGuard();
+}
+
+function confirmExit() {
+    console.log("[Exit] User confirmed exit");
+    forceExitApp();
+}
+
+function forceExitApp() {
+    // Method 1: Android JS Interface (kalau WebIntoApp expose)
+    try {
+        if (window.Android && typeof window.Android.exitApp === "function") {
+            console.log("[Exit] Using Android.exitApp()");
+            window.Android.exitApp();
+            return;
+        }
+    } catch (e) {
+        console.error("[Exit] Android.exitApp() failed:", e);
+    }
+    
+    // Method 2: Coba window.close()
+    try {
+        console.log("[Exit] Trying window.close()");
+        window.close();
+    } catch (e) {
+        console.error("[Exit] window.close() failed:", e);
+    }
+    
+    // Method 3: Fallback history — clear semua history
+    setTimeout(() => {
+        try {
+            console.log("[Exit] Using history.go(-length)");
+            history.go(-(history.length));
+        } catch (e) {
+            console.error("[Exit] history.go() failed:", e);
+        }
+    }, 100);
+    
+    // Reset flag setelah delay
+    setTimeout(() => {
+        exitModalShown = false;
+    }, 500);
+}
+
+
+// =========================================================
+// PUSH BACK GUARD — biar back button bisa di-intercept
+// =========================================================
+function pushBackGuard() {
+    try {
+        history.pushState({ guard: true, ts: Date.now() }, "", "");
+    } catch (e) {
+        console.error("[Back] pushState failed:", e);
+    }
+}
+
+// Init saat app load
+setTimeout(pushBackGuard, 800);
 
 // =========================================================
 // BOOT

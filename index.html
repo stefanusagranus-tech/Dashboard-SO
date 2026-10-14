@@ -718,6 +718,28 @@
 </div>
 
 <!-- ========================================================= -->
+<!-- MODAL — KONFIRMASI KELUAR APP -->
+<!-- ========================================================= -->
+<div id="exitModal" class="modal-overlay">
+    <div class="modal-content modal-exit" onclick="event.stopPropagation()">
+        <div class="exit-icon">🚪</div>
+        <div class="exit-title">Keluar dari Dashboard?</div>
+        <div class="exit-desc">
+            Yakin mau keluar dari aplikasi?<br>
+            <small>Semua data chat & progress akan tersimpan.</small>
+        </div>
+        <div class="exit-actions">
+            <button class="exit-btn exit-btn-cancel" onclick="closeExitModal()">
+                ❌ Batal
+            </button>
+            <button class="exit-btn exit-btn-confirm" onclick="confirmExit()">
+                🚪 Keluar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
 <!-- SIDEBAR -->
 <!-- ========================================================= -->
 <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>

@@ -3964,5 +3964,121 @@ body {
 }
 
 /* =========================================================
+   EXIT MODAL — Konfirmasi Keluar APK
+   ========================================================= */
+.modal-exit {
+    max-width: 340px !important;
+    text-align: center;
+    padding: 32px 24px;
+    border-radius: var(--radius-xl) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    background: var(--bg-secondary);
+    position: relative;
+    overflow: hidden;
+}
+
+.modal-exit::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple), var(--accent-orange));
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+}
+
+.exit-icon {
+    font-size: 64px;
+    line-height: 1;
+    margin-bottom: 16px;
+    animation: pumpkinFloat 3s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px var(--accent-glow));
+}
+
+.exit-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    letter-spacing: -0.5px;
+}
+
+.exit-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 24px;
+    font-weight: 500;
+}
+
+.exit-desc small {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.exit-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.exit-btn {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.exit-btn:active {
+    transform: scale(0.96);
+}
+
+.exit-btn-cancel {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.exit-btn-cancel:active {
+    border-color: var(--accent-orange);
+}
+
+.exit-btn-confirm {
+    background: linear-gradient(135deg, #ee5253, #c73133);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(238, 82, 83, 0.4);
+}
+
+.exit-btn-confirm:active {
+    box-shadow: 0 0 24px rgba(238, 82, 83, 0.6);
+}
+
+#exitModal.modal-overlay {
+    align-items: center;
+    padding: 20px;
+}
+
+#exitModal.modal-overlay.active {
+    display: flex;
+}
+
+@media (max-width: 360px) {
+    .modal-exit { padding: 24px 20px; }
+    .exit-icon { font-size: 52px; }
+    .exit-title { font-size: 17px; }
+    .exit-desc { font-size: 12px; }
+    .exit-btn { padding: 12px 12px; font-size: 13px; }
+}
+
+/* =========================================================
    END OF STYLE v2.1
    ========================================================= */
