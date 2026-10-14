@@ -1323,7 +1323,7 @@ function getSpdDateRange() {
 // =========================================================
 // SPD LIST — Load
 // =========================================================
-async function dList() {
+async function loadSpdListdList() {
     const container = document.getElementById("spdList");
     if (!container) return;
 
