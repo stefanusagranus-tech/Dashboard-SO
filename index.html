@@ -270,6 +270,70 @@
         </div>
     </div>
 </div>
+<!-- ========================================================= -->
+<!-- RAK LIST SCREEN — Detail Rak SO v1.5 -->
+<!-- ========================================================= -->
+<div id="rakListScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Status Rak</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+
+    <div class="rak-list-content">
+
+        <!-- RINGKASAN -->
+        <div class="rak-summary" id="rakSummary">
+            <div class="rak-summary-item">
+                <div class="rak-summary-value" id="rakSummaryTotal">--</div>
+                <div class="rak-summary-label">Total</div>
+            </div>
+            <div class="rak-summary-item">
+                <div class="rak-summary-value rak-summary-sudah" id="rakSummarySudah">--</div>
+                <div class="rak-summary-label">Sudah SO</div>
+            </div>
+            <div class="rak-summary-item">
+                <div class="rak-summary-value rak-summary-belum" id="rakSummaryBelum">--</div>
+                <div class="rak-summary-label">Belum SO</div>
+            </div>
+        </div>
+
+        <!-- FILTER TABS -->
+        <div class="rak-filter-tabs">
+            <button class="rak-filter-tab active" data-filter="semua" onclick="setRakFilter('semua')">
+                📋 Semua
+            </button>
+            <button class="rak-filter-tab" data-filter="sudah" onclick="setRakFilter('sudah')">
+                ✅ Sudah SO
+            </button>
+            <button class="rak-filter-tab" data-filter="belum" onclick="setRakFilter('belum')">
+                ❌ Belum SO
+            </button>
+        </div>
+
+        <!-- SEARCH -->
+        <div class="rak-search-wrapper">
+            <span class="rak-search-icon">🔍</span>
+            <input
+                type="text"
+                id="rakSearchInput"
+                class="rak-search-input"
+                placeholder="Cari rak atau PIC..."
+                oninput="filterRakList()"
+            >
+            <button class="rak-search-clear hidden" id="rakSearchClear" onclick="clearRakSearch()">✕</button>
+        </div>
+
+        <!-- LIST RAK -->
+        <div id="rakList" class="rak-list">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Memuat data rak...</p>
+            </div>
+        </div>
+
+    </div>
+</div>
 
 <!-- ========================================================= -->
 <!-- MODAL — KONFIRMASI UPDATE SHIFT v1.4 -->
