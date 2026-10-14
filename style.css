@@ -720,6 +720,1242 @@ body {
 }
 
 /* =========================================================
+   MASTER SHIFT SCREEN v1.3
+   ========================================================= */
+.master-shift-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    z-index: 2;
+}
+
+.master-shift-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.master-shift-content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+/* =========================================================
+   FILTER TABS
+   ========================================================= */
+.filter-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.filter-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.filter-tab {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    white-space: nowrap;
+}
+
+.filter-tab:active {
+    transform: scale(0.96);
+}
+
+.filter-tab.active {
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-pumpkin));
+    border-color: var(--accent-orange);
+    color: #fff;
+    box-shadow: 0 0 20px rgba(255, 140, 66, 0.4);
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+/* =========================================================
+   FILTER PERSONIL
+   ========================================================= */
+.filter-personil {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.filter-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.filter-select {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+}
+
+.filter-select:focus {
+    border-color: var(--accent-orange);
+    box-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
+}
+
+/* =========================================================
+   CUSTOM DATE RANGE
+   ========================================================= */
+.custom-date-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.custom-date-row.hidden {
+    display: none;
+}
+
+.date-input {
+    flex: 1;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.date-input:focus {
+    border-color: var(--accent-orange);
+}
+
+.date-separator {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+/* =========================================================
+   SHIFT LIST
+   ========================================================= */
+.shift-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.loading-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+}
+
+.loading-state .spinner {
+    margin: 0 auto 12px;
+}
+
+.loading-state p {
+    font-size: 13px;
+}
+
+/* Date Group Card */
+.date-group {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s;
+}
+
+.date-group:active {
+    border-color: var(--border-hover);
+}
+
+.date-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.date-group-date {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--accent-orange);
+    text-shadow: 0 0 8px rgba(255, 140, 66, 0.3);
+}
+
+.date-group-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.shift-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
+}
+
+.shift-row:last-child {
+    border-bottom: none;
+}
+
+.shift-row:active {
+    background: var(--bg-tertiary);
+}
+
+.shift-emoji {
+    font-size: 20px;
+    flex-shrink: 0;
+    width: 28px;
+    text-align: center;
+}
+
+.shift-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.shift-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: var(--radius-xl);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.shift-badge-p7 {
+    background: rgba(6, 214, 160, 0.15);
+    color: #06d6a0;
+    border: 1px solid rgba(6, 214, 160, 0.3);
+}
+
+.shift-badge-s15 {
+    background: rgba(254, 202, 87, 0.15);
+    color: #feca57;
+    border: 1px solid rgba(254, 202, 87, 0.3);
+}
+
+.shift-badge-m22 {
+    background: rgba(238, 82, 83, 0.15);
+    color: #ee5253;
+    border: 1px solid rgba(238, 82, 83, 0.3);
+}
+
+.shift-badge-o {
+    background: rgba(122, 107, 153, 0.15);
+    color: var(--text-muted);
+    border: 1px solid rgba(122, 107, 153, 0.3);
+}
+
+.shift-badge-cuti {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.shift-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   SHIFT SUMMARY (footer)
+   ========================================================= */
+.shift-summary {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+    font-weight: 600;
+}
+
+.shift-summary-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.shift-summary-empty .empty-icon {
+    font-size: 40px;
+    display: block;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+/* =========================================================
+   MODAL — KELOLA PERSONIL
+   ========================================================= */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 200;
+    justify-content: center;
+    align-items: flex-end;
+    backdrop-filter: blur(4px);
+    animation: modalFadeIn 0.25s ease-out;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    width: 100%;
+    max-width: 500px;
+    max-height: 85vh;
+    background: var(--bg-secondary);
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    display: flex;
+    flex-direction: column;
+    animation: modalSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 -8px 40px rgba(162, 89, 255, 0.3);
+}
+
+@keyframes modalSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.modal-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+}
+
+.modal-close {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.modal-close:active {
+    background: var(--danger);
+    transform: scale(0.9);
+}
+
+.modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px 24px;
+}
+
+.modal-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+/* =========================================================
+   PERSONIL LIST
+   ========================================================= */
+.personil-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.personil-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+}
+
+.personil-item:active {
+    border-color: var(--accent-orange);
+}
+
+.personil-item-emoji {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.personil-item-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.personil-item-status {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: var(--radius-xl);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.personil-status-active {
+    background: rgba(6, 214, 160, 0.15);
+    color: #06d6a0;
+    border: 1px solid rgba(6, 214, 160, 0.3);
+}
+
+.personil-status-inactive {
+    background: rgba(238, 82, 83, 0.15);
+    color: #ee5253;
+    border: 1px solid rgba(238, 82, 83, 0.3);
+}
+
+.personil-item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.personil-item-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.personil-item-btn:active {
+    background: var(--bg-tertiary);
+    transform: scale(0.9);
+}
+
+.personil-item-btn.delete {
+    color: var(--danger);
+}
+
+.personil-item-btn.delete:active {
+    background: rgba(238, 82, 83, 0.2);
+}
+
+/* =========================================================
+   PERSONIL ADD SECTION
+   ========================================================= */
+.personil-add-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    margin-top: 8px;
+}
+
+.personil-add-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--accent-orange);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+}
+
+.personil-add-row {
+    display: flex;
+    gap: 8px;
+}
+
+.personil-input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    outline: none;
+    text-transform: uppercase;
+}
+
+.personil-input:focus {
+    border-color: var(--accent-orange);
+    box-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
+}
+
+.personil-input::placeholder {
+    text-transform: none;
+    color: var(--text-muted);
+}
+
+.personil-add-btn {
+    padding: 10px 18px;
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-pumpkin));
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.personil-add-btn:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 20px rgba(255, 140, 66, 0.5);
+}
+
+/* =========================================================
+   CHAT KONFIRMASI — Bubble + Tombol Simpan/Batal v1.3
+   ========================================================= */
+.bubble-confirm {
+    border: 1px solid var(--accent-orange) !important;
+    box-shadow: 
+        var(--shadow-md),
+        0 0 20px rgba(255, 140, 66, 0.25),
+        inset 0 0 30px rgba(255, 140, 66, 0.05);
+    background: linear-gradient(135deg, 
+        var(--bubble-ai-bg) 0%, 
+        rgba(255, 140, 66, 0.08) 100%) !important;
+    padding: 14px 16px !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.bubble-confirm::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, 
+        var(--accent-orange), 
+        var(--accent-purple), 
+        var(--accent-orange));
+    background-size: 200% 100%;
+    animation: shimmer 2.5s linear infinite;
+}
+
+.confirm-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--accent-orange);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.confirm-detail {
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin: 10px 0;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.confirm-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+}
+
+.confirm-detail-row .label {
+    color: var(--text-muted);
+    font-weight: 600;
+    min-width: 65px;
+    font-size: 12px;
+}
+
+.confirm-detail-row .value {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.confirm-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.confirm-item .arrow {
+    color: var(--accent-orange);
+    font-weight: 800;
+}
+
+/* Tombol konfirmasi */
+.confirm-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.confirm-btn {
+    flex: 1;
+    padding: 10px 14px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.confirm-btn-save {
+    background: linear-gradient(135deg, #06d6a0, #04a97c);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(6, 214, 160, 0.4);
+}
+
+.confirm-btn-save:active {
+    transform: scale(0.96);
+    box-shadow: 0 0 24px rgba(6, 214, 160, 0.7);
+}
+
+.confirm-btn-save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.confirm-btn-cancel {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.confirm-btn-cancel:active {
+    transform: scale(0.96);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.confirm-btn-cancel:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* State setelah klik */
+.bubble-confirm.resolved {
+    opacity: 0.6;
+}
+
+.bubble-confirm.resolved .confirm-actions {
+    display: none;
+}
+
+.bubble-confirm.resolved::before {
+    background: linear-gradient(90deg, #06d6a0, #06d6a0);
+    animation: none;
+}
+
+/* Status resolved */
+.confirm-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+.confirm-status-saved {
+    background: rgba(6, 214, 160, 0.15);
+    border: 1px solid rgba(6, 214, 160, 0.4);
+    color: #06d6a0;
+}
+
+.confirm-status-cancelled {
+    background: rgba(238, 82, 83, 0.15);
+    border: 1px solid rgba(238, 82, 83, 0.4);
+    color: #ee5253;
+}
+
+.confirm-status-error {
+    background: rgba(238, 82, 83, 0.15);
+    border: 1px solid rgba(238, 82, 83, 0.4);
+    color: #ee5253;
+}
+
+/* Loading spinner di dalam tombol */
+.confirm-btn .btn-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* =========================================================
+   BUBBLE SUCCESS — setelah save
+   ========================================================= */
+.bubble-success {
+    border: 1px solid rgba(6, 214, 160, 0.4) !important;
+    background: linear-gradient(135deg,
+        var(--bubble-ai-bg) 0%,
+        rgba(6, 214, 160, 0.1) 100%) !important;
+    box-shadow: 
+        var(--shadow-md),
+        0 0 20px rgba(6, 214, 160, 0.2);
+    position: relative;
+}
+
+.bubble-success::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #06d6a0, #04a97c, #06d6a0);
+    background-size: 200% 100%;
+    animation: shimmer 2.5s linear infinite;
+}
+
+.success-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 800;
+    color: #06d6a0;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+/* =========================================================
+   BUBBLE ERROR — kalau save gagal
+   ========================================================= */
+.bubble-error {
+    border: 1px solid rgba(238, 82, 83, 0.4) !important;
+    background: linear-gradient(135deg,
+        var(--bubble-ai-bg) 0%,
+        rgba(238, 82, 83, 0.1) 100%) !important;
+    box-shadow: 
+        var(--shadow-md),
+        0 0 20px rgba(238, 82, 83, 0.2);
+    position: relative;
+}
+
+.bubble-error::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #ee5253, #c73133, #ee5253);
+    background-size: 200% 100%;
+    animation: shimmer 2.5s linear infinite;
+}
+
+.error-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 800;
+    color: #ee5253;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+/* =========================================================
+   SHIFT SUMMARY DI CHAT — setelah save
+   ========================================================= */
+.shift-summary-chat {
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.7;
+}
+
+.shift-summary-chat-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--accent-orange);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+}
+
+.shift-summary-chat-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.shift-summary-chat-line b {
+    color: var(--text-primary);
+    font-weight: 800;
+}
+
+/* =========================================================
+   ANIMASI TAMBAHAN
+   ========================================================= */
+@keyframes confirmPulse {
+    0%, 100% { box-shadow: var(--shadow-md), 0 0 20px rgba(255, 140, 66, 0.25); }
+    50% { box-shadow: var(--shadow-md), 0 0 32px rgba(255, 140, 66, 0.5); }
+}
+
+.bubble-confirm:not(.resolved) {
+    animation: confirmPulse 2.5s ease-in-out infinite;
+}
+
+/* Toast notifikasi kecil */
+.toast-mini {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 12px 20px;
+    border-radius: var(--radius-xl);
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: var(--shadow-lg);
+    z-index: 999;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 90vw;
+    text-align: center;
+}
+
+.toast-mini.show {
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast-mini.success {
+    border-color: rgba(6, 214, 160, 0.5);
+    box-shadow: var(--shadow-lg), 0 0 30px rgba(6, 214, 160, 0.3);
+}
+
+.toast-mini.error {
+    border-color: rgba(238, 82, 83, 0.5);
+    box-shadow: var(--shadow-lg), 0 0 30px rgba(238, 82, 83, 0.3);
+}
+
+/* =========================================================
+   RESPONSIVE TAMBAHAN v1.3
+   ========================================================= */
+
+/* HP KECIL — 360px */
+@media (max-width: 360px) {
+    .master-shift-content {
+        padding: 12px 14px 30px;
+        gap: 12px;
+    }
+    .filter-tab {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    .shift-row {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .shift-name {
+        font-size: 13px;
+    }
+    .shift-badge {
+        font-size: 10px;
+        padding: 3px 8px;
+    }
+    .modal-content {
+        max-height: 90vh;
+    }
+    .modal-header {
+        padding: 14px 16px;
+    }
+    .modal-body {
+        padding: 12px 16px 20px;
+    }
+    .confirm-btn {
+        padding: 9px 10px;
+        font-size: 12px;
+    }
+    .personil-item {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    .personil-item-name {
+        font-size: 13px;
+    }
+    .date-input {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+}
+
+/* HP BESAR — 428px */
+@media (min-width: 428px) {
+    .master-shift-content {
+        padding: 20px 24px 50px;
+    }
+    .filter-tab {
+        padding: 11px 18px;
+        font-size: 14px;
+    }
+    .shift-row {
+        padding: 14px 18px;
+    }
+    .shift-name {
+        font-size: 15px;
+    }
+    .confirm-btn {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+}
+
+/* TABLET — 600px */
+@media (min-width: 600px) {
+    .master-shift-content {
+        max-width: 700px;
+        margin: 0 auto;
+        width: 100%;
+    }
+    .modal-content {
+        max-width: 600px;
+        border-radius: var(--radius-xl);
+        border-bottom: 1px solid var(--border-color);
+        max-height: 80vh;
+    }
+    .modal-overlay {
+        align-items: center;
+        padding: 20px;
+    }
+    @keyframes modalSlideUp {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+}
+
+/* =========================================================
+   SCREEN MASTER SHIFT — Full height fix
+   ========================================================= */
+#masterShiftScreen {
+    display: none;
+    flex-direction: column;
+}
+
+#masterShiftScreen.active {
+    display: flex;
+}
+
+/* =========================================================
+   FIX: Sidebar item active state di Master Shift
+   ========================================================= */
+.sidebar-item.active {
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--accent-orange);
+    padding-left: 17px;
+    box-shadow: inset 0 0 20px rgba(255, 140, 66, 0.1);
+}
+
+/* =========================================================
+   UTILITY
+   ========================================================= */
+.hidden {
+    display: none !important;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.mt-1 { margin-top: 8px; }
+.mt-2 { margin-top: 16px; }
+.mt-3 { margin-top: 24px; }
+
+.mb-1 { margin-bottom: 8px; }
+.mb-2 { margin-bottom: 16px; }
+.mb-3 { margin-bottom: 24px; }
+
+/* =========================================================
+   LOADING OVERLAY (untuk tombol aksi)
+   ========================================================= */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: modalFadeIn 0.2s ease-out;
+}
+
+.loading-overlay.hidden {
+    display: none;
+}
+
+.loading-overlay-content {
+    text-align: center;
+    color: var(--text-primary);
+}
+
+.loading-overlay-content .spinner {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+    margin-bottom: 16px;
+}
+
+.loading-overlay-content p {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent-orange);
+    letter-spacing: 0.5px;
+}
+
+/* =========================================================
+   PERSONIL ITEM — inactive state
+   ========================================================= */
+.personil-item.inactive {
+    opacity: 0.5;
+}
+
+.personil-item.inactive .personil-item-name {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+/* =========================================================
+   BADGE COUNT di filter tab
+   ========================================================= */
+.filter-tab-badge {
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.3);
+    color: currentColor;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: var(--radius-xl);
+    margin-left: 4px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* =========================================================
+   ANIMASI ENTRANCE untuk shift row
+   ========================================================= */
+.shift-row {
+    animation: shiftRowIn 0.3s ease-out backwards;
+}
+
+.shift-row:nth-child(1) { animation-delay: 0.02s; }
+.shift-row:nth-child(2) { animation-delay: 0.04s; }
+.shift-row:nth-child(3) { animation-delay: 0.06s; }
+.shift-row:nth-child(4) { animation-delay: 0.08s; }
+.shift-row:nth-child(5) { animation-delay: 0.10s; }
+.shift-row:nth-child(6) { animation-delay: 0.12s; }
+.shift-row:nth-child(7) { animation-delay: 0.14s; }
+.shift-row:nth-child(8) { animation-delay: 0.16s; }
+.shift-row:nth-child(9) { animation-delay: 0.18s; }
+.shift-row:nth-child(10) { animation-delay: 0.20s; }
+
+@keyframes shiftRowIn {
+    from {
+        opacity: 0;
+        transform: translateX(-16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* =========================================================
+   DATE GROUP ANIMASI
+   ========================================================= */
+.date-group {
+    animation: dateGroupIn 0.35s ease-out backwards;
+}
+
+.date-group:nth-child(1) { animation-delay: 0.05s; }
+.date-group:nth-child(2) { animation-delay: 0.10s; }
+.date-group:nth-child(3) { animation-delay: 0.15s; }
+.date-group:nth-child(4) { animation-delay: 0.20s; }
+.date-group:nth-child(5) { animation-delay: 0.25s; }
+.date-group:nth-child(6) { animation-delay: 0.30s; }
+.date-group:nth-child(7) { animation-delay: 0.35s; }
+
+@keyframes dateGroupIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* =========================================================
+   PRESSED STATE — biar kerasa native
+   ========================================================= */
+.filter-tab:active,
+.shift-row:active,
+.home-card:active,
+.sidebar-item:active,
+.settings-btn:active,
+.confirm-btn:active,
+.personil-add-btn:active,
+.personil-item-btn:active {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* =========================================================
+   SAFE AREA — HP dengan notch
+   ========================================================= */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .chat-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+    .modal-body {
+        padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    }
+}
+
+/* =========================================================
+   SCROLLBAR GLOBAL — tambahan
+   ========================================================= */
+.master-shift-content::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.master-shift-content::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.master-shift-content::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.master-shift-content::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-orange);
+}
+   
+/* =========================================================
    RUNNING TEXT v1.2.1 — Seamless Loop FIX
    ========================================================= */
 .running-text {

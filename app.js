@@ -1,6 +1,6 @@
 /* =========================================================
-   DASHBOARD SO C383 — APP LOGIC v1.1
-   Tambah: Jam Live, Auto Time Theme, Mini Dashboard, Running Text
+   DASHBOARD SO C383 — APP LOGIC v1.3
+   Tambah: Master Shift Screen, Chat Konfirmasi, CRUD Personil
    ========================================================= */
 
 // =========================================================
@@ -9,10 +9,10 @@
 const CONFIG = {
     BACKEND_URL: "https://dashboard-so.fastapicloud.dev",
     STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
-    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkV",  // ⚠️ GANTI KALAU KEY LO BEDA
+    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkV",
     DEFAULT_PIN: "123456",
-    APP_VERSION: "1.1.0",
-    TARGET_SO_PERSEN: 70,  // Target SO 70%
+    APP_VERSION: "1.3.0",
+    TARGET_SO_PERSEN: 70,
 };
 
 const BOTS = {
@@ -33,6 +33,15 @@ let clockInterval = null;
 let dashboardRefreshInterval = null;
 let autoThemeEnabled = true;
 
+// Master Shift state
+let shiftPeriod = "hari_ini";
+let shiftPersonilFilter = "";
+let masterShiftData = [];
+let personilData = [];
+
+// Konfirmasi chat state
+let pendingConfirmations = {};  // { msgId: { items, tanggal, resolved } }
+
 
 // =========================================================
 // INIT
@@ -42,28 +51,21 @@ function initApp() {
 
     loadChatHistories();
 
-    // Auto theme setting
     autoThemeEnabled = localStorage.getItem("so_auto_theme") !== "false";
 
-    // Theme
     const savedTheme = localStorage.getItem("so_theme") || "halloween-dark";
     setTheme(savedTheme);
 
-    // Time theme
     updateTimeTheme();
-
-    // API Key display
     updateApiKeyDisplay();
     updateAutoThemeDisplay();
 
-    // PIN hint
     const savedPin = localStorage.getItem("so_pin");
     if (savedPin) {
         const hint = document.querySelector(".pin-hint");
         if (hint) hint.textContent = "";
     }
 
-    // Show screen
     if (isLoggedIn) {
         showScreen("homeScreen");
         startLiveClock();
@@ -73,11 +75,9 @@ function initApp() {
         showScreen("loginScreen");
     }
 
-    // Bind
     bindPinKeypad();
     bindChatInput();
 
-    // Auto update time theme tiap 1 menit
     setInterval(updateTimeTheme, 60 * 1000);
 }
 
@@ -94,33 +94,16 @@ function showScreen(screenId) {
 function goToHomeScreen() {
     closeSidebar();
     showScreen("homeScreen");
-    // Refresh dashboard + start clock
     startLiveClock();
     loadMiniDashboard();
     startDashboardAutoRefresh();
 }
 
 function goToChatScreen() {
-    try {
-        document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-        const chat = document.getElementById("chatScreen");
-        if (!chat) {
-            alert("ERROR: chatScreen element gak ada!");
-            return;
-        }
-        chat.classList.add("active");
-        
-        // Set default bot
-        if (!currentBot || !BOTS[currentBot]) currentBot = "yui";
-        const bot = BOTS[currentBot];
-        document.getElementById("chatBotEmoji").textContent = bot.emoji;
-        document.getElementById("chatBotName").textContent = bot.name;
-        
-        renderChatHistory();
-    } catch (err) {
-        alert("ERROR: " + err.name + " — " + err.message);
-        console.error(err);
-    }
+    stopDashboardAutoRefresh();
+    showScreen("chatScreen");
+    if (!currentBot || !BOTS[currentBot]) currentBot = "yui";
+    switchBot(currentBot);
 }
 
 function goToSettingsScreen() {
@@ -136,6 +119,14 @@ function goToStreamlitScreen() {
     showScreen("streamlitScreen");
 }
 
+function goToMasterShiftScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("masterShiftScreen");
+    loadPersonilList();
+    loadMasterShift();
+}
+
 
 // =========================================================
 // JAM LIVE
@@ -149,13 +140,11 @@ function startLiveClock() {
 function updateClock() {
     const now = new Date();
 
-    // Jam
     const hh = String(now.getHours()).padStart(2, "0");
     const mm = String(now.getMinutes()).padStart(2, "0");
     const clockTime = document.getElementById("clockTime");
     if (clockTime) clockTime.textContent = `${hh}:${mm}`;
 
-    // Tanggal
     const hari = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
     const bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
     const clockDate = document.getElementById("clockDate");
@@ -163,14 +152,12 @@ function updateClock() {
         clockDate.textContent = `${hari[now.getDay()]}, ${now.getDate()} ${bulan[now.getMonth()]} ${now.getFullYear()}`;
     }
 
-    // Greeting
     const hour = now.getHours();
     let greeting = "Selamat Malam";
     let emoji = "🌙";
     if (hour >= 5 && hour < 11) { greeting = "Selamat Pagi"; emoji = "🌅"; }
     else if (hour >= 11 && hour < 15) { greeting = "Selamat Siang"; emoji = "☀️"; }
     else if (hour >= 15 && hour < 18) { greeting = "Selamat Sore"; emoji = "🌆"; }
-    else { greeting = "Selamat Malam"; emoji = "🌙"; }
 
     const clockGreeting = document.getElementById("clockGreeting");
     if (clockGreeting) clockGreeting.textContent = `${greeting}, Bos! ${emoji}`;
@@ -189,10 +176,8 @@ function updateTimeTheme() {
     if (hour >= 5 && hour < 11) timeTheme = "pagi";
     else if (hour >= 11 && hour < 15) timeTheme = "siang";
     else if (hour >= 15 && hour < 18) timeTheme = "sore";
-    else timeTheme = "malam";
 
     document.documentElement.setAttribute("data-time-theme", timeTheme);
-    console.log(`[TimeTheme] ${timeTheme} (jam: ${hour})`);
 }
 
 function toggleAutoTheme() {
@@ -202,9 +187,9 @@ function toggleAutoTheme() {
 
     if (autoThemeEnabled) {
         updateTimeTheme();
-        alert("✅ Auto tema jam aktif");
+        showToastMini("Auto tema jam aktif ✅", "success");
     } else {
-        alert("❌ Auto tema jam dimatikan");
+        showToastMini("Auto tema jam dimatikan", "error");
     }
 }
 
@@ -215,7 +200,7 @@ function updateAutoThemeDisplay() {
 
 
 // =========================================================
-// MINI DASHBOARD v1.2 — Widget Baru + Status + Running Text
+// MINI DASHBOARD — Fetch dari /api/yui/rekap
 // =========================================================
 async function loadMiniDashboard() {
     const statRak = document.getElementById("statRak");
@@ -242,32 +227,22 @@ async function loadMiniDashboard() {
             body: JSON.stringify({ mode: "bulan_ini" }),
         });
 
-        if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
-        }
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
         const data = await resp.json();
 
-        // ============================================================
-        // AMBIL DATA
-        // ============================================================
         const totalRak = data.total_rak || 0;
         const totalNominal = data.total_nominal || 0;
         const salesPeriode = data.sales_periode || 0;
 
-        // Total rak master (145)
         const totalRakMaster = 145;
         const persenSo = totalRakMaster > 0 ? (totalRak / totalRakMaster) * 100 : 0;
 
-        // ============================================================
-        // HITUNG STATUS: |Nominal Adjust| / SPD × 100
-        // ============================================================
         let statusPersen = 0;
         if (salesPeriode > 0) {
             statusPersen = (Math.abs(totalNominal) / salesPeriode) * 100;
         }
 
-        // Tentukan status
         let statusKey = "aman";
         let statusEmoji = "✅";
         let statusText = "AMAN";
@@ -283,35 +258,12 @@ async function loadMiniDashboard() {
             statusEmoji = "⚠️";
             statusText = "WASPADA";
             statusColor = "kuning";
-        } else {
-            statusKey = "aman";
-            statusEmoji = "✅";
-            statusText = "AMAN";
-            statusColor = "hijau";
         }
 
-        // ============================================================
-        // UPDATE WIDGET — TOTAL RAK
-        // ============================================================
         if (statRak) statRak.textContent = `${totalRak}/${totalRakMaster}`;
+        if (statSpd) statSpd.textContent = formatRupiahRingkas(salesPeriode);
+        if (statNominal) statNominal.textContent = formatRupiahRingkas(totalNominal);
 
-        // ============================================================
-        // UPDATE WIDGET — SPD (format ringkas)
-        // ============================================================
-        if (statSpd) {
-            statSpd.textContent = formatRupiahRingkas(salesPeriode);
-        }
-
-        // ============================================================
-        // UPDATE WIDGET — NOMINAL ADJUST (format ringkas)
-        // ============================================================
-        if (statNominal) {
-            statNominal.textContent = formatRupiahRingkas(totalNominal);
-        }
-
-        // ============================================================
-        // UPDATE STATUS BAR
-        // ============================================================
         if (statusIcon) statusIcon.textContent = statusEmoji;
         if (statusValue) statusValue.textContent = `${statusText} (${statusColor})`;
         if (statusPercent) statusPercent.textContent = `${statusPersen.toFixed(2)}%`;
@@ -321,24 +273,43 @@ async function loadMiniDashboard() {
             statusBar.classList.add(`status-${statusKey}`);
         }
 
-        // ============================================================
-        // UPDATE PROGRESS BAR (progress SO)
-        // ============================================================
         if (progressFill) progressFill.style.width = `${Math.min(persenSo, 100)}%`;
         if (progressLabel) {
             progressLabel.textContent = `Progress SO: ${persenSo.toFixed(1)}% dari target ${CONFIG.TARGET_SO_PERSEN}%`;
         }
 
-        // ============================================================
-        // UPDATE RUNNING TEXT — Seamless Loop
-        // ============================================================
         if (runningTextContainer) {
             const runningParts = [];
             runningParts.push(`📦 Total Rak: <b>${totalRak}/${totalRakMaster}</b>`);
             runningParts.push(`💰 SPD: <b>${formatRupiahRingkas(salesPeriode)}</b>`);
             runningParts.push(`📉 Nominal Adjust: <b>${formatRupiahRingkas(totalNominal)}</b>`);
             runningParts.push(`📊 Status: <b>${statusEmoji} ${statusText}</b> (${statusPersen.toFixed(2)}%)`);
-        
+
+            // Load shift hari ini
+            try {
+                const shiftResp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/shift-hari-ini`, {
+                    method: "GET",
+                    headers: { "X-API-Key": _key },
+                });
+                if (shiftResp.ok) {
+                    const shiftData = await shiftResp.json();
+                    if (shiftData.success && shiftData.grouped) {
+                        const shiftParts = [];
+                        const grouped = shiftData.grouped;
+                        if (grouped.P7 && grouped.P7.length) shiftParts.push(`🟢 Pagi: ${grouped.P7.join(", ")}`);
+                        if (grouped.S15 && grouped.S15.length) shiftParts.push(`🟡 Siang: ${grouped.S15.join(", ")}`);
+                        if (grouped.M22 && grouped.M22.length) shiftParts.push(`🔴 Malam: ${grouped.M22.join(", ")}`);
+                        if (grouped.O && grouped.O.length) shiftParts.push(`⚪ Off: ${grouped.O.join(", ")}`);
+                        if (grouped.CUTI && grouped.CUTI.length) shiftParts.push(`⚫ Cuti: ${grouped.CUTI.join(", ")}`);
+                        if (shiftParts.length) {
+                            runningParts.push(`🌸 Hana: ${shiftParts.join(" | ")}`);
+                        }
+                    }
+                }
+            } catch (e) {
+                // Skip kalau gagal
+            }
+
             const now = new Date();
             const hour = now.getHours();
             let greeting = "";
@@ -347,7 +318,7 @@ async function loadMiniDashboard() {
             else if (hour < 18) greeting = "🌆 Selamat sore, cek progress SO!";
             else greeting = "🌙 Selamat malam, jangan lupa SO besok!";
             runningParts.push(greeting);
-        
+
             const fullText = runningParts.join("  •  ") + "  •  ";
             startRunningText(fullText);
         }
@@ -364,6 +335,18 @@ async function loadMiniDashboard() {
         if (runningTextContainer) {
             runningTextContainer.innerHTML = `<div class="running-inner" style="color: var(--danger); padding-left: 40px;">⚠️ Gagal: ${err.name} — ${err.message}</div>`;
         }
+    }
+}
+
+function startDashboardAutoRefresh() {
+    stopDashboardAutoRefresh();
+    dashboardRefreshInterval = setInterval(loadMiniDashboard, 5 * 60 * 1000);
+}
+
+function stopDashboardAutoRefresh() {
+    if (dashboardRefreshInterval) {
+        clearInterval(dashboardRefreshInterval);
+        dashboardRefreshInterval = null;
     }
 }
 
@@ -388,6 +371,7 @@ function formatRupiahRingkas(nominal) {
     return formatted;
 }
 
+
 // =========================================================
 // RUNNING TEXT HELPER — Seamless Loop
 // =========================================================
@@ -407,6 +391,29 @@ function startRunningText(text) {
 }
 
 
+// =========================================================
+// TOAST MINI — notifikasi kecil
+// =========================================================
+let toastTimer = null;
+
+function showToastMini(message, type = "success") {
+    // Hapus toast lama
+    const oldToast = document.querySelector(".toast-mini");
+    if (oldToast) oldToast.remove();
+
+    const toast = document.createElement("div");
+    toast.className = `toast-mini ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.classList.add("show"), 100);
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        toast.classList.remove("show");
+        setTimeout(() => toast.remove(), 400);
+    }, 3000);
+}
 // =========================================================
 // PIN LOGIN
 // =========================================================
@@ -520,8 +527,10 @@ function toggleSidebar() {
 }
 
 function closeSidebar() {
-    document.getElementById("sidebar").classList.remove("open");
-    document.getElementById("sidebarOverlay").classList.remove("active");
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    if (sidebar) sidebar.classList.remove("open");
+    if (overlay) overlay.classList.remove("active");
 }
 
 
@@ -533,8 +542,10 @@ function switchBot(botId) {
     currentBot = botId;
 
     const bot = BOTS[botId];
-    document.getElementById("chatBotEmoji").textContent = bot.emoji;
-    document.getElementById("chatBotName").textContent = bot.name;
+    const emojiEl = document.getElementById("chatBotEmoji");
+    const nameEl = document.getElementById("chatBotName");
+    if (emojiEl) emojiEl.textContent = bot.emoji;
+    if (nameEl) nameEl.textContent = bot.name;
 
     document.querySelectorAll(".bot-item").forEach(item => {
         item.classList.toggle("active", item.getAttribute("data-bot") === botId);
@@ -583,7 +594,7 @@ function resetAllChat() {
         chatHistories[botId] = [];
     });
     saveChatHistories();
-    alert("✅ Semua chat dihapus");
+    showToastMini("✅ Semua chat dihapus", "success");
 }
 
 
@@ -610,7 +621,7 @@ function changeApiKey() {
     if (!newKey || newKey.trim() === "") return;
     localStorage.setItem("so_api_key", newKey.trim());
     updateApiKeyDisplay();
-    alert("✅ API Key diupdate");
+    showToastMini("✅ API Key diupdate", "success");
 }
 
 
@@ -620,16 +631,16 @@ function changeApiKey() {
 function changePin() {
     const newPin = prompt("Masukkan PIN baru (6 digit):");
     if (!newPin || newPin.length !== 6 || !/^\d+$/.test(newPin)) {
-        alert("❌ PIN harus 6 digit angka");
+        showToastMini("❌ PIN harus 6 digit angka", "error");
         return;
     }
     const confirmPin = prompt("Konfirmasi PIN baru:");
     if (newPin !== confirmPin) {
-        alert("❌ PIN tidak sama");
+        showToastMini("❌ PIN tidak sama", "error");
         return;
     }
     localStorage.setItem("so_pin", newPin);
-    alert("✅ PIN berhasil diubah");
+    showToastMini("✅ PIN berhasil diubah", "success");
 }
 
 
@@ -641,14 +652,12 @@ function loadStreamlit() {
     const loading = document.getElementById("streamlitLoading");
     if (!iframe) return;
 
-    // Reset ke blank dulu
     iframe.src = "about:blank";
     if (loading) loading.classList.remove("hidden");
 
     setTimeout(() => {
         iframe.src = CONFIG.STREAMLIT_URL;
 
-        // Hide loading setelah 4 detik
         setTimeout(() => {
             if (loading) loading.classList.add("hidden");
         }, 4000);
@@ -658,30 +667,773 @@ function loadStreamlit() {
 function openStreamlitInBrowser() {
     window.open(CONFIG.STREAMLIT_URL, "_blank");
 }
+// =========================================================
+// MASTER SHIFT v1.3 — LOAD & RENDER
+// =========================================================
+
+// =========================================================
+// SET PERIOD
+// =========================================================
+function setShiftPeriod(period) {
+    shiftPeriod = period;
+
+    document.querySelectorAll(".filter-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
+    });
+
+    const customRow = document.getElementById("customDateRow");
+    if (customRow) {
+        if (period === "custom") customRow.classList.remove("hidden");
+        else customRow.classList.add("hidden");
+    }
+
+    loadMasterShift();
+}
 
 
 // =========================================================
-// BOOT
+// HELPER — Hitung tanggal berdasarkan period
 // =========================================================
-document.addEventListener("DOMContentLoaded", initApp);
-/* =========================================================
-   CHAT — MESSAGE HANDLING
-   ========================================================= */
+function getShiftDateRange() {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (shiftPeriod === "hari_ini") {
+        start = today;
+        end = today;
+    } else if (shiftPeriod === "minggu") {
+        // Senin s/d Minggu minggu ini
+        const dayOfWeek = today.getDay();  // 0=Sunday
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;  // mundur ke Senin
+        start = new Date(today);
+        start.setDate(today.getDate() + diff);
+        end = new Date(start);
+        end.setDate(start.getDate() + 6);
+    } else if (shiftPeriod === "bulan") {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (shiftPeriod === "custom") {
+        const customStart = document.getElementById("customStart");
+        const customEnd = document.getElementById("customEnd");
+        if (customStart && customStart.value) start = new Date(customStart.value);
+        if (customEnd && customEnd.value) end = new Date(customEnd.value);
+    }
+
+    return { start, end };
+}
+
 
 // =========================================================
-// BIND INPUT
+// HELPER — Format tanggal
+// =========================================================
+function formatTanggalLong(dateStr) {
+    const d = new Date(dateStr);
+    const hari = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()} — ${hari[d.getDay()]}`;
+}
+
+function formatTanggalShort(dateStr) {
+    const d = new Date(dateStr);
+    const bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    return `${d.getDate()} ${bulan[d.getMonth()]}`;
+}
+
+
+// =========================================================
+// LOAD PERSONIL LIST
+// =========================================================
+async function loadPersonilList() {
+    const filterSelect = document.getElementById("personilFilter");
+    const personilList = document.getElementById("personilList");
+    const _key = getApiKey();
+
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, {
+            method: "GET",
+            headers: { "X-API-Key": _key },
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const data = await resp.json();
+        personilData = data.data || [];
+
+        // Update filter dropdown
+        if (filterSelect) {
+            const currentValue = filterSelect.value;
+            filterSelect.innerHTML = '<option value="">👥 Semua Personil</option>';
+            personilData.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.nama;
+                opt.textContent = `👤 ${p.nama}`;
+                filterSelect.appendChild(opt);
+            });
+            filterSelect.value = currentValue;
+        }
+
+        // Render di modal
+        renderPersonilList();
+
+    } catch (err) {
+        console.error("[Personil] Error:", err);
+        if (personilList) {
+            personilList.innerHTML = `
+                <div class="loading-state">
+                    <p style="color: var(--danger);">⚠️ Gagal load personil: ${err.message}</p>
+                </div>
+            `;
+        }
+    }
+}
+
+
+// =========================================================
+// RENDER PERSONIL LIST (di modal)
+// =========================================================
+function renderPersonilList() {
+    const container = document.getElementById("personilList");
+    if (!container) return;
+
+    if (!personilData || personilData.length === 0) {
+        container.innerHTML = `
+            <div class="loading-state">
+                <p>Belum ada personil</p>
+            </div>
+        `;
+        return;
+    }
+
+    const html = personilData.map(p => {
+        const isActive = p.aktif !== false;
+        return `
+            <div class="personil-item ${isActive ? '' : 'inactive'}" data-nama="${p.nama}">
+                <span class="personil-item-emoji">👤</span>
+                <span class="personil-item-name">${p.nama}</span>
+                <span class="personil-item-status ${isActive ? 'personil-status-active' : 'personil-status-inactive'}">
+                    ${isActive ? 'Aktif' : 'Off'}
+                </span>
+                <div class="personil-item-actions">
+                    ${isActive ? `
+                        <button class="personil-item-btn delete" onclick="deletePersonilConfirm('${p.nama}')" title="Hapus">
+                            🗑️
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+
+// =========================================================
+// LOAD MASTER SHIFT
+// =========================================================
+async function loadMasterShift() {
+    const container = document.getElementById("shiftList");
+    const summary = document.getElementById("shiftSummary");
+    const _key = getApiKey();
+
+    if (!container) return;
+
+    // Loading state
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat jadwal shift...</p>
+        </div>
+    `;
+
+    try {
+        const range = getShiftDateRange();
+        const startStr = range.start.toISOString().slice(0, 10);
+        const endStr = range.end.toISOString().slice(0, 10);
+
+        const filterSelect = document.getElementById("personilFilter");
+        const namaFilter = filterSelect ? filterSelect.value : "";
+
+        const body = {
+            tgl_start: startStr,
+            tgl_end: endStr,
+        };
+        if (namaFilter) body.nama_filter = namaFilter;
+
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const data = await resp.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Gagal load data");
+        }
+
+        masterShiftData = data.data || [];
+
+        renderShiftList();
+        renderShiftSummary(data);
+
+    } catch (err) {
+        console.error("[MasterShift] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load data: ${err.message}</p>
+            </div>
+        `;
+        if (summary) summary.innerHTML = "";
+    }
+}
+
+
+// =========================================================
+// RENDER SHIFT LIST
+// =========================================================
+function renderShiftList() {
+    const container = document.getElementById("shiftList");
+    if (!container) return;
+
+    if (!masterShiftData || masterShiftData.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">🌸</span>
+                <p>Belum ada data shift di periode ini</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Group by date
+    const grouped = {};
+    masterShiftData.forEach(row => {
+        const tgl = row.tanggal;
+        if (!grouped[tgl]) grouped[tgl] = [];
+        grouped[tgl].push(row);
+    });
+
+    // Sort dates
+    const sortedDates = Object.keys(grouped).sort();
+
+    // Render
+    const html = sortedDates.map(tgl => {
+        const rows = grouped[tgl];
+        const rowsHtml = rows.map(r => {
+            const kode = r.kode_shift || "O";
+            const badgeClass = getBadgeClass(kode);
+            return `
+                <div class="shift-row">
+                    <span class="shift-emoji">${r.shift_emoji || "❓"}</span>
+                    <span class="shift-name">${r.nama}</span>
+                    <span class="shift-badge ${badgeClass}">${r.shift_nama || kode}</span>
+                </div>
+            `;
+        }).join("");
+
+        return `
+            <div class="date-group">
+                <div class="date-group-header">
+                    <span class="date-group-date">📅 ${formatTanggalLong(tgl)}</span>
+                    <span class="date-group-count">${rows.length} orang</span>
+                </div>
+                ${rowsHtml}
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+
+// =========================================================
+// HELPER — Badge class
+// =========================================================
+function getBadgeClass(kode) {
+    switch (kode) {
+        case "P7":   return "shift-badge-p7";
+        case "S15":  return "shift-badge-s15";
+        case "M22":  return "shift-badge-m22";
+        case "O":    return "shift-badge-o";
+        case "CUTI": return "shift-badge-cuti";
+        default:     return "shift-badge-o";
+    }
+}
+
+
+// =========================================================
+// RENDER SHIFT SUMMARY
+// =========================================================
+function renderShiftSummary(data) {
+    const summary = document.getElementById("shiftSummary");
+    if (!summary) return;
+
+    const total = data.data ? data.data.length : 0;
+    const periode = data.periode || "—";
+
+    // Hitung statistik per kode
+    const stats = { P7: 0, S15: 0, M22: 0, O: 0, CUTI: 0 };
+    if (data.data) {
+        data.data.forEach(r => {
+            const kode = r.kode_shift || "O";
+            if (stats[kode] !== undefined) stats[kode]++;
+        });
+    }
+
+    summary.innerHTML = `
+        <div style="font-size: 12px; line-height: 1.8;">
+            <div style="color: var(--text-muted); margin-bottom: 6px;">📊 <b>${total}</b> data shift — ${periode}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+                <span>🟢 Pagi: <b>${stats.P7}</b></span>
+                <span>🟡 Siang: <b>${stats.S15}</b></span>
+                <span>🔴 Malam: <b>${stats.M22}</b></span>
+                <span>⚪ Off: <b>${stats.O}</b></span>
+                <span>⚫ Cuti: <b>${stats.CUTI}</b></span>
+            </div>
+        </div>
+    `;
+}
+// =========================================================
+// MODAL — KELOLA PERSONIL v1.3
+// =========================================================
+function openPersonilModal() {
+    const modal = document.getElementById("personilModal");
+    if (!modal) return;
+
+    modal.classList.add("active");
+    loadPersonilList();
+}
+
+function closePersonilModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const modal = document.getElementById("personilModal");
+    if (modal) modal.classList.remove("active");
+}
+
+
+// =========================================================
+// TAMBAH PERSONIL
+// =========================================================
+async function addNewPersonil() {
+    const input = document.getElementById("newPersonilName");
+    if (!input) return;
+
+    const nama = input.value.trim().toUpperCase();
+    if (!nama || nama.length < 2) {
+        showToastMini("❌ Nama minimal 2 karakter", "error");
+        return;
+    }
+
+    const _key = getApiKey();
+
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/add`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ nama: nama }),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.success) {
+            throw new Error(data.detail || data.message || `HTTP ${resp.status}`);
+        }
+
+        input.value = "";
+        showToastMini(`✅ ${nama} ditambahkan`, "success");
+
+        // Reload personil list
+        await loadPersonilList();
+
+    } catch (err) {
+        console.error("[AddPersonil] Error:", err);
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+
+// =========================================================
+// HAPUS PERSONIL — dengan konfirmasi soft/force
+// =========================================================
+function deletePersonilConfirm(nama) {
+    // Modal konfirmasi custom
+    const html = `
+        <div style="text-align: left;">
+            <p style="font-size: 14px; margin-bottom: 12px;">
+                Hapus personil <b style="color: var(--accent-orange);">${nama}</b>?
+            </p>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; cursor: pointer; margin-bottom: 12px;">
+                <input type="checkbox" id="forceDeleteCheck" style="width: 18px; height: 18px; accent-color: var(--danger);">
+                <span style="font-size: 12px;">⚠️ <b>Force delete</b> — hapus history juga (permanent)</span>
+            </label>
+            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 16px;">
+                Kalau gak dicentang, personil cuma dinonaktifkan (history tetap tersimpan).
+            </p>
+            <div style="display: flex; gap: 8px;">
+                <button class="confirm-btn confirm-btn-cancel" onclick="closeDeleteModal()">
+                    ❌ Batal
+                </button>
+                <button class="confirm-btn confirm-btn-save" style="background: linear-gradient(135deg, #ee5253, #c73133);" onclick="deletePersonilExecute('${nama}')">
+                    🗑️ Hapus
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Pakai modal personil yang udah ada — inject konfirmasi
+    let confirmModal = document.getElementById("deleteConfirmModal");
+    if (!confirmModal) {
+        confirmModal = document.createElement("div");
+        confirmModal.id = "deleteConfirmModal";
+        confirmModal.className = "modal-overlay active";
+        confirmModal.style.zIndex = "300";
+        confirmModal.innerHTML = `
+            <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 400px;">
+                <div class="modal-header">
+                    <div class="modal-title">⚠️ Konfirmasi Hapus</div>
+                    <button class="modal-close" onclick="closeDeleteModal()">✕</button>
+                </div>
+                <div class="modal-body" id="deleteConfirmBody"></div>
+            </div>
+        `;
+        document.body.appendChild(confirmModal);
+        confirmModal.onclick = (e) => { if (e.target === confirmModal) closeDeleteModal(); };
+    }
+
+    document.getElementById("deleteConfirmBody").innerHTML = html;
+}
+
+function closeDeleteModal() {
+    const modal = document.getElementById("deleteConfirmModal");
+    if (modal) modal.remove();
+}
+
+async function deletePersonilExecute(nama) {
+    const checkbox = document.getElementById("forceDeleteCheck");
+    const force = checkbox ? checkbox.checked : false;
+    const _key = getApiKey();
+
+    closeDeleteModal();
+
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/delete`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ nama: nama, force: force }),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.success) {
+            throw new Error(data.detail || data.message || `HTTP ${resp.status}`);
+        }
+
+        showToastMini(data.message || `✅ ${nama} dihapus`, "success");
+        await loadPersonilList();
+
+    } catch (err) {
+        console.error("[DeletePersonil] Error:", err);
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+
+// =========================================================
+// CHAT — RENDER HISTORY (dengan konfirmasi)
+// =========================================================
+function renderChatHistory() {
+    const container = document.getElementById("chatMessages");
+    if (!container) return;
+
+    const history = chatHistories[currentBot] || [];
+
+    if (history.length === 0) {
+        const bot = BOTS[currentBot];
+        container.innerHTML = `
+            <div class="bubble bubble-ai">
+Halo Bos! 👋
+
+Aku <b>${bot.emoji} ${bot.name}</b> — ${bot.role}.
+
+${getWelcomeText(currentBot)}
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = "";
+
+    history.forEach((msg, idx) => {
+        const wrapper = document.createElement("div");
+        wrapper.style.display = "flex";
+        wrapper.style.flexDirection = "column";
+        wrapper.style.gap = "4px";
+
+        // === KALAU PESAN KONFIRMASI ===
+        if (msg.isConfirm && msg.confirmData) {
+            const confirmBubble = renderConfirmBubble(msg, idx);
+            wrapper.appendChild(confirmBubble);
+        } else {
+            // === BUBBLE BIASA ===
+            const bubble = document.createElement("div");
+            bubble.className = `bubble bubble-${msg.role === "user" ? "user" : "ai"}`;
+
+            if (msg.isError) {
+                bubble.style.borderLeft = "3px solid var(--danger)";
+            } else if (msg.isSuccess) {
+                bubble.classList.add("bubble-success");
+            } else if (msg.isCancel) {
+                bubble.classList.add("bubble-error");
+            }
+
+            bubble.innerHTML = formatMessage(msg.content);
+            wrapper.appendChild(bubble);
+        }
+
+        const time = document.createElement("div");
+        time.className = `bubble-time ${msg.role === "assistant" ? "bubble-time-ai" : ""}`;
+        time.textContent = formatTime(msg.timestamp);
+
+        wrapper.appendChild(time);
+        container.appendChild(wrapper);
+    });
+}
+
+
+// =========================================================
+// RENDER BUBBLE KONFIRMASI
+// =========================================================
+function renderConfirmBubble(msg, idx) {
+    const bubble = document.createElement("div");
+    bubble.className = "bubble bubble-ai bubble-confirm";
+
+    if (msg.resolved) {
+        bubble.classList.add("resolved");
+    }
+
+    const data = msg.confirmData;
+    const itemsHtml = (data.items || []).map(it => `
+        <div class="confirm-item">
+            <span>👤</span>
+            <span>${it.nama}</span>
+            <span class="arrow">→</span>
+            <span>${it.shift_nama || it.kode_shift}</span>
+        </div>
+    `).join("");
+
+    let actionsHtml = "";
+    let statusHtml = "";
+
+    if (!msg.resolved) {
+        actionsHtml = `
+            <div class="confirm-actions">
+                <button class="confirm-btn confirm-btn-cancel" onclick="handleConfirmCancel(${idx})">
+                    ❌ Batal
+                </button>
+                <button class="confirm-btn confirm-btn-save" onclick="handleConfirmSave(${idx})" id="confirmBtnSave_${idx}">
+                    ✅ Simpan
+                </button>
+            </div>
+        `;
+    } else if (msg.resolvedStatus === "saved") {
+        statusHtml = `
+            <div class="confirm-status confirm-status-saved">
+                ✅ Tersimpan
+            </div>
+        `;
+    } else if (msg.resolvedStatus === "cancelled") {
+        statusHtml = `
+            <div class="confirm-status confirm-status-cancelled">
+                ❌ Dibatalkan
+            </div>
+        `;
+    } else if (msg.resolvedStatus === "error") {
+        statusHtml = `
+            <div class="confirm-status confirm-status-error">
+                ⚠️ Gagal disimpan
+            </div>
+        `;
+    }
+
+    bubble.innerHTML = `
+        <div class="confirm-title">🌸 KONFIRMASI UPDATE SHIFT</div>
+        <div class="confirm-detail">
+            <div class="confirm-detail-row">
+                <span class="label">📅 Tanggal</span>
+                <span class="value">${formatTanggalLong(data.tanggal)}</span>
+            </div>
+            <div class="confirm-detail-row">
+                <span class="label">👥 Total</span>
+                <span class="value">${data.items.length} orang</span>
+            </div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                ${itemsHtml}
+            </div>
+        </div>
+        ${actionsHtml}
+        ${statusHtml}
+    `;
+
+    return bubble;
+}
+
+
+// =========================================================
+// HANDLE KONFIRMASI — SIMPAN
+// =========================================================
+async function handleConfirmSave(idx) {
+    const history = chatHistories[currentBot] || [];
+    const msg = history[idx];
+    if (!msg || !msg.confirmData) return;
+
+    const btnSave = document.getElementById(`confirmBtnSave_${idx}`);
+    if (btnSave) {
+        btnSave.disabled = true;
+        btnSave.innerHTML = '<span class="btn-spinner"></span> Menyimpan...';
+    }
+
+    const _key = getApiKey();
+    const data = msg.confirmData;
+
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({
+                tanggal: data.tanggal,
+                items: data.items.map(it => ({
+                    nama: it.nama,
+                    kode_shift: it.kode_shift,
+                })),
+            }),
+        });
+
+        const result = await resp.json();
+
+        if (!resp.ok || !result.success) {
+            throw new Error(result.detail || result.message || `HTTP ${resp.status}`);
+        }
+
+        // Mark as resolved
+        msg.resolved = true;
+        msg.resolvedStatus = "saved";
+
+        // Add success message
+        const savedCount = result.saved || data.items.length;
+        const successMsg = {
+            role: "assistant",
+            content: `✅ ${savedCount} shift tersimpan!\n\n${getShiftSummaryText(data.items)}`,
+            timestamp: Date.now(),
+            isSuccess: true,
+        };
+        history.push(successMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+
+        // Refresh shift list kalau di master shift screen
+        if (document.getElementById("masterShiftScreen")?.classList.contains("active")) {
+            loadMasterShift();
+        }
+
+        showToastMini(`✅ ${savedCount} shift tersimpan`, "success");
+
+    } catch (err) {
+        console.error("[ConfirmSave] Error:", err);
+
+        msg.resolved = true;
+        msg.resolvedStatus = "error";
+
+        const errMsg = {
+            role: "assistant",
+            content: `⚠️ Gagal simpan: ${err.message}`,
+            timestamp: Date.now(),
+            isError: true,
+        };
+        history.push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+
+// =========================================================
+// HANDLE KONFIRMASI — BATAL
+// =========================================================
+function handleConfirmCancel(idx) {
+    const history = chatHistories[currentBot] || [];
+    const msg = history[idx];
+    if (!msg || !msg.confirmData) return;
+
+    msg.resolved = true;
+    msg.resolvedStatus = "cancelled";
+
+    const cancelMsg = {
+        role: "assistant",
+        content: `❌ Dibatalkan. Gak ada perubahan yang disimpan.`,
+        timestamp: Date.now(),
+        isCancel: true,
+    };
+    history.push(cancelMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+
+    showToastMini("❌ Dibatalkan", "error");
+}
+
+
+// =========================================================
+// HELPER — Shift summary text untuk chat
+// =========================================================
+function getShiftSummaryText(items) {
+    const grouped = { P7: [], S15: [], M22: [], O: [], CUTI: [] };
+    items.forEach(it => {
+        const kode = it.kode_shift;
+        if (grouped[kode]) grouped[kode].push(it.nama);
+    });
+
+    const lines = ["🌸 Shift terbaru:"];
+    if (grouped.P7.length) lines.push(`🟢 Pagi: ${grouped.P7.join(", ")}`);
+    if (grouped.S15.length) lines.push(`🟡 Siang: ${grouped.S15.join(", ")}`);
+    if (grouped.M22.length) lines.push(`🔴 Malam: ${grouped.M22.join(", ")}`);
+    if (grouped.O.length) lines.push(`⚪ Off: ${grouped.O.join(", ")}`);
+    if (grouped.CUTI.length) lines.push(`⚫ Cuti: ${grouped.CUTI.join(", ")}`);
+
+    return lines.join("\n");
+}
+// =========================================================
+// CHAT — BIND INPUT & SEND MESSAGE
 // =========================================================
 function bindChatInput() {
     const input = document.getElementById("chatInput");
     if (!input) return;
 
-    // Auto-resize
     input.addEventListener("input", () => {
         input.style.height = "auto";
         input.style.height = Math.min(input.scrollHeight, 100) + "px";
     });
 
-    // Enter = kirim
     input.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -697,6 +1449,8 @@ function bindChatInput() {
 async function sendMessage() {
     const input = document.getElementById("chatInput");
     const sendBtn = document.getElementById("chatSend");
+
+    if (!input || !sendBtn) return;
 
     const text = input.value.trim();
     if (!text) return;
@@ -716,15 +1470,14 @@ async function sendMessage() {
     renderChatHistory();
     scrollToBottom();
 
-    // Loading
     showLoadingBubble();
 
     try {
         const bot = BOTS[currentBot];
 
-        // History max 6 pesan terakhir (exclude yang barusan)
         const history = chatHistories[currentBot]
             .slice(-7, -1)
+            .filter(m => !m.isConfirm && !m.isSuccess && !m.isCancel && !m.isError)
             .map(m => ({ role: m.role, content: m.content }));
 
         const response = await fetch(`${CONFIG.BACKEND_URL}${bot.endpoint}`, {
@@ -749,18 +1502,36 @@ async function sendMessage() {
         }
 
         const data = await response.json();
-        const aiText = data.text || "(kosong)";
 
-        const aiMsg = {
-            role: "assistant",
-            content: aiText,
-            timestamp: Date.now(),
-            meta: {
-                model: data.model || null,
-                intent: data.intent || null,
-            },
-        };
-        chatHistories[currentBot].push(aiMsg);
+        // === KALAU HANA MINTA KONFIRMASI ===
+        if (data.needs_confirm && data.parsed && data.parsed.items) {
+            const confirmMsg = {
+                role: "assistant",
+                content: data.text || "",
+                timestamp: Date.now(),
+                isConfirm: true,
+                confirmData: {
+                    tanggal: data.parsed.tanggal,
+                    items: data.parsed.items,
+                    raw: data.parsed.raw || text,
+                },
+                resolved: false,
+            };
+            chatHistories[currentBot].push(confirmMsg);
+        } else {
+            // === CHAT BIASA ===
+            const aiMsg = {
+                role: "assistant",
+                content: data.text || "(kosong)",
+                timestamp: Date.now(),
+                meta: {
+                    model: data.model || null,
+                    intent: data.intent || null,
+                },
+            };
+            chatHistories[currentBot].push(aiMsg);
+        }
+
         saveChatHistories();
         renderChatHistory();
         scrollToBottom();
@@ -786,57 +1557,6 @@ async function sendMessage() {
 
 
 // =========================================================
-// RENDER CHAT HISTORY
-// =========================================================
-function renderChatHistory() {
-    const container = document.getElementById("chatMessages");
-    if (!container) return;
-
-    const history = chatHistories[currentBot] || [];
-
-    if (history.length === 0) {
-        const bot = BOTS[currentBot];
-        container.innerHTML = `
-            <div class="bubble bubble-ai">
-Halo Bos! 👋
-
-Aku <b>${bot.emoji} ${bot.name}</b> — ${bot.role}.
-
-${getWelcomeText(currentBot)}
-            </div>
-        `;
-        return;
-    }
-
-    container.innerHTML = "";
-
-    history.forEach(msg => {
-        const wrapper = document.createElement("div");
-        wrapper.style.display = "flex";
-        wrapper.style.flexDirection = "column";
-        wrapper.style.gap = "4px";
-
-        const bubble = document.createElement("div");
-        bubble.className = `bubble bubble-${msg.role === "user" ? "user" : "ai"}`;
-
-        if (msg.isError) {
-            bubble.style.borderLeft = "3px solid var(--danger)";
-        }
-
-        bubble.innerHTML = formatMessage(msg.content);
-
-        const time = document.createElement("div");
-        time.className = `bubble-time ${msg.role === "assistant" ? "bubble-time-ai" : ""}`;
-        time.textContent = formatTime(msg.timestamp);
-
-        wrapper.appendChild(bubble);
-        wrapper.appendChild(time);
-        container.appendChild(wrapper);
-    });
-}
-
-
-// =========================================================
 // LOADING BUBBLE
 // =========================================================
 let loadingEl = null;
@@ -845,7 +1565,6 @@ function showLoadingBubble() {
     const container = document.getElementById("chatMessages");
     if (!container) return;
 
-    // Hapus dulu kalau ada
     const old = document.getElementById("loadingBubble");
     if (old) old.remove();
 
@@ -899,19 +1618,10 @@ function formatMessage(text) {
     if (!text) return "";
     let html = escapeHtml(text);
 
-    // Bold **text**
     html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
-
-    // Italic *text*
     html = html.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<i>$1</i>");
-
-    // Inline code `code`
     html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
-
-    // Bullet points
     html = html.replace(/^[\-\*]\s+(.+)$/gm, "• $1");
-
-    // Numbered list
     html = html.replace(/^(\d+)\.\s+(.+)$/gm, "$1. $2");
 
     return html;
@@ -928,7 +1638,7 @@ function getWelcomeText(botId) {
         case "yui":
             return "Aku bisa:\n• Rekap SO (harian/mingguan/bulanan)\n• Input SO via chat\n• Top item minus/plus\n• List item per rak";
         case "hana":
-            return "Aku bisa:\n• Cek jadwal shift\n• Update/hapus shift\n• Saran pengganti\n• Cek konflik jadwal";
+            return "Aku bisa:\n• Cek jadwal shift\n• Update/hapus shift (ketik natural)\n• Saran pengganti\n• Cek konflik jadwal\n\nContoh: <i>\"Pagi: Pandu, Tika. Siang: Reza\"</i>";
         case "rei":
             return "Aku bisa:\n• Analisis trend SO\n• LPJ & laporan\n• Prediksi SO\n• Insight & rekomendasi";
         case "kurumi":
@@ -961,17 +1671,17 @@ resetIdleTimer();
 
 
 // =========================================================
-// AUTO REFRESH MINI DASHBOARD — tiap 5 menit (kalau di home)
+// AUTO REFRESH MINI DASHBOARD tiap 5 menit (kalau di home)
 // =========================================================
 setInterval(() => {
     const homeScreen = document.getElementById("homeScreen");
     if (homeScreen && homeScreen.classList.contains("active")) {
-        console.log("[Dashboard] Auto refresh");
         loadMiniDashboard();
     }
 }, 5 * 60 * 1000);
 
 
 // =========================================================
-// END OF APP v1.1
+// BOOT
 // =========================================================
+document.addEventListener("DOMContentLoaded", initApp);

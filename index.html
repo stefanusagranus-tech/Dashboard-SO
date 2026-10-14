@@ -13,7 +13,6 @@
 <!-- LOGIN SCREEN -->
 <!-- ========================================================= -->
 <div id="loginScreen" class="screen active">
-    <!-- Dekorasi Halloween -->
     <div class="bat bat-1">🦇</div>
     <div class="bat bat-2">🦇</div>
     <div class="bat bat-3">🦇</div>
@@ -53,11 +52,9 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- HOME SCREEN (UPDATE v1.1) -->
+<!-- HOME SCREEN -->
 <!-- ========================================================= -->
 <div id="homeScreen" class="screen">
-
-    <!-- Dekorasi Halloween -->
     <div class="bat bat-1">🦇</div>
     <div class="bat bat-2">🦇</div>
 
@@ -72,57 +69,52 @@
     </div>
 
     <div class="home-content">
-
-        <!-- JAM LIVE -->
         <div class="live-clock">
             <div class="clock-time" id="clockTime">--:--</div>
             <div class="clock-date" id="clockDate">Loading...</div>
             <div class="clock-greeting" id="clockGreeting">Selamat Datang</div>
         </div>
 
-<!-- MINI DASHBOARD v1.2 -->
-<div class="mini-dashboard" id="miniDashboard">
-    <div class="mini-title">📊 RINGKASAN HARI INI</div>
+        <!-- MINI DASHBOARD v1.2 -->
+        <div class="mini-dashboard" id="miniDashboard">
+            <div class="mini-title">📊 RINGKASAN HARI INI</div>
 
-    <!-- STATS GRID 3 KOLOM -->
-    <div class="mini-stats">
-        <div class="stat">
-            <div class="stat-icon">📦</div>
-            <div class="stat-value" id="statRak">--</div>
-            <div class="stat-label">TOTAL RAK</div>
-        </div>
-        <div class="stat">
-            <div class="stat-icon">💰</div>
-            <div class="stat-value" id="statSpd">--</div>
-            <div class="stat-label">SPD</div>
-        </div>
-        <div class="stat">
-            <div class="stat-icon">📉</div>
-            <div class="stat-value" id="statNominal">--</div>
-            <div class="stat-label">NOMINAL ADJ</div>
-        </div>
-    </div>
+            <div class="mini-stats">
+                <div class="stat">
+                    <div class="stat-icon">📦</div>
+                    <div class="stat-value" id="statRak">--</div>
+                    <div class="stat-label">TOTAL RAK</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-value" id="statSpd">--</div>
+                    <div class="stat-label">SPD</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-icon">📉</div>
+                    <div class="stat-value" id="statNominal">--</div>
+                    <div class="stat-label">NOMINAL ADJ</div>
+                </div>
+            </div>
 
-    <!-- STATUS BAR -->
-    <div class="status-bar" id="statusBar">
-        <div class="status-icon" id="statusIcon">⏳</div>
-        <div class="status-info">
-            <div class="status-label">Status Selisih</div>
-            <div class="status-value" id="statusValue">Memuat...</div>
-        </div>
-        <div class="status-percent" id="statusPercent">--%</div>
-    </div>
+            <div class="status-bar" id="statusBar">
+                <div class="status-icon" id="statusIcon">⏳</div>
+                <div class="status-info">
+                    <div class="status-label">Status Selisih</div>
+                    <div class="status-value" id="statusValue">Memuat...</div>
+                </div>
+                <div class="status-percent" id="statusPercent">--%</div>
+            </div>
 
-    <!-- PROGRESS BAR -->
-    <div class="progress-bar">
-        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-    </div>
-    <div class="progress-label" id="progressLabel">Memuat data...</div>
-</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <div class="progress-label" id="progressLabel">Memuat data...</div>
+        </div>
 
         <!-- RUNNING TEXT v1.2 -->
         <div class="running-text" id="runningTextContainer">
-            <!-- Konten di-generate otomatis oleh JS -->
+            <div class="running-inner" id="runningText">🎃 Memuat info terbaru...</div>
         </div>
 
         <!-- MENU CARDS -->
@@ -132,6 +124,15 @@
                 <div class="home-card-info">
                     <div class="home-card-title">Chat dengan AI</div>
                     <div class="home-card-subtitle">Yui, Hana, Rei, Kurumi</div>
+                </div>
+                <div class="home-card-arrow">→</div>
+            </button>
+
+            <button class="home-card" onclick="goToMasterShiftScreen()">
+                <div class="home-card-icon">🌸</div>
+                <div class="home-card-info">
+                    <div class="home-card-title">Master Shift</div>
+                    <div class="home-card-subtitle">Cek & atur jadwal</div>
                 </div>
                 <div class="home-card-arrow">→</div>
             </button>
@@ -156,13 +157,13 @@
         </div>
 
         <div class="home-footer">
-            <span>v1.1.0 — Dashboard SO C383</span>
+            <span>v1.3.0 — Dashboard SO C383</span>
         </div>
     </div>
 </div>
 
 <!-- ========================================================= -->
-<!-- CHAT SCREEN (sama kayak sebelumnya) -->
+<!-- CHAT SCREEN -->
 <!-- ========================================================= -->
 <div id="chatScreen" class="screen">
     <div class="chat-header">
@@ -181,6 +182,91 @@
     <div class="chat-input-area">
         <textarea id="chatInput" class="chat-input" rows="1" placeholder="Ketik pesan..."></textarea>
         <button id="chatSend" class="chat-send" onclick="sendMessage()">📤</button>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- MASTER SHIFT SCREEN (BARU) -->
+<!-- ========================================================= -->
+<div id="masterShiftScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Master Shift</div>
+        <button class="screen-header-action" onclick="openPersonilModal()" title="Kelola Personil">➕</button>
+    </div>
+
+    <div class="master-shift-content">
+
+        <!-- FILTER TABS -->
+        <div class="filter-tabs">
+            <button class="filter-tab active" data-period="hari_ini" onclick="setShiftPeriod('hari_ini')">
+                📅 Hari Ini
+            </button>
+            <button class="filter-tab" data-period="minggu" onclick="setShiftPeriod('minggu')">
+                🗓️ Minggu
+            </button>
+            <button class="filter-tab" data-period="bulan" onclick="setShiftPeriod('bulan')">
+                📆 Bulan
+            </button>
+            <button class="filter-tab" data-period="custom" onclick="setShiftPeriod('custom')">
+                🔍 Custom
+            </button>
+        </div>
+
+        <!-- FILTER PERSONIL -->
+        <div class="filter-personil">
+            <label class="filter-label">Filter Personil:</label>
+            <select id="personilFilter" class="filter-select" onchange="loadMasterShift()">
+                <option value="">👥 Semua Personil</option>
+            </select>
+        </div>
+
+        <!-- CUSTOM DATE (hidden default) -->
+        <div class="custom-date-row hidden" id="customDateRow">
+            <input type="date" id="customStart" class="date-input" onchange="loadMasterShift()">
+            <span class="date-separator">s/d</span>
+            <input type="date" id="customEnd" class="date-input" onchange="loadMasterShift()">
+        </div>
+
+        <!-- SHIFT LIST -->
+        <div id="shiftList" class="shift-list">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Memuat jadwal shift...</p>
+            </div>
+        </div>
+
+        <!-- SUMMARY -->
+        <div class="shift-summary" id="shiftSummary"></div>
+
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- MODAL — KELOLA PERSONIL -->
+<!-- ========================================================= -->
+<div id="personilModal" class="modal-overlay" onclick="closePersonilModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">👥 Kelola Personil</div>
+            <button class="modal-close" onclick="closePersonilModal()">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <div id="personilList" class="personil-list">
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <div class="personil-add-section">
+                <div class="personil-add-title">➕ Tambah Personil Baru</div>
+                <div class="personil-add-row">
+                    <input type="text" id="newPersonilName" class="personil-input" placeholder="Nama personil..." maxlength="20">
+                    <button class="personil-add-btn" onclick="addNewPersonil()">Tambah</button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -216,6 +302,9 @@
 
         <div class="sidebar-divider"></div>
 
+        <button class="sidebar-item" onclick="goToMasterShiftScreen()">
+            <span>🌸</span> <span>Master Shift</span>
+        </button>
         <button class="sidebar-item" onclick="goToSettingsScreen()">
             <span>⚙️</span> <span>Pengaturan</span>
         </button>
@@ -282,7 +371,7 @@
             <div class="settings-group-title">ℹ️ Info</div>
             <div class="settings-item">
                 <div class="settings-label">Versi</div>
-                <div class="settings-item-value">1.1.0</div>
+                <div class="settings-item-value">1.3.0</div>
             </div>
             <div class="settings-item">
                 <div class="settings-label">Backend</div>
@@ -306,7 +395,7 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- STREAMLIT SCREEN (UPDATE: WebView + tombol browser) -->
+<!-- STREAMLIT SCREEN -->
 <!-- ========================================================= -->
 <div id="streamlitScreen" class="screen">
     <div class="screen-header">
