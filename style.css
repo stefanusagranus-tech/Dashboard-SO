@@ -423,107 +423,324 @@ body {
 }
 
 /* =========================================================
-   MINI DASHBOARD
+   MINI DASHBOARD v1.2 — UI UPGRADE
    ========================================================= */
 .mini-dashboard {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    padding: 16px;
-    box-shadow: var(--shadow-md);
+    padding: 18px 16px;
+    box-shadow: var(--shadow-md), 0 0 30px rgba(255, 140, 66, 0.08);
     position: relative;
     overflow: hidden;
+    backdrop-filter: blur(10px);
 }
 
+/* Animated gradient border di atas */
 .mini-dashboard::before {
     content: "";
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 2px;
+    height: 3px;
     background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple), var(--accent-orange));
     background-size: 200% 100%;
     animation: shimmer 3s linear infinite;
 }
 
-@keyframes shimmer {
-    0% { background-position: 0% 0; }
-    100% { background-position: 200% 0; }
+/* Glow radial subtle */
+.mini-dashboard::after {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 140, 66, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+    animation: pulseGlow 4s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
 }
 
 .mini-title {
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 14px;
+    letter-spacing: 1.2px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
 }
 
+.mini-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border-color), transparent);
+}
+
+/* =========================================================
+   STATS GRID v1.2
+   ========================================================= */
 .mini-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 10px;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
 }
 
 .stat {
     text-align: center;
-    padding: 8px 4px;
+    padding: 12px 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 140, 66, 0.15), transparent);
+    animation: statShine 4s ease-in-out infinite;
+}
+
+.stat:nth-child(2)::before { animation-delay: 1s; }
+.stat:nth-child(3)::before { animation-delay: 2s; }
+
+@keyframes statShine {
+    0%, 100% { left: -100%; }
+    50% { left: 100%; }
+}
+
+.stat:active {
+    transform: scale(0.96);
+    border-color: var(--accent-orange);
+}
+
+.stat-icon {
+    font-size: 18px;
+    margin-bottom: 6px;
+    filter: drop-shadow(0 0 8px rgba(255, 140, 66, 0.4));
 }
 
 .stat-value {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 800;
     color: var(--accent-orange);
     line-height: 1.1;
-    text-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
+    text-shadow: 0 0 12px rgba(255, 140, 66, 0.4);
     word-break: break-all;
+    letter-spacing: -0.5px;
 }
 
 .stat-label {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-muted);
     margin-top: 4px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
+    letter-spacing: 0.8px;
+    font-weight: 700;
 }
 
+/* =========================================================
+   STATUS BAR v1.2
+   ========================================================= */
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: 14px;
+    transition: all 0.4s;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.status-bar::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent-orange);
+    transition: background 0.4s;
+}
+
+.status-icon {
+    font-size: 28px;
+    line-height: 1;
+    animation: statusPulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+@keyframes statusPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+}
+
+.status-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.status-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 700;
+}
+
+.status-value {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: 0.5px;
+}
+
+.status-percent {
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--accent-orange);
+    letter-spacing: -0.5px;
+    text-shadow: 0 0 12px rgba(255, 140, 66, 0.5);
+    flex-shrink: 0;
+}
+
+/* Status: AMAN */
+.status-bar.status-aman::before { background: #06d6a0; }
+.status-bar.status-aman .status-percent {
+    color: #06d6a0;
+    text-shadow: 0 0 12px rgba(6, 214, 160, 0.5);
+}
+
+/* Status: WASPADA */
+.status-bar.status-waspada::before { background: #feca57; }
+.status-bar.status-waspada .status-percent {
+    color: #feca57;
+    text-shadow: 0 0 12px rgba(254, 202, 87, 0.5);
+}
+
+/* Status: BAHAYA */
+.status-bar.status-bahaya::before { background: #ee5253; }
+.status-bar.status-bahaya .status-percent {
+    color: #ee5253;
+    text-shadow: 0 0 12px rgba(238, 82, 83, 0.5);
+}
+
+.status-bar.status-bahaya {
+    animation: dangerFlash 1.5s ease-in-out infinite;
+}
+
+@keyframes dangerFlash {
+    0%, 100% { 
+        border-color: var(--border-color);
+        box-shadow: 0 0 0 rgba(238, 82, 83, 0);
+    }
+    50% { 
+        border-color: #ee5253;
+        box-shadow: 0 0 20px rgba(238, 82, 83, 0.3);
+    }
+}
+
+/* =========================================================
+   PROGRESS BAR v1.2
+   ========================================================= */
 .progress-bar {
     height: 8px;
     background: var(--bg-tertiary);
     border-radius: 4px;
     overflow: hidden;
     margin-bottom: 6px;
+    position: relative;
+    z-index: 1;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .progress-fill {
     height: 100%;
     background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple));
     border-radius: 4px;
-    transition: width 0.8s ease-out;
-    box-shadow: 0 0 12px var(--accent-glow);
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 16px var(--accent-glow);
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-fill::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: progressShine 2s linear infinite;
+}
+
+@keyframes progressShine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
 }
 
 .progress-label {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-secondary);
     text-align: center;
+    position: relative;
+    z-index: 1;
+    font-weight: 600;
+    letter-spacing: 0.3px;
 }
 
 /* =========================================================
-   RUNNING TEXT
+   RUNNING TEXT v1.2 — Seamless Infinite Loop
    ========================================================= */
 .running-text {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 10px 0;
+    padding: 12px 0;
     overflow: hidden;
     position: relative;
     box-shadow: var(--shadow-sm);
+    /* Fade kiri-kanan */
+    mask-image: linear-gradient(90deg, 
+        transparent 0%, 
+        black 8%, 
+        black 92%, 
+        transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, 
+        transparent 0%, 
+        black 8%, 
+        black 92%, 
+        transparent 100%);
 }
 
 .running-text::before {
@@ -534,22 +751,117 @@ body {
     transform: translateY(-50%);
     font-size: 16px;
     z-index: 2;
-    background: var(--bg-card);
-    padding-right: 8px;
+    pointer-events: none;
+    filter: drop-shadow(0 0 8px rgba(255, 140, 66, 0.5));
+    animation: bellShake 2s ease-in-out infinite;
+}
+
+@keyframes bellShake {
+    0%, 100% { transform: translateY(-50%) rotate(0deg); }
+    25% { transform: translateY(-50%) rotate(-10deg); }
+    75% { transform: translateY(-50%) rotate(10deg); }
+}
+
+/* Container untuk track yang di-loop */
+.running-track {
+    display: flex;
+    white-space: nowrap;
+    animation: runningScroll 30s linear infinite;
+    will-change: transform;
 }
 
 .running-inner {
-    white-space: nowrap;
     font-size: 12px;
     color: var(--text-secondary);
-    padding-left: 40px;
-    animation: scrollText 25s linear infinite;
-    display: inline-block;
+    padding: 0 24px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
 }
 
-@keyframes scrollText {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-100%); }
+.running-inner b {
+    color: var(--accent-orange);
+    font-weight: 800;
+}
+
+/* Animasi loop seamless — 2x konten di-copy di JS */
+@keyframes runningScroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+/* Pause saat di-tap */
+.running-text:active .running-track {
+    animation-play-state: paused;
+}
+
+/* =========================================================
+   RESPONSIVE TAMBAHAN v1.2
+   ========================================================= */
+
+/* HP KECIL */
+@media (max-width: 360px) {
+    .stat-icon {
+        font-size: 16px;
+    }
+    .stat-value {
+        font-size: 15px;
+    }
+    .stat-label {
+        font-size: 8px;
+    }
+    .status-icon {
+        font-size: 24px;
+    }
+    .status-value {
+        font-size: 12px;
+    }
+    .status-percent {
+        font-size: 17px;
+    }
+    .status-bar {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .running-inner {
+        font-size: 11px;
+    }
+}
+
+/* HP BESAR */
+@media (min-width: 428px) {
+    .stat-value {
+        font-size: 20px;
+    }
+    .stat-icon {
+        font-size: 20px;
+    }
+    .status-percent {
+        font-size: 22px;
+    }
+    .running-inner {
+        font-size: 13px;
+    }
+}
+
+/* TABLET */
+@media (min-width: 600px) {
+    .mini-stats {
+        gap: 16px;
+    }
+    .stat {
+        padding: 16px 10px;
+    }
+    .stat-value {
+        font-size: 22px;
+    }
+    .status-percent {
+        font-size: 24px;
+    }
 }
 
 /* =========================================================

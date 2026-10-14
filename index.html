@@ -80,34 +80,49 @@
             <div class="clock-greeting" id="clockGreeting">Selamat Datang</div>
         </div>
 
-        <!-- MINI DASHBOARD -->
-        <div class="mini-dashboard" id="miniDashboard">
-            <div class="mini-title">📊 RINGKASAN HARI INI</div>
-            <div class="mini-stats">
-                <div class="stat">
-                    <div class="stat-value" id="statRak">--</div>
-                    <div class="stat-label">Rak SO</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="statItem">--</div>
-                    <div class="stat-label">Item</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="statNominal">--</div>
-                    <div class="stat-label">Selisih</div>
-                </div>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-            </div>
-            <div class="progress-label" id="progressLabel">Memuat data...</div>
-        </div>
+<!-- MINI DASHBOARD v1.2 -->
+<div class="mini-dashboard" id="miniDashboard">
+    <div class="mini-title">📊 RINGKASAN HARI INI</div>
 
-        <!-- RUNNING TEXT -->
-        <div class="running-text">
-            <div class="running-inner" id="runningText">
-                🎃 Memuat info terbaru...
-            </div>
+    <!-- STATS GRID 3 KOLOM -->
+    <div class="mini-stats">
+        <div class="stat">
+            <div class="stat-icon">📦</div>
+            <div class="stat-value" id="statRak">--</div>
+            <div class="stat-label">TOTAL RAK</div>
+        </div>
+        <div class="stat">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value" id="statSpd">--</div>
+            <div class="stat-label">SPD</div>
+        </div>
+        <div class="stat">
+            <div class="stat-icon">📉</div>
+            <div class="stat-value" id="statNominal">--</div>
+            <div class="stat-label">NOMINAL ADJ</div>
+        </div>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar" id="statusBar">
+        <div class="status-icon" id="statusIcon">⏳</div>
+        <div class="status-info">
+            <div class="status-label">Status Selisih</div>
+            <div class="status-value" id="statusValue">Memuat...</div>
+        </div>
+        <div class="status-percent" id="statusPercent">--%</div>
+    </div>
+
+    <!-- PROGRESS BAR -->
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+    </div>
+    <div class="progress-label" id="progressLabel">Memuat data...</div>
+</div>
+
+        <!-- RUNNING TEXT v1.2 -->
+        <div class="running-text" id="runningTextContainer">
+            <!-- Konten di-generate otomatis oleh JS -->
         </div>
 
         <!-- MENU CARDS -->

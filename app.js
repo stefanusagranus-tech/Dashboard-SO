@@ -215,27 +215,22 @@ function updateAutoThemeDisplay() {
 
 
 // =========================================================
-// MINI DASHBOARD — Fetch dari /api/yui/rekap
+// MINI DASHBOARD v1.2 — Widget Baru + Status + Running Text
 // =========================================================
 async function loadMiniDashboard() {
     const statRak = document.getElementById("statRak");
-    const statItem = document.getElementById("statItem");
+    const statSpd = document.getElementById("statSpd");
     const statNominal = document.getElementById("statNominal");
+    const statusBar = document.getElementById("statusBar");
+    const statusIcon = document.getElementById("statusIcon");
+    const statusValue = document.getElementById("statusValue");
+    const statusPercent = document.getElementById("statusPercent");
     const progressFill = document.getElementById("progressFill");
     const progressLabel = document.getElementById("progressLabel");
-    const runningText = document.getElementById("runningText");
+    const runningTextContainer = document.getElementById("runningTextContainer");
 
-    // 🔥 DEBUG — liat URL & key sebelum fetch
     const _url = `${CONFIG.BACKEND_URL}/api/yui/rekap`;
     const _key = getApiKey();
-
-    alert(
-        `DEBUG INFO:\n\n` +
-        `URL: ${_url}\n\n` +
-        `Key prefix: ${_key.substring(0, 15)}...\n` +
-        `Key length: ${_key.length}\n` +
-        `Backend: ${CONFIG.BACKEND_URL}`
-    );
 
     try {
         const resp = await fetch(_url, {
@@ -247,73 +242,186 @@ async function loadMiniDashboard() {
             body: JSON.stringify({ mode: "bulan_ini" }),
         });
 
-        // 🔥 DEBUG — liat response status
-        alert(
-            `RESPONSE:\n\n` +
-            `Status: ${resp.status}\n` +
-            `Status text: ${resp.statusText}\n` +
-            `Final URL: ${resp.url}`
-        );
-
         if (!resp.ok) {
             throw new Error(`HTTP ${resp.status}`);
         }
 
         const data = await resp.json();
 
+        // ============================================================
+        // AMBIL DATA
+        // ============================================================
         const totalRak = data.total_rak || 0;
-        const totalItem = data.total_item || 0;
         const totalNominal = data.total_nominal || 0;
+        const salesPeriode = data.sales_periode || 0;
 
+        // Total rak master (145)
         const totalRakMaster = 145;
-        const persen = totalRakMaster > 0 ? (totalRak / totalRakMaster) * 100 : 0;
+        const persenSo = totalRakMaster > 0 ? (totalRak / totalRakMaster) * 100 : 0;
 
+        // ============================================================
+        // HITUNG STATUS: |Nominal Adjust| / SPD × 100
+        // ============================================================
+        let statusPersen = 0;
+        if (salesPeriode > 0) {
+            statusPersen = (Math.abs(totalNominal) / salesPeriode) * 100;
+        }
+
+        // Tentukan status
+        let statusKey = "aman";
+        let statusEmoji = "✅";
+        let statusText = "AMAN";
+        let statusColor = "hijau";
+
+        if (statusPersen > 0.15) {
+            statusKey = "bahaya";
+            statusEmoji = "🚨";
+            statusText = "BAHAYA";
+            statusColor = "merah";
+        } else if (statusPersen >= 0.13) {
+            statusKey = "waspada";
+            statusEmoji = "⚠️";
+            statusText = "WASPADA";
+            statusColor = "kuning";
+        } else {
+            statusKey = "aman";
+            statusEmoji = "✅";
+            statusText = "AMAN";
+            statusColor = "hijau";
+        }
+
+        // ============================================================
+        // UPDATE WIDGET — TOTAL RAK
+        // ============================================================
         if (statRak) statRak.textContent = `${totalRak}/${totalRakMaster}`;
-        if (statItem) statItem.textContent = totalItem;
+
+        // ============================================================
+        // UPDATE WIDGET — SPD (format ringkas)
+        // ============================================================
+        if (statSpd) {
+            statSpd.textContent = formatRupiahRingkas(salesPeriode);
+        }
+
+        // ============================================================
+        // UPDATE WIDGET — NOMINAL ADJUST (format ringkas)
+        // ============================================================
         if (statNominal) {
-            const abs = Math.abs(totalNominal);
-            let formatted = "";
-            if (abs >= 1_000_000) formatted = `${(totalNominal / 1_000_000).toFixed(1)}M`;
-            else if (abs >= 1_000) formatted = `${(totalNominal / 1_000).toFixed(0)}K`;
-            else formatted = totalNominal.toFixed(0);
-            statNominal.textContent = `Rp ${formatted}`;
+            statNominal.textContent = formatRupiahRingkas(totalNominal);
         }
 
-        if (progressFill) progressFill.style.width = `${Math.min(persen, 100)}%`;
+        // ============================================================
+        // UPDATE STATUS BAR
+        // ============================================================
+        if (statusIcon) statusIcon.textContent = statusEmoji;
+        if (statusValue) statusValue.textContent = `${statusText} (${statusColor})`;
+        if (statusPercent) statusPercent.textContent = `${statusPersen.toFixed(2)}%`;
+
+        if (statusBar) {
+            statusBar.classList.remove("status-aman", "status-waspada", "status-bahaya");
+            statusBar.classList.add(`status-${statusKey}`);
+        }
+
+        // ============================================================
+        // UPDATE PROGRESS BAR (progress SO)
+        // ============================================================
+        if (progressFill) progressFill.style.width = `${Math.min(persenSo, 100)}%`;
         if (progressLabel) {
-            progressLabel.textContent = `${persen.toFixed(1)}% dari target ${CONFIG.TARGET_SO_PERSEN}%`;
+            progressLabel.textContent = `Progress SO: ${persenSo.toFixed(1)}% dari target ${CONFIG.TARGET_SO_PERSEN}%`;
         }
 
-        if (runningText) {
+        // ============================================================
+        // UPDATE RUNNING TEXT — Seamless Loop
+        // ============================================================
+        if (runningTextContainer) {
             const runningParts = [];
-            runningParts.push(`📦 Yui: ${totalRak} rak SO bulan ini`);
-            runningParts.push(`💰 Total selisih: Rp ${totalNominal.toLocaleString("id-ID")}`);
-            runningParts.push(`📊 Total item: ${totalItem}`);
-            runningParts.push(`⚙️ Target SO: ${CONFIG.TARGET_SO_PERSEN}%`);
-
+            runningParts.push(`📦 Total Rak: <b>${totalRak}/${totalRakMaster}</b>`);
+            runningParts.push(`💰 SPD: <b>${formatRupiahRingkas(salesPeriode)}</b>`);
+            runningParts.push(`📉 Nominal Adjust: <b>${formatRupiahRingkas(totalNominal)}</b>`);
+            runningParts.push(`📊 Status: <b>${statusEmoji} ${statusText}</b> (${statusPersen.toFixed(2)}%)`);
+        
             const now = new Date();
             const hour = now.getHours();
-            if (hour < 11) runningParts.push(`🌅 Selamat pagi, semangat SO hari ini!`);
-            else if (hour < 15) runningParts.push(`☀️ Selamat siang, cek data SO!`);
-            else if (hour < 18) runningParts.push(`🌆 Selamat sore, cek progress SO!`);
-            else runningParts.push(`🌙 Selamat malam, jangan lupa SO besok!`);
-
-            runningText.textContent = runningParts.join("  •  ");
+            let greeting = "";
+            if (hour < 11) greeting = "🌅 Selamat pagi, semangat SO hari ini!";
+            else if (hour < 15) greeting = "☀️ Selamat siang, cek data SO!";
+            else if (hour < 18) greeting = "🌆 Selamat sore, cek progress SO!";
+            else greeting = "🌙 Selamat malam, jangan lupa SO besok!";
+            runningParts.push(greeting);
+        
+            const fullText = runningParts.join("  •  ") + "  •  ";
+            startRunningText(fullText);
         }
 
     } catch (err) {
         console.error("[Dashboard] Error:", err);
 
-        // 🔥 DEBUG — error detail
-        alert(`ERROR CATCH:\n\nName: ${err.name}\nMessage: ${err.message}`);
-
         if (statRak) statRak.textContent = "—";
-        if (statItem) statItem.textContent = "—";
+        if (statSpd) statSpd.textContent = "—";
         if (statNominal) statNominal.textContent = "—";
         if (progressLabel) progressLabel.textContent = "Gagal load data";
-        if (runningText) runningText.textContent = `⚠️ Gagal: ${err.name} — ${err.message}`;
+        if (statusValue) statusValue.textContent = "Gagal load";
+        if (statusPercent) statusPercent.textContent = "—%";
+        if (runningTextContainer) {
+            runningTextContainer.innerHTML = `<div class="running-inner" style="color: var(--danger); padding-left: 40px;">⚠️ Gagal: ${err.name} — ${err.message}</div>`;
+        }
     }
 }
+
+
+// =========================================================
+// HELPER — Format Rupiah Ringkas
+// =========================================================
+function formatRupiahRingkas(nominal) {
+    const abs = Math.abs(nominal);
+    let formatted = "";
+
+    if (abs >= 1_000_000_000) {
+        formatted = (nominal / 1_000_000_000).toFixed(2) + "M";
+    } else if (abs >= 1_000_000) {
+        formatted = (nominal / 1_000_000).toFixed(1) + "jt";
+    } else if (abs >= 1_000) {
+        formatted = (nominal / 1_000).toFixed(0) + "rb";
+    } else {
+        formatted = nominal.toFixed(0);
+    }
+
+    return formatted;
+}
+
+// =========================================================
+// RUNNING TEXT HELPER — Seamless Loop
+// =========================================================
+function startRunningText(text) {
+    const container = document.querySelector(".running-text");
+    if (!container) return;
+
+    // Hapus isi lama
+    container.innerHTML = "";
+
+    // Buat icon
+    const icon = document.createElement("div");
+    icon.textContent = "📢";
+    container.appendChild(icon);
+
+    // Buat track
+    const track = document.createElement("div");
+    track.className = "running-track";
+
+    // Item 1 (asli)
+    const inner1 = document.createElement("div");
+    inner1.className = "running-inner";
+    inner1.innerHTML = text;
+    track.appendChild(inner1);
+
+    // Item 2 (duplikat untuk seamless)
+    const inner2 = document.createElement("div");
+    inner2.className = "running-inner";
+    inner2.innerHTML = text;
+    track.appendChild(inner2);
+
+    container.appendChild(track);
+}
+
 
 // =========================================================
 // PIN LOGIN
