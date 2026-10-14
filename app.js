@@ -1286,7 +1286,6 @@ async function loadSpdList() {
     const container = document.getElementById("spdList");
     if (!container) return;
 
-    // Loading
     container.innerHTML = `
         <div class="loading-state">
             <div class="spinner"></div>
@@ -1300,7 +1299,6 @@ async function loadSpdList() {
         const startStr = range.start.toISOString().slice(0, 10);
         const endStr = range.end.toISOString().slice(0, 10);
 
-        // Body request
         const body = { mode: spdPeriodCurrent };
         if (spdPeriodCurrent === "custom") {
             body.tgl_start = startStr;
@@ -1329,14 +1327,11 @@ async function loadSpdList() {
 
         spdListData = data.list_spd || [];
 
-        // Sort
+        // ✅ SORT
         const sortValue = document.getElementById("spdSortFilter")?.value || "tanggal_asc";
         spdListData = sortSpdData(spdListData, sortValue);
 
-        // Update summary
         renderSpdSummary(data);
-
-        // Render list
         renderSpdList();
 
     } catch (err) {
@@ -1352,22 +1347,18 @@ async function loadSpdList() {
 
 
 // =========================================================
-// SPD LIST — Sort Data
+// SPD LIST — Sort
 // =========================================================
 function sortSpdData(data, sortBy) {
     const arr = [...data];
 
     if (sortBy === "tanggal_asc") {
-        // Terbaru dulu
         arr.sort((a, b) => (b.tanggal || "").localeCompare(a.tanggal || ""));
     } else if (sortBy === "tanggal_desc") {
-        // Lama dulu
         arr.sort((a, b) => (a.tanggal || "").localeCompare(b.tanggal || ""));
     } else if (sortBy === "spd_desc") {
-        // Terbesar → terkecil
         arr.sort((a, b) => (b.spd || 0) - (a.spd || 0));
     } else if (sortBy === "spd_asc") {
-        // Terkecil → terbesar
         arr.sort((a, b) => (a.spd || 0) - (b.spd || 0));
     }
 

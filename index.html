@@ -285,6 +285,17 @@
             <span class="date-separator">s/d</span>
             <input type="date" id="spdCustomEnd" class="date-input" onchange="loadSpdList()">
         </div>
+        
+        <!-- FILTER SORT -->
+        <div class="spd-sort-wrapper">
+            <span class="spd-sort-label">🔀 Urutkan:</span>
+            <select id="spdSortFilter" class="spd-sort-select" onchange="loadSpdList()">
+                <option value="tanggal_asc">📅 Tanggal (Terbaru → Lama)</option>
+                <option value="tanggal_desc">📅 Tanggal (Lama → Terbaru)</option>
+                <option value="spd_desc">💰 Terbesar → Terkecil</option>
+                <option value="spd_asc">💰 Terkecil → Terbesar</option>
+            </select>
+        </div>
 
         <!-- SUMMARY CARD -->
         <div class="spd-summary-card" id="spdSummaryCard">

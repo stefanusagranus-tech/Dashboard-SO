@@ -2840,28 +2840,20 @@ body {
 }
 
 /* =========================================================
-   SPD SUMMARY CARD
+   SPD SUMMARY CARD — FIXED v2
    ========================================================= */
 .spd-summary-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
+    /* ✅ Ganti ::before jadi border-top */
+    border-top: 3px solid var(--accent-orange);
     border-radius: var(--radius-lg);
     padding: 18px 16px;
     box-shadow: var(--shadow-md), 0 0 30px rgba(255, 140, 66, 0.1);
     position: relative;
-    overflow: hidden;
-}
-
-.spd-summary-card::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple), var(--accent-orange));
-    background-size: 200% 100%;
-    animation: shimmer 3s linear infinite;
+    z-index: 5;
+    isolation: isolate;
+    overflow: visible;
 }
 
 .spd-summary-title {
@@ -2871,6 +2863,8 @@ body {
     text-transform: uppercase;
     letter-spacing: 1.2px;
     margin-bottom: 10px;
+    position: relative;
+    z-index: 2;
 }
 
 .spd-summary-total {
@@ -2885,6 +2879,9 @@ body {
     overflow-wrap: break-word;
     white-space: normal;
     overflow: visible;
+    position: relative;
+    z-index: 2;
+    min-height: 32px;
 }
 
 .spd-summary-meta {
@@ -2892,6 +2889,9 @@ body {
     color: var(--text-muted);
     font-weight: 600;
     margin-bottom: 14px;
+    position: relative;
+    z-index: 2;
+    min-height: 18px;
 }
 
 .spd-summary-stats {
@@ -2900,6 +2900,8 @@ body {
     gap: 10px;
     padding-top: 12px;
     border-top: 1px solid var(--border-color);
+    position: relative;
+    z-index: 2;
 }
 
 .spd-summary-stat {
@@ -2914,6 +2916,7 @@ body {
     word-break: break-word;
     overflow-wrap: break-word;
     white-space: normal;
+    min-height: 20px;
 }
 
 .spd-summary-stat-label {
@@ -2925,12 +2928,14 @@ body {
 }
 
 /* =========================================================
-   SPD LIST
+   SPD LIST — FIXED v2
    ========================================================= */
 .spd-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    position: relative;
+    z-index: 1;
 }
 
 .spd-item {
@@ -2941,6 +2946,7 @@ body {
     box-shadow: var(--shadow-sm);
     transition: all 0.2s;
     position: relative;
+    z-index: 1;
 }
 
 .spd-item:active {
@@ -2969,7 +2975,9 @@ body {
     color: var(--text-primary);
     text-align: right;
     letter-spacing: -0.3px;
-    word-break: break-all;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
 }
 
 .spd-item-delta-row {
@@ -3030,6 +3038,48 @@ body {
     margin-top: 4px;
 }
 
+/* =========================================================
+   SPD SORT FILTER
+   ========================================================= */
+.spd-sort-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    position: relative;
+    z-index: 5;
+}
+
+.spd-sort-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.spd-sort-select {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    outline: none;
+    cursor: pointer;
+}
+
+.spd-sort-select:focus {
+    border-color: var(--accent-orange);
+    box-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
+}
 /* =========================================================
    RESPONSIVE — HP KECIL
    ========================================================= */
