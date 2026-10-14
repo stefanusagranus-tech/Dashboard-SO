@@ -1226,14 +1226,22 @@ function renderConfirmBubble(msg, idx) {
     }
 
     const data = msg.confirmData;
-    const itemsHtml = (data.items || []).map(it => `
-        <div class="confirm-item">
-            <span>👤</span>
-            <span>${it.nama}</span>
-            <span class="arrow">→</span>
-            <span>${it.shift_nama || it.kode_shift}</span>
-        </div>
-    `).join("");
+    const items = data.items || [];
+    const itemsCount = items.length;
+
+    // Compact: tampil 3 pertama + ringkasan sisa
+    const showAll = itemsCount <= 3;
+    const displayItems = showAll ? items : items.slice(0, 3);
+    const remaining = itemsCount - 3;
+
+    // Compact item — 1 baris
+    const itemsHtml = displayItems.map(it => 
+        `<span class="confirm-item">👤 ${it.nama} → ${it.shift_nama || it.kode_shift}</span>`
+    ).join("");
+
+    const moreHtml = !showAll 
+        ? `<span class="confirm-more">+ ${remaining} lainnya</span>` 
+        : "";
 
     let actionsHtml = "";
     let statusHtml = "";
@@ -1250,39 +1258,21 @@ function renderConfirmBubble(msg, idx) {
             </div>
         `;
     } else if (msg.resolvedStatus === "saved") {
-        statusHtml = `
-            <div class="confirm-status confirm-status-saved">
-                ✅ Tersimpan
-            </div>
-        `;
+        statusHtml = `<div class="confirm-status confirm-status-saved">✅ Tersimpan</div>`;
     } else if (msg.resolvedStatus === "cancelled") {
-        statusHtml = `
-            <div class="confirm-status confirm-status-cancelled">
-                ❌ Dibatalkan
-            </div>
-        `;
+        statusHtml = `<div class="confirm-status confirm-status-cancelled">❌ Dibatalkan</div>`;
     } else if (msg.resolvedStatus === "error") {
-        statusHtml = `
-            <div class="confirm-status confirm-status-error">
-                ⚠️ Gagal disimpan
-            </div>
-        `;
+        statusHtml = `<div class="confirm-status confirm-status-error">⚠️ Gagal disimpan</div>`;
     }
 
     bubble.innerHTML = `
-        <div class="confirm-title">🌸 KONFIRMASI UPDATE SHIFT</div>
+        <div class="confirm-title">🌸 KONFIRMASI UPDATE</div>
         <div class="confirm-detail">
-            <div class="confirm-detail-row">
-                <span class="label">📅 Tanggal</span>
-                <span class="value">${formatTanggalLong(data.tanggal)}</span>
-            </div>
-            <div class="confirm-detail-row">
-                <span class="label">👥 Total</span>
-                <span class="value">${data.items.length} orang</span>
-            </div>
-            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
-                ${itemsHtml}
-            </div>
+            📅 ${formatTanggalShort(data.tanggal)} • 👥 ${itemsCount} orang
+        </div>
+        <div class="confirm-items-list">
+            ${itemsHtml}
+            ${moreHtml}
         </div>
         ${actionsHtml}
         ${statusHtml}
@@ -1290,7 +1280,6 @@ function renderConfirmBubble(msg, idx) {
 
     return bubble;
 }
-
 
 // =========================================================
 // HANDLE KONFIRMASI — SIMPAN

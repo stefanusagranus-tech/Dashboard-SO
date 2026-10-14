@@ -63,102 +63,130 @@ SHIFT_EMOJI = {
 # =========================================================
 # PARSE TANGGAL NATURAL
 # =========================================================
-def parse_tanggal(text: str, today=None) -> date:
+def parse_shift_update(text: str, today=None) -> dict:
     """
-    Parse teks tanggal natural jadi `date`.
-    
-    Support:
-    - "hari ini", "today"
-    - "besok", "esok", "tomorrow"
-    - "lusa"
-    - "kemarin"
-    - "senin", "selasa", ..., "minggu" (hari terdekat ke depan)
-    - "senin depan"
-    - "20 okt", "20 oktober", "20-10", "20/10", "20/10/2026"
-    - "oktober", "okt" (bulan ini)
-    - Default: hari ini kalau gak ada tanggal
+    Parse natural language jadi struktur shift.
+    Versi v3 — handle format kompleks.
     """
     _today = today or _now_jkt().date()
-    _text = str(text).lower().strip()
+    _tgl = parse_tanggal(text, _today)
 
-    # === HARI INI ===
-    if any(k in _text for k in ["hari ini", "today", "skrg", "sekarang"]):
-        return _today
+    _items = []
+    _text_lower = str(text).lower()
+    _text_upper = str(text).upper()
 
-    # === BESOK ===
-    if any(k in _text for k in ["besok", "esok", "tomorrow", "bsk"]):
-        return _today + timedelta(days=1)
-
-    # === LUSA ===
-    if "lusa" in _text:
-        return _today + timedelta(days=2)
-
-    # === KEMARIN ===
-    if "kemarin" in _text:
-        return _today - timedelta(days=1)
-
-    # === NAMA HARI ===
-    _hari_map = {
-        "senin": 0, "selasa": 1, "rabu": 2, "kamis": 3,
-        "jumat": 4, "jum'at": 4, "sabtu": 5, "minggu": 6, "ahad": 6,
-    }
-    for _nama, _idx in _hari_map.items():
-        if _nama in _text:
-            _days_ahead = (_idx - _today.weekday()) % 7
-            if _days_ahead == 0:
-                _days_ahead = 7  # kalau hari ini sama, ambil minggu depan
-            if "depan" in _text or "next" in _text:
-                _days_ahead += 7
-            return _today + timedelta(days=_days_ahead)
-
-    # === TANGGAL ANGKA ===
-    # "20 okt", "20 oktober"
-    _bulan_map = {
-        "jan": 1, "januari": 1,
-        "feb": 2, "februari": 2,
-        "mar": 3, "maret": 3,
-        "apr": 4, "april": 4,
-        "mei": 5, "may": 5,
-        "jun": 6, "juni": 6,
-        "jul": 7, "juli": 7,
-        "agu": 8, "agustus": 8, "aug": 8,
-        "sep": 9, "september": 9,
-        "okt": 10, "oktober": 10, "oct": 10,
-        "nov": 11, "november": 11,
-        "des": 12, "desember": 12, "dec": 12,
+    # === STOPWORDS ===
+    _stopwords = {
+        "PAGI", "SIANG", "MALAM", "MALEM", "MLM", "SORE",
+        "LIBUR", "OFF", "CUTI", "MASUK",
+        "SHIFT", "ATUR", "SET", "UBAH", "GANTI", "PINDAH", "JADWAL",
+        "BESOK", "ESOK", "LUSA", "KEMARIN", "HARI", "INI", "ITU",
+        "SKRG", "SEKARANG", "TODAY", "TOMORROW", "NEXT", "DEPAN",
+        "KE", "DAN", "YANG",
+        "MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU",
+        "AHAD", "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI",
+        "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER",
+        "JAN", "FEB", "MAR", "APR", "JUN", "JUL", "AGU", "SEP", "OKT", "NOV", "DES",
+        "BOS", "HANA", "YUI", "REI", "KURUMI",
     }
 
-    _match = re.search(r'(\d{1,2})\s+([a-z]+)', _text)
-    if _match:
-        _day = int(_match.group(1))
-        _bulan_str = _match.group(2)
-        _month = _bulan_map.get(_bulan_str)
-        if _month:
-            _year = _today.year
-            # Kalau bulan udah lewat, tahun depan
-            if _month < _today.month:
-                _year += 1
-            try:
-                return date(_year, _month, _day)
-            except ValueError:
-                pass
+    # === AMBIL DAFTAR PERSONIL ===
+    _personil_list = get_personil_aktif()
+    _personil_names = [p["nama"].upper() for p in _personil_list]
 
-    # "20-10", "20/10", "20-10-2026", "20/10/2026"
-    _match = re.search(r'(\d{1,2})[\-\/](\d{1,2})(?:[\-\/](\d{2,4}))?', _text)
-    if _match:
-        _day = int(_match.group(1))
-        _month = int(_match.group(2))
-        _year = int(_match.group(3)) if _match.group(3) else _today.year
-        if _year < 100:
-            _year += 2000
-        try:
-            return date(_year, _month, _day)
-        except ValueError:
-            pass
+    if not _personil_names:
+        return {"tanggal": _tgl, "tanggal_list": [_tgl], "items": [], "raw": text}
 
-    # === DEFAULT: HARI INI ===
-    return _today
+    # === STRATEGI BARU: SPLIT PER KALIMAT DENGAN KATA KUNCI SHIFT ===
+    # Pecah text by kata: "atur", "set", "ubah", "ganti", koma, titik
+    # Lalu tiap segmen dianalisis
+    
+    # Mapping keyword shift → kode
+    _shift_map = {
+        "pagi": "P7",
+        "siang": "S15",
+        "malam": "M22",
+        "malem": "M22",
+        "mlm": "M22",
+        "sore": "S15",       # treat sore sebagai siang
+        "libur": "O",
+        "off": "O",
+        "cuti": "CUTI",
+    }
 
+    # Split text by separator kuat
+    _segments = re.split(r'[,\.]|\batur\b|\bset\b|\bubah\b|\bganti\b|\bpindah\b', _text_lower)
+    _segments = [s.strip() for s in _segments if s.strip()]
+
+    _found_any = False
+
+    for _seg in _segments:
+        # Skip segmen yang terlalu pendek
+        if len(_seg) < 3:
+            continue
+
+        # Deteksi kode shift di segmen ini
+        _kode_detected = None
+        _shift_keyword_found = None
+
+        for _kw, _kode in _shift_map.items():
+            if re.search(r'\b' + _kw + r'\b', _seg):
+                _kode_detected = _kode
+                _shift_keyword_found = _kw
+                break
+
+        if not _kode_detected:
+            continue
+
+        # Cari nama personil di segmen ini
+        _names_in_segment = []
+        for _nama_db in _personil_names:
+            # Match whole word
+            if re.search(r'\b' + re.escape(_nama_db) + r'\b', _seg.upper()):
+                _names_in_segment.append(_nama_db)
+
+        if not _names_in_segment:
+            continue
+
+        # Kalau ketemu → tambahkan
+        for _nama in _names_in_segment:
+            # Hindari duplikat
+            if _nama in [it["nama"] for it in _items]:
+                continue
+
+            _items.append({
+                "nama": _nama,
+                "kode_shift": _kode_detected,
+                "shift_nama": SHIFT_MAP[_kode_detected],
+            })
+            _found_any = True
+
+    # === FALLBACK: KALAU STRATEGI BARU GAGAL ===
+    if not _found_any:
+        # Deteksi shift tunggal
+        _shift_detected = None
+        for _kw, _kode in _shift_map.items():
+            if re.search(r'\b' + _kw + r'\b', _text_lower):
+                _shift_detected = _kode
+                break
+
+        if not _shift_detected:
+            _shift_detected = "O"
+
+        for _nama_db in _personil_names:
+            if re.search(r'\b' + re.escape(_nama_db) + r'\b', _text_upper):
+                _items.append({
+                    "nama": _nama_db,
+                    "kode_shift": _shift_detected,
+                    "shift_nama": SHIFT_MAP[_shift_detected],
+                })
+
+    return {
+        "tanggal": _tgl,
+        "tanggal_list": [_tgl],
+        "items": _items,
+        "raw": text,
+    }
 
 # =========================================================
 # PARSE NAMA & SHIFT DARI TEKS

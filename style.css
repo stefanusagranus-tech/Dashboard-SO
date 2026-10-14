@@ -1293,18 +1293,16 @@ body {
 }
 
 /* =========================================================
-   CHAT KONFIRMASI — Bubble + Tombol Simpan/Batal v1.3
+   CHAT KONFIRMASI — Bubble Compact v1.4
    ========================================================= */
 .bubble-confirm {
     border: 1px solid var(--accent-orange) !important;
     box-shadow: 
-        var(--shadow-md),
-        0 0 20px rgba(255, 140, 66, 0.25),
-        inset 0 0 30px rgba(255, 140, 66, 0.05);
-    background: linear-gradient(135deg, 
-        var(--bubble-ai-bg) 0%, 
-        rgba(255, 140, 66, 0.08) 100%) !important;
-    padding: 14px 16px !important;
+        var(--shadow-sm),
+        0 0 12px rgba(255, 140, 66, 0.2);
+    background: var(--bubble-ai-bg) !important;
+    padding: 10px 12px !important;
+    max-width: 90%;
     position: relative;
     overflow: hidden;
 }
@@ -1325,101 +1323,85 @@ body {
 }
 
 .confirm-title {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
     color: var(--accent-orange);
     text-transform: uppercase;
     letter-spacing: 1px;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    margin-bottom: 6px;
 }
 
 .confirm-detail {
-    background: rgba(0, 0, 0, 0.25);
-    border-radius: var(--radius-sm);
-    padding: 10px 12px;
-    margin: 10px 0;
-    font-size: 13px;
-    line-height: 1.6;
-}
-
-.confirm-detail-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 0;
-}
-
-.confirm-detail-row .label {
-    color: var(--text-muted);
-    font-weight: 600;
-    min-width: 65px;
     font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 600;
 }
 
-.confirm-detail-row .value {
-    color: var(--text-primary);
-    font-weight: 700;
-    font-size: 13px;
+.confirm-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+    max-height: 120px;
+    overflow-y: auto;
 }
 
 .confirm-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 0;
-    font-size: 13px;
+    display: inline-block;
+    font-size: 12px;
     color: var(--text-primary);
     font-weight: 600;
+    line-height: 1.5;
+    padding: 1px 0;
 }
 
-.confirm-item .arrow {
+.confirm-more {
+    font-size: 11px;
     color: var(--accent-orange);
-    font-weight: 800;
+    font-style: italic;
+    font-weight: 600;
+    padding-top: 2px;
 }
 
-/* Tombol konfirmasi */
+/* Tombol konfirmasi — COMPACT */
 .confirm-actions {
     display: flex;
-    gap: 8px;
-    margin-top: 12px;
+    gap: 6px;
+    margin-top: 8px;
 }
 
 .confirm-btn {
     flex: 1;
-    padding: 10px 14px;
+    padding: 8px 10px;
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     font-family: inherit;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     transition: all 0.2s;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     text-transform: uppercase;
 }
 
 .confirm-btn-save {
     background: linear-gradient(135deg, #06d6a0, #04a97c);
     color: #fff;
-    box-shadow: 0 0 16px rgba(6, 214, 160, 0.4);
+    box-shadow: 0 0 12px rgba(6, 214, 160, 0.35);
 }
 
 .confirm-btn-save:active {
     transform: scale(0.96);
-    box-shadow: 0 0 24px rgba(6, 214, 160, 0.7);
 }
 
 .confirm-btn-save:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    box-shadow: none;
 }
 
 .confirm-btn-cancel {
@@ -1434,34 +1416,24 @@ body {
     color: var(--danger);
 }
 
-.confirm-btn-cancel:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* State setelah klik */
+/* Resolved state */
 .bubble-confirm.resolved {
-    opacity: 0.6;
+    opacity: 0.7;
 }
 
 .bubble-confirm.resolved .confirm-actions {
     display: none;
 }
 
-.bubble-confirm.resolved::before {
-    background: linear-gradient(90deg, #06d6a0, #06d6a0);
-    animation: none;
-}
-
-/* Status resolved */
 .confirm-status {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 10px;
-    padding: 8px 12px;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 6px 10px;
     border-radius: var(--radius-sm);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.5px;
 }
@@ -1484,15 +1456,6 @@ body {
     color: #ee5253;
 }
 
-/* Loading spinner di dalam tombol */
-.confirm-btn .btn-spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
 
 /* =========================================================
    BUBBLE SUCCESS — setelah save
