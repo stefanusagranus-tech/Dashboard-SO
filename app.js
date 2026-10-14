@@ -41,7 +41,8 @@ let personilData = [];
 
 // Konfirmasi chat state
 let pendingConfirmations = {};  // { msgId: { items, tanggal, resolved } }
-
+// Modal konfirmasi state
+let currentConfirmData = null;   // { tanggal, items, raw }
 
 // =========================================================
 // INIT
@@ -1001,6 +1002,184 @@ function renderShiftSummary(data) {
         </div>
     `;
 }
+
+// =========================================================
+// MODAL KONFIRMASI UPDATE SHIFT v1.4
+// =========================================================
+function openConfirmShiftModal(data) {
+    const modal = document.getElementById("confirmShiftModal");
+    if (!modal) {
+        console.error("[Modal] confirmShiftModal tidak ditemukan");
+        return;
+    }
+
+    // Simpan data di state
+    currentConfirmData = data;
+
+    // Format tanggal
+    const tglEl = document.getElementById("confirmModalDate");
+    if (tglEl) tglEl.textContent = formatTanggalLong(data.tanggal);
+
+    // Total
+    const countEl = document.getElementById("confirmModalCount");
+    if (countEl) countEl.textContent = `${data.items.length} orang`;
+
+    // Render list items
+    renderConfirmModalItems(data.items);
+
+    // Reset tombol save
+    const saveBtn = document.getElementById("confirmModalSaveBtn");
+    if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = "✅ Konfirmasi";
+    }
+
+    // Tampilkan modal
+    modal.classList.add("active");
+}
+
+
+function closeConfirmShiftModal() {
+    const modal = document.getElementById("confirmShiftModal");
+    if (modal) modal.classList.remove("active");
+
+    // Reset state kalau user batal (bukan setelah save)
+    currentConfirmData = null;
+}
+
+
+function renderConfirmModalItems(items) {
+    const container = document.getElementById("confirmModalList");
+    if (!container) return;
+
+    const html = items.map(it => {
+        const kode = it.kode_shift || "O";
+        const shiftClass = getShiftModalClass(kode);
+        return `
+            <div class="confirm-modal-item ${shiftClass}">
+                <span class="confirm-modal-item-icon">👤</span>
+                <span class="confirm-modal-item-name">${it.nama}</span>
+                <span class="confirm-modal-item-arrow">→</span>
+                <span class="confirm-modal-item-shift">${it.shift_nama || kode}</span>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+
+function getShiftModalClass(kode) {
+    switch (kode) {
+        case "P7":   return "shift-p7";
+        case "S15":  return "shift-s15";
+        case "M22":  return "shift-m22";
+        case "O":    return "shift-o";
+        case "CUTI": return "shift-cuti";
+        default:     return "shift-o";
+    }
+}
+
+
+// =========================================================
+// EKSEKUSI KONFIRMASI — klik tombol ✅
+// =========================================================
+async function executeConfirmShift() {
+    if (!currentConfirmData) {
+        showToastMini("❌ Tidak ada data untuk dikonfirmasi", "error");
+        return;
+    }
+
+    const saveBtn = document.getElementById("confirmModalSaveBtn");
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...';
+    }
+
+    const _key = getApiKey();
+    const data = currentConfirmData;
+
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({
+                tanggal: data.tanggal,
+                items: data.items.map(it => ({
+                    nama: it.nama,
+                    kode_shift: it.kode_shift,
+                })),
+            }),
+        });
+
+        const result = await resp.json();
+
+        if (!resp.ok || !result.success) {
+            throw new Error(result.detail || result.message || `HTTP ${resp.status}`);
+        }
+
+        const savedCount = result.saved || data.items.length;
+
+        // Tutup modal
+        const modal = document.getElementById("confirmShiftModal");
+        if (modal) modal.classList.remove("active");
+
+        // Push success bubble ke chat
+        const successMsg = {
+            role: "assistant",
+            content: `✅ ${savedCount} shift tersimpan!\n\n${getShiftSummaryText(data.items)}`,
+            timestamp: Date.now(),
+            isSuccess: true,
+        };
+        chatHistories[currentBot].push(successMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+
+        // Refresh Master Shift kalau lagi di screen itu
+        const masterScreen = document.getElementById("masterShiftScreen");
+        if (masterScreen && masterScreen.classList.contains("active")) {
+            loadMasterShift();
+        }
+
+        // Refresh running text di home (kalau lagi di home)
+        const homeScreen = document.getElementById("homeScreen");
+        if (homeScreen && homeScreen.classList.contains("active")) {
+            loadMiniDashboard();
+        }
+
+        showToastMini(`✅ ${savedCount} shift tersimpan`, "success");
+
+        // Clear state
+        currentConfirmData = null;
+
+    } catch (err) {
+        console.error("[ConfirmShift] Error:", err);
+
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = "✅ Konfirmasi";
+        }
+
+        // Push error bubble
+        const errMsg = {
+            role: "assistant",
+            content: `⚠️ Gagal simpan: ${err.message}`,
+            timestamp: Date.now(),
+            isError: true,
+        };
+        chatHistories[currentBot].push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
 // =========================================================
 // MODAL — KELOLA PERSONIL v1.3
 // =========================================================
@@ -1487,19 +1666,30 @@ async function sendMessage() {
 
         // === KALAU HANA MINTA KONFIRMASI ===
         if (data.needs_confirm && data.parsed && data.parsed.items) {
-            const confirmMsg = {
+            // Push bubble pendek
+            const shortMsg = {
                 role: "assistant",
-                content: data.text || "",
+                content: data.text || `Oke Bos, aku catat ${data.parsed.items.length} perubahan shift. Cek detailnya ya! 🌸`,
                 timestamp: Date.now(),
-                isConfirm: true,
-                confirmData: {
+            };
+            chatHistories[currentBot].push(shortMsg);
+            saveChatHistories();
+            renderChatHistory();
+            scrollToBottom();
+        
+            // Trigger modal
+            setTimeout(() => {
+                openConfirmShiftModal({
                     tanggal: data.parsed.tanggal,
                     items: data.parsed.items,
                     raw: data.parsed.raw || text,
-                },
-                resolved: false,
-            };
-            chatHistories[currentBot].push(confirmMsg);
+                });
+            }, 400);
+        
+            hideLoadingBubble();
+            sendBtn.disabled = false;
+            input.focus();
+            return;  // Stop di sini, jangan render bubble konfirmasi lama
         } else {
             // === CHAT BIASA ===
             const aiMsg = {

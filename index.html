@@ -271,6 +271,53 @@
 </div>
 
 <!-- ========================================================= -->
+<!-- MODAL — KONFIRMASI UPDATE SHIFT v1.4 -->
+<!-- ========================================================= -->
+<div id="confirmShiftModal" class="modal-overlay">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">🌸 Konfirmasi Update Shift</div>
+            <button class="modal-close" onclick="closeConfirmShiftModal()">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Header info -->
+            <div class="confirm-modal-info">
+                <div class="confirm-modal-row">
+                    <span class="confirm-modal-icon">📅</span>
+                    <span class="confirm-modal-label">Tanggal</span>
+                    <span class="confirm-modal-value" id="confirmModalDate">—</span>
+                </div>
+                <div class="confirm-modal-row">
+                    <span class="confirm-modal-icon">👥</span>
+                    <span class="confirm-modal-label">Total</span>
+                    <span class="confirm-modal-value" id="confirmModalCount">—</span>
+                </div>
+            </div>
+
+            <!-- List items -->
+            <div class="confirm-modal-list" id="confirmModalList">
+                <!-- Item di-generate JS -->
+            </div>
+
+            <!-- Warning -->
+            <div class="confirm-modal-warning">
+                ⚠️ Perubahan akan disimpan ke database. Pastikan data benar.
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeConfirmShiftModal()">
+                ❌ Batal
+            </button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" id="confirmModalSaveBtn" onclick="executeConfirmShift()">
+                ✅ Konfirmasi
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
 <!-- SIDEBAR -->
 <!-- ========================================================= -->
 <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
