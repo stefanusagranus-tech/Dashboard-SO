@@ -1,6 +1,6 @@
 /* =========================================================
-   DASHBOARD SO C383 — STYLE v2.0 (CLEAN REWRITE)
-   No duplicates. Fully tested.
+   DASHBOARD SO C383 — STYLE v2.1 (RESPONSIVE FIX)
+   Fix: widget card kepotong, status bar kepotong
    ========================================================= */
 
 /* =========================================================
@@ -93,7 +93,7 @@
 }
 
 /* =========================================================
-   TIME THEME — PAGI
+   TIME THEME
    ========================================================= */
 [data-time-theme="pagi"] {
     --accent-orange: #ffa94d;
@@ -102,18 +102,12 @@
     --bg-gradient: linear-gradient(135deg, #1a1e3e 0%, #243056 100%);
 }
 
-/* =========================================================
-   TIME THEME — SIANG
-   ========================================================= */
 [data-time-theme="siang"] {
     --accent-orange: #feca57;
     --accent-purple: #ff9f43;
     --accent-glow: #feca57;
 }
 
-/* =========================================================
-   TIME THEME — SORE
-   ========================================================= */
 [data-time-theme="sore"] {
     --accent-orange: #ff6b1a;
     --accent-purple: #ee5253;
@@ -121,9 +115,6 @@
     --bg-gradient: linear-gradient(135deg, #2a0f1e 0%, #3d1428 100%);
 }
 
-/* =========================================================
-   TIME THEME — MALAM
-   ========================================================= */
 [data-time-theme="malam"] {
     --accent-orange: #ff8c42;
     --accent-purple: #a259ff;
@@ -195,6 +186,7 @@ body {
     90%  { opacity: 0.3; }
     100% { transform: translate(110vw, -5vh) rotate(-10deg); opacity: 0; }
 }
+
 /* =========================================================
    LOGIN SCREEN
    ========================================================= */
@@ -318,7 +310,7 @@ body {
 }
 
 /* =========================================================
-   HOME SCREEN
+   HOME HEADER
    ========================================================= */
 .home-header {
     display: flex;
@@ -429,7 +421,7 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    padding: 18px 16px;
+    padding: 16px 14px;
     box-shadow: var(--shadow-md), 0 0 30px rgba(255, 140, 66, 0.08);
     position: relative;
     overflow: hidden;
@@ -453,12 +445,12 @@ body {
 }
 
 .mini-title {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 1.2px;
-    margin-bottom: 16px;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -474,12 +466,12 @@ body {
 }
 
 /* =========================================================
-   STATS GRID
+   ✅ WIDGET STATS GRID — FIXED RESPONSIVE
    ========================================================= */
 .mini-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 6px;                 /* ← gap dikecilin dari 10px */
+    gap: 6px;
     margin-bottom: 14px;
     position: relative;
     z-index: 1;
@@ -487,13 +479,13 @@ body {
 
 .stat {
     text-align: center;
-    padding: 10px 4px;        /* ← padding horizontal dikecilin */
+    padding: 10px 4px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     transition: all 0.3s;
-    min-width: 0;             /* ← KUNCI: biar boleh shrink */
-    overflow: hidden;         /* ← KUNCI: biar gak overflow */
+    min-width: 0;
+    overflow: hidden;
 }
 
 .stat:active {
@@ -501,26 +493,38 @@ body {
     border-color: var(--accent-orange);
 }
 
+.stat-clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.stat-clickable:active {
+    transform: scale(0.95);
+    border-color: var(--accent-orange);
+    box-shadow: var(--shadow-glow);
+}
+
 .stat-icon {
-    font-size: 16px;          /* ← dikecilin dikit */
+    font-size: 16px;
     margin-bottom: 4px;
     line-height: 1;
 }
 
+/* ✅ KUNCI FIX — font responsive pake clamp */
 .stat-value {
-    font-size: clamp(13px, 4.2vw, 17px);   /* ← RESPONSIVE! */
+    font-size: clamp(13px, 4.2vw, 17px);
     font-weight: 800;
     color: var(--accent-orange);
     line-height: 1.1;
     letter-spacing: -0.5px;
-    white-space: nowrap;      /* ← biar gak wrap */
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     min-height: 20px;
 }
 
 .stat-label {
-    font-size: 8px;           /* ← dikecilin */
+    font-size: 8px;
     color: var(--text-muted);
     margin-top: 3px;
     text-transform: uppercase;
@@ -531,7 +535,6 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Tap hint — KECILIN banget biar gak makan space */
 .stat-tap-hint {
     font-size: 7px;
     color: var(--accent-orange);
@@ -544,20 +547,20 @@ body {
 }
 
 /* =========================================================
-   STATUS BAR
+   ✅ STATUS BAR — FIXED RESPONSIVE
    ========================================================= */
 .status-bar {
     display: flex;
     align-items: center;
-    gap: 10px;                /* ← 12px → 10px */
-    padding: 10px 12px;       /* ← dikit dikecilin */
+    gap: 10px;
+    padding: 10px 12px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     margin-bottom: 14px;
     position: relative;
     overflow: hidden;
-    min-height: 60px;         /* ← biar konsisten */
+    min-height: 60px;
 }
 
 .status-bar::before {
@@ -570,8 +573,19 @@ body {
     background: var(--accent-orange);
 }
 
+.status-bar-clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.status-bar-clickable:active {
+    transform: scale(0.99);
+    border-color: var(--accent-orange);
+    box-shadow: var(--shadow-glow);
+}
+
 .status-icon {
-    font-size: 28px;
+    font-size: 26px;
     line-height: 1;
     flex-shrink: 0;
     animation: statusPulse 2s ease-in-out infinite;
@@ -586,30 +600,50 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
     min-width: 0;
+    overflow: hidden;
 }
 
 .status-label {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.6px;
     font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .status-value {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .status-percent {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 900;
     color: var(--accent-orange);
     letter-spacing: -0.5px;
     flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.status-tap-hint {
+    font-size: 8px;
+    color: var(--accent-orange);
+    margin-top: 1px;
+    opacity: 0.8;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .status-bar.status-aman::before { background: #06d6a0; }
@@ -756,6 +790,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
 }
 
 .home-card-title {
@@ -782,6 +817,7 @@ body {
     font-size: 11px;
     color: var(--text-muted);
 }
+
 /* =========================================================
    CHAT SCREEN
    ========================================================= */
@@ -867,7 +903,6 @@ body {
     border-radius: 4px;
 }
 
-/* Background gradient subtle */
 .chat-messages::before {
     content: "";
     position: absolute;
@@ -879,7 +914,6 @@ body {
     z-index: 0;
 }
 
-/* Pattern Halloween */
 .chat-messages::after {
     content: "🎃 🦇 🎃 🦇 🎃";
     position: absolute;
@@ -954,7 +988,7 @@ body {
 }
 
 /* =========================================================
-   BUBBLE CONTENT WRAPPER — KUNCI FIX BUBBLE
+   BUBBLE CONTENT WRAPPER
    ========================================================= */
 .bubble-content {
     display: flex;
@@ -974,7 +1008,7 @@ body {
 }
 
 /* =========================================================
-   BUBBLE BASE — FIXED
+   BUBBLE BASE
    ========================================================= */
 .bubble {
     padding: 10px 14px;
@@ -987,7 +1021,6 @@ body {
     word-break: normal;
     box-shadow: var(--shadow-sm);
     position: relative;
-    /* KUNCI */
     width: fit-content;
     max-width: 100%;
     min-width: 0;
@@ -1215,6 +1248,7 @@ body {
     cursor: not-allowed;
     box-shadow: none;
 }
+
 /* =========================================================
    MASTER SHIFT SCREEN
    ========================================================= */
@@ -1941,7 +1975,7 @@ body {
 }
 
 /* =========================================================
-   CONFIRM BUBBLE (kalau modal gagal)
+   CONFIRM BUBBLE (fallback)
    ========================================================= */
 .bubble-confirm {
     border: 1px solid var(--accent-orange) !important;
@@ -2108,7 +2142,7 @@ body {
 }
 
 /* =========================================================
-   SCREEN HEADER (settings, streamlit)
+   SCREEN HEADER
    ========================================================= */
 .screen-header {
     display: flex;
@@ -2353,135 +2387,6 @@ body {
 .text-center {
     text-align: center;
 }
-/* =========================================================
-   RESPONSIVE — HP KECIL (max 360px)
-   ========================================================= */
-@media (max-width: 360px) {
-    .clock-time { font-size: 40px; }
-    .stat-value { font-size: 17px; }
-    .login-logo { font-size: 64px; }
-    .login-title { font-size: 22px; }
-    .pin-key { font-size: 20px; }
-    .home-card { padding: 14px 16px; }
-    .home-card-icon { font-size: 26px; }
-    .home-card-title { font-size: 14px; }
-    .home-card-subtitle { font-size: 11px; }
-    .bubble { font-size: 13px; }
-    .sidebar { width: 240px; }
-    .master-shift-content { padding: 12px 14px 30px; gap: 12px; }
-    .filter-tab { padding: 8px 12px; font-size: 12px; }
-    .shift-row { padding: 10px 12px; gap: 8px; }
-    .shift-name { font-size: 13px; }
-    .shift-badge { font-size: 10px; padding: 3px 8px; }
-    .modal-content { max-height: 90vh; }
-    .modal-header { padding: 14px 16px; }
-    .modal-body { padding: 12px 16px 20px; }
-    .personil-item { padding: 10px 12px; gap: 8px; }
-    .personil-item-name { font-size: 13px; }
-}
-
-/* =========================================================
-   RESPONSIVE — HP BESAR (min 428px)
-   ========================================================= */
-@media (min-width: 428px) {
-    .clock-time { font-size: 56px; }
-    .stat-value { font-size: 24px; }
-    .home-card { padding: 20px 24px; }
-    .home-card-icon { font-size: 36px; }
-    .bubble { font-size: 15px; }
-    .master-shift-content { padding: 20px 24px 50px; }
-    .filter-tab { padding: 11px 18px; font-size: 14px; }
-    .shift-row { padding: 14px 18px; }
-    .shift-name { font-size: 15px; }
-}
-
-/* =========================================================
-   RESPONSIVE — TABLET (min 600px)
-   ========================================================= */
-@media (min-width: 600px) {
-    .home-content,
-    .settings-content,
-    .chat-messages,
-    .chat-input-area {
-        max-width: 700px;
-        margin: 0 auto;
-        width: 100%;
-    }
-
-    .master-shift-content {
-        max-width: 700px;
-        margin: 0 auto;
-        width: 100%;
-    }
-
-    .modal-content {
-        max-width: 600px;
-        border-radius: var(--radius-xl);
-        border-bottom: 1px solid var(--border-color);
-        max-height: 80vh;
-    }
-
-    .modal-overlay {
-        align-items: center;
-        padding: 20px;
-    }
-
-    #confirmShiftModal .modal-overlay {
-        align-items: center;
-    }
-
-    .mini-stats { gap: 20px; }
-    .stat-value { font-size: 28px; }
-}
-
-/* =========================================================
-   SAFE AREA — HP dengan notch
-   ========================================================= */
-@supports (padding: env(safe-area-inset-bottom)) {
-    .chat-input-area {
-        padding-bottom: calc(12px + env(safe-area-inset-bottom));
-    }
-    .modal-body {
-        padding-bottom: calc(24px + env(safe-area-inset-bottom));
-    }
-}
-
-/* =========================================================
-   SCROLLBAR GLOBAL
-   ========================================================= */
-::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-}
-
-::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--accent-orange);
-}
-
-/* =========================================================
-   NO SELECT
-   ========================================================= */
-.home-card,
-.theme-toggle,
-.pin-key,
-.hamburger-btn,
-.chat-send,
-.sidebar-item,
-.settings-btn,
-.back-btn,
-.screen-header-action {
-    user-select: none;
-    -webkit-user-select: none;
-}
 
 /* =========================================================
    RAK LIST SCREEN
@@ -2506,27 +2411,6 @@ body {
     z-index: 1;
 }
 
-/* Widget hint */
-.stat-tap-hint {
-    font-size: 8px;
-    color: var(--accent-orange);
-    margin-top: 2px;
-    opacity: 0.7;
-    font-weight: 700;
-}
-
-.stat-clickable {
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.stat-clickable:active {
-    transform: scale(0.95);
-    border-color: var(--accent-orange);
-    box-shadow: var(--shadow-glow);
-}
-
-/* Summary card */
 .rak-summary {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -2540,6 +2424,7 @@ body {
 
 .rak-summary-item {
     text-align: center;
+    min-width: 0;
 }
 
 .rak-summary-value {
@@ -2562,7 +2447,6 @@ body {
     font-weight: 700;
 }
 
-/* Filter tabs */
 .rak-filter-tabs {
     display: flex;
     gap: 8px;
@@ -2601,7 +2485,6 @@ body {
     color: #fff;
 }
 
-/* Search */
 .rak-search-wrapper {
     display: flex;
     align-items: center;
@@ -2628,6 +2511,7 @@ body {
     font-family: inherit;
     font-size: 14px;
     font-weight: 500;
+    min-width: 0;
 }
 
 .rak-search-input::placeholder {
@@ -2653,7 +2537,6 @@ body {
     display: none;
 }
 
-/* Rak card */
 .rak-list {
     display: flex;
     flex-direction: column;
@@ -2736,16 +2619,21 @@ body {
     justify-content: space-between;
     align-items: center;
     font-size: 12px;
+    gap: 12px;
 }
 
 .rak-card-label {
     color: var(--text-muted);
     font-weight: 600;
+    flex-shrink: 0;
 }
 
 .rak-card-value {
     color: var(--text-primary);
     font-weight: 700;
+    text-align: right;
+    min-width: 0;
+    word-break: break-word;
 }
 
 .rak-nominal-minus {
@@ -2757,7 +2645,7 @@ body {
 }
 
 /* =========================================================
-   SPD LIST SCREEN v1.5
+   SPD LIST SCREEN
    ========================================================= */
 #spdListScreen {
     display: none;
@@ -2779,9 +2667,6 @@ body {
     z-index: 1;
 }
 
-/* =========================================================
-   SPD PERIOD TABS
-   ========================================================= */
 .spd-period-tabs {
     display: flex;
     gap: 8px;
@@ -2821,9 +2706,7 @@ body {
     box-shadow: 0 0 16px rgba(255, 140, 66, 0.4);
 }
 
-/* =========================================================
-   SPD SORT FILTER
-   ========================================================= */
+/* SPD SORT */
 .spd-sort-wrapper {
     display: flex;
     align-items: center;
@@ -2832,10 +2715,12 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
+    position: relative;
+    z-index: 5;
 }
 
 .spd-sort-label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -2843,28 +2728,6 @@ body {
     flex-shrink: 0;
 }
 
-.spd-sort-select {
-    flex: 1;
-    padding: 8px 12px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    outline: none;
-    cursor: pointer;
-}
-
-.spd-sort-select:focus {
-    border-color: var(--accent-orange);
-    box-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
-}
-
-/* =========================================================
-   SPD SORT BUTTONS — Reliable di WebView
-   ========================================================= */
 .spd-sort-buttons {
     display: flex;
     gap: 6px;
@@ -2879,13 +2742,13 @@ body {
 
 .spd-sort-btn {
     flex-shrink: 0;
-    padding: 8px 14px;
+    padding: 8px 12px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-xl);
     color: var(--text-secondary);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.25s;
@@ -2903,13 +2766,10 @@ body {
     box-shadow: 0 0 16px rgba(255, 140, 66, 0.4);
 }
 
-/* =========================================================
-   SPD SUMMARY CARD — FIXED v2
-   ========================================================= */
+/* SPD SUMMARY CARD */
 .spd-summary-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    /* ✅ Ganti ::before jadi border-top */
     border-top: 3px solid var(--accent-orange);
     border-radius: var(--radius-lg);
     padding: 18px 16px;
@@ -2932,7 +2792,7 @@ body {
 }
 
 .spd-summary-total {
-    font-size: 28px;
+    font-size: clamp(20px, 7vw, 28px);
     font-weight: 900;
     color: var(--accent-orange);
     letter-spacing: -0.8px;
@@ -2970,10 +2830,11 @@ body {
 
 .spd-summary-stat {
     text-align: center;
+    min-width: 0;
 }
 
 .spd-summary-stat-value {
-    font-size: 16px;
+    font-size: clamp(12px, 4vw, 16px);
     font-weight: 800;
     color: var(--text-primary);
     margin-bottom: 2px;
@@ -2991,9 +2852,7 @@ body {
     font-weight: 700;
 }
 
-/* =========================================================
-   SPD LIST — FIXED v2
-   ========================================================= */
+/* SPD LIST */
 .spd-list {
     display: flex;
     flex-direction: column;
@@ -3050,7 +2909,6 @@ body {
     margin-bottom: 4px;
 }
 
-/* Delta badge */
 .spd-delta {
     display: inline-flex;
     align-items: center;
@@ -3081,7 +2939,6 @@ body {
     border: 1px solid rgba(122, 107, 153, 0.3);
 }
 
-/* Keterangan */
 .spd-item-ket {
     font-size: 11px;
     color: var(--text-muted);
@@ -3094,7 +2951,6 @@ body {
     line-height: 1.5;
 }
 
-/* PIC */
 .spd-item-pic {
     font-size: 11px;
     color: var(--text-secondary);
@@ -3103,106 +2959,7 @@ body {
 }
 
 /* =========================================================
-   SPD SORT FILTER
-   ========================================================= */
-.spd-sort-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    position: relative;
-    z-index: 5;
-}
-
-.spd-sort-label {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    flex-shrink: 0;
-}
-
-.spd-sort-select {
-    flex: 1;
-    padding: 8px 12px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    outline: none;
-    cursor: pointer;
-}
-
-.spd-sort-select:focus {
-    border-color: var(--accent-orange);
-    box-shadow: 0 0 12px rgba(255, 140, 66, 0.3);
-}
-/* =========================================================
-   RESPONSIVE — HP KECIL
-   ========================================================= */
-@media (max-width: 360px) {
-    .spd-list-content {
-        padding: 12px 14px 30px;
-        gap: 12px;
-    }
-    .spd-period-tab {
-        padding: 8px 12px;
-        font-size: 11px;
-    }
-    .spd-summary-total {
-        font-size: 22px;
-    }
-    .spd-summary-stat-value {
-        font-size: 14px;
-    }
-    .spd-item-spd {
-        font-size: 13px;
-    }
-    .spd-delta {
-        font-size: 10px;
-        padding: 2px 6px;
-    }
-}
-
-/* =========================================================
-   RESPONSIVE — HP BESAR
-   ========================================================= */
-@media (min-width: 428px) {
-    .spd-list-content {
-        padding: 20px 24px 50px;
-    }
-    .spd-period-tab {
-        padding: 11px 18px;
-        font-size: 13px;
-    }
-    .spd-summary-total {
-        font-size: 32px;
-    }
-    .spd-item-spd {
-        font-size: 16px;
-    }
-}
-
-/* =========================================================
-   RESPONSIVE — TABLET
-   ========================================================= */
-@media (min-width: 600px) {
-    .spd-list-content {
-        max-width: 700px;
-        margin: 0 auto;
-        width: 100%;
-    }
-}
-
-/* =========================================================
-   TOP MINUS SCREEN v1.6
+   TOP MINUS SCREEN
    ========================================================= */
 #topMinusScreen {
     display: none;
@@ -3225,9 +2982,6 @@ body {
     z-index: 1;
 }
 
-/* =========================================================
-   SUBTAB (Rak / Item)
-   ========================================================= */
 .top-subtabs {
     display: flex;
     gap: 8px;
@@ -3263,9 +3017,6 @@ body {
     box-shadow: 0 0 16px rgba(255, 140, 66, 0.4);
 }
 
-/* =========================================================
-   TOP SUMMARY CARD
-   ========================================================= */
 .top-summary-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -3287,7 +3038,7 @@ body {
 }
 
 .top-summary-total {
-    font-size: 28px;
+    font-size: clamp(20px, 7vw, 28px);
     font-weight: 900;
     color: var(--accent-orange);
     letter-spacing: -0.8px;
@@ -3307,9 +3058,6 @@ body {
     min-height: 18px;
 }
 
-/* =========================================================
-   TOP LIST
-   ========================================================= */
 .top-list {
     display: flex;
     flex-direction: column;
@@ -3318,9 +3066,6 @@ body {
     z-index: 1;
 }
 
-/* =========================================================
-   TOP ITEM CARD
-   ========================================================= */
 .top-item-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -3366,6 +3111,7 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.3px;
     word-break: break-word;
+    min-width: 0;
 }
 
 .top-item-nominal {
@@ -3416,60 +3162,7 @@ body {
 }
 
 /* =========================================================
-   RESPONSIVE — HP KECIL
-   ========================================================= */
-@media (max-width: 360px) {
-    .top-minus-content {
-        padding: 12px 14px 30px;
-        gap: 12px;
-    }
-    .top-subtab {
-        padding: 8px 12px;
-        font-size: 12px;
-    }
-    .top-summary-total {
-        font-size: 22px;
-    }
-    .top-item-title {
-        font-size: 13px;
-    }
-    .top-item-nominal {
-        font-size: 12px;
-    }
-    .top-item-meta {
-        font-size: 10px;
-        gap: 8px;
-    }
-}
-
-/* =========================================================
-   RESPONSIVE — HP BESAR
-   ========================================================= */
-@media (min-width: 428px) {
-    .top-minus-content {
-        padding: 20px 24px 50px;
-    }
-    .top-summary-total {
-        font-size: 32px;
-    }
-    .top-item-title {
-        font-size: 16px;
-    }
-}
-
-/* =========================================================
-   RESPONSIVE — TABLET
-   ========================================================= */
-@media (min-width: 600px) {
-    .top-minus-content {
-        max-width: 700px;
-        margin: 0 auto;
-        width: 100%;
-    }
-}
-
-/* =========================================================
-   RAK DETAIL SCREEN v1.6
+   RAK DETAIL SCREEN
    ========================================================= */
 #rakDetailScreen {
     display: none;
@@ -3492,9 +3185,6 @@ body {
     z-index: 1;
 }
 
-/* =========================================================
-   INFO CARD
-   ========================================================= */
 .rak-detail-info {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -3533,25 +3223,24 @@ body {
     font-weight: 800;
     text-align: right;
     word-break: break-word;
+    min-width: 0;
 }
 
-/* =========================================================
-   SUMMARY STATS (Minus/Plus/Net)
-   ========================================================= */
 .rak-detail-stats {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    gap: 8px;
 }
 
 .rak-detail-stat {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 12px 8px;
+    padding: 12px 6px;
     text-align: center;
     position: relative;
     overflow: hidden;
+    min-width: 0;
 }
 
 .rak-detail-stat-minus {
@@ -3567,7 +3256,7 @@ body {
 }
 
 .rak-detail-stat-value {
-    font-size: 13px;
+    font-size: clamp(10px, 3.2vw, 13px);
     font-weight: 900;
     line-height: 1.1;
     letter-spacing: -0.3px;
@@ -3591,16 +3280,16 @@ body {
 }
 
 .rak-detail-stat-label {
-    font-size: 9px;
+    font-size: 8px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* =========================================================
-   FILTER TABS (Semua/Minus/Plus)
-   ========================================================= */
 .rak-detail-tabs {
     display: flex;
     gap: 6px;
@@ -3633,9 +3322,6 @@ body {
     box-shadow: 0 0 12px rgba(255, 140, 66, 0.4);
 }
 
-/* =========================================================
-   ITEM LIST
-   ========================================================= */
 .rak-detail-list {
     display: flex;
     flex-direction: column;
@@ -3681,6 +3367,7 @@ body {
     color: var(--text-primary);
     letter-spacing: 0.3px;
     word-break: break-word;
+    min-width: 0;
 }
 
 .rak-detail-item-name {
@@ -3703,79 +3390,7 @@ body {
     padding-left: 34px;
 }
 
-/* =========================================================
-   RESPONSIVE — HP KECIL
-   ========================================================= */
-@media (max-width: 360px) {
-    .rak-detail-content {
-        padding: 12px 14px 30px;
-        gap: 12px;
-    }
-    .rak-detail-info {
-        padding: 12px 14px;
-    }
-    .rak-detail-info-label {
-        font-size: 10px;
-    }
-    .rak-detail-info-value {
-        font-size: 13px;
-    }
-    .rak-detail-stat {
-        padding: 10px 6px;
-    }
-    .rak-detail-stat-value {
-        font-size: 11px;
-    }
-    .rak-detail-stat-label {
-        font-size: 8px;
-    }
-    .rak-detail-tab {
-        padding: 8px 8px;
-        font-size: 11px;
-    }
-    .rak-detail-item-plu {
-        font-size: 13px;
-    }
-    .rak-detail-item-name {
-        font-size: 11px;
-    }
-    .rak-detail-item-footer {
-        font-size: 10px;
-        gap: 8px;
-    }
-}
-
-/* =========================================================
-   RESPONSIVE — HP BESAR
-   ========================================================= */
-@media (min-width: 428px) {
-    .rak-detail-content {
-        padding: 20px 24px 50px;
-    }
-    .rak-detail-stat-value {
-        font-size: 15px;
-    }
-    .rak-detail-item-plu {
-        font-size: 15px;
-    }
-    .rak-detail-item-name {
-        font-size: 13px;
-    }
-}
-
-/* =========================================================
-   RESPONSIVE — TABLET
-   ========================================================= */
-@media (min-width: 600px) {
-    .rak-detail-content {
-        max-width: 700px;
-        margin: 0 auto;
-        width: 100%;
-    }
-}
-
-/* =========================================================
-   STATUS ANALYSIS SCREEN v1.6
+/* =========================================================   STATUS ANALYSIS SCREEN
    ========================================================= */
 #statusScreen {
     display: none;
@@ -3798,9 +3413,6 @@ body {
     z-index: 1;
 }
 
-/* =========================================================
-   BIG STATUS CARD
-   ========================================================= */
 .status-big-card {
     background: var(--bg-card);
     border: 2px solid var(--border-color);
@@ -3825,7 +3437,6 @@ body {
     animation: shimmer 3s linear infinite;
 }
 
-/* Status: AMAN */
 .status-big-card.status-big-card-aman {
     border-color: #06d6a0;
     background: linear-gradient(135deg, var(--bg-card) 0%, rgba(6, 214, 160, 0.08) 100%);
@@ -3837,15 +3448,11 @@ body {
     background-size: 200% 100%;
 }
 
-.status-big-card.status-big-card-aman .status-big-label {
-    color: #06d6a0;
-}
-
+.status-big-card.status-big-card-aman .status-big-label,
 .status-big-card.status-big-card-aman .status-big-persen {
     color: #06d6a0;
 }
 
-/* Status: WASPADA */
 .status-big-card.status-big-card-waspada {
     border-color: #feca57;
     background: linear-gradient(135deg, var(--bg-card) 0%, rgba(254, 202, 87, 0.08) 100%);
@@ -3857,15 +3464,11 @@ body {
     background-size: 200% 100%;
 }
 
-.status-big-card.status-big-card-waspada .status-big-label {
-    color: #feca57;
-}
-
+.status-big-card.status-big-card-waspada .status-big-label,
 .status-big-card.status-big-card-waspada .status-big-persen {
     color: #feca57;
 }
 
-/* Status: BAHAYA */
 .status-big-card.status-big-card-bahaya {
     border-color: #ee5253;
     background: linear-gradient(135deg, var(--bg-card) 0%, rgba(238, 82, 83, 0.1) 100%);
@@ -3878,10 +3481,7 @@ body {
     background-size: 200% 100%;
 }
 
-.status-big-card.status-big-card-bahaya .status-big-label {
-    color: #ee5253;
-}
-
+.status-big-card.status-big-card-bahaya .status-big-label,
 .status-big-card.status-big-card-bahaya .status-big-persen {
     color: #ee5253;
 }
@@ -3917,7 +3517,7 @@ body {
 }
 
 .status-big-persen {
-    font-size: 42px;
+    font-size: clamp(28px, 11vw, 42px);
     font-weight: 900;
     color: var(--accent-orange);
     letter-spacing: -1px;
@@ -3933,9 +3533,6 @@ body {
     font-weight: 600;
 }
 
-/* =========================================================
-   METRICS CARDS
-   ========================================================= */
 .status-metrics {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -3951,6 +3548,7 @@ body {
     transition: all 0.2s;
     position: relative;
     overflow: hidden;
+    min-width: 0;
 }
 
 .status-metric-card:active {
@@ -3972,7 +3570,7 @@ body {
 }
 
 .status-metric-value {
-    font-size: 15px;
+    font-size: clamp(12px, 3.8vw, 15px);
     font-weight: 900;
     color: var(--text-primary);
     word-break: break-word;
@@ -3990,9 +3588,6 @@ body {
     color: #06d6a0;
 }
 
-/* =========================================================
-   REKOMENDASI CARD
-   ========================================================= */
 .status-rekomendasi-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -4026,17 +3621,9 @@ body {
     margin-bottom: 8px;
 }
 
-.status-rekomendasi-aman .status-rekomendasi-title {
-    color: #06d6a0;
-}
-
-.status-rekomendasi-waspada .status-rekomendasi-title {
-    color: #feca57;
-}
-
-.status-rekomendasi-bahaya .status-rekomendasi-title {
-    color: #ee5253;
-}
+.status-rekomendasi-aman .status-rekomendasi-title { color: #06d6a0; }
+.status-rekomendasi-waspada .status-rekomendasi-title { color: #feca57; }
+.status-rekomendasi-bahaya .status-rekomendasi-title { color: #ee5253; }
 
 .status-rekomendasi-text {
     font-size: 13px;
@@ -4047,9 +3634,6 @@ body {
     word-break: break-word;
 }
 
-/* =========================================================
-   ACTION BUTTONS
-   ========================================================= */
 .status-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -4078,99 +3662,197 @@ body {
 }
 
 /* =========================================================
-   STATUS BAR CLICKABLE (di Home)
-   ========================================================= */
-.status-bar-clickable {
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-}
-
-.status-bar-clickable:active {
-    transform: scale(0.99);
-    border-color: var(--accent-orange);
-    box-shadow: var(--shadow-glow);
-}
-
-.status-tap-hint {
-    font-size: 9px;
-    color: var(--accent-orange);
-    margin-top: 2px;
-    opacity: 0.8;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-}
-
-/* =========================================================
-   RESPONSIVE — HP KECIL
+   RESPONSIVE — HP KECIL (max 360px)
    ========================================================= */
 @media (max-width: 360px) {
+    .clock-time { font-size: 40px; }
+    .stat-value { font-size: 13px; }
+    .login-logo { font-size: 64px; }
+    .login-title { font-size: 22px; }
+    .pin-key { font-size: 20px; }
+    .home-card { padding: 14px 16px; }
+    .home-card-icon { font-size: 26px; }
+    .home-card-title { font-size: 14px; }
+    .home-card-subtitle { font-size: 11px; }
+    .bubble { font-size: 13px; }
+    .sidebar { width: 240px; }
+    .master-shift-content { padding: 12px 14px 30px; gap: 12px; }
+    .filter-tab { padding: 8px 12px; font-size: 12px; }
+    .shift-row { padding: 10px 12px; gap: 8px; }
+    .shift-name { font-size: 13px; }
+    .shift-badge { font-size: 10px; padding: 3px 8px; }
+    .modal-content { max-height: 90vh; }
+    .modal-header { padding: 14px 16px; }
+    .modal-body { padding: 12px 16px 20px; }
+    .personil-item { padding: 10px 12px; gap: 8px; }
+    .personil-item-name { font-size: 13px; }
+    
+    .rak-list-content,
+    .spd-list-content,
+    .top-minus-content,
+    .rak-detail-content,
     .status-content {
         padding: 12px 14px 30px;
         gap: 12px;
     }
-    .status-big-card {
-        padding: 20px 16px;
-    }
-    .status-big-emoji {
-        font-size: 44px;
-    }
-    .status-big-label {
-        font-size: 17px;
-    }
-    .status-big-persen {
-        font-size: 34px;
-    }
-    .status-metric-card {
-        padding: 12px 10px;
-    }
-    .status-metric-value {
-        font-size: 13px;
-    }
-    .status-rekomendasi-text {
-        font-size: 12px;
-    }
-    .status-action-btn {
-        padding: 12px 8px;
-        font-size: 12px;
-    }
+    
+    .spd-summary-total { font-size: 20px; }
+    .top-summary-total { font-size: 20px; }
+    
+    .rak-detail-stat { padding: 10px 4px; }
+    .rak-detail-stat-value { font-size: 10px; }
+    .rak-detail-stat-label { font-size: 7px; }
+    
+    .status-big-card { padding: 20px 16px; }
+    .status-big-emoji { font-size: 44px; }
+    .status-big-label { font-size: 17px; }
+    .status-big-persen { font-size: 28px; }
+    .status-metric-card { padding: 12px 8px; }
+    .status-metric-value { font-size: 12px; }
+    .status-rekomendasi-text { font-size: 12px; }
+    .status-action-btn { padding: 12px 8px; font-size: 11px; }
+    
+    .top-item-title { font-size: 13px; }
+    .top-item-nominal { font-size: 12px; }
+    .top-item-meta { font-size: 10px; gap: 8px; }
+    
+    .rak-detail-item-plu { font-size: 13px; }
+    .rak-detail-item-name { font-size: 11px; }
+    .rak-detail-item-footer { font-size: 10px; gap: 8px; }
 }
 
 /* =========================================================
-   RESPONSIVE — HP BESAR
+   RESPONSIVE — HP BESAR (min 428px)
    ========================================================= */
 @media (min-width: 428px) {
+    .clock-time { font-size: 56px; }
+    .stat-value { font-size: 17px; }
+    .home-card { padding: 20px 24px; }
+    .home-card-icon { font-size: 36px; }
+    .bubble { font-size: 15px; }
+    .master-shift-content { padding: 20px 24px 50px; }
+    .filter-tab { padding: 11px 18px; font-size: 14px; }
+    .shift-row { padding: 14px 18px; }
+    .shift-name { font-size: 15px; }
+    
+    .rak-list-content,
+    .spd-list-content,
+    .top-minus-content,
+    .rak-detail-content,
     .status-content {
         padding: 20px 24px 50px;
     }
-    .status-big-emoji {
-        font-size: 64px;
-    }
-    .status-big-persen {
-        font-size: 48px;
-    }
-    .status-metric-value {
-        font-size: 16px;
-    }
-    .status-rekomendasi-text {
-        font-size: 14px;
-    }
+    
+    .spd-summary-total { font-size: 32px; }
+    .top-summary-total { font-size: 32px; }
+    .top-item-title { font-size: 16px; }
+    .spd-item-spd { font-size: 16px; }
+    
+    .status-big-emoji { font-size: 64px; }
+    .status-big-persen { font-size: 48px; }
+    .status-metric-value { font-size: 15px; }
+    .status-rekomendasi-text { font-size: 14px; }
+    
+    .rak-detail-stat-value { font-size: 14px; }
+    .rak-detail-item-plu { font-size: 15px; }
+    .rak-detail-item-name { font-size: 13px; }
 }
 
 /* =========================================================
-   RESPONSIVE — TABLET
+   RESPONSIVE — TABLET (min 600px)
    ========================================================= */
 @media (min-width: 600px) {
+    .home-content,
+    .settings-content,
+    .chat-messages,
+    .chat-input-area,
+    .master-shift-content,
+    .rak-list-content,
+    .spd-list-content,
+    .top-minus-content,
+    .rak-detail-content,
     .status-content {
         max-width: 700px;
         margin: 0 auto;
         width: 100%;
     }
+
+    .modal-content {
+        max-width: 600px;
+        border-radius: var(--radius-xl);
+        border-bottom: 1px solid var(--border-color);
+        max-height: 80vh;
+    }
+
+    .modal-overlay {
+        align-items: center;
+        padding: 20px;
+    }
+
+    .mini-stats { gap: 10px; }
+    .stat-value { font-size: 20px; }
+    
     .status-metrics {
         grid-template-columns: repeat(4, 1fr);
     }
 }
 
 /* =========================================================
-   END OF STYLE v2.0
+   SAFE AREA — HP dengan notch
+   ========================================================= */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .chat-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+    .modal-body {
+        padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    }
+}
+
+/* =========================================================
+   SCROLLBAR GLOBAL
+   ========================================================= */
+::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-orange);
+}
+
+/* =========================================================
+   NO SELECT
+   ========================================================= */
+.home-card,
+.theme-toggle,
+.pin-key,
+.hamburger-btn,
+.chat-send,
+.sidebar-item,
+.settings-btn,
+.back-btn,
+.screen-header-action,
+.stat-clickable,
+.status-bar-clickable,
+.spd-period-tab,
+.spd-sort-btn,
+.top-subtab,
+.rak-detail-tab,
+.status-action-btn {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* =========================================================
+   END OF STYLE v2.1
    ========================================================= */
