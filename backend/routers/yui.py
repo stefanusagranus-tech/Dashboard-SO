@@ -626,6 +626,7 @@ class TopItemsExtendedRequest(BaseModel):
     limit: Optional[int] = Field(None, description="None = semua")
     search: str = Field("", description="Cari by PLU atau nama")
     order_by: str = Field("nominal_desc", description="'nominal_desc' | 'nominal_asc' | 'tanggal_desc' | 'tanggal_asc'")
+    sign: str = Field("minus", description="'minus' | 'plus' | 'all'")  # ✅ NEW
 
 
 @router.post("/top-items-extended")
@@ -655,6 +656,7 @@ async def yui_top_items_extended_endpoint(request: Request, req: TopItemsExtende
             limit=req.limit,
             search=req.search,
             order_by=req.order_by,
+            sign=req.sign,   # ✅ NEW
         )
 
         if not _hasil.get("success"):

@@ -2451,6 +2451,7 @@ let topPeriodCurrent = "bulan_ini";
 let topSortValue = "tanggal_desc";
 let topTabCurrent = "rak";
 let topSearchQuery = "";
+let topSignCurrent = "minus";   // ✅ NEW: "minus" | "plus" | "all"
 
 
 // =========================================================
@@ -2516,6 +2517,13 @@ function setTopTab(tab) {
         else searchWrapper.classList.add("hidden");
     }
 
+    // ✅ NEW: Show/hide filter sign (cuma di tab Item)
+    const filterSign = document.getElementById("topFilterSign");
+    if (filterSign) {
+        if (tab === "item") filterSign.classList.remove("hidden");
+        else filterSign.classList.add("hidden");
+    }
+
     // Reset search
     topSearchQuery = "";
     const searchInput = document.getElementById("topSearchInput");
@@ -2526,6 +2534,20 @@ function setTopTab(tab) {
     loadTopMinus();
 }
 
+// =========================================================
+// ✅ NEW: Set Sign (Minus / Plus / Semua)
+// =========================================================
+function setTopSign(sign) {
+    console.log("[Top] Sign:", sign);
+    topSignCurrent = sign;
+
+    document.querySelectorAll(".top-filter-btn").forEach(btn => {
+        const isActive = btn.getAttribute("data-sign") === sign;
+        btn.classList.toggle("active", isActive);
+    });
+
+    loadTopMinus();
+}
 
 // =========================================================
 // TOP MINUS — Set Sort
@@ -2587,9 +2609,18 @@ async function loadTopMinus() {
     // Update summary title
     const summaryTitle = document.getElementById("topSummaryTitle");
     if (summaryTitle) {
-        summaryTitle.textContent = topTabCurrent === "rak" 
-            ? "💰 TOTAL MINUS RAK" 
-            : "💰 TOTAL MINUS ITEM";
+        if (topTabCurrent === "rak") {
+            summaryTitle.textContent = "💰 TOTAL MINUS RAK";
+        } else {
+            // Item — beda berdasarkan sign
+            if (topSignCurrent === "minus") {
+                summaryTitle.textContent = "💰 TOTAL MINUS ITEM";
+            } else if (topSignCurrent === "plus") {
+                summaryTitle.textContent = "💰 TOTAL PLUS ITEM";
+            } else {
+                summaryTitle.textContent = "💰 TOTAL ADJUST ITEM";
+            }
+        }
     }
 
     try {
@@ -2612,7 +2643,8 @@ async function loadTopMinus() {
             url = `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
             body.limit = null;  // semua
             body.search = topSearchQuery || "";
-            body.order_by = topSortValue;   // ✅ pakai state actual
+            body.order_by = topSortValue;
+            body.sign = topSignCurrent;   // ✅ NEW: minus/plus/all
         }
 
         console.log("[Top] Fetch:", url, body);

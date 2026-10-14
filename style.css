@@ -3017,6 +3017,46 @@ body {
     box-shadow: 0 0 16px rgba(255, 140, 66, 0.4);
 }
 
+/* ✅ NEW: Filter Minus / Plus / Semua */
+.top-filter-sign {
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.top-filter-sign.hidden {
+    display: none;
+}
+
+.top-filter-btn {
+    flex: 1;
+    padding: 9px 12px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s;
+    white-space: nowrap;
+}
+
+.top-filter-btn:active {
+    transform: scale(0.97);
+}
+
+.top-filter-btn.active {
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-pumpkin));
+    color: #fff;
+    box-shadow: 0 0 12px rgba(255, 140, 66, 0.4);
+}
+
 .top-summary-card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);

@@ -514,6 +514,19 @@
                 📦 Top Item
             </button>
         </div>
+        
+        <!-- ✅ NEW: FILTER MINUS / PLUS / SEMUA (cuma muncul di tab Item) -->
+        <div class="top-filter-sign hidden" id="topFilterSign">
+            <button class="top-filter-btn active" data-sign="minus" onclick="setTopSign('minus')">
+                📉 Minus
+            </button>
+            <button class="top-filter-btn" data-sign="plus" onclick="setTopSign('plus')">
+                📈 Plus
+            </button>
+            <button class="top-filter-btn" data-sign="all" onclick="setTopSign('all')">
+                📊 Semua
+            </button>
+        </div>
 
         <!-- SORT BUTTONS (sama kaya SPD) -->
         <div class="spd-sort-wrapper">

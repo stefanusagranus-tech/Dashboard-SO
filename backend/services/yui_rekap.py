@@ -712,6 +712,7 @@ def get_items_by_rak_extended(rak_id, mode="bulan_ini", tgl_start=None, tgl_end=
 def get_top_items_extended(
     mode="bulan_ini", tgl_start=None, tgl_end=None,
     limit=None, search="", order_by="nominal_desc",
+    sign="minus",   # ✅ NEW: "minus" | "plus" | "all"
 ):
     """Top items extended — search + sort."""
     try:
@@ -732,8 +733,14 @@ def get_top_items_extended(
             .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
             .gte("so_date", _start_str)
             .lte("so_date", _end_str)
-            .lt("nominal_adjust", 0)  # default minus
         )
+
+# ✅ Filter berdasarkan sign
+if sign == "minus":
+    _q = _q.lt("nominal_adjust", 0)
+elif sign == "plus":
+    _q = _q.gt("nominal_adjust", 0)
+# "all" → nggak ada filter (semua item)
 
         _res = _q.limit(5000).execute()
         _items = _res.data if _res.data else []
