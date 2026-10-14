@@ -2378,6 +2378,18 @@ function formatMessage(text) {
     return html;
 }
 
+function cleanHtmlEntities(str) {
+    if (!str) return "";
+    return str
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&nbsp;/g, " ")
+        .replace(/&#x27;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">");
+}
+
 function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
@@ -2759,7 +2771,7 @@ function renderTopItemList(container, data) {
         const tglShort = item.so_date ? formatTanggalShort(item.so_date) : "-";
         const pic = item.pic || "-";
         const plu = item.plu || "-";
-        const nama = item.nama_produk || "(tanpa nama)";
+        const nama = cleanHtmlEntities(item.nama_produk) || "(tanpa nama)";
 
         const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
 
@@ -3062,7 +3074,7 @@ function renderRakDetailList() {
         const nominalText = formatRupiahFull(nominal);
         const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
         const plu = item.plu || "-";
-        const nama = item.nama_produk || "(tanpa nama)";
+        const nama = cleanHtmlEntities(item.nama_produk) || "(tanpa nama)";
 
         // Icon minus/plus
         const icon = nominal < 0 ? "📉" : nominal > 0 ? "📈" : "➖";

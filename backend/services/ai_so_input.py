@@ -325,6 +325,10 @@ def _extract_from_dataframe(df, context=None):
             _plu = str(_row[_col_plu]).strip() if _col_plu else ""
             _nama = str(_row[_col_nama]).strip()[:120] if _col_nama else ""
             _rak = str(_row[_col_rak]).strip().upper() if _col_rak else _ctx.get("rak_id", "")
+            
+            # ✅ Clean HTML entities
+            _plu = _plu.replace("&#39;", "'").replace("&amp;", "&").replace("&quot;", '"').replace("&nbsp;", " ")
+            _nama = _nama.replace("&#39;", "'").replace("&amp;", "&").replace("&quot;", '"').replace("&nbsp;", " ")
 
             # Validasi PLU struktural — minimal 3 digit angka
             if not _plu or _plu.lower() in ("nan", "none", "plu", "no", ""):
