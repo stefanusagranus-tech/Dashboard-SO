@@ -520,3 +520,149 @@ async def yui_spd_list_endpoint(request: Request, req: SpdListRequest):
         raise
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+# =========================================================
+# GET TOP RAK
+# =========================================================
+class TopRakRequest(BaseModel):
+    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
+    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
+    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+    limit: int = Field(500, ge=1, le=1000)
+
+
+@router.post("/top-rak")
+@limiter.limit("30/minute")
+async def yui_top_rak_endpoint(request: Request, req: TopRakRequest):
+    """Ranking rak by nominal adjust (minus terbesar)."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+        from services.yui_rekap import get_top_rak
+
+        _tgl_start = None
+        _tgl_end = None
+
+        if req.mode == "custom":
+            if not req.tgl_start or not req.tgl_end:
+                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
+            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
+
+        _hasil = get_top_rak(
+            mode=req.mode,
+            tgl_start=_tgl_start,
+            tgl_end=_tgl_end,
+            limit=req.limit,
+        )
+
+        if not _hasil.get("success"):
+            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load top rak"))
+
+        return _hasil
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# GET ITEMS BY RAK — DETAIL
+# =========================================================
+class ItemsByRakRequest(BaseModel):
+    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
+    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
+    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+
+
+@router.post("/items-by-rak/{rak_id}")
+@limiter.limit("60/minute")
+async def yui_items_by_rak_detail_endpoint(request: Request, rak_id: str, req: ItemsByRakRequest):
+    """Detail item di rak tertentu (minus + plus)."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+        from services.yui_rekap import get_items_by_rak_extended
+
+        _tgl_start = None
+        _tgl_end = None
+
+        if req.mode == "custom":
+            if not req.tgl_start or not req.tgl_end:
+                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
+            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
+
+        _hasil = get_items_by_rak_extended(
+            rak_id=rak_id,
+            mode=req.mode,
+            tgl_start=_tgl_start,
+            tgl_end=_tgl_end,
+        )
+
+        if not _hasil.get("success"):
+            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load items"))
+
+        return _hasil
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# GET TOP ITEMS — Extended (search + sort)
+# =========================================================
+class TopItemsExtendedRequest(BaseModel):
+    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
+    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
+    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+    limit: Optional[int] = Field(None, description="None = semua")
+    search: str = Field("", description="Cari by PLU atau nama")
+    order_by: str = Field("nominal_desc", description="'nominal_desc' | 'nominal_asc' | 'tanggal_desc' | 'tanggal_asc'")
+
+
+@router.post("/top-items-extended")
+@limiter.limit("30/minute")
+async def yui_top_items_extended_endpoint(request: Request, req: TopItemsExtendedRequest):
+    """Top items extended — search + sort."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+        from services.yui_rekap import get_top_items_extended
+
+        _tgl_start = None
+        _tgl_end = None
+
+        if req.mode == "custom":
+            if not req.tgl_start or not req.tgl_end:
+                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
+            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
+
+        _hasil = get_top_items_extended(
+            mode=req.mode,
+            tgl_start=_tgl_start,
+            tgl_end=_tgl_end,
+            limit=req.limit,
+            search=req.search,
+            order_by=req.order_by,
+        )
+
+        if not _hasil.get("success"):
+            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load items"))
+
+        return _hasil
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])

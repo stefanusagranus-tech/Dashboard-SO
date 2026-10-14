@@ -92,10 +92,11 @@
                     <div class="stat-label">SPD</div>
                     <div class="stat-tap-hint">Tap untuk detail →</div>
                 </div>
-                <div class="stat">
+                <div class="stat stat-clickable" onclick="goToTopMinusScreen()">
                     <div class="stat-icon">📉</div>
                     <div class="stat-value" id="statNominal">--</div>
                     <div class="stat-label">NOMINAL ADJ</div>
+                    <div class="stat-tap-hint">Tap untuk detail →</div>
                 </div>
             </div>
 
@@ -387,6 +388,180 @@
 
     </div>
 </div>
+
+<!-- ========================================================= -->
+<!-- TOP MINUS SCREEN -->
+<!-- ========================================================= -->
+<div id="topMinusScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Top Minus — Nominal Adjust</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+
+    <div class="top-minus-content">
+
+        <!-- PERIODE TABS -->
+        <div class="spd-period-tabs">
+            <button class="spd-period-tab active" data-period="bulan_ini" onclick="setTopPeriod('bulan_ini')">
+                📅 Bulan Ini
+            </button>
+            <button class="spd-period-tab" data-period="bulan_lalu" onclick="setTopPeriod('bulan_lalu')">
+                🗓️ Bulan Lalu
+            </button>
+            <button class="spd-period-tab" data-period="custom" onclick="setTopPeriod('custom')">
+                🔍 Custom
+            </button>
+        </div>
+
+        <!-- CUSTOM DATE (hidden default) -->
+        <div class="custom-date-row hidden" id="topCustomDateRow">
+            <input type="date" id="topCustomStart" class="date-input" onchange="loadTopMinus()">
+            <span class="date-separator">s/d</span>
+            <input type="date" id="topCustomEnd" class="date-input" onchange="loadTopMinus()">
+        </div>
+
+        <!-- SUBTAB: RAK / ITEM -->
+        <div class="top-subtabs">
+            <button class="top-subtab active" data-tab="rak" onclick="setTopTab('rak')">
+                🏪 Top Rak
+            </button>
+            <button class="top-subtab" data-tab="item" onclick="setTopTab('item')">
+                📦 Top Item
+            </button>
+        </div>
+
+        <!-- SORT BUTTONS (sama kaya SPD) -->
+        <div class="spd-sort-wrapper">
+            <span class="spd-sort-label">🔀 Urutkan:</span>
+            <div class="spd-sort-buttons">
+                <button class="spd-sort-btn active" data-sort="tanggal_desc" onclick="setTopSort('tanggal_desc')">
+                    📅 Terbaru
+                </button>
+                <button class="spd-sort-btn" data-sort="tanggal_asc" onclick="setTopSort('tanggal_asc')">
+                    📅 Lama
+                </button>
+                <button class="spd-sort-btn" data-sort="nominal_desc" onclick="setTopSort('nominal_desc')">
+                    💰 ↓
+                </button>
+                <button class="spd-sort-btn" data-sort="nominal_asc" onclick="setTopSort('nominal_asc')">
+                    💰 ↑
+                </button>
+            </div>
+        </div>
+
+        <!-- SEARCH (cuma muncul di tab Item) -->
+        <div class="rak-search-wrapper hidden" id="topSearchWrapper">
+            <span class="rak-search-icon">🔍</span>
+            <input
+                type="text"
+                id="topSearchInput"
+                class="rak-search-input"
+                placeholder="Cari PLU atau nama item..."
+                oninput="searchTopItems()"
+            >
+            <button class="rak-search-clear hidden" id="topSearchClear" onclick="clearTopSearch()">✕</button>
+        </div>
+
+        <!-- SUMMARY CARD -->
+        <div class="top-summary-card" id="topSummaryCard">
+            <div class="top-summary-title" id="topSummaryTitle">💰 TOTAL MINUS</div>
+            <div class="top-summary-total" id="topSummaryTotal">--</div>
+            <div class="top-summary-meta" id="topSummaryMeta">Memuat...</div>
+        </div>
+
+        <!-- LIST -->
+        <div id="topList" class="top-list">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Memuat data...</p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- RAK DETAIL SCREEN -->
+<!-- ========================================================= -->
+<div id="rakDetailScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToTopMinusScreen()">←</button>
+        <div class="screen-title" id="rakDetailTitle">Detail Rak</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+
+    <div class="rak-detail-content">
+
+        <!-- INFO CARD -->
+        <div class="rak-detail-info" id="rakDetailInfo">
+            <div class="rak-detail-info-row">
+                <span class="rak-detail-info-label">🏪 Rak</span>
+                <span class="rak-detail-info-value" id="rakDetailInfoRak">--</span>
+            </div>
+            <div class="rak-detail-info-row">
+                <span class="rak-detail-info-label">📅 Tanggal SO</span>
+                <span class="rak-detail-info-value" id="rakDetailInfoTgl">--</span>
+            </div>
+            <div class="rak-detail-info-row">
+                <span class="rak-detail-info-label">👤 PIC</span>
+                <span class="rak-detail-info-value" id="rakDetailInfoPic">--</span>
+            </div>
+        </div>
+
+        <!-- SUMMARY STATS -->
+        <div class="rak-detail-stats" id="rakDetailStats">
+            <div class="rak-detail-stat rak-detail-stat-minus">
+                <div class="rak-detail-stat-value" id="rakDetailStatMinus">--</div>
+                <div class="rak-detail-stat-label">Total Minus</div>
+            </div>
+            <div class="rak-detail-stat rak-detail-stat-plus">
+                <div class="rak-detail-stat-value" id="rakDetailStatPlus">--</div>
+                <div class="rak-detail-stat-label">Total Plus</div>
+            </div>
+            <div class="rak-detail-stat rak-detail-stat-net">
+                <div class="rak-detail-stat-value" id="rakDetailStatNet">--</div>
+                <div class="rak-detail-stat-label">Selisih Net</div>
+            </div>
+        </div>
+
+        <!-- FILTER TABS: MINUS / PLUS / SEMUA -->
+        <div class="rak-detail-tabs">
+            <button class="rak-detail-tab active" data-filter="semua" onclick="setRakDetailFilter('semua')">
+                📋 Semua
+            </button>
+            <button class="rak-detail-tab" data-filter="minus" onclick="setRakDetailFilter('minus')">
+                📉 Minus
+            </button>
+            <button class="rak-detail-tab" data-filter="plus" onclick="setRakDetailFilter('plus')">
+                📈 Plus
+            </button>
+        </div>
+
+        <!-- SEARCH -->
+        <div class="rak-search-wrapper">
+            <span class="rak-search-icon">🔍</span>
+            <input
+                type="text"
+                id="rakDetailSearchInput"
+                class="rak-search-input"
+                placeholder="Cari PLU atau nama item..."
+                oninput="filterRakDetail()"
+            >
+            <button class="rak-search-clear hidden" id="rakDetailSearchClear" onclick="clearRakDetailSearch()">✕</button>
+        </div>
+
+        <!-- ITEM LIST -->
+        <div id="rakDetailList" class="rak-detail-list">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Memuat item...</p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
 
 <!-- ========================================================= -->
 <!-- MODAL — KELOLA PERSONIL -->

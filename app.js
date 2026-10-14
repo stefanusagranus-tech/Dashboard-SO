@@ -1323,7 +1323,7 @@ function getSpdDateRange() {
 // =========================================================
 // SPD LIST — Load
 // =========================================================
-async function loadSpdList() {
+async function dList() {
     const container = document.getElementById("spdList");
     if (!container) return;
 
@@ -2432,6 +2432,659 @@ setInterval(() => {
     }
 }, 5 * 60 * 1000);
 
+// =========================================================
+// TOP MINUS SCREEN v1.6
+// =========================================================
+let topData = [];
+let topPeriodCurrent = "bulan_ini";
+let topSortValue = "nominal_desc";
+let topTabCurrent = "rak";
+let topSearchQuery = "";
+
+
+// =========================================================
+// TOP MINUS — Navigate
+// =========================================================
+function goToTopMinusScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("topMinusScreen");
+    loadTopMinus();
+}
+
+
+// =========================================================
+// TOP MINUS — Set Period
+// =========================================================
+function setTopPeriod(period) {
+    console.log("[Top] Period:", period);
+    topPeriodCurrent = period;
+
+    document.querySelectorAll("#topMinusScreen .spd-period-tab").forEach(tab => {
+        const isActive = tab.getAttribute("data-period") === period;
+        tab.classList.toggle("active", isActive);
+    });
+
+    const customRow = document.getElementById("topCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("topCustomStart");
+            const e = document.getElementById("topCustomEnd");
+            const today = new Date();
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const todayStr = today.toISOString().slice(0, 10);
+            const startStr = startOfMonth.toISOString().slice(0, 10);
+            if (s && !s.value) s.value = startStr;
+            if (e && !e.value) e.value = todayStr;
+        } else {
+            customRow.classList.add("hidden");
+        }
+    }
+
+    loadTopMinus();
+}
+
+
+// =========================================================
+// TOP MINUS — Set Tab (Rak / Item)
+// =========================================================
+function setTopTab(tab) {
+    console.log("[Top] Tab:", tab);
+    topTabCurrent = tab;
+
+    document.querySelectorAll(".top-subtab").forEach(t => {
+        const isActive = t.getAttribute("data-tab") === tab;
+        t.classList.toggle("active", isActive);
+    });
+
+    // Show/hide search (cuma di tab Item)
+    const searchWrapper = document.getElementById("topSearchWrapper");
+    if (searchWrapper) {
+        if (tab === "item") searchWrapper.classList.remove("hidden");
+        else searchWrapper.classList.add("hidden");
+    }
+
+    // Reset search
+    topSearchQuery = "";
+    const searchInput = document.getElementById("topSearchInput");
+    if (searchInput) searchInput.value = "";
+    const clearBtn = document.getElementById("topSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+
+    loadTopMinus();
+}
+
+
+// =========================================================
+// TOP MINUS — Set Sort
+// =========================================================
+function setTopSort(sortValue) {
+    console.log("[Top] Sort:", sortValue);
+    topSortValue = sortValue;
+
+    document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => {
+        const isActive = btn.getAttribute("data-sort") === sortValue;
+        btn.classList.toggle("active", isActive);
+    });
+
+    // Reload from data yang udah ada (gak perlu fetch ulang)
+    renderTopList();
+}
+
+
+// =========================================================
+// TOP MINUS — Date Range Helper
+// =========================================================
+function getTopDateRange() {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (topPeriodCurrent === "bulan_ini") {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (topPeriodCurrent === "bulan_lalu") {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (topPeriodCurrent === "custom") {
+        const s = document.getElementById("topCustomStart");
+        const e = document.getElementById("topCustomEnd");
+        if (s && s.value) start = new Date(s.value);
+        if (e && e.value) end = new Date(e.value);
+    }
+
+    return { start, end };
+}
+
+
+// =========================================================
+// TOP MINUS — Load Data
+// =========================================================
+async function loadTopMinus() {
+    const container = document.getElementById("topList");
+    if (!container) return;
+
+    // Loading
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat data...</p>
+        </div>
+    `;
+
+    // Update summary title
+    const summaryTitle = document.getElementById("topSummaryTitle");
+    if (summaryTitle) {
+        summaryTitle.textContent = topTabCurrent === "rak" 
+            ? "💰 TOTAL MINUS RAK" 
+            : "💰 TOTAL MINUS ITEM";
+    }
+
+    try {
+        const _key = getApiKey();
+        const range = getTopDateRange();
+        const startStr = range.start.toISOString().slice(0, 10);
+        const endStr = range.end.toISOString().slice(0, 10);
+
+        const body = { mode: topPeriodCurrent };
+        if (topPeriodCurrent === "custom") {
+            body.tgl_start = startStr;
+            body.tgl_end = endStr;
+        }
+
+        let url = "";
+        if (topTabCurrent === "rak") {
+            url = `${CONFIG.BACKEND_URL}/api/yui/top-rak`;
+            body.limit = 500;
+        } else {
+            url = `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
+            body.limit = null;  // semua
+            body.search = topSearchQuery || "";
+            body.order_by = "nominal_asc";
+        }
+
+        console.log("[Top] Fetch:", url, body);
+
+        const resp = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Gagal load data");
+        }
+
+        // Simpan data
+        if (topTabCurrent === "rak") {
+            topData = data.list_rak || [];
+        } else {
+            topData = data.items || [];
+        }
+
+        // Update summary
+        renderTopSummary(data);
+
+        // Render list
+        renderTopList();
+
+    } catch (err) {
+        console.error("[Top] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load data: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
+    }
+}
+
+
+// =========================================================
+// TOP MINUS — Render Summary
+// =========================================================
+function renderTopSummary(data) {
+    const elTotal = document.getElementById("topSummaryTotal");
+    const elMeta = document.getElementById("topSummaryMeta");
+
+    let totalNominal = 0;
+    let totalCount = 0;
+    let periode = data.periode || "—";
+
+    if (topTabCurrent === "rak") {
+        totalNominal = data.total_nominal || 0;
+        totalCount = data.total_rak || 0;
+    } else {
+        totalNominal = data.total_nominal || 0;
+        totalCount = data.total_items || 0;
+    }
+
+    if (elTotal) elTotal.textContent = formatRupiahFull(totalNominal);
+    if (elMeta) elMeta.textContent = `${totalCount} ${topTabCurrent === "rak" ? "rak" : "item"} • ${periode}`;
+}
+
+
+// =========================================================
+// TOP MINUS — Render List
+// =========================================================
+function renderTopList() {
+    const container = document.getElementById("topList");
+    if (!container) return;
+
+    if (!topData || topData.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">💰</span>
+                <p>Belum ada data di periode ini</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Sort data
+    const sorted = sortTopData([...topData], topSortValue);
+
+    if (topTabCurrent === "rak") {
+        renderTopRakList(container, sorted);
+    } else {
+        renderTopItemList(container, sorted);
+    }
+}
+
+
+// =========================================================
+// TOP MINUS — Render Top Rak
+// =========================================================
+function renderTopRakList(container, data) {
+    const html = data.map((rak, idx) => {
+        const rank = idx + 1;
+        const nominal = rak.nominal_adjust || 0;
+        const nominalText = formatRupiahFull(nominal);
+        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+        const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
+        const pic = rak.pic || "-";
+
+        const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+
+        return `
+            <div class="top-item-card" onclick="openRakDetail('${escapeHtml(rak.rak_id)}')">
+                <div class="top-item-header">
+                    <span class="top-item-rank">${medal}</span>
+                    <span class="top-item-title">${escapeHtml(rak.rak_id)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
+                </div>
+                <div class="top-item-meta">
+                    <span>📅 ${tglShort}</span>
+                    <span>👤 ${escapeHtml(pic)}</span>
+                    <span>📦 ${rak.total_item || 0} item</span>
+                </div>
+                <div class="top-item-hint">Tap untuk detail item →</div>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+
+// =========================================================
+// TOP MINUS — Render Top Item
+// =========================================================
+function renderTopItemList(container, data) {
+    if (data.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">🔍</span>
+                <p>Tidak ada item yang cocok</p>
+            </div>
+        `;
+        return;
+    }
+
+    const html = data.map((item, idx) => {
+        const rank = idx + 1;
+        const nominal = item.nominal_adjust || 0;
+        const nominalText = formatRupiahFull(nominal);
+        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+        const tglShort = item.so_date ? formatTanggalShort(item.so_date) : "-";
+        const pic = item.pic || "-";
+        const plu = item.plu || "-";
+        const nama = item.nama_produk || "(tanpa nama)";
+
+        const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+
+        return `
+            <div class="top-item-card top-item-card-item">
+                <div class="top-item-header">
+                    <span class="top-item-rank">${medal}</span>
+                    <span class="top-item-title">${escapeHtml(plu)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
+                </div>
+                <div class="top-item-name">${escapeHtml(nama)}</div>
+                <div class="top-item-meta">
+                    <span>📅 ${tglShort}</span>
+                    <span>🏪 ${escapeHtml(item.rak_id || "-")}</span>
+                    <span>👤 ${escapeHtml(pic)}</span>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+
+// =========================================================
+// TOP MINUS — Sort Data
+// =========================================================
+function sortTopData(data, sortBy) {
+    if (sortBy === "nominal_desc") {
+        // Minus terbesar dulu (paling negatif) → plus terbesar
+        data.sort((a, b) => (a.nominal_adjust || 0) - (b.nominal_adjust || 0));
+    } else if (sortBy === "nominal_asc") {
+        // Plus terbesar dulu → minus terbesar
+        data.sort((a, b) => (b.nominal_adjust || 0) - (a.nominal_adjust || 0));
+    } else if (sortBy === "tanggal_desc") {
+        // Tanggal terbaru dulu
+        data.sort((a, b) => {
+            const ta = a.tgl_so || a.so_date || "";
+            const tb = b.tgl_so || b.so_date || "";
+            return tb.localeCompare(ta);
+        });
+    } else if (sortBy === "tanggal_asc") {
+        // Tanggal lama dulu
+        data.sort((a, b) => {
+            const ta = a.tgl_so || a.so_date || "";
+            const tb = b.tgl_so || b.so_date || "";
+            return ta.localeCompare(tb);
+        });
+    }
+
+    return data;
+}
+
+
+// =========================================================
+// TOP MINUS — Search (cuma tab Item)
+// =========================================================
+let topSearchTimeout = null;
+
+function searchTopItems() {
+    const input = document.getElementById("topSearchInput");
+    const clearBtn = document.getElementById("topSearchClear");
+    if (!input) return;
+
+    topSearchQuery = input.value.trim();
+
+    if (clearBtn) {
+        if (topSearchQuery) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+
+    // Debounce 500ms
+    clearTimeout(topSearchTimeout);
+    topSearchTimeout = setTimeout(() => {
+        loadTopMinus();
+    }, 500);
+}
+
+function clearTopSearch() {
+    const input = document.getElementById("topSearchInput");
+    if (input) input.value = "";
+    topSearchQuery = "";
+    const clearBtn = document.getElementById("topSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    loadTopMinus();
+}
+// =========================================================
+// RAK DETAIL SCREEN v1.6
+// =========================================================
+let rakDetailData = [];
+let rakDetailCurrentRak = null;
+let rakDetailFilter = "semua";
+let rakDetailSearchQuery = "";
+
+
+// =========================================================
+// RAK DETAIL — Buka
+// =========================================================
+async function openRakDetail(rakId) {
+    console.log("[RakDetail] Open:", rakId);
+    
+    if (!rakId) return;
+    
+    rakDetailCurrentRak = rakId;
+    rakDetailFilter = "semua";
+    rakDetailSearchQuery = "";
+    rakDetailData = [];
+
+    // Update title
+    const titleEl = document.getElementById("rakDetailTitle");
+    if (titleEl) titleEl.textContent = `Detail ${rakId}`;
+
+    // Reset tabs
+    document.querySelectorAll(".rak-detail-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-filter") === "semua");
+    });
+
+    // Reset search
+    const searchInput = document.getElementById("rakDetailSearchInput");
+    if (searchInput) searchInput.value = "";
+    const clearBtn = document.getElementById("rakDetailSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+
+    // Tampilkan halaman
+    showScreen("rakDetailScreen");
+
+    // Load data
+    await loadRakDetail(rakId);
+}
+
+
+// =========================================================
+// RAK DETAIL — Load Data
+// =========================================================
+async function loadRakDetail(rakId) {
+    const container = document.getElementById("rakDetailList");
+    if (!container) return;
+
+    // Loading
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat item...</p>
+        </div>
+    `;
+
+    try {
+        const _key = getApiKey();
+
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/items-by-rak/${encodeURIComponent(rakId)}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ mode: "bulan_ini" }),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Gagal load data");
+        }
+
+        // Simpan data
+        rakDetailData = data.items || [];
+
+        // Update info
+        renderRakDetailInfo(data);
+
+        // Render list
+        renderRakDetailList();
+
+    } catch (err) {
+        console.error("[RakDetail] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load item: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
+    }
+}
+
+
+// =========================================================
+// RAK DETAIL — Render Info Card
+// =========================================================
+function renderRakDetailInfo(data) {
+    const elRak = document.getElementById("rakDetailInfoRak");
+    const elTgl = document.getElementById("rakDetailInfoTgl");
+    const elPic = document.getElementById("rakDetailInfoPic");
+
+    const elMinus = document.getElementById("rakDetailStatMinus");
+    const elPlus = document.getElementById("rakDetailStatPlus");
+    const elNet = document.getElementById("rakDetailStatNet");
+
+    // Info card
+    if (elRak) elRak.textContent = data.rak_id || "-";
+    if (elTgl) elTgl.textContent = data.tgl_so ? formatTanggalLong(data.tgl_so) : "-";
+    if (elPic) elPic.textContent = data.pic || "-";
+
+    // Stats
+    if (elMinus) elMinus.textContent = formatRupiahFull(data.total_minus || 0);
+    if (elPlus) elPlus.textContent = formatRupiahFull(data.total_plus || 0);
+    if (elNet) elNet.textContent = formatRupiahFull(data.total_nominal || 0);
+}
+
+
+// =========================================================
+// RAK DETAIL — Set Filter (Semua / Minus / Plus)
+// =========================================================
+function setRakDetailFilter(filter) {
+    console.log("[RakDetail] Filter:", filter);
+    rakDetailFilter = filter;
+
+    document.querySelectorAll(".rak-detail-tab").forEach(tab => {
+        const isActive = tab.getAttribute("data-filter") === filter;
+        tab.classList.toggle("active", isActive);
+    });
+
+    renderRakDetailList();
+}
+
+
+// =========================================================
+// RAK DETAIL — Search
+// =========================================================
+function filterRakDetail() {
+    const input = document.getElementById("rakDetailSearchInput");
+    const clearBtn = document.getElementById("rakDetailSearchClear");
+    if (!input) return;
+
+    rakDetailSearchQuery = input.value.trim().toLowerCase();
+
+    if (clearBtn) {
+        if (rakDetailSearchQuery) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+
+    renderRakDetailList();
+}
+
+function clearRakDetailSearch() {
+    const input = document.getElementById("rakDetailSearchInput");
+    if (input) input.value = "";
+    rakDetailSearchQuery = "";
+    const clearBtn = document.getElementById("rakDetailSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    renderRakDetailList();
+}
+
+
+// =========================================================
+// RAK DETAIL — Render List
+// =========================================================
+function renderRakDetailList() {
+    const container = document.getElementById("rakDetailList");
+    if (!container) return;
+
+    let filtered = [...(rakDetailData || [])];
+
+    // Filter minus/plus/semua
+    if (rakDetailFilter === "minus") {
+        filtered = filtered.filter(it => (it.nominal_adjust || 0) < 0);
+    } else if (rakDetailFilter === "plus") {
+        filtered = filtered.filter(it => (it.nominal_adjust || 0) > 0);
+    }
+
+    // Search
+    if (rakDetailSearchQuery) {
+        filtered = filtered.filter(it => {
+            const _plu = (it.plu || "").toLowerCase();
+            const _nama = (it.nama_produk || "").toLowerCase();
+            return _plu.includes(rakDetailSearchQuery) || _nama.includes(rakDetailSearchQuery);
+        });
+    }
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">🔍</span>
+                <p>Tidak ada item yang cocok</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Sort: minus terbesar → plus terbesar
+    filtered.sort((a, b) => (a.nominal_adjust || 0) - (b.nominal_adjust || 0));
+
+    const html = filtered.map((item, idx) => {
+        const rank = idx + 1;
+        const nominal = item.nominal_adjust || 0;
+        const nominalText = formatRupiahFull(nominal);
+        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+        const plu = item.plu || "-";
+        const nama = item.nama_produk || "(tanpa nama)";
+
+        // Icon minus/plus
+        const icon = nominal < 0 ? "📉" : nominal > 0 ? "📈" : "➖";
+
+        return `
+            <div class="rak-detail-item">
+                <div class="rak-detail-item-header">
+                    <span class="rak-detail-item-rank">${rank}</span>
+                    <span class="rak-detail-item-plu">${escapeHtml(plu)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
+                </div>
+                <div class="rak-detail-item-name">${escapeHtml(nama)}</div>
+                <div class="rak-detail-item-footer">
+                    <span>${icon} Selisih: ${item.qty_var || 0} pcs</span>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
 
 // =========================================================
 // BOOT
