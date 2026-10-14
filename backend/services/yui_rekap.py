@@ -734,13 +734,13 @@ def get_top_items_extended(
             .gte("so_date", _start_str)
             .lte("so_date", _end_str)
         )
-
-# ✅ Filter berdasarkan sign
-if sign == "minus":
-    _q = _q.lt("nominal_adjust", 0)
-elif sign == "plus":
-    _q = _q.gt("nominal_adjust", 0)
-# "all" → nggak ada filter (semua item)
+        
+        # ✅ Filter berdasarkan sign
+        if sign == "minus":
+            _q = _q.lt("nominal_adjust", 0)
+        elif sign == "plus":
+            _q = _q.gt("nominal_adjust", 0)
+        # "all" → nggak ada filter (semua item)
 
         _res = _q.limit(5000).execute()
         _items = _res.data if _res.data else []
