@@ -192,33 +192,76 @@ def parse_shift_update(text: str, today=None) -> dict:
     _personil_names = [p["nama"].upper() for p in _personil_list]
 
     # === PRIORITAS 1: MULTI-SHIFT (pagi/siang/malam sekaligus) ===
-    # Format: "Pagi: X, Y. Siang: Z. Malam: W"
-    _multi_patterns = [
-        (r'\bpagi\s*:?\s*([^\n\.]+)', "P7"),
-        (r'\bsiang\s*:?\s*([^\n\.]+)', "S15"),
-        (r'\bmalam\s*:?\s*([^\n\.]+)', "M22"),
-    ]
-
+    # Support format:
+    #   "Pagi: Pandu, Tika. Siang: Reza. Malam: Zaki"
+    #   "pagi pandu tika, siang reza, malam zaki"
+    #   "shift pagi: pandu. shift siang: reza"
+    
     _found_multi = False
-    for _pattern, _kode in _multi_patterns:
-        _matches = re.findall(_pattern, _text_lower)
-        for _names_str in _matches:
-            # Cleanup: buang kata shift lain di akhir
-            _names_str = re.split(r'\b(?:pagi|siang|malam)\b', _names_str)[0]
-            _names = re.split(r'[,\s]+dan\s+|,\s*|\s+dan\s+|\s*\.\s*', _names_str)
-            for _nama in _names:
-                _nama_clean = _nama.strip().upper()
-                _nama_clean = re.sub(r'[^A-Z\s]', '', _nama_clean).strip()
-                # Filter: 2-15 karakter, bukan stopword, bukan kosong
-                if (_nama_clean 
-                    and 2 <= len(_nama_clean) <= 15 
-                    and _nama_clean not in _stopwords
-                    and not any(sw in _nama_clean for sw in ["PAGI", "SIANG", "MALAM"])):
-                    _items.append({
-                        "nama": _nama_clean,
-                        "kode_shift": _kode,
-                        "shift_nama": SHIFT_MAP[_kode],
-                    })
+    
+    # Mapping keyword → kode shift
+    _shift_kw = {
+        "pagi": "P7",
+        "siang": "S15",
+        "malam": "M22",
+    }
+    
+    # Cari posisi setiap keyword shift di text
+    _shift_positions = []
+    for _kw, _kode in _shift_kw.items():
+        # Regex: keyword dengan word boundary
+        for _m in re.finditer(r'\b' + _kw + r'\b', _text_lower):
+            _shift_positions.append({
+                "start": _m.start(),
+                "end": _m.end(),
+                "kode": _kode,
+                "kw": _kw,
+            })
+    
+    # Sort by posisi
+    _shift_positions.sort(key=lambda x: x["start"])
+    
+    # Kalau ada minimal 1 keyword shift → proses
+    if _shift_positions:
+        # Kalau cuma 1 keyword, biarin masuk ke single detection
+        if len(_shift_positions) >= 1:
+            for _idx, _pos in enumerate(_shift_positions):
+                # Ambil teks SETELAH keyword ini sampai keyword berikutnya (atau akhir)
+                _content_start = _pos["end"]
+                if _idx + 1 < len(_shift_positions):
+                    _content_end = _shift_positions[_idx + 1]["start"]
+                else:
+                    _content_end = len(_text_lower)
+    
+                _content = _text_lower[_content_start:_content_end]
+    
+                # Buang karakter ":", ".", ",", "-", "\n", kata "shift", "dan"
+                _content = re.sub(r'^[\s:\.\,\-]+', '', _content)  # buang pemisah di awal
+                _content = re.sub(r'[\s:\.\,\-]+$', '', _content)  # buang pemisah di akhir
+                _content = re.sub(r'\bshift\b', '', _content)      # buang kata "shift"
+    
+                if not _content.strip():
+                    continue
+    
+                # Split nama-nama: koma, "dan", spasi
+                _names = re.split(r'[,\s]+dan\s+|,\s*|\s+dan\s+|\s+', _content)
+    
+                for _nama in _names:
+                    _nama_clean = _nama.strip().upper()
+                    _nama_clean = re.sub(r'[^A-Z\s]', '', _nama_clean).strip()
+    
+                    # Validasi nama
+                    if (_nama_clean
+                        and 2 <= len(_nama_clean) <= 15
+                        and _nama_clean not in _stopwords
+                        and not any(sw in _nama_clean for sw in ["PAGI", "SIANG", "MALAM", "SHIFT"])
+                        and _nama_clean not in [it["nama"] for it in _items]):  # Hindari duplikat
+                        _items.append({
+                            "nama": _nama_clean,
+                            "kode_shift": _pos["kode"],
+                            "shift_nama": SHIFT_MAP[_pos["kode"]],
+                        })
+    
             if _items:
                 _found_multi = True
 
