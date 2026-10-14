@@ -75,7 +75,7 @@
             <div class="clock-greeting" id="clockGreeting">Selamat Datang</div>
         </div>
 
-        <!-- MINI DASHBOARD v1.2 -->
+        <!-- MINI DASHBOARD -->
         <div class="mini-dashboard" id="miniDashboard">
             <div class="mini-title">📊 RINGKASAN HARI INI</div>
 
@@ -86,12 +86,12 @@
                     <div class="stat-label">TOTAL RAK</div>
                     <div class="stat-tap-hint">Tap untuk detail →</div>
                 </div>
-                    <div class="stat stat-clickable" onclick="goToSpdListScreen()">
-                        <div class="stat-icon">💰</div>
-                        <div class="stat-value" id="statSpd">--</div>
-                        <div class="stat-label">SPD</div>
-                        <div class="stat-tap-hint">Tap untuk detail →</div>
-                    </div>
+                <div class="stat stat-clickable" onclick="goToSpdListScreen()">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-value" id="statSpd">--</div>
+                    <div class="stat-label">SPD</div>
+                    <div class="stat-tap-hint">Tap untuk detail →</div>
+                </div>
                 <div class="stat">
                     <div class="stat-icon">📉</div>
                     <div class="stat-value" id="statNominal">--</div>
@@ -114,7 +114,7 @@
             <div class="progress-label" id="progressLabel">Memuat data...</div>
         </div>
 
-        <!-- RUNNING TEXT v1.2 -->
+        <!-- RUNNING TEXT -->
         <div class="running-text" id="runningTextContainer">
             <div class="running-inner" id="runningText">🎃 Memuat info terbaru...</div>
         </div>
@@ -159,7 +159,7 @@
         </div>
 
         <div class="home-footer">
-            <span>v1.3.0 — Dashboard SO C383</span>
+            <span>v1.5.0 — Dashboard SO C383</span>
         </div>
     </div>
 </div>
@@ -188,7 +188,7 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- MASTER SHIFT SCREEN (BARU) -->
+<!-- MASTER SHIFT SCREEN -->
 <!-- ========================================================= -->
 <div id="masterShiftScreen" class="screen">
     <div class="screen-header">
@@ -229,26 +229,7 @@
             <span class="date-separator">s/d</span>
             <input type="date" id="customEnd" class="date-input" onchange="loadMasterShift()">
         </div>
-        
-        <!-- FILTER SORT -->
-        <div class="spd-sort-wrapper">
-            <span class="spd-sort-label">🔀 Urutkan:</span>
-            <div class="spd-sort-buttons">
-                <button class="spd-sort-btn active" data-sort="tanggal_desc" onclick="setSpdSort('tanggal_desc')">
-                    📅 Terbaru
-                </button>
-                <button class="spd-sort-btn" data-sort="tanggal_asc" onclick="setSpdSort('tanggal_asc')">
-                    📅 Lama
-                </button>
-                <button class="spd-sort-btn" data-sort="spd_desc" onclick="setSpdSort('spd_desc')">
-                    💰 ↓
-                </button>
-                <button class="spd-sort-btn" data-sort="spd_asc" onclick="setSpdSort('spd_asc')">
-                    💰 ↑
-                </button>
-            </div>
-        </div>
-        
+
         <!-- SHIFT LIST -->
         <div id="shiftList" class="shift-list">
             <div class="loading-state">
@@ -262,8 +243,9 @@
 
     </div>
 </div>
+
 <!-- ========================================================= -->
-<!-- SPD LIST SCREEN — Sales Per Day v1.5 -->
+<!-- SPD LIST SCREEN — Sales Per Day -->
 <!-- ========================================================= -->
 <div id="spdListScreen" class="screen">
     <div class="screen-header">
@@ -293,16 +275,24 @@
             <span class="date-separator">s/d</span>
             <input type="date" id="spdCustomEnd" class="date-input" onchange="loadSpdList()">
         </div>
-        
-        <!-- FILTER SORT -->
+
+        <!-- FILTER SORT — BUTTON GROUP -->
         <div class="spd-sort-wrapper">
             <span class="spd-sort-label">🔀 Urutkan:</span>
-            <select id="spdSortFilter" class="spd-sort-select" onchange="loadSpdList()">
-                <option value="tanggal_asc">📅 Tanggal (Terbaru → Lama)</option>
-                <option value="tanggal_desc">📅 Tanggal (Lama → Terbaru)</option>
-                <option value="spd_desc">💰 Terbesar → Terkecil</option>
-                <option value="spd_asc">💰 Terkecil → Terbesar</option>
-            </select>
+            <div class="spd-sort-buttons">
+                <button class="spd-sort-btn active" data-sort="tanggal_desc" onclick="setSpdSort('tanggal_desc')">
+                    📅 Terbaru
+                </button>
+                <button class="spd-sort-btn" data-sort="tanggal_asc" onclick="setSpdSort('tanggal_asc')">
+                    📅 Lama
+                </button>
+                <button class="spd-sort-btn" data-sort="spd_desc" onclick="setSpdSort('spd_desc')">
+                    💰 ↓
+                </button>
+                <button class="spd-sort-btn" data-sort="spd_asc" onclick="setSpdSort('spd_asc')">
+                    💰 ↑
+                </button>
+            </div>
         </div>
 
         <!-- SUMMARY CARD -->
@@ -334,34 +324,7 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- MODAL — KELOLA PERSONIL -->
-<!-- ========================================================= -->
-<div id="personilModal" class="modal-overlay" onclick="closePersonilModal(event)">
-    <div class="modal-content" onclick="event.stopPropagation()">
-        <div class="modal-header">
-            <div class="modal-title">👥 Kelola Personil</div>
-            <button class="modal-close" onclick="closePersonilModal()">✕</button>
-        </div>
-
-        <div class="modal-body">
-            <div id="personilList" class="personil-list">
-                <div class="loading-state">
-                    <div class="spinner"></div>
-                </div>
-            </div>
-
-            <div class="personil-add-section">
-                <div class="personil-add-title">➕ Tambah Personil Baru</div>
-                <div class="personil-add-row">
-                    <input type="text" id="newPersonilName" class="personil-input" placeholder="Nama personil..." maxlength="20">
-                    <button class="personil-add-btn" onclick="addNewPersonil()">Tambah</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-<!-- ========================================================= -->
-<!-- RAK LIST SCREEN — Detail Rak SO v1.5 -->
+<!-- RAK LIST SCREEN -->
 <!-- ========================================================= -->
 <div id="rakListScreen" class="screen">
     <div class="screen-header">
@@ -426,7 +389,35 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- MODAL — KONFIRMASI UPDATE SHIFT v1.4 -->
+<!-- MODAL — KELOLA PERSONIL -->
+<!-- ========================================================= -->
+<div id="personilModal" class="modal-overlay" onclick="closePersonilModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">👥 Kelola Personil</div>
+            <button class="modal-close" onclick="closePersonilModal()">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <div id="personilList" class="personil-list">
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+
+            <div class="personil-add-section">
+                <div class="personil-add-title">➕ Tambah Personil Baru</div>
+                <div class="personil-add-row">
+                    <input type="text" id="newPersonilName" class="personil-input" placeholder="Nama personil..." maxlength="20">
+                    <button class="personil-add-btn" onclick="addNewPersonil()">Tambah</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- MODAL — KONFIRMASI UPDATE SHIFT -->
 <!-- ========================================================= -->
 <div id="confirmShiftModal" class="modal-overlay">
     <div class="modal-content" onclick="event.stopPropagation()">
@@ -436,7 +427,6 @@
         </div>
 
         <div class="modal-body">
-            <!-- Header info -->
             <div class="confirm-modal-info">
                 <div class="confirm-modal-row">
                     <span class="confirm-modal-icon">📅</span>
@@ -450,12 +440,8 @@
                 </div>
             </div>
 
-            <!-- List items -->
-            <div class="confirm-modal-list" id="confirmModalList">
-                <!-- Item di-generate JS -->
-            </div>
+            <div class="confirm-modal-list" id="confirmModalList"></div>
 
-            <!-- Warning -->
             <div class="confirm-modal-warning">
                 ⚠️ Perubahan akan disimpan ke database. Pastikan data benar.
             </div>
@@ -573,7 +559,7 @@
             <div class="settings-group-title">ℹ️ Info</div>
             <div class="settings-item">
                 <div class="settings-label">Versi</div>
-                <div class="settings-item-value">1.3.0</div>
+                <div class="settings-item-value">1.5.0</div>
             </div>
             <div class="settings-item">
                 <div class="settings-label">Backend</div>
@@ -628,7 +614,5 @@
 <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
 <script>eruda.init();</script>
 
-</body>
-</html>
 </body>
 </html>
