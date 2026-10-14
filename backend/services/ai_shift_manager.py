@@ -395,3 +395,708 @@ def parse_shift_update(text: str, today=None) -> dict:
         "items": _final_items,
         "raw": text,
     }
+# =========================================================
+# SAVE SHIFT — dengan deteksi konflik
+# =========================================================
+def save_shift(tanggal, nama, kode_shift, action="update", force=False):
+    """
+    Simpan/update/hapus shift.
+    
+    Args:
+        tanggal: date atau str YYYY-MM-DD
+        nama: str
+        kode_shift: "P7" | "S15" | "M22" | "O" | "CUTI"
+        action: "update" (insert/update) | "delete"
+        force: True kalau mau hapus history (force delete personil)
+    
+    Returns:
+        {"success": bool, "message": str, "data": dict}
+    """
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {"success": False, "message": "Supabase gak konek"}
+
+        if isinstance(tanggal, date):
+            _tgl_str = tanggal.isoformat()
+        else:
+            _tgl_str = str(tanggal)[:10]
+
+        _nama = str(nama).upper().strip()
+
+        # === ACTION: DELETE ===
+        if action == "delete":
+            _res = _sb.table("master_shift").delete().eq("tanggal", _tgl_str).eq("nama", _nama).execute()
+            return {
+                "success": True,
+                "message": f"✅ Shift {_nama} tanggal {_tgl_str} dihapus",
+                "data": {"nama": _nama, "tanggal": _tgl_str, "action": "delete"},
+            }
+
+        # === ACTION: UPDATE/INSERT ===
+        _kode = str(kode_shift).upper().strip()
+        if _kode not in SHIFT_MAP:
+            return {"success": False, "message": f"Kode shift '{_kode}' tidak valid"}
+
+        _existing = (
+            _sb.table("master_shift")
+            .select("id, kode_shift")
+            .eq("tanggal", _tgl_str)
+            .eq("nama", _nama)
+            .execute()
+        )
+
+        _row_data = {
+            "tanggal": _tgl_str,
+            "nama": _nama,
+            "kode_shift": _kode,
+            "sumber": "hana_chat",
+            "catatan": " | Update via Hana",
+            "updated_at": _now_jkt().isoformat(),
+        }
+
+        if _existing.data and len(_existing.data) > 0:
+            _row_id = _existing.data[0]["id"]
+            _old_kode = _existing.data[0]["kode_shift"]
+
+            if _old_kode == _kode:
+                return {
+                    "success": True,
+                    "message": f"ℹ️ Shift {_nama} tanggal {_tgl_str} sudah {SHIFT_MAP[_kode]}",
+                    "data": {"nama": _nama, "tanggal": _tgl_str, "kode_shift": _kode, "status": "no_change"},
+                }
+
+            _res = _sb.table("master_shift").update(_row_data).eq("id", _row_id).execute()
+            _msg = f"✅ Shift {_nama} diupdate: {SHIFT_MAP.get(_old_kode, _old_kode)} → {SHIFT_MAP[_kode]}"
+
+        else:
+            _row_data["created_at"] = _now_jkt().isoformat()
+            _res = _sb.table("master_shift").insert(_row_data).execute()
+            _msg = f"✅ Shift {_nama} disimpan: {SHIFT_MAP[_kode]}"
+
+        return {
+            "success": True,
+            "message": _msg,
+            "data": {
+                "nama": _nama,
+                "tanggal": _tgl_str,
+                "kode_shift": _kode,
+                "shift_nama": SHIFT_MAP[_kode],
+                "action": "update",
+            },
+        }
+
+    except Exception as e:
+        _log(f"save_shift error: {e}")
+        return {"success": False, "message": f"Gagal: {str(e)[:150]}"}
+
+
+# =========================================================
+# SAVE BATCH — simpan banyak shift sekaligus
+# =========================================================
+def save_batch(items, tanggal):
+    """
+    Simpan banyak shift sekaligus.
+    
+    Args:
+        items: [{"nama": "REZA", "kode_shift": "S15"}, ...]
+        tanggal: date atau str
+    """
+    _saved = 0
+    _errors = []
+
+    for _item in items:
+        _res = save_shift(
+            tanggal=tanggal,
+            nama=_item.get("nama"),
+            kode_shift=_item.get("kode_shift"),
+            action="update",
+        )
+        if _res.get("success"):
+            _saved += 1
+        else:
+            _errors.append(_item.get("nama"))
+
+    _msg = f"✅ {_saved} shift tersimpan"
+    if _errors:
+        _msg += f" | ⚠️ Gagal: {', '.join(_errors)}"
+
+    return {
+        "success": _saved > 0,
+        "saved": _saved,
+        "message": _msg,
+    }
+
+
+# =========================================================
+# GET MASTER SHIFT — list dengan filter
+# =========================================================
+def get_master_shift(tgl_start=None, tgl_end=None, nama_filter=None, limit=500):
+    """Ambil daftar shift dari Supabase."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {"success": False, "data": [], "error": "Supabase gak konek"}
+
+        _today = _now_jkt().date()
+        _start = tgl_start or _today
+        _end = tgl_end or _today
+
+        _start_str = _start.isoformat() if isinstance(_start, date) else str(_start)[:10]
+        _end_str = _end.isoformat() if isinstance(_end, date) else str(_end)[:10]
+
+        _q = (
+            _sb.table("master_shift")
+            .select("*")
+            .gte("tanggal", _start_str)
+            .lte("tanggal", _end_str)
+        )
+
+        if nama_filter:
+            _q = _q.eq("nama", str(nama_filter).upper())
+
+        _q = _q.order("tanggal", desc=False).order("nama", desc=False).limit(limit)
+
+        _res = _q.execute()
+        _rows = _res.data if _res.data else []
+
+        for _r in _rows:
+            _kode = _r.get("kode_shift", "O")
+            _r["shift_nama"] = SHIFT_MAP.get(_kode, "Unknown")
+            _r["shift_emoji"] = SHIFT_EMOJI.get(_kode, "❓")
+
+        return {
+            "success": True,
+            "data": _rows,
+            "total": len(_rows),
+            "periode": f"{_start_str} s/d {_end_str}",
+        }
+
+    except Exception as e:
+        _log(f"get_master_shift error: {e}")
+        return {"success": False, "data": [], "error": str(e)[:150]}
+
+
+# =========================================================
+# CHECK KONFLIK
+# =========================================================
+def check_konflik(nama, tanggal, kode_shift_baru):
+    """Cek konflik: personil udah punya shift lain di tanggal sama."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {"ada_konflik": False}
+
+        _tgl_str = tanggal.isoformat() if isinstance(tanggal, date) else str(tanggal)[:10]
+        _nama = str(nama).upper()
+
+        _res = (
+            _sb.table("master_shift")
+            .select("kode_shift")
+            .eq("tanggal", _tgl_str)
+            .eq("nama", _nama)
+            .execute()
+        )
+
+        if _res.data and len(_res.data) > 0:
+            _kode_lama = _res.data[0]["kode_shift"]
+            if _kode_lama != kode_shift_baru:
+                return {
+                    "ada_konflik": True,
+                    "kode_lama": _kode_lama,
+                    "shift_lama": SHIFT_MAP.get(_kode_lama, "?"),
+                    "shift_baru": SHIFT_MAP.get(kode_shift_baru, "?"),
+                    "message": f"⚠️ {_nama} udah shift {SHIFT_MAP.get(_kode_lama, '?')}, ganti ke {SHIFT_MAP.get(kode_shift_baru, '?')}?",
+                }
+
+        return {"ada_konflik": False}
+
+    except Exception as e:
+        _log(f"check_konflik error: {e}")
+        return {"ada_konflik": False}
+
+
+# =========================================================
+# CRUD PERSONIL
+# =========================================================
+def add_personil(nama, urutan=None):
+    """Tambah personil baru."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {"success": False, "message": "Supabase gak konek"}
+
+        _nama = str(nama).upper().strip()
+        if len(_nama) < 2:
+            return {"success": False, "message": "Nama terlalu pendek"}
+
+        _existing = _sb.table("personil_master").select("*").eq("nama", _nama).execute()
+        if _existing.data and len(_existing.data) > 0:
+            _row = _existing.data[0]
+            if _row.get("aktif"):
+                return {"success": False, "message": f"{_nama} udah ada di daftar aktif"}
+            else:
+                _sb.table("personil_master").update({"aktif": True}).eq("id", _row["id"]).execute()
+                return {"success": True, "message": f"✅ {_nama} diaktifkan kembali"}
+
+        if urutan is None:
+            _all = _sb.table("personil_master").select("urutan").order("urutan", desc=True).limit(1).execute()
+            if _all.data:
+                urutan = (_all.data[0].get("urutan") or 0) + 1
+            else:
+                urutan = 1
+
+        _data = {
+            "nama": _nama,
+            "aktif": True,
+            "urutan": urutan,
+            "created_at": _now_jkt().isoformat(),
+            "updated_at": _now_jkt().isoformat(),
+        }
+        _sb.table("personil_master").insert(_data).execute()
+
+        return {"success": True, "message": f"✅ {_nama} ditambahkan"}
+
+    except Exception as e:
+        _log(f"add_personil error: {e}")
+        return {"success": False, "message": f"Gagal: {str(e)[:150]}"}
+
+
+def delete_personil(nama, force=False):
+    """Hapus personil (soft/hard delete)."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return {"success": False, "message": "Supabase gak konek"}
+
+        _nama = str(nama).upper().strip()
+
+        _existing = _sb.table("personil_master").select("id").eq("nama", _nama).execute()
+        if not _existing.data:
+            return {"success": False, "message": f"{_nama} gak ada di daftar"}
+
+        _row_id = _existing.data[0]["id"]
+
+        if force:
+            _sb.table("personil_master").delete().eq("id", _row_id).execute()
+            _sb.table("master_shift").delete().eq("nama", _nama).execute()
+            return {"success": True, "message": f"🗑️ {_nama} + history dihapus permanent"}
+        else:
+            _sb.table("personil_master").update({
+                "aktif": False,
+                "updated_at": _now_jkt().isoformat(),
+            }).eq("id", _row_id).execute()
+            return {"success": True, "message": f"✅ {_nama} dinonaktifkan (history tetap tersimpan)"}
+
+    except Exception as e:
+        _log(f"delete_personil error: {e}")
+        return {"success": False, "message": f"Gagal: {str(e)[:150]}"}
+
+
+# =========================================================
+# AMBIL SHIFT HARI INI — untuk running text
+# =========================================================
+def get_shift_hari_ini(tanggal=None):
+    """Ambil ringkasan shift hari ini, grouped by kode."""
+    _today = tanggal or _now_jkt().date()
+    _res = get_master_shift(tgl_start=_today, tgl_end=_today)
+
+    if not _res.get("success"):
+        return {"success": False, "data": {}}
+
+    _grouped = {}
+    for _row in _res.get("data", []):
+        _kode = _row.get("kode_shift", "O")
+        _grouped.setdefault(_kode, []).append(_row["nama"])
+
+    return {
+        "success": True,
+        "tanggal": _today.isoformat(),
+        "grouped": _grouped,
+        "total": len(_res.get("data", [])),
+    }
+# =========================================================
+# CHAT HANA — fungsi utama
+# =========================================================
+def chat_response(user_message, conversation_history=None):
+    """
+    Hana chat response dengan intent detection.
+    
+    Intent:
+    - confirm_shift: update shift → return preview + tombol konfirmasi
+    - query_shift: tanya jadwal → return data jadwal
+    - chat: fallback LLM
+    """
+    if not user_message:
+        return {"text": "", "intent": "chat", "parsed": None, "engine": None}
+
+    _text_lower = str(user_message).lower().strip()
+
+    # ============================================================
+    # INTENT 1 — UPDATE SHIFT (termasuk multi-shift)
+    # ============================================================
+    _update_keywords = [
+        "atur", "set", "ubah", "ganti", "pindah", "masuk",
+        "libur", "cuti", "off",
+    ]
+    _shift_keywords = ["pagi", "siang", "malam", "malem", "libur", "off", "cuti"]
+
+    _is_update = any(k in _text_lower for k in _update_keywords) or any(k in _text_lower for k in _shift_keywords)
+
+    if _is_update:
+        try:
+            _parsed = parse_shift_update(user_message)
+
+            if _parsed.get("items") and len(_parsed["items"]) > 0:
+                _items = _parsed["items"]
+                _tgl = _parsed["tanggal"]
+
+                _tgl_str = _tgl.strftime("%d %b %Y") if hasattr(_tgl, "strftime") else str(_tgl)
+
+                _items_preview = []
+                for _it in _items:
+                    _items_preview.append(
+                        f"  • {_it['nama']} → {_it['shift_nama']}"
+                    )
+                _items_str = "\n".join(_items_preview)
+
+                _count = len(_items)
+                _text = f"""Oke Bos, aku catat {_count} perubahan shift:
+
+📅 Tanggal: {_tgl_str}
+{_items_str}
+
+Konfirmasi update?"""
+
+                return {
+                    "text": _text.strip(),
+                    "intent": "confirm_shift",
+                    "parsed": {
+                        "tanggal": _tgl.isoformat() if hasattr(_tgl, "isoformat") else str(_tgl)[:10],
+                        "items": _items,
+                        "raw": user_message,
+                    },
+                    "engine": "intent_detection",
+                    "needs_confirm": True,
+                }
+        except Exception as _e:
+            _log(f"Intent update parse error: {_e}")
+
+    # ============================================================
+    # INTENT 2 — QUERY SHIFT
+    # ============================================================
+    _query_keywords = [
+        "jadwal", "shift", "piket", "siapa masuk", "siapa shift",
+        "hari ini", "besok", "minggu ini",
+    ]
+    _is_query = any(k in _text_lower for k in _query_keywords)
+    _is_question = any(k in _text_lower for k in ["?", "apa", "siapa", "gimana", "cek", "lihat", "tampil"])
+
+    if _is_query and (_is_question or "jadwal" in _text_lower or "shift" in _text_lower):
+        try:
+            _tgl = parse_tanggal(user_message)
+            _tgl_str = _tgl.isoformat() if hasattr(_tgl, "isoformat") else str(_tgl)[:10]
+
+            _res = get_master_shift(tgl_start=_tgl_str, tgl_end=_tgl_str)
+
+            if _res.get("success") and _res.get("data"):
+                _grouped = {"P7": [], "S15": [], "M22": [], "O": [], "CUTI": []}
+                for _row in _res["data"]:
+                    _kode = _row.get("kode_shift", "O")
+                    _grouped.setdefault(_kode, []).append(_row["nama"])
+
+                _lines = [f"🌸 Jadwal shift {_tgl_str}:"]
+                if _grouped.get("P7"):
+                    _lines.append(f"🟢 Pagi: {', '.join(_grouped['P7'])}")
+                if _grouped.get("S15"):
+                    _lines.append(f"🟡 Siang: {', '.join(_grouped['S15'])}")
+                if _grouped.get("M22"):
+                    _lines.append(f"🔴 Malam: {', '.join(_grouped['M22'])}")
+                if _grouped.get("O"):
+                    _lines.append(f"⚪ Libur: {', '.join(_grouped['O'])}")
+                if _grouped.get("CUTI"):
+                    _lines.append(f"⚫ Cuti: {', '.join(_grouped['CUTI'])}")
+
+                return {
+                    "text": "\n".join(_lines),
+                    "intent": "query_shift",
+                    "parsed": {"tanggal": _tgl_str, "grouped": _grouped},
+                    "engine": "query",
+                }
+            else:
+                return {
+                    "text": f"🌸 Hmm, gak ada jadwal shift buat {_tgl_str} Bos. Mau aku atur?",
+                    "intent": "query_shift",
+                    "parsed": {"tanggal": _tgl_str},
+                    "engine": "query",
+                }
+        except Exception as _e:
+            _log(f"Intent query error: {_e}")
+
+    # ============================================================
+    # FALLBACK — CHAT BIASA (Groq)
+    # ============================================================
+    _history_str = ""
+    if conversation_history:
+        for _msg in conversation_history[-6:]:
+            _history_str += f"{_msg.get('role', 'user')}: {_msg.get('content', '')}\n"
+
+    _prompt = f"""Kamu Hana — Master Shift Specialist Toko C383.
+
+=== TUGAS KAMU ===
+1. Cek jadwal shift (hari ini, besok, minggu ini)
+2. Update / pindah / hapus shift
+3. Saran pengganti kalau ada yang libur
+4. Cek konflik jadwal
+
+=== PERSONA ===
+Personal yang profesional tapi santai. Panggil user "Bos".
+Pakai emoji 🌸 secukupnya. Bales singkat, max 6 baris.
+
+Riwayat:
+{_history_str}
+
+Bos: "{user_message}"
+
+Balas sebagai Hana.
+"""
+
+    _ok, _text, _model, _err = _call_hana_groq(_prompt, function="chat", temperature=0.7)
+
+    if not _ok:
+        return {
+            "text": f"Waduh error Bos. ({str(_err)[:50]})",
+            "intent": "chat",
+            "parsed": None,
+            "engine": None,
+        }
+
+    return {
+        "text": _text.strip(),
+        "intent": "chat",
+        "parsed": None,
+        "engine": _model,
+    }
+
+
+# =========================================================
+# SUGGEST PENGGANTI
+# =========================================================
+def suggest_pengganti(nama_libur, tanggal=None):
+    """Saran pengganti terstruktur."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return []
+
+        _tgl = tanggal or _now_jkt().date()
+        _tgl_str = _tgl.isoformat() if isinstance(_tgl, date) else str(_tgl)[:10]
+
+        _personil = get_personil_aktif()
+
+        _shift_res = get_master_shift(tgl_start=_tgl_str, tgl_end=_tgl_str)
+        _sudah_shift = {}
+        if _shift_res.get("success"):
+            for _row in _shift_res.get("data", []):
+                _sudah_shift[_row["nama"]] = _row.get("kode_shift", "O")
+
+        _kandidat = []
+        for _p in _personil:
+            _nama = _p["nama"].upper()
+            if _nama == str(nama_libur).upper():
+                continue
+            _kode = _sudah_shift.get(_nama)
+            if _kode is None or _kode == "O":
+                _kandidat.append({
+                    "nama": _nama,
+                    "status": "Bebas" if _kode is None else "Sedang OFF",
+                    "kode_shift": _kode,
+                })
+
+        return _kandidat
+
+    except Exception as e:
+        _log(f"suggest_pengganti error: {e}")
+        return []
+
+
+def ai_suggest_pengganti_text(nama_libur, tanggal=None):
+    """Saran pengganti versi AI."""
+    _kandidat = suggest_pengganti(nama_libur, tanggal)
+    _tgl = tanggal or _now_jkt().date()
+
+    if not _kandidat:
+        return f"🌸 Hmm, gak ada kandidat pengganti buat {nama_libur} tanggal {_tgl}. Semua udah ada shift."
+
+    _kandidat_str = "\n".join([
+        f"- {k['nama']} ({k['status']})" for k in _kandidat[:5]
+    ])
+
+    return f"""🌸 Oke Bos, buat gantiin {nama_libur} tanggal {_tgl}, aku saranin:
+
+{_kandidat_str}
+
+Mau aku atur salah satu buat gantiin?"""
+
+
+# =========================================================
+# CHECK CONFLICT (versi lama, return list)
+# =========================================================
+def check_conflict(tanggal, shift_map):
+    """Cek konflik shift, return list of issues."""
+    _issues = []
+    try:
+        _tgl_str = tanggal.isoformat() if isinstance(tanggal, date) else str(tanggal)[:10]
+
+        _nama_count = {}
+        for _nama in shift_map.keys():
+            _nama_upper = str(_nama).upper()
+            _nama_count[_nama_upper] = _nama_count.get(_nama_upper, 0) + 1
+
+        for _nama, _count in _nama_count.items():
+            if _count > 1:
+                _issues.append({
+                    "type": "duplikat",
+                    "message": f"{_nama} muncul {_count}x",
+                })
+
+        _personil = get_personil_aktif()
+        _sudah_ada = [str(n).upper() for n in shift_map.keys()]
+        for _p in _personil:
+            _nama = _p["nama"].upper()
+            if _nama not in _sudah_ada:
+                _issues.append({
+                    "type": "belum_ada_shift",
+                    "message": f"{_nama} belum ada shift",
+                })
+
+        return _issues
+
+    except Exception as e:
+        _log(f"check_conflict error: {e}")
+        return _issues
+
+
+def ai_check_conflict_text(tanggal, shift_map):
+    """Cek konflik versi AI."""
+    _issues = check_conflict(tanggal, shift_map)
+    _tgl = tanggal.isoformat() if isinstance(tanggal, date) else str(tanggal)[:10]
+
+    if not _issues:
+        return f"🌸 Cek selesai Bos! Gak ada konflik di tanggal {_tgl}. Aman ✅"
+
+    _issues_str = "\n".join([f"- {i['message']}" for i in _issues])
+    return f"""🌸 Hmm, ada {len(_issues)} hal yang perlu dicek di tanggal {_tgl}:
+
+{_issues_str}
+
+Mau aku bantu fix?"""
+
+
+# =========================================================
+# HELPER — Call Groq
+# =========================================================
+def _call_hana_groq(prompt, hard_timeout=90, function="chat", temperature=0.7):
+    """Call Groq API untuk Hana."""
+    if not GROQ_AVAILABLE:
+        return False, "", None, "Groq not available"
+
+    if check_auto_pause("ai-1"):
+        return False, "", None, "Auto-pause"
+
+    try:
+        _key = get_ai_api_key("ai-1")
+        if not _key:
+            return False, "", None, "API key Hana gak ada"
+
+        _client = Groq(api_key=_key)
+        _cfg = get_ai_config("ai-1")
+        _models = _cfg.get("model_priority", ["openai/gpt-oss-20b"])
+
+        _last_err = None
+        for _model_name in _models:
+            try:
+                _log(f"Trying {_model_name}...")
+                _resp = _client.chat.completions.create(
+                    model=_model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                    max_tokens=2048,
+                    top_p=0.95,
+                    extra_body={"reasoning_effort": "low"},
+                )
+
+                if not _resp or not _resp.choices:
+                    _last_err = "No response"
+                    continue
+
+                _choice = _resp.choices[0]
+                _msg = _choice.message if _choice else None
+                if not _msg:
+                    _last_err = "No message"
+                    continue
+
+                _content = getattr(_msg, "content", None)
+                if not _content:
+                    _reasoning = getattr(_msg, "reasoning_content", None)
+                    if _reasoning:
+                        _content = _reasoning
+
+                if not _content:
+                    _last_err = "Content kosong"
+                    continue
+
+                _text = str(_content).strip()
+                _log(f"OK: {_model_name} ({len(_text)} chars)")
+
+                try:
+                    _u = getattr(_resp, "usage", None)
+                    record_usage_v2(
+                        ai_name="ai-1",
+                        function=function,
+                        model=_model_name,
+                        prompt_tokens=getattr(_u, "prompt_tokens", 0) if _u else 0,
+                        output_tokens=getattr(_u, "completion_tokens", 0) if _u else 0,
+                        success=True,
+                    )
+                except Exception:
+                    pass
+
+                return True, _text, _model_name, None
+
+            except Exception as _e:
+                _last_err = str(_e)[:200]
+                _log(f"{_model_name} error: {_last_err}")
+                continue
+
+        return False, "", None, _last_err or "All models failed"
+
+    except Exception as e:
+        _log(f"_call_hana_groq error: {e}")
+        return False, "", None, str(e)[:200]
+
+
+# =========================================================
+# EXPORT
+# =========================================================
+__all__ = [
+    "SHIFT_MAP",
+    "SHIFT_MAP_REVERSE",
+    "SHIFT_EMOJI",
+    "STOPWORDS",
+    "parse_tanggal",
+    "parse_shift_update",
+    "get_personil_aktif",
+    "save_shift",
+    "save_batch",
+    "get_master_shift",
+    "check_konflik",
+    "add_personil",
+    "delete_personil",
+    "get_shift_hari_ini",
+    "chat_response",
+    "suggest_pengganti",
+    "ai_suggest_pengganti_text",
+    "check_conflict",
+    "ai_check_conflict_text",
+]
