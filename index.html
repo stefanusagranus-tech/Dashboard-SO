@@ -229,7 +229,18 @@
             <span class="date-separator">s/d</span>
             <input type="date" id="customEnd" class="date-input" onchange="loadMasterShift()">
         </div>
-
+        
+        <!-- FILTER SORT -->
+        <div class="spd-sort-wrapper">
+            <span class="spd-sort-label">🔀 Urutkan:</span>
+            <select id="spdSortFilter" class="spd-sort-select" onchange="loadSpdList()">
+                <option value="tanggal_asc">📅 Tanggal (Terbaru → Lama)</option>
+                <option value="tanggal_desc">📅 Tanggal (Lama → Terbaru)</option>
+                <option value="spd_desc">💰 Terbesar → Terkecil</option>
+                <option value="spd_asc">💰 Terkecil → Terbesar</option>
+            </select>
+        </div>
+        
         <!-- SHIFT LIST -->
         <div id="shiftList" class="shift-list">
             <div class="loading-state">
