@@ -101,12 +101,15 @@ function goToHomeScreen() {
 }
 
 function goToChatScreen() {
-    // Stop clock refresh biar hemat
+    alert("1. goToChatScreen dipanggil");
     stopDashboardAutoRefresh();
+    alert("2. Clock stopped");
     showScreen("chatScreen");
-    // Set bot default
+    alert("3. showScreen chatScreen dipanggil");
     if (!currentBot || !BOTS[currentBot]) currentBot = "yui";
+    alert("4. currentBot: " + currentBot);
     switchBot(currentBot);
+    alert("5. switchBot selesai");
 }
 
 function goToSettingsScreen() {
