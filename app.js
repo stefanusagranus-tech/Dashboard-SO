@@ -1325,12 +1325,23 @@ async function loadSpdList() {
             throw new Error(data.error || "Gagal load SPD");
         }
 
+        // ✅ 1. Simpan data
         spdListData = data.list_spd || [];
 
-        // ✅ SORT
-        const sortValue = document.getElementById("spdSortFilter")?.value || "tanggal_asc";
+        // ✅ 2. Ambil sort value dari dropdown
+        const sortFilter = document.getElementById("spdSortFilter");
+        const sortValue = sortFilter ? sortFilter.value : "tanggal_asc";
+
+        console.log("[SPD] Data loaded:", spdListData.length, "items");
+        console.log("[SPD] Sort value:", sortValue);
+        console.log("[SPD] Before sort (first):", spdListData[0]?.tanggal);
+
+        // ✅ 3. Sort
         spdListData = sortSpdData(spdListData, sortValue);
 
+        console.log("[SPD] After sort (first):", spdListData[0]?.tanggal);
+
+        // ✅ 4. Render
         renderSpdSummary(data);
         renderSpdList();
 
@@ -1344,7 +1355,6 @@ async function loadSpdList() {
         `;
     }
 }
-
 
 // =========================================================
 // SPD LIST — Sort
