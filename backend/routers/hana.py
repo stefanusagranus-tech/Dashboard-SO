@@ -68,6 +68,7 @@ class ChatResponse(BaseModel):
     intent: Optional[str] = None
     parsed: Optional[dict] = None
     engine: Optional[str] = None
+    needs_confirm: Optional[bool] = False
     error: Optional[str] = None
 
 
@@ -135,14 +136,7 @@ async def hana_health():
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
 async def hana_chat_endpoint(request: Request, req: ChatRequest):
-    """
-    Endpoint chat Hana.
-    
-    Deteksi intent otomatis:
-    - Query: "jadwal hari ini?"
-    - Update: "atur Reza ke siang"
-    - Delete: "hapus shift Pandu"
-    """
+    """Endpoint chat Hana dengan intent detection."""
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -159,8 +153,8 @@ async def hana_chat_endpoint(request: Request, req: ChatRequest):
             intent=_resp.get("intent"),
             parsed=_resp.get("parsed"),
             engine=_resp.get("engine"),
+            needs_confirm=_resp.get("needs_confirm", False),
         )
-
     except Exception as _e:
         import traceback
         traceback.print_exc()

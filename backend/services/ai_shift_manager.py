@@ -642,11 +642,126 @@ def get_shift_hari_ini(tanggal=None):
 def chat_response(user_message, conversation_history=None):
     """
     Hana chat response dengan intent detection.
-    Fokus: master shift.
+    
+    Intent yang dideteksi:
+    - update_shift: user minta atur/update/hapus shift → return preview + tombol konfirmasi
+    - query_shift: user tanya jadwal → return data jadwal
+    - suggest: user minta saran pengganti
+    - chat: chat biasa
     """
     if not user_message:
         return {"text": "", "intent": "chat", "parsed": None, "engine": None}
 
+    _text_lower = str(user_message).lower().strip()
+
+    # ============================================================
+    # INTENT 1 — UPDATE SHIFT
+    # ============================================================
+    _update_keywords = [
+        "atur", "set", "ubah", "ganti", "pindah", "masuk",
+        "libur", "cuti", "off",
+    ]
+    _shift_keywords = ["pagi", "siang", "malam", "libur", "off", "cuti"]
+
+    _is_update = any(k in _text_lower for k in _update_keywords)
+
+    # Kalau ada kata shift + ada action → update
+    if _is_update:
+        try:
+            _parsed = parse_shift_update(user_message)
+
+            # Kalau ada items → trigger konfirmasi
+            if _parsed.get("items") and len(_parsed["items"]) > 0:
+                _items = _parsed["items"]
+                _tgl = _parsed["tanggal"]
+
+                # Build preview text
+                _tgl_str = _tgl.strftime("%d %b %Y") if hasattr(_tgl, "strftime") else str(_tgl)
+
+                _items_preview = []
+                for _it in _items:
+                    _items_preview.append(
+                        f"  • {_it['nama']} → {_it['shift_nama']}"
+                    )
+                _items_str = "\n".join(_items_preview)
+
+                _count = len(_items)
+                _text = f"""Oke Bos, aku catat {_count} perubahan shift:
+
+📅 Tanggal: {_tgl_str}
+{_items_str}
+
+Konfirmasi update?"""
+
+                return {
+                    "text": _text.strip(),
+                    "intent": "confirm_shift",
+                    "parsed": {
+                        "tanggal": _tgl.isoformat() if hasattr(_tgl, "isoformat") else str(_tgl)[:10],
+                        "items": _items,
+                        "raw": user_message,
+                    },
+                    "engine": "intent_detection",
+                    "needs_confirm": True,
+                }
+        except Exception as _e:
+            _log(f"Intent update parse error: {_e}")
+
+    # ============================================================
+    # INTENT 2 — QUERY SHIFT (jadwal hari ini, besok, minggu)
+    # ============================================================
+    _query_keywords = [
+        "jadwal", "shift", "piket", "siapa masuk", "siapa shift",
+        "hari ini", "besok", "minggu ini",
+    ]
+    _is_query = any(k in _text_lower for k in _query_keywords)
+    _is_question = any(k in _text_lower for k in ["?", "apa", "siapa", "gimana", "cek", "lihat", "tampil"])
+
+    if _is_query and (_is_question or "jadwal" in _text_lower or "shift" in _text_lower):
+        try:
+            _tgl = parse_tanggal(user_message)
+            _tgl_str = _tgl.isoformat() if hasattr(_tgl, "isoformat") else str(_tgl)[:10]
+
+            _res = get_master_shift(tgl_start=_tgl_str, tgl_end=_tgl_str)
+
+            if _res.get("success") and _res.get("data"):
+                # Group by shift
+                _grouped = {"P7": [], "S15": [], "M22": [], "O": [], "CUTI": []}
+                for _row in _res["data"]:
+                    _kode = _row.get("kode_shift", "O")
+                    _grouped.setdefault(_kode, []).append(_row["nama"])
+
+                _lines = [f"🌸 Jadwal shift {_tgl_str}:"]
+                if _grouped.get("P7"):
+                    _lines.append(f"🟢 Pagi: {', '.join(_grouped['P7'])}")
+                if _grouped.get("S15"):
+                    _lines.append(f"🟡 Siang: {', '.join(_grouped['S15'])}")
+                if _grouped.get("M22"):
+                    _lines.append(f"🔴 Malam: {', '.join(_grouped['M22'])}")
+                if _grouped.get("O"):
+                    _lines.append(f"⚪ Libur: {', '.join(_grouped['O'])}")
+                if _grouped.get("CUTI"):
+                    _lines.append(f"⚫ Cuti: {', '.join(_grouped['CUTI'])}")
+
+                return {
+                    "text": "\n".join(_lines),
+                    "intent": "query_shift",
+                    "parsed": {"tanggal": _tgl_str, "grouped": _grouped},
+                    "engine": "query",
+                }
+            else:
+                return {
+                    "text": f"🌸 Hmm, gak ada jadwal shift buat {_tgl_str} Bos. Mau aku atur?",
+                    "intent": "query_shift",
+                    "parsed": {"tanggal": _tgl_str},
+                    "engine": "query",
+                }
+        except Exception as _e:
+            _log(f"Intent query error: {_e}")
+
+    # ============================================================
+    # FALLBACK — CHAT BIASA (pakai Groq)
+    # ============================================================
     _history_str = ""
     if conversation_history:
         for _msg in conversation_history[-6:]:
@@ -672,7 +787,6 @@ Bos: "{user_message}"
 Balas sebagai Hana.
 """
 
-    # Pakai Groq
     _ok, _text, _model, _err = _call_hana_groq(_prompt, function="chat", temperature=0.7)
 
     if not _ok:
@@ -689,7 +803,6 @@ Balas sebagai Hana.
         "parsed": None,
         "engine": _model,
     }
-
 
 def suggest_pengganti(nama_libur, tanggal=None):
     """Saran pengganti terstruktur (bukan AI)."""
