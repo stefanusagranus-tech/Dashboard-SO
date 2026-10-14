@@ -1346,12 +1346,14 @@ function renderChatHistory() {
         container.innerHTML = `
             <div class="chat-message-wrapper ai">
                 <div class="chat-avatar">${bot.emoji}</div>
-                <div class="bubble bubble-ai bubble-welcome">
+                <div class="bubble-content ai">
+                    <div class="bubble bubble-ai bubble-welcome">
 Halo Bos! 👋
 
 Aku <b>${bot.emoji} ${bot.name}</b> — ${bot.role}.
 
 ${getWelcomeText(currentBot)}
+                    </div>
                 </div>
             </div>
         `;
@@ -1363,10 +1365,12 @@ ${getWelcomeText(currentBot)}
     history.forEach((msg, idx) => {
         const isUser = msg.role === "user";
 
-        // Wrapper untuk bubble + avatar
+        // ============================================================
+        // WRAPPER
+        // ============================================================
         const wrapper = document.createElement("div");
         wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
-        
+
         // ============================================================
         // AVATAR
         // ============================================================
@@ -1379,55 +1383,52 @@ ${getWelcomeText(currentBot)}
             avatar.textContent = bot.emoji;
         }
         wrapper.appendChild(avatar);
-        
-        // ============================================================
-        // BUBBLE CONTENT WRAPPER (ini yang isi bubble + timestamp)
-        // ============================================================
-        const bubbleWrapper = document.createElement("div");
-        bubbleWrapper.className = `bubble-content ${isUser ? "user" : "ai"}`;
 
-        // === KALAU PESAN KONFIRMASI ===
+        // ============================================================
+        // BUBBLE CONTENT WRAPPER — class baru, gak ada inline flex!
+        // ============================================================
+        const bubbleContent = document.createElement("div");
+        bubbleContent.className = `bubble-content ${isUser ? "user" : "ai"}`;
+
+        // ============================================================
+        // BUBBLE / KONTEN
+        // ============================================================
         if (msg.isConfirm && msg.confirmData) {
             const confirmBubble = renderConfirmBubble(msg, idx);
-            bubbleWrapper.appendChild(confirmBubble);
+            bubbleContent.appendChild(confirmBubble);
         } else {
-            // === BUBBLE BIASA ===
             const bubble = document.createElement("div");
             bubble.className = `bubble bubble-${isUser ? "user" : "ai"}`;
 
-            // Custom class berdasarkan tipe pesan
             if (msg.isSuccess) {
                 bubble.classList.add("bubble-success");
             } else if (msg.isError) {
                 bubble.classList.add("bubble-error");
             } else if (msg.isCancel) {
                 bubble.classList.add("bubble-error");
-            } else if (msg.isConfirmTrigger) {
-                bubble.classList.add("bubble-confirm-trigger");
             }
 
-            // Render content
             if (msg.isSuccess && msg.content.includes("🌸")) {
-                // Custom render untuk success + shift summary
                 bubble.innerHTML = formatSuccessMessage(msg.content);
             } else {
                 bubble.innerHTML = formatMessage(msg.content);
             }
 
-            bubbleWrapper.appendChild(bubble);
+            bubbleContent.appendChild(bubble);
         }
 
-        // === TIMESTAMP ===
+        // ============================================================
+        // TIMESTAMP
+        // ============================================================
         const time = document.createElement("div");
-        time.className = `bubble-time ${!isUser ? "bubble-time-ai" : ""}`;
+        time.className = "bubble-time";
         time.textContent = formatTime(msg.timestamp);
 
-        bubbleWrapper.appendChild(time);
-        wrapper.appendChild(bubbleWrapper);
+        bubbleContent.appendChild(time);
+        wrapper.appendChild(bubbleContent);
         container.appendChild(wrapper);
     });
 }
-
 
 // =========================================================
 // HELPER — Format Success Message
