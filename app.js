@@ -101,15 +101,26 @@ function goToHomeScreen() {
 }
 
 function goToChatScreen() {
-    alert("1. goToChatScreen dipanggil");
-    stopDashboardAutoRefresh();
-    alert("2. Clock stopped");
-    showScreen("chatScreen");
-    alert("3. showScreen chatScreen dipanggil");
-    if (!currentBot || !BOTS[currentBot]) currentBot = "yui";
-    alert("4. currentBot: " + currentBot);
-    switchBot(currentBot);
-    alert("5. switchBot selesai");
+    try {
+        document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+        const chat = document.getElementById("chatScreen");
+        if (!chat) {
+            alert("ERROR: chatScreen element gak ada!");
+            return;
+        }
+        chat.classList.add("active");
+        
+        // Set default bot
+        if (!currentBot || !BOTS[currentBot]) currentBot = "yui";
+        const bot = BOTS[currentBot];
+        document.getElementById("chatBotEmoji").textContent = bot.emoji;
+        document.getElementById("chatBotName").textContent = bot.name;
+        
+        renderChatHistory();
+    } catch (err) {
+        alert("ERROR: " + err.name + " — " + err.message);
+        console.error(err);
+    }
 }
 
 function goToSettingsScreen() {
