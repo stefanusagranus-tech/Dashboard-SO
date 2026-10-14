@@ -725,12 +725,14 @@ body {
 .master-shift-content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px 20px 40px;
     display: flex;
     flex-direction: column;
     gap: 16px;
     position: relative;
-    z-index: 2;
+    z-index: 1;
+    -webkit-overflow-scrolling: touch;
 }
 
 .master-shift-content::-webkit-scrollbar {
@@ -749,9 +751,17 @@ body {
     display: flex;
     gap: 8px;
     overflow-x: auto;
-    padding-bottom: 4px;
+    overflow-y: hidden;
+    padding: 4px 0 8px 0;
+    margin: 0 -4px;
+    padding-left: 4px;
+    padding-right: 4px;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    -webkit-overflow-scrolling: touch;
 }
 
 .filter-tabs::-webkit-scrollbar {
