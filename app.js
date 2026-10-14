@@ -1254,6 +1254,46 @@ function setSpdSort(sortValue) {
     loadSpdList();
 }
 
+// =========================================================
+// SPD LIST — Set Period
+// =========================================================
+function setSpdPeriod(period) {
+    console.log("[SPD] Period clicked:", period);
+
+    // Update state
+    spdPeriodCurrent = period;
+
+    // Update active tab
+    document.querySelectorAll(".spd-period-tab").forEach(tab => {
+        const isActive = tab.getAttribute("data-period") === period;
+        tab.classList.toggle("active", isActive);
+    });
+
+    // Show/hide custom date range
+    const customRow = document.getElementById("spdCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+
+            // Auto-set default date kalau kosong
+            const s = document.getElementById("spdCustomStart");
+            const e = document.getElementById("spdCustomEnd");
+            const today = new Date();
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const todayStr = today.toISOString().slice(0, 10);
+            const startStr = startOfMonth.toISOString().slice(0, 10);
+
+            if (s && !s.value) s.value = startStr;
+            if (e && !e.value) e.value = todayStr;
+        } else {
+            customRow.classList.add("hidden");
+        }
+    }
+
+    // Reload
+    loadSpdList();
+}
+
 
 // =========================================================
 // SPD LIST — Helper: Date Range
