@@ -3085,6 +3085,217 @@ function renderRakDetailList() {
 
     container.innerHTML = html;
 }
+// =========================================================
+// STATUS ANALYSIS SCREEN v1.6
+// =========================================================
+let statusPeriodCurrent = "bulan_ini";
+
+
+// =========================================================
+// STATUS — Navigate
+// =========================================================
+function goToStatusScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("statusScreen");
+    loadStatusAnalysis();
+}
+
+
+// =========================================================
+// STATUS — Set Period
+// =========================================================
+function setStatusPeriod(period) {
+    console.log("[Status] Period:", period);
+    statusPeriodCurrent = period;
+
+    document.querySelectorAll("#statusScreen .spd-period-tab").forEach(tab => {
+        const isActive = tab.getAttribute("data-period") === period;
+        tab.classList.toggle("active", isActive);
+    });
+
+    const customRow = document.getElementById("statusCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("statusCustomStart");
+            const e = document.getElementById("statusCustomEnd");
+            const today = new Date();
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const todayStr = today.toISOString().slice(0, 10);
+            const startStr = startOfMonth.toISOString().slice(0, 10);
+            if (s && !s.value) s.value = startStr;
+            if (e && !e.value) e.value = todayStr;
+        } else {
+            customRow.classList.add("hidden");
+        }
+    }
+
+    loadStatusAnalysis();
+}
+
+
+// =========================================================
+// STATUS — Date Range Helper
+// =========================================================
+function getStatusDateRange() {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (statusPeriodCurrent === "bulan_ini") {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (statusPeriodCurrent === "bulan_lalu") {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (statusPeriodCurrent === "custom") {
+        const s = document.getElementById("statusCustomStart");
+        const e = document.getElementById("statusCustomEnd");
+        if (s && s.value) start = new Date(s.value);
+        if (e && e.value) end = new Date(e.value);
+    }
+
+    return { start, end };
+}
+
+
+// =========================================================
+// STATUS — Load Data
+// =========================================================
+async function loadStatusAnalysis() {
+    console.log("[Status] Loading...");
+
+    try {
+        const _key = getApiKey();
+        const range = getStatusDateRange();
+        const startStr = range.start.toISOString().slice(0, 10);
+        const endStr = range.end.toISOString().slice(0, 10);
+
+        const body = { mode: statusPeriodCurrent };
+        if (statusPeriodCurrent === "custom") {
+            body.tgl_start = startStr;
+            body.tgl_end = endStr;
+        }
+
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Gagal load status");
+        }
+
+        console.log("[Status] Data:", data);
+
+        // Render
+        renderStatusCard(data);
+        renderStatusMetrics(data);
+        renderStatusRekomendasi(data);
+
+    } catch (err) {
+        console.error("[Status] Error:", err);
+
+        // Error state
+        const elEmoji = document.getElementById("statusBigEmoji");
+        const elLabel = document.getElementById("statusBigLabel");
+        const elPersen = document.getElementById("statusBigPersen");
+        const elMeta = document.getElementById("statusBigMeta");
+        const elRekom = document.getElementById("statusRekomendasi");
+
+        if (elEmoji) elEmoji.textContent = "⚠️";
+        if (elLabel) elLabel.textContent = "Error";
+        if (elPersen) elPersen.textContent = "—";
+        if (elMeta) elMeta.textContent = err.message;
+        if (elRekom) elRekom.textContent = "Gagal load data. Cek koneksi.";
+    }
+}
+
+
+// =========================================================
+// STATUS — Render Big Card
+// =========================================================
+function renderStatusCard(data) {
+    const elEmoji = document.getElementById("statusBigEmoji");
+    const elLabel = document.getElementById("statusBigLabel");
+    const elPersen = document.getElementById("statusBigPersen");
+    const elMeta = document.getElementById("statusBigMeta");
+    const elCard = document.getElementById("statusBigCard");
+
+    const statusEmoji = data.status_emoji || "⏳";
+    const statusLabel = data.status_label || "—";
+    const statusColor = data.status_color || "hijau";
+    const persen = data.persen || 0;
+    const periode = data.periode || "—";
+
+    if (elEmoji) elEmoji.textContent = statusEmoji;
+    if (elLabel) elLabel.textContent = statusLabel;
+    if (elPersen) elPersen.textContent = `${persen.toFixed(3)}%`;
+    if (elMeta) elMeta.textContent = periode;
+
+    // Update warna card
+    if (elCard) {
+        elCard.classList.remove("status-big-card-aman", "status-big-card-waspada", "status-big-card-bahaya");
+        elCard.classList.add(`status-big-card-${statusColor === "merah" ? "bahaya" : statusColor === "kuning" ? "waspada" : "aman"}`);
+    }
+}
+
+
+// =========================================================
+// STATUS — Render Metrics
+// =========================================================
+function renderStatusMetrics(data) {
+    const elNSB = document.getElementById("metricNSB");
+    const elAdjust = document.getElementById("metricAdjust");
+    const elBTSB = document.getElementById("metricBTSB");
+    const elNSBPersonil = document.getElementById("metricNSBPersonil");
+
+    if (elNSB) elNSB.textContent = formatRupiahFull(data.net_sales || 0);
+    if (elAdjust) elAdjust.textContent = formatRupiahFull(data.total_adjust || 0);
+    if (elBTSB) elBTSB.textContent = formatRupiahFull(data.btsb_rupiah || 0);
+    if (elNSBPersonil) {
+        const nsbPersonil = data.nsb_personil || 0;
+        elNSBPersonil.textContent = formatRupiahFull(nsbPersonil);
+        // Warna: negatif = aman (hijau), positif = bahaya (merah)
+        if (nsbPersonil > 0) {
+            elNSBPersonil.classList.add("status-metric-value-minus");
+        } else {
+            elNSBPersonil.classList.add("status-metric-value-plus");
+        }
+    }
+}
+
+
+// =========================================================
+// STATUS — Render Rekomendasi
+// =========================================================
+function renderStatusRekomendasi(data) {
+    const elRekom = document.getElementById("statusRekomendasi");
+    const elCard = document.getElementById("statusRekomendasiCard");
+
+    if (elRekom) {
+        elRekom.textContent = data.rekomendasi || "Tidak ada rekomendasi.";
+    }
+
+    // Update warna border kiri
+    if (elCard) {
+        elCard.classList.remove("status-rekomendasi-aman", "status-rekomendasi-waspada", "status-rekomendasi-bahaya");
+        const status = data.status || "aman";
+        elCard.classList.add(`status-rekomendasi-${status}`);
+    }
+}
 
 // =========================================================
 // BOOT

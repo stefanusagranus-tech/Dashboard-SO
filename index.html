@@ -100,11 +100,12 @@
                 </div>
             </div>
 
-            <div class="status-bar" id="statusBar">
+            <div class="status-bar status-bar-clickable" id="statusBar" onclick="goToStatusScreen()">
                 <div class="status-icon" id="statusIcon">⏳</div>
                 <div class="status-info">
                     <div class="status-label">Status Selisih</div>
                     <div class="status-value" id="statusValue">Memuat...</div>
+                    <div class="status-tap-hint">Tap untuk analisis →</div>
                 </div>
                 <div class="status-percent" id="statusPercent">--%</div>
             </div>
@@ -384,6 +385,89 @@
                 <div class="spinner"></div>
                 <p>Memuat data rak...</p>
             </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- STATUS ANALYSIS SCREEN -->
+<!-- ========================================================= -->
+<div id="statusScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Status Analisis SO</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+
+    <div class="status-content">
+
+        <!-- PERIODE TABS -->
+        <div class="spd-period-tabs">
+            <button class="spd-period-tab active" data-period="bulan_ini" onclick="setStatusPeriod('bulan_ini')">
+                📅 Bulan Ini
+            </button>
+            <button class="spd-period-tab" data-period="bulan_lalu" onclick="setStatusPeriod('bulan_lalu')">
+                🗓️ Bulan Lalu
+            </button>
+            <button class="spd-period-tab" data-period="custom" onclick="setStatusPeriod('custom')">
+                🔍 Custom
+            </button>
+        </div>
+
+        <!-- CUSTOM DATE -->
+        <div class="custom-date-row hidden" id="statusCustomDateRow">
+            <input type="date" id="statusCustomStart" class="date-input" onchange="loadStatusAnalysis()">
+            <span class="date-separator">s/d</span>
+            <input type="date" id="statusCustomEnd" class="date-input" onchange="loadStatusAnalysis()">
+        </div>
+
+        <!-- STATUS CARD (BIG) -->
+        <div class="status-big-card" id="statusBigCard">
+            <div class="status-big-emoji" id="statusBigEmoji">⏳</div>
+            <div class="status-big-label" id="statusBigLabel">Memuat...</div>
+            <div class="status-big-persen" id="statusBigPersen">--%</div>
+            <div class="status-big-meta" id="statusBigMeta">--</div>
+        </div>
+
+        <!-- METRIK CARDS -->
+        <div class="status-metrics">
+            <div class="status-metric-card">
+                <div class="status-metric-icon">💰</div>
+                <div class="status-metric-label">Net Sales (NSB)</div>
+                <div class="status-metric-value" id="metricNSB">--</div>
+            </div>
+            <div class="status-metric-card">
+                <div class="status-metric-icon">📉</div>
+                <div class="status-metric-label">Total Adjust</div>
+                <div class="status-metric-value status-metric-value-minus" id="metricAdjust">--</div>
+            </div>
+            <div class="status-metric-card">
+                <div class="status-metric-icon">📊</div>
+                <div class="status-metric-label">BTSB (0.15%)</div>
+                <div class="status-metric-value" id="metricBTSB">--</div>
+            </div>
+            <div class="status-metric-card">
+                <div class="status-metric-icon">⚖️</div>
+                <div class="status-metric-label">NSB Personil</div>
+                <div class="status-metric-value" id="metricNSBPersonil">--</div>
+            </div>
+        </div>
+
+        <!-- REKOMENDASI CARD -->
+        <div class="status-rekomendasi-card" id="statusRekomendasiCard">
+            <div class="status-rekomendasi-title">💡 REKOMENDASI</div>
+            <div class="status-rekomendasi-text" id="statusRekomendasi">Memuat...</div>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="status-actions">
+            <button class="status-action-btn" onclick="goToTopMinusScreen()">
+                🚨 Lihat Top Minus
+            </button>
+            <button class="status-action-btn" onclick="goToSpdListScreen()">
+                📊 Lihat SPD
+            </button>
         </div>
 
     </div>

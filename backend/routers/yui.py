@@ -666,3 +666,48 @@ async def yui_top_items_extended_endpoint(request: Request, req: TopItemsExtende
         raise
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+# =========================================================
+# GET STATUS ANALYSIS
+# =========================================================
+class StatusAnalysisRequest(BaseModel):
+    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
+    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
+    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+
+
+@router.post("/status-analysis")
+@limiter.limit("30/minute")
+async def yui_status_analysis_endpoint(request: Request, req: StatusAnalysisRequest):
+    """Analisis status SO: NSB, BTSB, NSB Personil, Status, Rekomendasi."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+        from services.yui_rekap import get_status_analysis
+
+        _tgl_start = None
+        _tgl_end = None
+
+        if req.mode == "custom":
+            if not req.tgl_start or not req.tgl_end:
+                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
+            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
+
+        _hasil = get_status_analysis(
+            mode=req.mode,
+            tgl_start=_tgl_start,
+            tgl_end=_tgl_end,
+        )
+
+        if not _hasil.get("success"):
+            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load status"))
+
+        return _hasil
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])

@@ -439,3 +439,174 @@ def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None, mode="bulan_ini"):
         only_minus=False,
         rak_filter=rak_id,
     )
+
+# =========================================================
+# GET STATUS ANALYSIS — Analisis Status SO
+# =========================================================
+def get_status_analysis(mode="bulan_ini", tgl_start=None, tgl_end=None):
+    """
+    Analisis status SO: NSB, BTSB, NSB Personil, Status.
+    
+    Returns:
+        {
+            "success": bool,
+            "periode": "...",
+            "net_sales": 185628812,
+            "total_adjust": -399320,
+            "btsb_persen": 0.15,
+            "btsb_rupiah": 278443,
+            "nsb_personil": 120877,
+            "persen": 0.215,
+            "status": "bahaya" | "waspada" | "aman",
+            "status_label": "BAHAYA",
+            "status_emoji": "🚨",
+            "status_color": "merah",
+            "rekomendasi": "...",
+            "adjust_untuk_aman": 120877,
+        }
+    """
+    try:
+        _sb = _get_supabase_safe()
+        if _sb is None:
+            return {"success": False, "error": "Supabase gak konek"}
+
+        # Tentukan periode
+        if mode == "custom" and tgl_start and tgl_end:
+            _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
+            _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
+        else:
+            _start, _end = get_periode_range(mode)
+            _start_str = _start.isoformat()[:10]
+            _end_str = _end.isoformat()[:10]
+
+        # =========================================================
+        # 1. AMBIL NET SALES (dari spd_harian)
+        # =========================================================
+        _res_spd = (
+            _sb.table("spd_harian")
+            .select("spd")
+            .gte("tanggal", _start_str)
+            .lte("tanggal", _end_str)
+            .execute()
+        )
+        _spd_rows = _res_spd.data if _res_spd.data else []
+        _net_sales = sum(float(r.get("spd") or 0) for r in _spd_rows)
+
+        # =========================================================
+        # 2. AMBIL TOTAL ADJUST (dari so_rak_harian)
+        # =========================================================
+        _res_so = (
+            _sb.table("so_rak_harian")
+            .select("nominal_adjust")
+            .gte("so_date", _start_str)
+            .lte("so_date", _end_str)
+            .execute()
+        )
+        _so_rows = _res_so.data if _res_so.data else []
+        _total_adjust = sum(float(r.get("nominal_adjust") or 0) for r in _so_rows)
+
+        # =========================================================
+        # 3. HITUNG BTSB & NSB PERSONIL
+        # =========================================================
+        _btsb_persen = 0.15  # 0.15% dari Net Sales
+        _btsb_rupiah = (_net_sales * _btsb_persen) / 100 if _net_sales > 0 else 0
+
+        _total_adjust_abs = abs(_total_adjust)
+        _nsb_personil = _total_adjust_abs - _btsb_rupiah
+
+        # Persen = |adjust| / NSB × 100
+        _persen = (_total_adjust_abs / _net_sales * 100) if _net_sales > 0 else 0
+
+        # =========================================================
+        # 4. TENTUKAN STATUS
+        # =========================================================
+        _status_key = "aman"
+        _status_label = "AMAN"
+        _status_emoji = "✅"
+        _status_color = "hijau"
+        _persen_bahaya = 0.15
+        _persen_waspada = 0.13
+
+        if _persen > _persen_bahaya:
+            _status_key = "bahaya"
+            _status_label = "BAHAYA"
+            _status_emoji = "🚨"
+            _status_color = "merah"
+        elif _persen >= _persen_waspada:
+            _status_key = "waspada"
+            _status_label = "WASPADA"
+            _status_emoji = "⚠️"
+            _status_color = "kuning"
+
+        # =========================================================
+        # 5. REKOMENDASI
+        # =========================================================
+        _rekomendasi = ""
+        _adjust_untuk_aman = 0
+
+        if _status_key == "bahaya":
+            # Butuh adjust plus minimal X agar persen masuk WASPADA (0.13%)
+            _target_persen = _persen_waspada  # masuk WASPADA (di bawah 0.15)
+            _target_adjust_max = (_target_persen / 100) * _net_sales
+            _adjust_untuk_aman = max(0, _total_adjust_abs - _target_adjust_max)
+
+            if _adjust_untuk_aman > 0:
+                _rekomendasi = (
+                    f"Status BAHAYA. Beban NSB personil: Rp {_nsb_personil:,.0f}.\n"
+                    f"Disarankan adjust plus minimal Rp {_adjust_untuk_aman:,.0f} "
+                    f"agar status kembali ke WASPADA."
+                )
+            else:
+                _rekomendasi = "Status BAHAYA. Segera lakukan adjust plus untuk menurunkan selisih."
+
+        elif _status_key == "waspada":
+            _target_persen = _persen_waspada  # target: < 0.13%
+            _target_adjust_max = (_target_persen / 100) * _net_sales
+            _adjust_untuk_aman = max(0, _total_adjust_abs - _target_adjust_max)
+
+            _rekomendasi = (
+                f"Status WASPADA. Beban NSB personil: Rp {_nsb_personil:,.0f}.\n"
+                f"Disarankan adjust plus minimal Rp {_adjust_untuk_aman:,.0f} "
+                f"agar status kembali ke AMAN."
+            )
+
+        else:  # aman
+            # Berapa sisa ruang sebelum BAHAYA (0.15%)?
+            _target_persen = _persen_bahaya
+            _target_adjust_max = (_target_persen / 100) * _net_sales
+            _sisa_ruang = max(0, _target_adjust_max - _total_adjust_abs)
+
+            _rekomendasi = (
+                f"Status AMAN. Selisih saat ini di bawah BTSB.\n"
+                f"Masih bisa melakukan adjust selisih sebesar Rp {_sisa_ruang:,.0f} "
+                f"sebelum masuk BAHAYA."
+            )
+
+        # =========================================================
+        # 6. RETURN
+        # =========================================================
+        return {
+            "success": True,
+            "periode": f"{_start_str} s/d {_end_str}",
+            "tgl_start": _start_str,
+            "tgl_end": _end_str,
+            "net_sales": _net_sales,
+            "total_adjust": _total_adjust,
+            "total_adjust_abs": _total_adjust_abs,
+            "btsb_persen": _btsb_persen,
+            "btsb_rupiah": _btsb_rupiah,
+            "nsb_personil": _nsb_personil,
+            "persen": round(_persen, 3),
+            "status": _status_key,
+            "status_label": _status_label,
+            "status_emoji": _status_emoji,
+            "status_color": _status_color,
+            "rekomendasi": _rekomendasi,
+            "adjust_untuk_aman": _adjust_untuk_aman,
+        }
+
+    except Exception as e:
+        print(f"[GET_STATUS_ANALYSIS ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)[:200]}
