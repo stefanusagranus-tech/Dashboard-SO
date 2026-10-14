@@ -392,34 +392,18 @@ function formatRupiahRingkas(nominal) {
 // RUNNING TEXT HELPER — Seamless Loop
 // =========================================================
 function startRunningText(text) {
-    const container = document.querySelector(".running-text");
+    const container = document.getElementById("runningTextContainer");
     if (!container) return;
 
-    // Hapus isi lama
-    container.innerHTML = "";
-
-    // Buat icon
-    const icon = document.createElement("div");
-    icon.textContent = "📢";
-    container.appendChild(icon);
-
-    // Buat track
-    const track = document.createElement("div");
-    track.className = "running-track";
-
-    // Item 1 (asli)
-    const inner1 = document.createElement("div");
-    inner1.className = "running-inner";
-    inner1.innerHTML = text;
-    track.appendChild(inner1);
-
-    // Item 2 (duplikat untuk seamless)
-    const inner2 = document.createElement("div");
-    inner2.className = "running-inner";
-    inner2.innerHTML = text;
-    track.appendChild(inner2);
-
-    container.appendChild(track);
+    container.innerHTML = `
+        <div class="running-icon">📢</div>
+        <div class="running-viewport">
+            <div class="running-track">
+                <span class="running-inner">${text}</span>
+                <span class="running-inner">${text}</span>
+            </div>
+        </div>
+    `;
 }
 
 
