@@ -381,6 +381,23 @@ function formatRupiahRingkas(nominal) {
     return formatted;
 }
 
+// =========================================================
+// HELPER — Format Rupiah Full (e.g., -Rp 32.500)
+// =========================================================
+function formatRupiahFull(nominal) {
+    if (nominal === 0) return "Rp 0";
+
+    const isNegative = nominal < 0;
+    const abs = Math.abs(nominal);
+
+    // Format dengan pemisah ribuan Indonesia (titik)
+    const formatted = abs.toLocaleString("id-ID", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    });
+
+    return `${isNegative ? "-" : ""}Rp ${formatted}`;
+}
 
 // =========================================================
 // RUNNING TEXT HELPER — Seamless Loop
@@ -1160,7 +1177,7 @@ function renderRakList() {
         const isSudah = rak.status === "SUDAH";
 
         if (isSudah) {
-            const nominalText = formatRupiahRingkas(rak.nominal);
+            const nominalText = formatRupiahFull(rak.nominal);
             const nominalClass = rak.nominal < 0 ? "rak-nominal-minus" : "rak-nominal-plus";
             const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
 
