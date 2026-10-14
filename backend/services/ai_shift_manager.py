@@ -635,3 +635,263 @@ def get_shift_hari_ini(tanggal=None):
         "grouped": _grouped,
         "total": len(_res.get("data", [])),
     }
+
+# =========================================================
+# CHAT HANA — fungsi lama yang HARUS di-restore
+# =========================================================
+def chat_response(user_message, conversation_history=None):
+    """
+    Hana chat response dengan intent detection.
+    Fokus: master shift.
+    """
+    if not user_message:
+        return {"text": "", "intent": "chat", "parsed": None, "engine": None}
+
+    _history_str = ""
+    if conversation_history:
+        for _msg in conversation_history[-6:]:
+            _history_str += f"{_msg.get('role', 'user')}: {_msg.get('content', '')}\n"
+
+    _prompt = f"""Kamu Hana — Master Shift Specialist Toko C383.
+
+=== TUGAS KAMU ===
+1. Cek jadwal shift (hari ini, besok, minggu ini)
+2. Update / pindah / hapus shift
+3. Saran pengganti kalau ada yang libur
+4. Cek konflik jadwal
+
+=== PERSONA ===
+Personal yang profesional tapi santai. Panggil user "Bos".
+Pakai emoji 🌸 secukupnya. Bales singkat, max 6 baris.
+
+Riwayat:
+{_history_str}
+
+Bos: "{user_message}"
+
+Balas sebagai Hana.
+"""
+
+    # Pakai Groq
+    _ok, _text, _model, _err = _call_hana_groq(_prompt, function="chat", temperature=0.7)
+
+    if not _ok:
+        return {
+            "text": f"Waduh error Bos. ({str(_err)[:50]})",
+            "intent": "chat",
+            "parsed": None,
+            "engine": None,
+        }
+
+    return {
+        "text": _text.strip(),
+        "intent": "chat",
+        "parsed": None,
+        "engine": _model,
+    }
+
+
+def suggest_pengganti(nama_libur, tanggal=None):
+    """Saran pengganti terstruktur (bukan AI)."""
+    try:
+        _sb = get_supabase()
+        if _sb is None:
+            return []
+
+        _tgl = tanggal or _now_jkt().date()
+        _tgl_str = _tgl.isoformat() if isinstance(_tgl, date) else str(_tgl)[:10]
+
+        # Ambil semua personil aktif
+        _personil = get_personil_aktif()
+
+        # Ambil shift tanggal itu
+        _shift_res = get_master_shift(tgl_start=_tgl_str, tgl_end=_tgl_str)
+        _sudah_shift = {}
+        if _shift_res.get("success"):
+            for _row in _shift_res.get("data", []):
+                _sudah_shift[_row["nama"]] = _row.get("kode_shift", "O")
+
+        # Kandidat = personil yang OFF / belum shift / belum di-set
+        _kandidat = []
+        for _p in _personil:
+            _nama = _p["nama"].upper()
+            if _nama == str(nama_libur).upper():
+                continue
+            _kode = _sudah_shift.get(_nama)
+            if _kode is None or _kode == "O":
+                _kandidat.append({
+                    "nama": _nama,
+                    "status": "Bebas" if _kode is None else "Sedang OFF",
+                    "kode_shift": _kode,
+                })
+
+        return _kandidat
+
+    except Exception as e:
+        _log(f"suggest_pengganti error: {e}")
+        return []
+
+
+def ai_suggest_pengganti_text(nama_libur, tanggal=None):
+    """Saran pengganti versi AI (text natural)."""
+    _kandidat = suggest_pengganti(nama_libur, tanggal)
+    _tgl = tanggal or _now_jkt().date()
+
+    if not _kandidat:
+        return f"🌸 Hmm, gak ada kandidat pengganti buat {nama_libur} tanggal {_tgl}. Semua udah ada shift."
+
+    _kandidat_str = "\n".join([
+        f"- {k['nama']} ({k['status']})" for k in _kandidat[:5]
+    ])
+
+    return f"""🌸 Oke Bos, buat gantiin {nama_libur} tanggal {_tgl}, aku saranin:
+
+{_kandidat_str}
+
+Mau aku atur salah satu buat gantiin?"""
+
+
+def check_conflict(tanggal, shift_map):
+    """
+    Cek konflik shift (versi lama, struktur return list).
+    
+    Args:
+        tanggal: date
+        shift_map: {"NAMA": "kode", ...}
+    
+    Returns:
+        list of dict: [{"type": "...", "message": "..."}]
+    """
+    _issues = []
+    try:
+        _tgl_str = tanggal.isoformat() if isinstance(tanggal, date) else str(tanggal)[:10]
+
+        # Cek duplikat nama
+        _nama_count = {}
+        for _nama in shift_map.keys():
+            _nama_upper = str(_nama).upper()
+            _nama_count[_nama_upper] = _nama_count.get(_nama_upper, 0) + 1
+
+        for _nama, _count in _nama_count.items():
+            if _count > 1:
+                _issues.append({
+                    "type": "duplikat",
+                    "message": f"{_nama} muncul {_count}x",
+                })
+
+        # Cek semua personil punya shift
+        _personil = get_personil_aktif()
+        _sudah_ada = [str(n).upper() for n in shift_map.keys()]
+        for _p in _personil:
+            _nama = _p["nama"].upper()
+            if _nama not in _sudah_ada:
+                _issues.append({
+                    "type": "belum_ada_shift",
+                    "message": f"{_nama} belum ada shift",
+                })
+
+        return _issues
+
+    except Exception as e:
+        _log(f"check_conflict error: {e}")
+        return _issues
+
+
+def ai_check_conflict_text(tanggal, shift_map):
+    """Cek konflik versi AI (text natural)."""
+    _issues = check_conflict(tanggal, shift_map)
+    _tgl = tanggal.isoformat() if isinstance(tanggal, date) else str(tanggal)[:10]
+
+    if not _issues:
+        return f"🌸 Cek selesai Bos! Gak ada konflik di tanggal {_tgl}. Aman ✅"
+
+    _issues_str = "\n".join([f"- {i['message']}" for i in _issues])
+    return f"""🌸 Hmm, ada {len(_issues)} hal yang perlu dicek di tanggal {_tgl}:
+
+{_issues_str}
+
+Mau aku bantu fix?"""
+
+
+# =========================================================
+# HELPER — Call Groq untuk Hana
+# =========================================================
+def _call_hana_groq(prompt, hard_timeout=90, function="chat", temperature=0.7):
+    """Call Groq API untuk Hana."""
+    if not GROQ_AVAILABLE:
+        return False, "", None, "Groq not available"
+
+    if check_auto_pause("ai-1"):
+        return False, "", None, "Auto-pause"
+
+    try:
+        _key = get_ai_api_key("ai-1")
+        if not _key:
+            return False, "", None, "API key Hana gak ada"
+
+        _client = Groq(api_key=_key)
+        _cfg = get_ai_config("ai-1")
+        _models = _cfg.get("model_priority", ["openai/gpt-oss-20b"])
+
+        _last_err = None
+        for _model_name in _models:
+            try:
+                _log(f"Trying {_model_name}...")
+                _resp = _client.chat.completions.create(
+                    model=_model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                    max_tokens=2048,
+                    top_p=0.95,
+                    extra_body={"reasoning_effort": "low"},
+                )
+
+                if not _resp or not _resp.choices:
+                    _last_err = "No response"
+                    continue
+
+                _choice = _resp.choices[0]
+                _msg = _choice.message if _choice else None
+                if not _msg:
+                    _last_err = "No message"
+                    continue
+
+                _content = getattr(_msg, "content", None)
+                if not _content:
+                    _reasoning = getattr(_msg, "reasoning_content", None)
+                    if _reasoning:
+                        _content = _reasoning
+
+                if not _content:
+                    _last_err = "Content kosong"
+                    continue
+
+                _text = str(_content).strip()
+                _log(f"OK: {_model_name} ({len(_text)} chars)")
+
+                # Record usage
+                try:
+                    _u = getattr(_resp, "usage", None)
+                    record_usage_v2(
+                        ai_name="ai-1",
+                        function=function,
+                        model=_model_name,
+                        prompt_tokens=getattr(_u, "prompt_tokens", 0) if _u else 0,
+                        output_tokens=getattr(_u, "completion_tokens", 0) if _u else 0,
+                        success=True,
+                    )
+                except Exception:
+                    pass
+
+                return True, _text, _model_name, None
+
+            except Exception as _e:
+                _last_err = str(_e)[:200]
+                _log(f"{_model_name} error: {_last_err}")
+                continue
+
+        return False, "", None, _last_err or "All models failed"
+
+    except Exception as e:
+        _log(f"_call_hana_groq error: {e}")
+        return False, "", None, str(e)[:200]
