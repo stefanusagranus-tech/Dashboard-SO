@@ -474,3 +474,128 @@ def get_items_by_rak(rak_id, tgl_start=None, tgl_end=None,
         show_all=show_all,          # ✅ FIX Bug #3
         rak_filter=rak_id,
     )
+
+# =========================================================
+# GET RAK STATUS — List semua rak: sudah/belum SO
+# =========================================================
+def get_rak_status(mode="bulan_ini", tgl_start=None, tgl_end=None):
+    """
+    Ambil status semua rak: sudah SO atau belum.
+    
+    Returns:
+        {
+            "success": bool,
+            "total_rak": int,
+            "sudah_so": int,
+            "belum_so": int,
+            "persen": float,
+            "list_rak": [
+                {
+                    "rak_id": "Q51",
+                    "rak_name": "...",
+                    "status": "SUDAH" | "BELUM",
+                    "tgl_so": "2026-10-14",
+                    "nominal": -28000,
+                    "pic": "PANDU"
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        _sb = _get_supabase_safe()
+        if _sb is None:
+            return {"success": False, "error": "Supabase gak konek", "list_rak": []}
+
+        # === 1. Ambil semua rak dari master ===
+        _res_master = _sb.table("rak_master").select("rak_id, rak_name").execute()
+        _all_rak = _res_master.data if _res_master.data else []
+
+        if not _all_rak:
+            return {"success": True, "total_rak": 0, "sudah_so": 0, "belum_so": 0, "persen": 0, "list_rak": []}
+
+        # === 2. Tentukan periode ===
+        if mode == "custom" and tgl_start and tgl_end:
+            _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
+            _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
+        else:
+            _start, _end = get_periode_range(mode)
+            _start_str = _start.isoformat()[:10]
+            _end_str = _end.isoformat()[:10]
+
+        # === 3. Ambil data SO ===
+        _res_so = (
+            _sb.table("so_rak_harian")
+            .select("rak_id, so_date, nominal_adjust, pic")
+            .gte("so_date", _start_str)
+            .lte("so_date", _end_str)
+            .execute()
+        )
+        _so_rows = _res_so.data if _res_so.data else []
+
+        # === 4. Map rak → data SO (ambil tanggal terakhir kalau ada multiple) ===
+        _so_map = {}
+        for _row in _so_rows:
+            _rak = _row.get("rak_id", "")
+            if not _rak:
+                continue
+            # Ambil data dengan tanggal terbaru
+            if _rak not in _so_map or _row.get("so_date", "") > _so_map[_rak].get("so_date", ""):
+                _so_map[_rak] = _row
+
+        # === 5. Build list ===
+        _list_rak = []
+        _sudah_so = 0
+        _belum_so = 0
+
+        for _rak in _all_rak:
+            _rak_id = _rak.get("rak_id", "")
+            _rak_name = _rak.get("rak_name", "")
+            _so_data = _so_map.get(_rak_id)
+
+            if _so_data:
+                _sudah_so += 1
+                _list_rak.append({
+                    "rak_id": _rak_id,
+                    "rak_name": _rak_name,
+                    "status": "SUDAH",
+                    "tgl_so": _so_data.get("so_date", ""),
+                    "nominal": float(_so_data.get("nominal_adjust") or 0),
+                    "pic": _so_data.get("pic") or "-",
+                })
+            else:
+                _belum_so += 1
+                _list_rak.append({
+                    "rak_id": _rak_id,
+                    "rak_name": _rak_name,
+                    "status": "BELUM",
+                    "tgl_so": None,
+                    "nominal": 0,
+                    "pic": None,
+                })
+
+        # === 6. Sort: yang BELUM dulu, terus yang SUDAH (minimal nominal) ===
+        _list_rak.sort(key=lambda x: (
+            0 if x["status"] == "BELUM" else 1,  # BELUM dulu
+            x["rak_id"],                          # abjad
+        ))
+
+        _total_rak = len(_all_rak)
+        _persen = (_sudah_so / _total_rak * 100) if _total_rak > 0 else 0
+
+        return {
+            "success": True,
+            "periode": f"{_start_str} s/d {_end_str}",
+            "total_rak": _total_rak,
+            "sudah_so": _sudah_so,
+            "belum_so": _belum_so,
+            "persen": round(_persen, 2),
+            "list_rak": _list_rak,
+        }
+
+    except Exception as e:
+        print(f"[GET_RAK_STATUS ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)[:200], "list_rak": []}
+        

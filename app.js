@@ -128,6 +128,15 @@ function goToMasterShiftScreen() {
     loadMasterShift();
 }
 
+// =========================================================
+// RAK LIST SCREEN v1.5
+// =========================================================
+function goToRakListScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("rakListScreen");
+    loadRakList();
+}
 
 // =========================================================
 // JAM LIVE
@@ -1001,6 +1010,197 @@ function renderShiftSummary(data) {
             </div>
         </div>
     `;
+}
+// =========================================================
+// RAK LIST — Load & Render
+// =========================================================
+let rakListData = [];
+let rakFilterCurrent = "semua";
+let rakSearchQuery = "";
+
+async function loadRakList() {
+    const container = document.getElementById("rakList");
+    if (!container) return;
+
+    // Loading
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat data rak...</p>
+        </div>
+    `;
+
+    try {
+        const _key = getApiKey();
+
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ mode: "bulan_ini" }),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Gagal load data rak");
+        }
+
+        rakListData = data.list_rak || [];
+
+        // Update summary
+        const elTotal = document.getElementById("rakSummaryTotal");
+        const elSudah = document.getElementById("rakSummarySudah");
+        const elBelum = document.getElementById("rakSummaryBelum");
+
+        if (elTotal) elTotal.textContent = data.total_rak;
+        if (elSudah) elSudah.textContent = data.sudah_so;
+        if (elBelum) elBelum.textContent = data.belum_so;
+
+        // Render
+        renderRakList();
+
+    } catch (err) {
+        console.error("[RakList] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load data: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
+    }
+}
+
+
+// =========================================================
+// RAK LIST — Filter
+// =========================================================
+function setRakFilter(filter) {
+    rakFilterCurrent = filter;
+
+    document.querySelectorAll(".rak-filter-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-filter") === filter);
+    });
+
+    renderRakList();
+}
+
+
+// =========================================================
+// RAK LIST — Search
+// =========================================================
+function filterRakList() {
+    const input = document.getElementById("rakSearchInput");
+    const clearBtn = document.getElementById("rakSearchClear");
+    if (!input) return;
+
+    rakSearchQuery = input.value.trim().toLowerCase();
+
+    if (clearBtn) {
+        if (rakSearchQuery) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+
+    renderRakList();
+}
+
+function clearRakSearch() {
+    const input = document.getElementById("rakSearchInput");
+    if (input) input.value = "";
+    rakSearchQuery = "";
+    const clearBtn = document.getElementById("rakSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    renderRakList();
+}
+
+
+// =========================================================
+// RAK LIST — Render
+// =========================================================
+function renderRakList() {
+    const container = document.getElementById("rakList");
+    if (!container) return;
+
+    let filtered = rakListData || [];
+
+    // Filter status
+    if (rakFilterCurrent === "sudah") {
+        filtered = filtered.filter(r => r.status === "SUDAH");
+    } else if (rakFilterCurrent === "belum") {
+        filtered = filtered.filter(r => r.status === "BELUM");
+    }
+
+    // Filter search
+    if (rakSearchQuery) {
+        filtered = filtered.filter(r => {
+            const _id = (r.rak_id || "").toLowerCase();
+            const _pic = (r.pic || "").toLowerCase();
+            return _id.includes(rakSearchQuery) || _pic.includes(rakSearchQuery);
+        });
+    }
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">🔍</span>
+                <p>Tidak ada rak yang cocok</p>
+            </div>
+        `;
+        return;
+    }
+
+    const html = filtered.map(rak => {
+        const isSudah = rak.status === "SUDAH";
+
+        if (isSudah) {
+            const nominalText = formatRupiahRingkas(rak.nominal);
+            const nominalClass = rak.nominal < 0 ? "rak-nominal-minus" : "rak-nominal-plus";
+            const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
+
+            return `
+                <div class="rak-card rak-card-sudah">
+                    <div class="rak-card-header">
+                        <span class="rak-card-badge rak-badge-sudah">✅</span>
+                        <span class="rak-card-id">${escapeHtml(rak.rak_id)}</span>
+                        <span class="rak-card-status">Sudah SO</span>
+                    </div>
+                    <div class="rak-card-body">
+                        <div class="rak-card-row">
+                            <span class="rak-card-label">📅 Tanggal</span>
+                            <span class="rak-card-value">${tglShort}</span>
+                        </div>
+                        <div class="rak-card-row">
+                            <span class="rak-card-label">💰 Nominal</span>
+                            <span class="rak-card-value ${nominalClass}">${nominalText}</span>
+                        </div>
+                        <div class="rak-card-row">
+                            <span class="rak-card-label">👤 PIC</span>
+                            <span class="rak-card-value">${escapeHtml(rak.pic || "-")}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="rak-card rak-card-belum">
+                    <div class="rak-card-header">
+                        <span class="rak-card-badge rak-badge-belum">❌</span>
+                        <span class="rak-card-id">${escapeHtml(rak.rak_id)}</span>
+                        <span class="rak-card-status">Belum SO</span>
+                    </div>
+                </div>
+            `;
+        }
+    }).join("");
+
+    container.innerHTML = html;
 }
 
 // =========================================================
