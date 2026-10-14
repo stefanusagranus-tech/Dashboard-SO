@@ -204,14 +204,7 @@ def get_personil_aktif() -> list:
 def parse_shift_update(text: str, today=None) -> dict:
     """
     Parse natural language jadi struktur shift.
-    Versi v3 — handle format kompleks.
-    
-    Contoh input yang SUPPORTED:
-    - "Atur Reza ke siang besok"
-    - "Pagi: Pandu, Tika. Siang: Reza. Malam: Zaki"
-    - "Atur Kusdewi shift siang, Atur zaki shift Malam dan reza libur"
-    - "Besok Pandu dan Rizki libur"
-    - "Hari ini Zaki cuti"
+    Versi FINAL v4 — handle multi-klausa.
     """
     _today = today or _now_jkt().date()
     _tgl = parse_tanggal(text, _today)
@@ -220,15 +213,13 @@ def parse_shift_update(text: str, today=None) -> dict:
     _text_lower = str(text).lower().strip()
     _text_upper = str(text).upper()
 
-    # === AMBIL DAFTAR PERSONIL ===
     _personil_list = get_personil_aktif()
     _personil_names = [p["nama"].upper() for p in _personil_list]
 
     if not _personil_names:
-        _log("Warning: personil list kosong")
         return {"tanggal": _tgl, "tanggal_list": [_tgl], "items": [], "raw": text}
 
-    # === SHIFT KEYWORD → KODE ===
+    # Mapping keyword → kode
     _shift_kw_map = [
         ("pagi", "P7"),
         ("siang", "S15"),
@@ -242,121 +233,87 @@ def parse_shift_update(text: str, today=None) -> dict:
     ]
 
     # =========================================================
-    # STRATEGI v3: SPLIT PER SEGMEN, LALU PARSE TIAP SEGMEN
+    # STEP 1: Split text by keyword "atur/set/ubah/ganti" + koma
     # =========================================================
-    # Split text by separator kuat: "atur", "set", "ubah", "ganti", "pindah", koma, titik
-    _separator_pattern = r'[,\.]|\batur\b|\bset\b|\bubah\b|\bganti\b|\bpindah\b|\bjadwal\b'
-    _segments = re.split(_separator_pattern, _text_lower)
+    _segments = re.split(
+        r'[,\.]|\batur\b|\bset\b|\bubah\b|\bganti\b|\bpindah\b|\bjadwal\b',
+        _text_lower
+    )
     _segments = [s.strip() for s in _segments if s.strip()]
 
     _found_any = False
 
+    # =========================================================
+    # STEP 2: Untuk tiap segmen, split lagi by "dan"
+    # =========================================================
+    _sub_segments = []
     for _seg in _segments:
-        if len(_seg) < 3:
-            continue
+        # Split by "dan" sebagai pemisah klausa
+        _parts = re.split(r'\s+dan\s+|\s*,\s*', _seg)
+        for _p in _parts:
+            _p = _p.strip()
+            if _p and len(_p) >= 3:
+                _sub_segments.append(_p)
 
-        # Cari SEMUA keyword shift di segmen ini (bisa lebih dari 1)
-        _shift_positions = []
+    # =========================================================
+    # STEP 3: Parse tiap sub-segment
+    # =========================================================
+    for _seg in _sub_segments:
+        # Cari keyword shift (pertama ketemu)
+        _kode_detected = None
+        _kw_position = None
+
         for _kw, _kode in _shift_kw_map:
-            # Whole word match
-            for _m in re.finditer(r'\b' + re.escape(_kw) + r'\b', _seg):
-                _shift_positions.append({
-                    "start": _m.start(),
-                    "end": _m.end(),
-                    "kode": _kode,
-                    "kw": _kw,
-                })
+            _match = re.search(r'\b' + re.escape(_kw) + r'\b', _seg)
+            if _match:
+                _kode_detected = _kode
+                _kw_position = _match.start()
+                break
 
-        if not _shift_positions:
-            continue
+        # Cari nama personil di segmen ini
+        _found_names = []
+        for _nama_db in _personil_names:
+            if re.search(r'\b' + re.escape(_nama_db.lower()) + r'\b', _seg):
+                _found_names.append(_nama_db)
 
-        # Sort by position
-        _shift_positions.sort(key=lambda x: x["start"])
-
-        # === STRATEGI A: Kalau ada >1 shift keyword di segmen, split lagi ===
-        if len(_shift_positions) > 1:
-            # Split segmen berdasarkan posisi shift keyword
-            for _idx, _pos in enumerate(_shift_positions):
-                _content_start = _pos["end"]
-                if _idx + 1 < len(_shift_positions):
-                    _content_end = _shift_positions[_idx + 1]["start"]
-                else:
-                    _content_end = len(_seg)
-
-                _content = _seg[_content_start:_content_end]
-                _content = re.sub(r'^[\s:\.\,\-]+', '', _content)
-                _content = re.sub(r'[\s:\.\,\-]+$', '', _content)
-
-                # Cari nama personil di content
-                for _nama_db in _personil_names:
-                    if re.search(r'\b' + re.escape(_nama_db.lower()) + r'\b', _content):
-                        if _nama_db not in [it["nama"] for it in _items]:
-                            _items.append({
-                                "nama": _nama_db,
-                                "kode_shift": _pos["kode"],
-                                "shift_nama": SHIFT_MAP[_pos["kode"]],
-                            })
-                            _found_any = True
-
-        # === STRATEGI B: Kalau cuma 1 shift keyword ===
-        else:
-            _pos = _shift_positions[0]
-
-            # Split segmen jadi: sebelum & sesudah keyword
-            _before = _seg[:_pos["start"]]
-            _after = _seg[_pos["end"]:]
-
-            # Cari nama di SEBELUM keyword (misal: "atur reza ke siang")
-            _nama_before = None
-            for _nama_db in _personil_names:
-                if re.search(r'\b' + re.escape(_nama_db.lower()) + r'\b', _before):
-                    _nama_before = _nama_db
-                    break
-
-            # Kalau ada nama sebelum → masukkan
-            if _nama_before and _nama_before not in [it["nama"] for it in _items]:
-                _items.append({
-                    "nama": _nama_before,
-                    "kode_shift": _pos["kode"],
-                    "shift_nama": SHIFT_MAP[_pos["kode"]],
-                })
-                _found_any = True
-
-            # Cari nama di SESUDAH keyword (misal: "siang: pandu, tika")
-            _after_clean = re.sub(r'^[\s:\.\,\-]+', '', _after)
-            _after_clean = re.sub(r'[\s:\.\,\-]+$', '', _after_clean)
-
-            # Split by "dan" atau "," atau spasi
-            _after_parts = re.split(r'\bdan\b|[,\s]+', _after_clean)
-
-            for _part in _after_parts:
-                _part = _part.strip().lower()
-                if not _part or len(_part) < 2:
-                    continue
-
-                for _nama_db in _personil_names:
-                    if _part == _nama_db.lower() and _nama_db not in [it["nama"] for it in _items]:
+        # Kalau gak ada keyword shift tapi ada nama → pakai shift dari segmen sebelumnya (context)
+        if not _kode_detected and _found_names:
+            # Cari shift terakhir yang di-set
+            if _items:
+                _last_kode = _items[-1]["kode_shift"]
+                for _nama in _found_names:
+                    if _nama not in [it["nama"] for it in _items]:
                         _items.append({
-                            "nama": _nama_db,
-                            "kode_shift": _pos["kode"],
-                            "shift_nama": SHIFT_MAP[_pos["kode"]],
+                            "nama": _nama,
+                            "kode_shift": _last_kode,
+                            "shift_nama": SHIFT_MAP[_last_kode],
                         })
                         _found_any = True
+            continue
+
+        # Kalau ada keyword + ada nama → tambahkan
+        if _kode_detected and _found_names:
+            for _nama in _found_names:
+                if _nama not in [it["nama"] for it in _items]:
+                    _items.append({
+                        "nama": _nama,
+                        "kode_shift": _kode_detected,
+                        "shift_nama": SHIFT_MAP[_kode_detected],
+                    })
+                    _found_any = True
 
     # =========================================================
-    # FALLBACK: KALAU STRATEGI v3 GAGAL
+    # FALLBACK
     # =========================================================
     if not _found_any:
-        _log("Strategy v3 failed, using fallback")
+        _log("Strategy v4 failed, using fallback")
 
-        # Deteksi shift tunggal (cari yang muncul pertama)
-        _shift_detected = "O"  # default libur
+        _shift_detected = "O"
         for _kw, _kode in _shift_kw_map:
             if re.search(r'\b' + re.escape(_kw) + r'\b', _text_lower):
                 _shift_detected = _kode
                 break
 
-        # Cari SEMUA nama personil di text
         for _nama_db in _personil_names:
             if re.search(r'\b' + re.escape(_nama_db) + r'\b', _text_upper):
                 _items.append({
@@ -365,36 +322,31 @@ def parse_shift_update(text: str, today=None) -> dict:
                     "shift_nama": SHIFT_MAP[_shift_detected],
                 })
 
-    # =========================================================
-    # FILTER AKHIR — buang duplikat, stopwords, dll
-    # =========================================================
-    _final_items = []
-    _seen_names = set()
-
+    # Filter duplikat & stopwords
+    _final = []
+    _seen = set()
     for _it in _items:
-        _nama = _it.get("nama", "").upper().strip()
-
-        # Skip kalau kosong, kepanjangan, stopword, atau duplikat
-        if not _nama or len(_nama) < 2 or len(_nama) > 20:
+        _n = _it.get("nama", "").upper().strip()
+        if not _n or len(_n) < 2 or len(_n) > 20:
             continue
-        if _nama in STOPWORDS:
+        if _n in STOPWORDS:
             continue
-        if _nama in _seen_names:
+        if _n in _seen:
             continue
-
-        _final_items.append({
-            "nama": _nama,
+        _final.append({
+            "nama": _n,
             "kode_shift": _it["kode_shift"],
             "shift_nama": _it["shift_nama"],
         })
-        _seen_names.add(_nama)
+        _seen.add(_n)
 
     return {
         "tanggal": _tgl,
         "tanggal_list": [_tgl],
-        "items": _final_items,
+        "items": _final,
         "raw": text,
     }
+    
 # =========================================================
 # SAVE SHIFT — dengan deteksi konflik
 # =========================================================

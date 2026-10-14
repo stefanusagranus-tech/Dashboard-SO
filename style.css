@@ -1293,14 +1293,14 @@ body {
 }
 
 /* =========================================================
-   CHAT KONFIRMASI — Bubble Compact v1.4
+   BUBBLE KONFIRMASI — HORIZONTAL COMPACT v4
    ========================================================= */
 .bubble-confirm {
     border: 1px solid var(--accent-orange) !important;
     box-shadow: var(--shadow-sm), 0 0 12px rgba(255, 140, 66, 0.2);
     background: var(--bubble-ai-bg) !important;
     padding: 10px 12px !important;
-    max-width: 85% !important;
+    max-width: 88% !important;
     width: auto !important;
     position: relative;
     overflow: hidden;
@@ -1316,60 +1316,76 @@ body {
     animation: shimmer 2.5s linear infinite;
 }
 
+/* Header — 1 baris */
+.confirm-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.confirm-title-icon {
+    font-size: 14px;
+}
+
 .confirm-title {
     font-size: 11px;
     font-weight: 800;
     color: var(--accent-orange);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 6px;
+    letter-spacing: 0.8px;
 }
 
-.confirm-detail {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-    font-weight: 600;
-}
-
-.confirm-items-list {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    margin-bottom: 8px;
-    max-height: 100px;
-    overflow-y: auto;
-}
-
-.confirm-item {
-    font-size: 12px;
-    color: var(--text-primary);
-    font-weight: 600;
-    line-height: 1.5;
-    padding: 1px 0;
-}
-
-.confirm-more {
+.confirm-date {
     font-size: 11px;
-    color: var(--accent-orange);
-    font-style: italic;
+    color: var(--text-muted);
     font-weight: 600;
-    padding-top: 2px;
+    margin-left: auto;
 }
 
+/* Chips — horizontal wrap */
+.confirm-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.confirm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-xl);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    border: 1px solid var(--border-color);
+}
+
+.confirm-chip-more {
+    background: var(--accent-orange);
+    color: #fff;
+    border-color: var(--accent-orange);
+    font-weight: 800;
+}
+
+/* Tombol — sejajar horizontal */
 .confirm-actions {
     display: flex;
     gap: 6px;
-    margin-top: 8px;
 }
 
 .confirm-btn {
     flex: 1;
-    padding: 8px 10px;
+    padding: 7px 10px;
     border: none;
     border-radius: var(--radius-sm);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -1378,6 +1394,7 @@ body {
     gap: 4px;
     transition: all 0.2s;
     text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 .confirm-btn-save {
@@ -1385,30 +1402,37 @@ body {
     color: #fff;
 }
 
+.confirm-btn-save:active { transform: scale(0.96); }
+.confirm-btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .confirm-btn-cancel {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     border: 1px solid var(--border-color);
 }
 
-.bubble-confirm.resolved {
-    opacity: 0.7;
+.confirm-btn-cancel:active {
+    transform: scale(0.96);
+    border-color: var(--danger);
+    color: var(--danger);
 }
 
-.bubble-confirm.resolved .confirm-actions {
-    display: none;
-}
+/* Resolved */
+.bubble-confirm.resolved { opacity: 0.75; }
+.bubble-confirm.resolved .confirm-actions { display: none; }
 
 .confirm-status {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     margin-top: 8px;
-    padding: 6px 10px;
+    padding: 5px 10px;
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .confirm-status-saved {

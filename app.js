@@ -1227,16 +1227,17 @@ function renderConfirmBubble(msg, idx) {
     const items = data.items || [];
     const itemsCount = items.length;
 
-    const showAll = itemsCount <= 3;
-    const displayItems = showAll ? items : items.slice(0, 3);
-    const remaining = itemsCount - 3;
+    const showAll = itemsCount <= 4;
+    const displayItems = showAll ? items : items.slice(0, 4);
+    const remaining = itemsCount - 4;
 
+    // Item sejajar horizontal — inline
     const itemsHtml = displayItems.map(it => 
-        `<div class="confirm-item">👤 ${it.nama} → ${it.shift_nama || it.kode_shift}</div>`
+        `<span class="confirm-chip">👤 ${it.nama} → ${it.shift_nama || it.kode_shift}</span>`
     ).join("");
 
     const moreHtml = !showAll 
-        ? `<div class="confirm-more">+ ${remaining} lainnya</div>` 
+        ? `<span class="confirm-chip confirm-chip-more">+${remaining}</span>` 
         : "";
 
     let actionsHtml = "";
@@ -1258,16 +1259,21 @@ function renderConfirmBubble(msg, idx) {
     }
 
     bubble.innerHTML = `
-        <div class="confirm-title">🌸 KONFIRMASI UPDATE</div>
-        <div class="confirm-detail">📅 ${formatTanggalShort(data.tanggal)} • 👥 ${itemsCount} orang</div>
-        <div class="confirm-items-list">${itemsHtml}${moreHtml}</div>
+        <div class="confirm-header">
+            <span class="confirm-title-icon">🌸</span>
+            <span class="confirm-title">KONFIRMASI UPDATE</span>
+            <span class="confirm-date">📅 ${formatTanggalShort(data.tanggal)}</span>
+        </div>
+        <div class="confirm-chips">
+            ${itemsHtml}
+            ${moreHtml}
+        </div>
         ${actionsHtml}
         ${statusHtml}
     `;
 
     return bubble;
 }
-
 // =========================================================
 // HANDLE KONFIRMASI — SIMPAN
 // =========================================================
