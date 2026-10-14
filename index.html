@@ -233,12 +233,20 @@
         <!-- FILTER SORT -->
         <div class="spd-sort-wrapper">
             <span class="spd-sort-label">🔀 Urutkan:</span>
-            <select id="spdSortFilter" class="spd-sort-select" onchange="loadSpdList()">
-                <option value="tanggal_asc">📅 Tanggal (Terbaru → Lama)</option>
-                <option value="tanggal_desc">📅 Tanggal (Lama → Terbaru)</option>
-                <option value="spd_desc">💰 Terbesar → Terkecil</option>
-                <option value="spd_asc">💰 Terkecil → Terbesar</option>
-            </select>
+            <div class="spd-sort-buttons">
+                <button class="spd-sort-btn active" data-sort="tanggal_desc" onclick="setSpdSort('tanggal_desc')">
+                    📅 Terbaru
+                </button>
+                <button class="spd-sort-btn" data-sort="tanggal_asc" onclick="setSpdSort('tanggal_asc')">
+                    📅 Lama
+                </button>
+                <button class="spd-sort-btn" data-sort="spd_desc" onclick="setSpdSort('spd_desc')">
+                    💰 ↓
+                </button>
+                <button class="spd-sort-btn" data-sort="spd_asc" onclick="setSpdSort('spd_asc')">
+                    💰 ↑
+                </button>
+            </div>
         </div>
         
         <!-- SHIFT LIST -->

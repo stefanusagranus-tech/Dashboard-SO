@@ -1225,6 +1225,7 @@ function renderRakList() {
 // =========================================================
 let spdListData = [];
 let spdPeriodCurrent = "bulan_ini";
+let spdSortValue = "tanggal_desc";  // ← state sort
 
 function goToSpdListScreen() {
     closeSidebar();
@@ -1235,21 +1236,21 @@ function goToSpdListScreen() {
 
 
 // =========================================================
-// SPD LIST — Set Period
+// SPD LIST — Set Sort (via button)
 // =========================================================
-function setSpdPeriod(period) {
-    spdPeriodCurrent = period;
+function setSpdSort(sortValue) {
+    console.log("[SPD] Sort button clicked:", sortValue);
+    
+    // Update state
+    spdSortValue = sortValue;
 
-    document.querySelectorAll(".spd-period-tab").forEach(tab => {
-        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
+    // Update active button
+    document.querySelectorAll(".spd-sort-btn").forEach(btn => {
+        const isActive = btn.getAttribute("data-sort") === sortValue;
+        btn.classList.toggle("active", isActive);
     });
 
-    const customRow = document.getElementById("spdCustomDateRow");
-    if (customRow) {
-        if (period === "custom") customRow.classList.remove("hidden");
-        else customRow.classList.add("hidden");
-    }
-
+    // Reload with new sort
     loadSpdList();
 }
 
@@ -1329,8 +1330,7 @@ async function loadSpdList() {
         spdListData = data.list_spd || [];
 
         // ✅ 2. Ambil sort value dari dropdown
-        const sortFilter = document.getElementById("spdSortFilter");
-        const sortValue = sortFilter ? sortFilter.value : "tanggal_asc";
+        const sortValue = spdSortValue || "tanggal_desc";
 
         console.log("[SPD] Data loaded:", spdListData.length, "items");
         console.log("[SPD] Sort value:", sortValue);
