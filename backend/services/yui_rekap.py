@@ -752,12 +752,16 @@ def get_top_items_extended(
 
         # Sort
         if order_by == "nominal_desc":
-            _items.sort(key=lambda x: x["nominal_adjust"])
-        elif order_by == "nominal_asc":
+            # Descending — paling positif dulu
             _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
+        elif order_by == "nominal_asc":
+            # Ascending — paling negatif dulu
+            _items.sort(key=lambda x: x["nominal_adjust"])
         elif order_by == "tanggal_desc":
+            # Terbaru dulu
             _items.sort(key=lambda x: x.get("so_date") or "", reverse=True)
         elif order_by == "tanggal_asc":
+            # Lama dulu
             _items.sort(key=lambda x: x.get("so_date") or "")
 
         if limit:

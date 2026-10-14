@@ -2436,7 +2436,7 @@ setInterval(() => {
 // =========================================================
 let topData = [];
 let topPeriodCurrent = "bulan_ini";
-let topSortValue = "nominal_desc";
+let topSortValue = "tanggal_desc";
 let topTabCurrent = "rak";
 let topSearchQuery = "";
 
@@ -2600,7 +2600,7 @@ async function loadTopMinus() {
             url = `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
             body.limit = null;  // semua
             body.search = topSearchQuery || "";
-            body.order_by = "nominal_asc";
+            body.order_by = topSortValue;   // ✅ pakai state actual
         }
 
         console.log("[Top] Fetch:", url, body);
