@@ -4416,5 +4416,46 @@ body {
 }
 
 /* =========================================================
+   SAFE AREA — Fix tampilan kepotong di HP dengan notch/gesture
+   ========================================================= */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .screen.active {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    
+    .chat-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+    
+    .modal-body {
+        padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    }
+    
+    .home-content,
+    .settings-content,
+    .master-shift-content,
+    .rak-list-content,
+    .spd-list-content,
+    .top-minus-content,
+    .rak-detail-content,
+    .status-content {
+        padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    }
+}
+
+/* Prevent bounce & pull-to-refresh */
+html, body {
+    overscroll-behavior: contain;
+    overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.screen.active {
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* =========================================================
    END OF STYLE v2.1
    ========================================================= */

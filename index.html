@@ -791,23 +791,18 @@
 <!-- ========================================================= -->
 <!-- MODAL — KONFIRMASI KELUAR APP -->
 <!-- ========================================================= -->
-<div id="exitModal" class="modal-overlay">
-    <div class="modal-content modal-exit" onclick="event.stopPropagation()">
-        <div class="exit-icon">🚪</div>
-        <div class="exit-title">Keluar dari Dashboard?</div>
-        <div class="exit-desc">
-            Yakin mau keluar dari aplikasi?<br>
-            <small>Semua data chat & progress akan tersimpan.</small>
-        </div>
-        <div class="exit-actions">
-            <button class="exit-btn exit-btn-cancel" onclick="closeExitModal()">
-                ❌ Batal
-            </button>
-            <button class="exit-btn exit-btn-confirm" onclick="confirmExit()">
-                🚪 Keluar
-            </button>
-        </div>
-    </div>
+<div class="exit-title">Logout dari Dashboard?</div>
+<div class="exit-desc">
+    Yakin mau logout, Bos?<br>
+    <small>Kamu perlu input PIN lagi untuk masuk. Semua data chat & progress tetap tersimpan.</small>
+</div>
+<div class="exit-actions">
+    <button class="exit-btn exit-btn-cancel" onclick="closeExitModal()">
+        ❌ Batal
+    </button>
+    <button class="exit-btn exit-btn-confirm" onclick="confirmLogout()">
+        🚪 Logout
+    </button>
 </div>
 
 <!-- ========================================================= -->

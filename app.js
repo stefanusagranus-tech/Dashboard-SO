@@ -72,18 +72,22 @@ async function initApp() {
     }
 
     // ✅ 3. Cek login status
+    // Cek session berdasarkan timestamp (30 menit)
     const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
-
-    bindPinKeypad();
-    bindChatInput();
-
-    setInterval(updateTimeTheme, 60 * 1000);
-
-    if (isLoggedIn) {
-        // ✅ 4. User udah login — Load dashboard dengan loading overlay
+    const lastLoginTime = parseInt(localStorage.getItem("so_login_timestamp") || "0");
+    const SESSION_DURATION = 30 * 60 * 1000;   // 30 menit
+    const isSessionValid = (Date.now() - lastLoginTime) < SESSION_DURATION;
+    
+    if (isLoggedIn && isSessionValid) {
+        console.log("[Auth] Session valid — auto-login");
+        resetIdleTimer();
         await loadDashboardWithLoading();
     } else {
-        // ✅ 5. Belum login — Hide splash, tampil login
+        console.log("[Auth] Need login");
+        if (isLoggedIn && !isSessionValid) {
+            localStorage.removeItem("so_logged_in");
+            localStorage.removeItem("so_login_timestamp");
+        }
         hideSplashScreen();
         showScreen("loginScreen");
     }
@@ -108,13 +112,15 @@ function showSplashScreen() {
 
         splash.classList.add("active");
 
-        // Progress messages
         const steps = [
             { pct: 20, msg: "Menyiapkan aplikasi..." },
             { pct: 50, msg: "Memuat konfigurasi..." },
             { pct: 80, msg: "Hampir siap..." },
             { pct: 100, msg: "Siap!" },
         ];
+
+        const startTime = Date.now();
+        const MIN_DURATION = 1500;   // Minimal 1.5 detik
 
         let i = 0;
         const interval = setInterval(() => {
@@ -125,8 +131,9 @@ function showSplashScreen() {
                 i++;
             } else {
                 clearInterval(interval);
-                // Minimum tampil 1.5 detik total
-                setTimeout(resolve, 200);
+                const elapsed = Date.now() - startTime;
+                const remaining = Math.max(0, MIN_DURATION - elapsed);
+                setTimeout(resolve, remaining);
             }
         }, 350);
     });
@@ -640,9 +647,12 @@ function checkPinComplete() {
             if (pinInput === validPin) {
                 pinInput = "";
                 updatePinDisplay();
+                
                 localStorage.setItem("so_logged_in", "true");
-            
-                // ✅ Tampilkan splash + loading
+                localStorage.setItem("so_login_timestamp", Date.now().toString());
+                
+                resetIdleTimer();   // ✅ Reset idle timer
+                
                 (async () => {
                     await showSplashScreen();
                     await loadDashboardWithLoading();
@@ -3504,187 +3514,173 @@ function renderStatusRekomendasi(data) {
 }
 // =========================================================
 // HANDLE TOMBOL BACK ANDROID
-// Screen lain → balik ke Home
-// Home → muncul modal konfirmasi exit
+// Screen lain → balik Home
+// Home → modal LOGOUT
 // =========================================================
 let exitModalShown = false;
 
 window.addEventListener("popstate", function(event) {
     console.log("[Back] Back button pressed");
     
-    // Cek screen aktif
     const activeScreen = document.querySelector(".screen.active");
     if (!activeScreen) return;
     
     const screenId = activeScreen.id;
     
-    // ============================================
-    // CEK DULU: sidebar kebuka?
-    // ============================================
+    // Sidebar kebuka → close sidebar
     const sidebar = document.getElementById("sidebar");
     if (sidebar && sidebar.classList.contains("open")) {
-        console.log("[Back] Sidebar open — closing sidebar");
         event.preventDefault();
         closeSidebar();
         pushBackGuard();
         return;
     }
     
-    // ============================================
-    // CEK: modal kebuka (selain exit modal)?
-    // ============================================
+    // Modal lain kebuka → close
     const modalOpen = document.querySelector(".modal-overlay.active:not(#exitModal)");
     if (modalOpen) {
-        console.log("[Back] Modal open — closing modal");
         event.preventDefault();
         modalOpen.classList.remove("active");
         pushBackGuard();
         return;
     }
     
-    // ============================================
-    // CEK: exit modal udah tampil?
-    // ============================================
+    // Exit modal udah tampil → force logout
     if (exitModalShown) {
-        // Pencet back lagi waktu modal muncul = force exit
-        console.log("[Back] Exit modal shown — forcing exit");
         event.preventDefault();
-        forceExitApp();
+        confirmLogout();
         return;
     }
     
-    // ============================================
-    // HOME / LOGIN → munculin modal exit
-    // ============================================
+    // Di HOME / LOGIN → tampil modal
     if (screenId === "homeScreen" || screenId === "loginScreen") {
-        console.log("[Back] At main screen — showing exit modal");
         event.preventDefault();
         showExitModal();
         pushBackGuard();
         return;
     }
     
-    // ============================================
-    // SCREEN LAIN → balik ke Home (silent)
-    // ============================================
-    console.log("[Back] Not at home — navigating to home from:", screenId);
+    // Di screen lain → balik Home
     event.preventDefault();
     
-    // Kalau di rakDetail, balik ke topMinus dulu (opsional — biar konsisten)
-    // Kalau lo mau langsung ke home, hapus blok ini
     if (screenId === "rakDetailScreen") {
         goToTopMinusScreen();
         pushBackGuard();
         return;
     }
     
-    // Default: balik ke home
     goToHomeScreen();
     pushBackGuard();
 });
 
 
 // =========================================================
-// EXIT MODAL — SHOW / CLOSE / CONFIRM
+// LOGOUT MODAL
 // =========================================================
 function showExitModal() {
-    console.log("[Exit] Showing exit modal");
+    console.log("[Logout] Showing modal");
     exitModalShown = true;
-    
     const modal = document.getElementById("exitModal");
-    if (modal) {
-        modal.classList.add("active");
-    }
+    if (modal) modal.classList.add("active");
 }
 
 function closeExitModal() {
-    console.log("[Exit] Modal closed (Batal)");
+    console.log("[Logout] Cancelled");
     exitModalShown = false;
-    
     const modal = document.getElementById("exitModal");
-    if (modal) {
-        modal.classList.remove("active");
-    }
-    
-    // Re-push guard biar back bisa di-intercept lagi
+    if (modal) modal.classList.remove("active");
     pushBackGuard();
 }
 
-function confirmExit() {
-    console.log("[Exit] User confirmed exit");
-    forceExitApp();
-}
-
-function forceExitApp() {
-    // Method 1: Android JS Interface (kalau WebIntoApp expose)
-    try {
-        if (window.Android && typeof window.Android.exitApp === "function") {
-            console.log("[Exit] Using Android.exitApp()");
-            window.Android.exitApp();
-            return;
-        }
-    } catch (e) {
-        console.error("[Exit] Android.exitApp() failed:", e);
+function confirmLogout() {
+    console.log("[Logout] Confirmed");
+    
+    const modal = document.getElementById("exitModal");
+    if (modal) modal.classList.remove("active");
+    
+    // Clear session
+    localStorage.removeItem("so_logged_in");
+    localStorage.removeItem("so_login_timestamp");
+    
+    // Clear idle timer
+    if (typeof idleTimer !== "undefined" && idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
     }
     
-    // Method 2: Coba window.close()
-    try {
-        console.log("[Exit] Trying window.close()");
-        window.close();
-    } catch (e) {
-        console.error("[Exit] window.close() failed:", e);
-    }
+    exitModalShown = false;
+    pinInput = "";
+    updatePinDisplay();
     
-    // Method 3: Fallback history — clear semua history
-    setTimeout(() => {
-        try {
-            console.log("[Exit] Using history.go(-length)");
-            history.go(-(history.length));
-        } catch (e) {
-            console.error("[Exit] history.go() failed:", e);
-        }
-    }, 100);
+    if (clockInterval) clearInterval(clockInterval);
+    stopDashboardAutoRefresh();
     
-    // Reset flag setelah delay
+    showToastMini("👋 Logout berhasil!", "success");
+    
     setTimeout(() => {
-        exitModalShown = false;
-    }, 500);
+        showScreen("loginScreen");
+        pushBackGuard();
+    }, 300);
 }
 
 
 // =========================================================
-// PUSH BACK GUARD — biar back button bisa di-intercept
+// PUSH BACK GUARD
 // =========================================================
 function pushBackGuard() {
     try {
         history.pushState({ guard: true, ts: Date.now() }, "", "");
-    } catch (e) {
-        console.error("[Back] pushState failed:", e);
-    }
+    } catch (e) {}
 }
 
-// Init saat app load
 setTimeout(pushBackGuard, 800);
 
-// =========================================================
-// PENCEGAHAN PULL-TO-REFRESH MOBILE
-// =========================================================
-let touchStartY = 0;
 
-window.addEventListener('touchstart', function(e) {
-    touchStartY = e.touches[0].clientY;
-}, { passive: true });
+// =========================================================
+// AUTO-LOGOUT IDLE TIMER — 5 MENIT
+// =========================================================
+let idleTimer = null;
+const IDLE_TIMEOUT = 5 * 60 * 1000;   // 5 menit
 
-window.addEventListener('touchmove', function(e) {
-    const touchY = e.touches[0].clientY;
-    const touchYDelta = touchY - touchStartY;
+function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
     
-    // Jika halaman berada di paling atas dan user menarik layar ke bawah (pull down)
-    if (window.scrollY === 0 && touchYDelta > 0 && e.target.closest('.chat-messages, .master-shift-content, .home-content, .rak-list-content, .spd-list-content, .top-minus-content, .rak-detail-content, .status-content') === null) {
-        e.preventDefault();
-    }
-}, { passive: false });
+    const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
+    if (!isLoggedIn) return;
+    
+    const activeScreen = document.querySelector(".screen.active");
+    if (activeScreen && activeScreen.id === "loginScreen") return;
+    
+    idleTimer = setTimeout(() => {
+        console.log("[Idle] 5 menit idle — auto logout");
+        autoLogout();
+    }, IDLE_TIMEOUT);
+}
 
+function autoLogout() {
+    console.log("[Idle] Auto logout");
+    
+    localStorage.removeItem("so_logged_in");
+    localStorage.removeItem("so_login_timestamp");
+    
+    pinInput = "";
+    updatePinDisplay();
+    
+    if (clockInterval) clearInterval(clockInterval);
+    stopDashboardAutoRefresh();
+    
+    showToastMini("⏰ Idle 5 menit — auto logout", "error");
+    
+    setTimeout(() => {
+        showScreen("loginScreen");
+        pushBackGuard();
+    }, 300);
+}
+
+// Listen aktivitas user
+["click", "touchstart", "keydown", "scroll"].forEach(evt => {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+});
 
 // =========================================================
 // BOOT
