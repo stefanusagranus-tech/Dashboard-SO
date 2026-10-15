@@ -71,8 +71,13 @@ async function initApp() {
         if (hint) hint.textContent = "";
     }
 
-    // ✅ 3. Cek login status
-    // Cek session berdasarkan timestamp (30 menit)
+    // ✅ 3. BIND EVENT LISTENER — INI YANG HILANG!
+    console.log("[App] Binding PIN keypad...");
+    bindPinKeypad();
+    bindChatInput();
+    console.log("[App] Binding done");
+
+    // ✅ 4. Cek login status (session 30 menit)
     const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
     const lastLoginTime = parseInt(localStorage.getItem("so_login_timestamp") || "0");
     const SESSION_DURATION = 30 * 60 * 1000;   // 30 menit
@@ -92,9 +97,11 @@ async function initApp() {
         showScreen("loginScreen");
     }
 
+    // ✅ 5. Timer auto theme
+    setInterval(updateTimeTheme, 60 * 1000);
+
     console.log("[App] Init done");
 }
-
 
 // =========================================================
 // SPLASH SCREEN
