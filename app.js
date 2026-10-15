@@ -661,7 +661,6 @@ function checkPinComplete() {
                 resetIdleTimer();   // ✅ Reset idle timer
                 
                 (async () => {
-                    await showSplashScreen();
                     await loadDashboardWithLoading();
                 })();
             } else {
