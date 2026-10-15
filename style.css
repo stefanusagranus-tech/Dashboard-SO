@@ -558,14 +558,15 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
+    padding: 12px 14px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     position: relative;
     overflow: hidden;
-    min-height: 60px;
+    min-height: 72px;        /* ← Dinaikin biar cukup */
+    box-sizing: border-box;   /* ← PENTING */
 }
 
 .status-bar::before {
@@ -590,7 +591,7 @@ body {
 }
 
 .status-icon {
-    font-size: 26px;
+    font-size: 24px;          /* ← Kecilin dikit */
     line-height: 1;
     flex-shrink: 0;
     animation: statusPulse 2s ease-in-out infinite;
@@ -649,6 +650,7 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1;           /* ← Tambahin */
 }
 
 .status-bar.status-aman::before { background: #06d6a0; }
