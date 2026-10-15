@@ -88,7 +88,7 @@ async function initApp() {
             localStorage.removeItem("so_logged_in");
             localStorage.removeItem("so_login_timestamp");
         }
-        hideSplashScreen();
+        await hideSplashScreen();
         showScreen("loginScreen");
     }
 
@@ -140,14 +140,21 @@ function showSplashScreen() {
 }
 
 function hideSplashScreen() {
-    const splash = document.getElementById("splashScreen");
-    if (!splash) return;
+    return new Promise(resolve => {
+        const splash = document.getElementById("splashScreen");
+        if (!splash) {
+            resolve();
+            return;
+        }
 
-    splash.classList.add("fade-out");
+        splash.classList.add("fade-out");
 
-    setTimeout(() => {
-        splash.classList.remove("active", "fade-out");
-    }, 400);
+        setTimeout(() => {
+            splash.classList.remove("active", "fade-out");
+            splash.style.display = "none";   // ✅ FORCE HIDE
+            resolve();
+        }, 400);
+    });
 }
 
 
@@ -164,7 +171,7 @@ async function loadDashboardWithLoading() {
         startLiveClock();
         loadMiniDashboard();
         startDashboardAutoRefresh();
-        hideSplashScreen();
+        await hideSplashScreen();
         return;
     }
 
