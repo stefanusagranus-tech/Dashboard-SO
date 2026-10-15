@@ -150,8 +150,8 @@ function hideSplashScreen() {
         splash.classList.add("fade-out");
 
         setTimeout(() => {
-            splash.classList.remove("active", "fade-out");
-            splash.style.display = "none";   // ✅ FORCE HIDE
+            // ✅ FULL REMOVE dari DOM
+            splash.remove();
             resolve();
         }, 400);
     });
