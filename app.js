@@ -2584,28 +2584,6 @@ function getWelcomeText(botId) {
     }
 }
 
-
-// =========================================================
-// IDLE AUTO LOGOUT 30 MENIT
-// =========================================================
-let idleTimer;
-function resetIdleTimer() {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => {
-        if (localStorage.getItem("so_logged_in") === "true") {
-            console.log("[Auth] Idle 30 menit — auto logout");
-            localStorage.removeItem("so_logged_in");
-            location.reload();
-        }
-    }, 30 * 60 * 1000);
-}
-
-["click", "touchstart", "keydown"].forEach(evt => {
-    document.addEventListener(evt, resetIdleTimer, { passive: true });
-});
-resetIdleTimer();
-
-
 // =========================================================
 // AUTO REFRESH MINI DASHBOARD tiap 5 menit (kalau di home)
 // =========================================================
