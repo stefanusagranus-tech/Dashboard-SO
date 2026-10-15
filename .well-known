@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.stefanusagranus_tech.twa",
+        "sha256_cert_fingerprints": ["83:52:D1:7F:97:40:34:23:CB:46:BA:9B:F3:E3:04:BF:C5:5C:E0:0F:08:6C:A9:7E:47:EA:3F:78:40:E3:81:19"]
+      }
+    }]
