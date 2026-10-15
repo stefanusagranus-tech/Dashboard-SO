@@ -3667,6 +3667,26 @@ function pushBackGuard() {
 setTimeout(pushBackGuard, 800);
 
 // =========================================================
+// PENCEGAHAN PULL-TO-REFRESH MOBILE
+// =========================================================
+let touchStartY = 0;
+
+window.addEventListener('touchstart', function(e) {
+    touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+window.addEventListener('touchmove', function(e) {
+    const touchY = e.touches[0].clientY;
+    const touchYDelta = touchY - touchStartY;
+    
+    // Jika halaman berada di paling atas dan user menarik layar ke bawah (pull down)
+    if (window.scrollY === 0 && touchYDelta > 0 && e.target.closest('.chat-messages, .master-shift-content, .home-content, .rak-list-content, .spd-list-content, .top-minus-content, .rak-detail-content, .status-content') === null) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+
+// =========================================================
 // BOOT
 // =========================================================
 document.addEventListener("DOMContentLoaded", initApp);
