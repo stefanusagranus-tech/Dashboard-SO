@@ -10,6 +10,36 @@
 <body>
 
 <!-- ========================================================= -->
+<!-- SPLASH SCREEN — Loading pertama -->
+<!-- ========================================================= -->
+<div id="splashScreen" class="splash-screen active">
+    <div class="splash-bat bat bat-1">🦇</div>
+    <div class="splash-bat bat bat-2">🦇</div>
+    <div class="splash-bat bat bat-3">🦇</div>
+
+    <div class="splash-content">
+        <div class="splash-logo">🎃</div>
+        <h1 class="splash-title">Dashboard SO C383</h1>
+        <p class="splash-subtitle">Stock Opname Assistant</p>
+
+        <div class="splash-loader">
+            <div class="splash-loader-dot"></div>
+            <div class="splash-loader-dot"></div>
+            <div class="splash-loader-dot"></div>
+        </div>
+
+        <div class="splash-progress">
+            <div class="splash-progress-bar" id="splashProgressBar"></div>
+        </div>
+        <div class="splash-status" id="splashStatus">Menyiapkan aplikasi...</div>
+    </div>
+
+    <div class="splash-footer">
+        <span>v1.0.0 — Karang Satria</span>
+    </div>
+</div>
+
+<!-- ========================================================= -->
 <!-- LOGIN SCREEN -->
 <!-- ========================================================= -->
 <div id="loginScreen" class="screen active">
@@ -162,6 +192,33 @@
 
         <div class="home-footer">
             <span>v1.0.0 — Dashboard SO C383</span>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- LOADING OVERLAY — Fetch data setelah login -->
+<!-- ========================================================= -->
+<div id="dataLoadingOverlay" class="data-loading-overlay">
+    <div class="data-loading-content">
+        <div class="data-loading-pumpkin">🎃</div>
+        <div class="data-loading-spinner"></div>
+        <div class="data-loading-title">Memuat Data...</div>
+        <div class="data-loading-status" id="dataLoadingStatus">Menghubungi server...</div>
+
+        <div class="data-loading-steps" id="dataLoadingSteps">
+            <div class="data-loading-step" data-step="config">
+                <span class="step-icon">⏳</span>
+                <span class="step-text">Cek konfigurasi</span>
+            </div>
+            <div class="data-loading-step" data-step="dashboard">
+                <span class="step-icon">⏳</span>
+                <span class="step-text">Load dashboard</span>
+            </div>
+            <div class="data-loading-step" data-step="shift">
+                <span class="step-icon">⏳</span>
+                <span class="step-text">Load jadwal shift</span>
+            </div>
         </div>
     </div>
 </div>

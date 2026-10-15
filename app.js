@@ -11,7 +11,7 @@ const CONFIG = {
     STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
     API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkV",
     DEFAULT_PIN: "123456",
-    APP_VERSION: "1.0.0",
+    APP_VERSION: "1.3.0",
     TARGET_SO_PERSEN: 70,
 };
 
@@ -47,9 +47,13 @@ let currentConfirmData = null;   // { tanggal, items, raw }
 // =========================================================
 // INIT
 // =========================================================
-function initApp() {
-    const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
+async function initApp() {
+    console.log("[App] Init started");
 
+    // ✅ 1. SPLASH SCREEN — Tampil dulu
+    await showSplashScreen();
+
+    // ✅ 2. Load data basic (chat history, theme, dll)
     loadChatHistories();
 
     autoThemeEnabled = localStorage.getItem("so_auto_theme") !== "false";
@@ -67,21 +71,178 @@ function initApp() {
         if (hint) hint.textContent = "";
     }
 
-    if (isLoggedIn) {
-        showScreen("homeScreen");
-        startLiveClock();
-        loadMiniDashboard();
-        startDashboardAutoRefresh();
-    } else {
-        showScreen("loginScreen");
-    }
+    // ✅ 3. Cek login status
+    const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
 
     bindPinKeypad();
     bindChatInput();
 
     setInterval(updateTimeTheme, 60 * 1000);
+
+    if (isLoggedIn) {
+        // ✅ 4. User udah login — Load dashboard dengan loading overlay
+        await loadDashboardWithLoading();
+    } else {
+        // ✅ 5. Belum login — Hide splash, tampil login
+        hideSplashScreen();
+        showScreen("loginScreen");
+    }
+
+    console.log("[App] Init done");
 }
 
+
+// =========================================================
+// SPLASH SCREEN
+// =========================================================
+function showSplashScreen() {
+    return new Promise(resolve => {
+        const splash = document.getElementById("splashScreen");
+        const progressBar = document.getElementById("splashProgressBar");
+        const statusEl = document.getElementById("splashStatus");
+
+        if (!splash) {
+            resolve();
+            return;
+        }
+
+        splash.classList.add("active");
+
+        // Progress messages
+        const steps = [
+            { pct: 20, msg: "Menyiapkan aplikasi..." },
+            { pct: 50, msg: "Memuat konfigurasi..." },
+            { pct: 80, msg: "Hampir siap..." },
+            { pct: 100, msg: "Siap!" },
+        ];
+
+        let i = 0;
+        const interval = setInterval(() => {
+            if (i < steps.length) {
+                const step = steps[i];
+                if (progressBar) progressBar.style.width = `${step.pct}%`;
+                if (statusEl) statusEl.textContent = step.msg;
+                i++;
+            } else {
+                clearInterval(interval);
+                // Minimum tampil 1.5 detik total
+                setTimeout(resolve, 200);
+            }
+        }, 350);
+    });
+}
+
+function hideSplashScreen() {
+    const splash = document.getElementById("splashScreen");
+    if (!splash) return;
+
+    splash.classList.add("fade-out");
+
+    setTimeout(() => {
+        splash.classList.remove("active", "fade-out");
+    }, 400);
+}
+
+
+// =========================================================
+// DASHBOARD LOADING (setelah login)
+// =========================================================
+async function loadDashboardWithLoading() {
+    const overlay = document.getElementById("dataLoadingOverlay");
+    const statusEl = document.getElementById("dataLoadingStatus");
+
+    if (!overlay) {
+        // Fallback kalau overlay nggak ada
+        showScreen("homeScreen");
+        startLiveClock();
+        loadMiniDashboard();
+        startDashboardAutoRefresh();
+        hideSplashScreen();
+        return;
+    }
+
+    // Hide splash dulu
+    hideSplashScreen();
+
+    // Show loading overlay
+    await new Promise(r => setTimeout(r, 400));
+    overlay.classList.add("active");
+
+    // Reset steps
+    resetLoadingSteps();
+
+    try {
+        // Step 1: Config (optional)
+        await updateLoadingStep("config", "running", "Mengecek konfigurasi...");
+        await new Promise(r => setTimeout(r, 300));
+        await updateLoadingStep("config", "success", "Konfigurasi OK");
+
+        // Step 2: Dashboard data
+        await updateLoadingStep("dashboard", "running", "Memuat dashboard...");
+        await loadMiniDashboard();
+        await updateLoadingStep("dashboard", "success", "Dashboard siap");
+
+        // Step 3: Shift hari ini (optional)
+        await updateLoadingStep("shift", "running", "Memuat jadwal shift...");
+        // Shift udah di-load bareng dashboard, jadi cepet
+        await new Promise(r => setTimeout(r, 400));
+        await updateLoadingStep("shift", "success", "Jadwal shift siap");
+
+        // Semua OK
+        if (statusEl) statusEl.textContent = "Siap! 🚀";
+        await new Promise(r => setTimeout(r, 500));
+
+        // Hide overlay
+        overlay.classList.add("fade-out");
+        await new Promise(r => setTimeout(r, 400));
+        overlay.classList.remove("active", "fade-out");
+
+        // Show home
+        showScreen("homeScreen");
+        startLiveClock();
+        startDashboardAutoRefresh();
+
+    } catch (e) {
+        console.error("[Loading] Error:", e);
+        if (statusEl) statusEl.textContent = "Ada error, tapi lanjut...";
+        await new Promise(r => setTimeout(r, 1000));
+
+        overlay.classList.remove("active");
+        showScreen("homeScreen");
+        startLiveClock();
+        startDashboardAutoRefresh();
+    }
+}
+
+function resetLoadingSteps() {
+    document.querySelectorAll(".data-loading-step").forEach(step => {
+        step.classList.remove("running", "success", "error");
+        const icon = step.querySelector(".step-icon");
+        if (icon) icon.textContent = "⏳";
+    });
+}
+
+async function updateLoadingStep(stepId, status, msg) {
+    const step = document.querySelector(`.data-loading-step[data-step="${stepId}"]`);
+    if (!step) return;
+
+    step.classList.remove("running", "success", "error");
+    step.classList.add(status);
+
+    const icon = step.querySelector(".step-icon");
+    const text = step.querySelector(".step-text");
+
+    if (status === "running") {
+        if (icon) icon.textContent = "⏳";
+        if (text && msg) text.textContent = msg;
+    } else if (status === "success") {
+        if (icon) icon.textContent = "✅";
+        if (text && msg) text.textContent = msg;
+    } else if (status === "error") {
+        if (icon) icon.textContent = "❌";
+        if (text && msg) text.textContent = msg;
+    }
+}
 
 // =========================================================
 // SCREEN NAVIGATION
@@ -480,10 +641,12 @@ function checkPinComplete() {
                 pinInput = "";
                 updatePinDisplay();
                 localStorage.setItem("so_logged_in", "true");
-                showScreen("homeScreen");
-                startLiveClock();
-                loadMiniDashboard();
-                startDashboardAutoRefresh();
+            
+                // ✅ Tampilkan splash + loading
+                (async () => {
+                    await showSplashScreen();
+                    await loadDashboardWithLoading();
+                })();
             } else {
                 if (pinError) pinError.textContent = "❌ PIN salah, coba lagi";
                 pinInput = "";
