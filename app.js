@@ -11,7 +11,7 @@ const CONFIG = {
     STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
     API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkV",
     DEFAULT_PIN: "123456",
-    APP_VERSION: "1.3.0",
+    APP_VERSION: "1.0.0",
     TARGET_SO_PERSEN: 70,
 };
 
