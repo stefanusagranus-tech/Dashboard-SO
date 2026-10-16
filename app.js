@@ -3802,6 +3802,286 @@ function openUpdateDownload() {
 }
 
 // =========================================================
+// YUI — Input SPD via Chat
+// =========================================================
+async function parseSpdFromChat(text) {
+    console.log("[SPD] Parse:", text);
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/parse-spd`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": getApiKey(),
+            },
+            body: JSON.stringify({ text: text }),
+        });
+        const data = await resp.json();
+        return data;
+    } catch (e) {
+        console.error("[SPD Parse] Error:", e);
+        return { success: false, error: e.message };
+    }
+}
+
+async function saveSpd(tanggal, nominal, keterangan = "Input via APK chat") {
+    console.log("[SPD] Save:", tanggal, nominal);
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-spd`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": getApiKey(),
+            },
+            body: JSON.stringify({
+                tanggal: tanggal,
+                nominal: nominal,
+                keterangan: keterangan,
+            }),
+        });
+        const data = await resp.json();
+        return data;
+    } catch (e) {
+        console.error("[SPD Save] Error:", e);
+        return { success: false, error: e.message };
+    }
+}
+
+// =========================================================
+// YUI — Upload SO
+// =========================================================
+async function uploadSoFile(file) {
+    console.log("[Upload SO] File:", file.name, file.size);
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, {
+            method: "POST",
+            headers: {
+                "X-API-Key": getApiKey(),
+                // JANGAN set Content-Type — biar browser yg set boundary
+            },
+            body: formData,
+        });
+
+        const data = await resp.json();
+        return data;
+    } catch (e) {
+        console.error("[Upload SO] Error:", e);
+        return { success: false, error: e.message };
+    }
+}
+
+async function saveSoItems(tanggal, items, keterangan = "Input via APK upload") {
+    console.log("[Save SO] Items:", items.length);
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-so`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": getApiKey(),
+            },
+            body: JSON.stringify({
+                tanggal: tanggal,
+                items: items,
+                keterangan: keterangan,
+            }),
+        });
+        const data = await resp.json();
+        return data;
+    } catch (e) {
+        console.error("[Save SO] Error:", e);
+        return { success: false, error: e.message };
+    }
+}
+
+// =========================================================
+// HANDLER — Input SPD via Chat
+// =========================================================
+async function handleSpdChat(text) {
+    const parse = await parseSpdFromChat(text);
+
+    if (!parse.success || !parse.nominal) {
+        showToastMini("❌ Gak nemu nominal SPD", "error");
+        return;
+    }
+
+    const _tanggal = parse.tanggal;
+    const _nominal = parse.nominal;
+    const _budget = _nominal * 0.0015;
+
+    // Konfirmasi
+    const konfirmasi = confirm(
+        `💰 KONFIRMASI SPD\n\n` +
+        `📅 Tanggal: ${_tanggal}\n` +
+        `💵 SPD: ${formatRupiahFull(_nominal)}\n` +
+        `🎯 Budget SO (0,15%): ${formatRupiahFull(_budget)}\n\n` +
+        `Simpan?`
+    );
+
+    if (!konfirmasi) {
+        showToastMini("❌ Dibatalkan", "error");
+        return;
+    }
+
+    const result = await saveSpd(_tanggal, _nominal);
+
+    if (result.success) {
+        showToastMini(`✅ SPD tersimpan: ${formatRupiahFull(_nominal)}`, "success");
+        // Refresh dashboard kalau di home
+        const homeScreen = document.getElementById("homeScreen");
+        if (homeScreen && homeScreen.classList.contains("active")) {
+            loadMiniDashboard();
+        }
+    } else {
+        showToastMini(`❌ Gagal: ${result.error || result.message}`, "error");
+    }
+}
+
+// =========================================================
+// HANDLER — Upload SO
+// =========================================================
+function goToUploadSoScreen() {
+    showScreen("uploadSoScreen");
+    resetUploadSo();
+}
+
+function resetUploadSo() {
+    const fileInput = document.getElementById("uploadSoFile");
+    if (fileInput) fileInput.value = "";
+    const preview = document.getElementById("uploadSoPreview");
+    if (preview) preview.innerHTML = "";
+    const btnSave = document.getElementById("uploadSoSave");
+    if (btnSave) btnSave.disabled = true;
+    window._uploadSoData = null;
+}
+
+async function handleUploadSoFile(file) {
+    const preview = document.getElementById("uploadSoPreview");
+    if (!preview) return;
+
+    preview.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <div class="spinner" style="margin: 0 auto 12px;"></div>
+            <p>📄 Baca file <b>${escapeHtml(file.name)}</b>...</p>
+        </div>
+    `;
+
+    const result = await uploadSoFile(file);
+
+    if (!result.success) {
+        preview.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal: ${escapeHtml(result.error || result.detail || "Unknown")}</p>
+            </div>
+        `;
+        showToastMini("❌ Gagal parse file", "error");
+        return;
+    }
+
+    // Simpan data untuk save
+    window._uploadSoData = {
+        tanggal: result.tanggal,
+        items: result.items,
+        keterangan: `Upload ${file.name}`,
+    };
+
+    // Tampilkan preview
+    const _items = result.items || [];
+    const _totalRak = result.total_rak || 0;
+    const _totalItem = result.total_items || 0;
+    const _totalNominal = result.total_nominal || 0;
+
+    let _html = `
+        <div class="top-summary-card">
+            <div class="top-summary-title">📊 PREVIEW UPLOAD</div>
+            <div class="top-summary-meta" style="margin-top: 8px;">
+                📅 ${escapeHtml(result.tanggal || "-")} • 
+                🏪 ${_totalRak} rak • 
+                📦 ${_totalItem} item
+            </div>
+            <div class="top-summary-total" style="margin-top: 12px; color: ${_totalNominal < 0 ? '#ee5253' : '#06d6a0'};">
+                ${formatRupiahFull(_totalNominal)}
+            </div>
+        </div>
+    `;
+
+    // Preview 20 item pertama
+    if (_items.length > 0) {
+        _html += `<div style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">📦 Preview ${Math.min(20, _items.length)} item pertama:</div>`;
+        _items.slice(0, 20).forEach((it, idx) => {
+            const _nom = it.nominal_adjust || 0;
+            const _class = _nom < 0 ? "top-nominal-minus" : "top-nominal-plus";
+            _html += `
+                <div class="top-item-card top-item-card-item" style="margin-top: 8px;">
+                    <div class="top-item-header">
+                        <span class="top-item-rank">${idx + 1}</span>
+                        <span class="top-item-title">${escapeHtml(it.plu || "-")}</span>
+                        <span class="top-item-nominal ${_class}">${formatRupiahFull(_nom)}</span>
+                    </div>
+                    <div class="top-item-name">${escapeHtml(it.nama_produk || "-")}</div>
+                    <div class="top-item-meta">
+                        <span>🏪 ${escapeHtml(it.rak_id || "-")}</span>
+                        <span>📊 var: ${it.qty_var || 0}</span>
+                    </div>
+                </div>
+            `;
+        });
+        if (_items.length > 20) {
+            _html += `<div style="text-align: center; padding: 12px; color: var(--text-muted); font-style: italic;">... +${_items.length - 20} item lainnya</div>`;
+        }
+    }
+
+    preview.innerHTML = _html;
+
+    // Enable save button
+    const btnSave = document.getElementById("uploadSoSave");
+    if (btnSave) btnSave.disabled = false;
+
+    showToastMini(`✅ ${_totalItem} item siap disimpan`, "success");
+}
+
+async function handleUploadSoSave() {
+    const data = window._uploadSoData;
+    if (!data || !data.items) {
+        showToastMini("❌ Gak ada data", "error");
+        return;
+    }
+
+    const konfirmasi = confirm(
+        `💾 SIMPAN SO?\n\n` +
+        `📅 Tanggal: ${data.tanggal}\n` +
+        `📦 Total item: ${data.items.length}\n\n` +
+        `Simpan ke database?`
+    );
+
+    if (!konfirmasi) return;
+
+    const btnSave = document.getElementById("uploadSoSave");
+    if (btnSave) {
+        btnSave.disabled = true;
+        btnSave.textContent = "⏳ Menyimpan...";
+    }
+
+    const result = await saveSoItems(data.tanggal, data.items, data.keterangan);
+
+    if (result.success) {
+        showToastMini(`✅ ${result.saved_count || 0} rak tersimpan!`, "success");
+        // Redirect ke home
+        setTimeout(() => {
+            goToHomeScreen();
+        }, 1500);
+    } else {
+        showToastMini(`❌ Gagal: ${result.error || result.message || "Unknown"}`, "error");
+        if (btnSave) {
+            btnSave.disabled = false;
+            btnSave.textContent = "💾 Simpan SO";
+        }
+    }
+}
+
+// =========================================================
 // BOOT
 // =========================================================
 document.addEventListener("DOMContentLoaded", initApp);

@@ -4579,5 +4579,32 @@ html, body {
 }
 
 /* =========================================================
+   CHAT ATTACH BUTTON — Upload file via chat
+   ========================================================= */
+.chat-attach {
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    background: var(--bg-card);
+    color: var(--accent-orange);
+    font-size: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-sm);
+}
+
+.chat-attach:active {
+    transform: scale(0.9);
+    background: var(--accent-orange);
+    color: white;
+    box-shadow: var(--shadow-glow);
+}
+
+/* =========================================================
    END OF STYLE v2.1
    ========================================================= */
