@@ -1,6 +1,6 @@
 /* =========================================================
-   DASHBOARD SO C383 — APP LOGIC v1.3
-   Tambah: Master Shift Screen, Chat Konfirmasi, CRUD Personil
+   DASHBOARD SO C383 — APP LOGIC v2.0
+   Sprint 2: Upload SO + Konfirmasi + SPD Custom Date
    ========================================================= */
 
 // =========================================================
@@ -22,7 +22,6 @@ const BOTS = {
     kurumi: { emoji: "🎀", name: "Kurumi", role: "Chief",        endpoint: "/api/kurumi/chat" },
 };
 
-
 // =========================================================
 // STATE
 // =========================================================
@@ -32,35 +31,58 @@ let chatHistories = {};
 let clockInterval = null;
 let dashboardRefreshInterval = null;
 let autoThemeEnabled = true;
+let exitModalShown = false;
+let idleTimer = null;
+let updateInfo = null;
+let toastTimer = null;
 
-// Master Shift state
+let _personilCache = null;
+let _personilCacheTime = 0;
+
+window._pendingUploadSo = null;
+window._pendingSpd = null;
+
 let shiftPeriod = "hari_ini";
-let shiftPersonilFilter = "";
 let masterShiftData = [];
 let personilData = [];
 
-// Konfirmasi chat state
-let pendingConfirmations = {};  // { msgId: { items, tanggal, resolved } }
-// Modal konfirmasi state
-let currentConfirmData = null;   // { tanggal, items, raw }
+let spdListData = [];
+let spdPeriodCurrent = "bulan_ini";
+let spdSortValue = "tanggal_desc";
+
+let rakListData = [];
+let rakFilterCurrent = "semua";
+let rakSearchQuery = "";
+
+let topData = [];
+let topPeriodCurrent = "bulan_ini";
+let topSortValue = "tanggal_desc";
+let topTabCurrent = "rak";
+let topSearchQuery = "";
+let topSignCurrent = "minus";
+let topSearchTimeout = null;
+
+let rakDetailData = [];
+let rakDetailCurrentRak = null;
+let rakDetailFilter = "semua";
+let rakDetailSearchQuery = "";
+
+let statusPeriodCurrent = "bulan_ini";
+let currentConfirmData = null;
+
+const IDLE_TIMEOUT = 5 * 60 * 1000;
 
 // =========================================================
 // INIT
 // =========================================================
 async function initApp() {
     console.log("[App] Init started");
-
-    // ✅ 1. SPLASH SCREEN — Tampil dulu
     await showSplashScreen();
 
-    // ✅ 2. Load data basic (chat history, theme, dll)
     loadChatHistories();
-
     autoThemeEnabled = localStorage.getItem("so_auto_theme") !== "false";
-
     const savedTheme = localStorage.getItem("so_theme") || "halloween-dark";
     setTheme(savedTheme);
-
     updateTimeTheme();
     updateApiKeyDisplay();
     updateAutoThemeDisplay();
@@ -71,21 +93,18 @@ async function initApp() {
         if (hint) hint.textContent = "";
     }
 
-    // ✅ 3. BIND EVENT LISTENER
-console.log("[App] Binding PIN keypad...");
-bindPinKeypad();
-bindChatInput();
-console.log("[App] Binding done");
+    console.log("[App] Binding PIN keypad...");
+    bindPinKeypad();
+    bindChatInput();
+    console.log("[App] Binding done");
 
-// ✅ 4. AUTO-CHECK UPDATE (3 detik setelah init)
-setTimeout(() => checkForUpdate(false), 3000);
+    setTimeout(() => checkForUpdate(false), 3000);
 
-    // ✅ 4. Cek login status (session 30 menit)
     const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
     const lastLoginTime = parseInt(localStorage.getItem("so_login_timestamp") || "0");
-    const SESSION_DURATION = 30 * 60 * 1000;   // 30 menit
+    const SESSION_DURATION = 30 * 60 * 1000;
     const isSessionValid = (Date.now() - lastLoginTime) < SESSION_DURATION;
-    
+
     if (isLoggedIn && isSessionValid) {
         console.log("[Auth] Session valid — auto-login");
         resetIdleTimer();
@@ -100,9 +119,7 @@ setTimeout(() => checkForUpdate(false), 3000);
         showScreen("loginScreen");
     }
 
-    // ✅ 5. Timer auto theme
     setInterval(updateTimeTheme, 60 * 1000);
-
     console.log("[App] Init done");
 }
 
@@ -115,11 +132,7 @@ function showSplashScreen() {
         const progressBar = document.getElementById("splashProgressBar");
         const statusEl = document.getElementById("splashStatus");
 
-        if (!splash) {
-            resolve();
-            return;
-        }
-
+        if (!splash) { resolve(); return; }
         splash.classList.add("active");
 
         const steps = [
@@ -130,9 +143,9 @@ function showSplashScreen() {
         ];
 
         const startTime = Date.now();
-        const MIN_DURATION = 1500;   // Minimal 1.5 detik
-
+        const MIN_DURATION = 1500;
         let i = 0;
+
         const interval = setInterval(() => {
             if (i < steps.length) {
                 const step = steps[i];
@@ -152,31 +165,23 @@ function showSplashScreen() {
 function hideSplashScreen() {
     return new Promise(resolve => {
         const splash = document.getElementById("splashScreen");
-        if (!splash) {
-            resolve();
-            return;
-        }
-
+        if (!splash) { resolve(); return; }
         splash.classList.add("fade-out");
-
         setTimeout(() => {
-            // ✅ FULL REMOVE dari DOM
             splash.remove();
             resolve();
         }, 400);
     });
 }
 
-
 // =========================================================
-// DASHBOARD LOADING (setelah login)
+// DASHBOARD LOADING
 // =========================================================
 async function loadDashboardWithLoading() {
     const overlay = document.getElementById("dataLoadingOverlay");
     const statusEl = document.getElementById("dataLoadingStatus");
 
     if (!overlay) {
-        // Fallback kalau overlay nggak ada
         showScreen("homeScreen");
         startLiveClock();
         loadMiniDashboard();
@@ -185,52 +190,38 @@ async function loadDashboardWithLoading() {
         return;
     }
 
-    // Hide splash dulu
     hideSplashScreen();
-
-    // Show loading overlay
     await new Promise(r => setTimeout(r, 400));
     overlay.classList.add("active");
-
-    // Reset steps
     resetLoadingSteps();
 
     try {
-        // Step 1: Config (optional)
         await updateLoadingStep("config", "running", "Mengecek konfigurasi...");
         await new Promise(r => setTimeout(r, 300));
         await updateLoadingStep("config", "success", "Konfigurasi OK");
 
-        // Step 2: Dashboard data
         await updateLoadingStep("dashboard", "running", "Memuat dashboard...");
         await loadMiniDashboard();
         await updateLoadingStep("dashboard", "success", "Dashboard siap");
 
-        // Step 3: Shift hari ini (optional)
         await updateLoadingStep("shift", "running", "Memuat jadwal shift...");
-        // Shift udah di-load bareng dashboard, jadi cepet
         await new Promise(r => setTimeout(r, 400));
         await updateLoadingStep("shift", "success", "Jadwal shift siap");
 
-        // Semua OK
         if (statusEl) statusEl.textContent = "Siap! 🚀";
         await new Promise(r => setTimeout(r, 500));
 
-        // Hide overlay
         overlay.classList.add("fade-out");
         await new Promise(r => setTimeout(r, 400));
         overlay.classList.remove("active", "fade-out");
 
-        // Show home
         showScreen("homeScreen");
         startLiveClock();
         startDashboardAutoRefresh();
-
     } catch (e) {
         console.error("[Loading] Error:", e);
         if (statusEl) statusEl.textContent = "Ada error, tapi lanjut...";
         await new Promise(r => setTimeout(r, 1000));
-
         overlay.classList.remove("active");
         showScreen("homeScreen");
         startLiveClock();
@@ -249,13 +240,10 @@ function resetLoadingSteps() {
 async function updateLoadingStep(stepId, status, msg) {
     const step = document.querySelector(`.data-loading-step[data-step="${stepId}"]`);
     if (!step) return;
-
     step.classList.remove("running", "success", "error");
     step.classList.add(status);
-
     const icon = step.querySelector(".step-icon");
     const text = step.querySelector(".step-text");
-
     if (status === "running") {
         if (icon) icon.textContent = "⏳";
         if (text && msg) text.textContent = msg;
@@ -313,14 +301,32 @@ function goToMasterShiftScreen() {
     loadMasterShift();
 }
 
-// =========================================================
-// RAK LIST SCREEN v1.5
-// =========================================================
 function goToRakListScreen() {
     closeSidebar();
     stopDashboardAutoRefresh();
     showScreen("rakListScreen");
     loadRakList();
+}
+
+function goToSpdListScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("spdListScreen");
+    loadSpdList();
+}
+
+function goToTopMinusScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("topMinusScreen");
+    loadTopMinus();
+}
+
+function goToStatusScreen() {
+    closeSidebar();
+    stopDashboardAutoRefresh();
+    showScreen("statusScreen");
+    loadStatusAnalysis();
 }
 
 // =========================================================
@@ -334,7 +340,6 @@ function startLiveClock() {
 
 function updateClock() {
     const now = new Date();
-
     const hh = String(now.getHours()).padStart(2, "0");
     const mm = String(now.getMinutes()).padStart(2, "0");
     const clockTime = document.getElementById("clockTime");
@@ -358,20 +363,16 @@ function updateClock() {
     if (clockGreeting) clockGreeting.textContent = `${greeting}, Bos! ${emoji}`;
 }
 
-
 // =========================================================
 // AUTO TIME THEME
 // =========================================================
 function updateTimeTheme() {
     if (!autoThemeEnabled) return;
-
     const hour = new Date().getHours();
     let timeTheme = "malam";
-
     if (hour >= 5 && hour < 11) timeTheme = "pagi";
     else if (hour >= 11 && hour < 15) timeTheme = "siang";
     else if (hour >= 15 && hour < 18) timeTheme = "sore";
-
     document.documentElement.setAttribute("data-time-theme", timeTheme);
 }
 
@@ -379,7 +380,6 @@ function toggleAutoTheme() {
     autoThemeEnabled = !autoThemeEnabled;
     localStorage.setItem("so_auto_theme", String(autoThemeEnabled));
     updateAutoThemeDisplay();
-
     if (autoThemeEnabled) {
         updateTimeTheme();
         showToastMini("Auto tema jam aktif ✅", "success");
@@ -393,9 +393,8 @@ function updateAutoThemeDisplay() {
     if (el) el.textContent = autoThemeEnabled ? "Aktif" : "Nonaktif";
 }
 
-
 // =========================================================
-// MINI DASHBOARD — Fetch dari /api/yui/rekap
+// MINI DASHBOARD
 // =========================================================
 async function loadMiniDashboard() {
     const statRak = document.getElementById("statRak");
@@ -425,11 +424,9 @@ async function loadMiniDashboard() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
         const data = await resp.json();
-
         const totalRak = data.total_rak || 0;
         const totalNominal = data.total_nominal || 0;
         const salesPeriode = data.sales_periode || 0;
-
         const totalRakMaster = 145;
         const persenSo = totalRakMaster > 0 ? (totalRak / totalRakMaster) * 100 : 0;
 
@@ -444,15 +441,9 @@ async function loadMiniDashboard() {
         let statusColor = "hijau";
 
         if (statusPersen > 0.15) {
-            statusKey = "bahaya";
-            statusEmoji = "🚨";
-            statusText = "BAHAYA";
-            statusColor = "merah";
+            statusKey = "bahaya"; statusEmoji = "🚨"; statusText = "BAHAYA"; statusColor = "merah";
         } else if (statusPersen >= 0.13) {
-            statusKey = "waspada";
-            statusEmoji = "⚠️";
-            statusText = "WASPADA";
-            statusColor = "kuning";
+            statusKey = "waspada"; statusEmoji = "⚠️"; statusText = "WASPADA"; statusColor = "kuning";
         }
 
         if (statRak) statRak.textContent = `${totalRak}/${totalRakMaster}`;
@@ -480,7 +471,6 @@ async function loadMiniDashboard() {
             runningParts.push(`📉 Nominal Adjust: <b>${formatRupiahRingkas(totalNominal)}</b>`);
             runningParts.push(`📊 Status: <b>${statusEmoji} ${statusText}</b> (${statusPersen.toFixed(2)}%)`);
 
-            // Load shift hari ini
             try {
                 const shiftResp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/shift-hari-ini`, {
                     method: "GET",
@@ -496,14 +486,10 @@ async function loadMiniDashboard() {
                         if (grouped.M22 && grouped.M22.length) shiftParts.push(`🔴 Malam: ${grouped.M22.join(", ")}`);
                         if (grouped.O && grouped.O.length) shiftParts.push(`⚪ Off: ${grouped.O.join(", ")}`);
                         if (grouped.CUTI && grouped.CUTI.length) shiftParts.push(`⚫ Cuti: ${grouped.CUTI.join(", ")}`);
-                        if (shiftParts.length) {
-                            runningParts.push(`🌸 Hana: ${shiftParts.join(" | ")}`);
-                        }
+                        if (shiftParts.length) runningParts.push(`🌸 Hana: ${shiftParts.join(" | ")}`);
                     }
                 }
-            } catch (e) {
-                // Skip kalau gagal
-            }
+            } catch (e) {}
 
             const now = new Date();
             const hour = now.getHours();
@@ -520,7 +506,6 @@ async function loadMiniDashboard() {
 
     } catch (err) {
         console.error("[Dashboard] Error:", err);
-
         if (statRak) statRak.textContent = "—";
         if (statSpd) statSpd.textContent = "—";
         if (statNominal) statNominal.textContent = "—";
@@ -528,7 +513,7 @@ async function loadMiniDashboard() {
         if (statusValue) statusValue.textContent = "Gagal load";
         if (statusPercent) statusPercent.textContent = "—%";
         if (runningTextContainer) {
-            runningTextContainer.innerHTML = `<div class="running-inner" style="color: var(--danger); padding-left: 40px;">⚠️ Gagal: ${err.name} — ${err.message}</div>`;
+            runningTextContainer.innerHTML = `<div class="running-inner" style="color: var(--danger); padding-left: 40px;">⚠️ Gagal: ${err.message}</div>`;
         }
     }
 }
@@ -545,52 +530,33 @@ function stopDashboardAutoRefresh() {
     }
 }
 
-
 // =========================================================
-// HELPER — Format Rupiah Ringkas
+// HELPERS
 // =========================================================
 function formatRupiahRingkas(nominal) {
     const abs = Math.abs(nominal);
     let formatted = "";
-
-    if (abs >= 1_000_000_000) {
-        formatted = (nominal / 1_000_000_000).toFixed(2) + "M";
-    } else if (abs >= 1_000_000) {
-        formatted = (nominal / 1_000_000).toFixed(1) + "jt";
-    } else if (abs >= 1_000) {
-        formatted = (nominal / 1_000).toFixed(0) + "rb";
-    } else {
-        formatted = nominal.toFixed(0);
-    }
-
+    if (abs >= 1_000_000_000) formatted = (nominal / 1_000_000_000).toFixed(2) + "M";
+    else if (abs >= 1_000_000) formatted = (nominal / 1_000_000).toFixed(1) + "jt";
+    else if (abs >= 1_000) formatted = (nominal / 1_000).toFixed(0) + "rb";
+    else formatted = nominal.toFixed(0);
     return formatted;
 }
 
-// =========================================================
-// HELPER — Format Rupiah Full (e.g., -Rp 32.500)
-// =========================================================
 function formatRupiahFull(nominal) {
     if (nominal === 0) return "Rp 0";
-
     const isNegative = nominal < 0;
     const abs = Math.abs(nominal);
-
-    // Format dengan pemisah ribuan Indonesia (titik)
     const formatted = abs.toLocaleString("id-ID", {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
     });
-
     return `${isNegative ? "-" : ""}Rp ${formatted}`;
 }
 
-// =========================================================
-// RUNNING TEXT HELPER — Seamless Loop
-// =========================================================
 function startRunningText(text) {
     const container = document.getElementById("runningTextContainer");
     if (!container) return;
-
     container.innerHTML = `
         <div class="running-icon">📢</div>
         <div class="running-viewport">
@@ -602,14 +568,7 @@ function startRunningText(text) {
     `;
 }
 
-
-// =========================================================
-// TOAST MINI — notifikasi kecil
-// =========================================================
-let toastTimer = null;
-
 function showToastMini(message, type = "success") {
-    // Hapus toast lama
     const oldToast = document.querySelector(".toast-mini");
     if (oldToast) oldToast.remove();
 
@@ -626,6 +585,67 @@ function showToastMini(message, type = "success") {
         setTimeout(() => toast.remove(), 400);
     }, 3000);
 }
+
+function formatTime(timestamp) {
+    if (!timestamp) return "";
+    const d = new Date(timestamp);
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+}
+
+function getSessionDate() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}${m}${day}`;
+}
+
+function formatMessage(text) {
+    if (!text) return "";
+    let html = escapeHtml(text);
+    html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    html = html.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<i>$1</i>");
+    html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
+    html = html.replace(/^[\-\*]\s+(.+)$/gm, "• $1");
+    html = html.replace(/^(\d+)\.\s+(.+)$/gm, "$1. $2");
+    return html;
+}
+
+function cleanHtmlEntities(str) {
+    if (!str) return "";
+    return str
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/&nbsp;/g, " ")
+        .replace(/&#x27;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">");
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function getWelcomeText(botId) {
+    switch (botId) {
+        case "yui":
+            return "Aku bisa:\n• Rekap SO (harian/mingguan/bulanan)\n• Input SO via chat / upload Excel\n• Input SPD via chat\n• Top item minus/plus";
+        case "hana":
+            return "Aku bisa:\n• Cek jadwal shift\n• Update/hapus shift (ketik natural)\n• Saran pengganti\n• Cek konflik jadwal";
+        case "rei":
+            return "Aku bisa:\n• Analisis trend SO\n• LPJ & laporan\n• Prediksi SO\n• Insight & rekomendasi";
+        case "kurumi":
+            return "Aku bisa:\n• Rangkum laporan\n• Kirim report (text)\n• Chat general\n• Koordinasi antar bot";
+        default:
+            return "";
+    }
+}
+
 // =========================================================
 // PIN LOGIN
 // =========================================================
@@ -668,7 +688,7 @@ function checkPinComplete() {
                 localStorage.setItem("so_logged_in", "true");
                 localStorage.setItem("so_login_timestamp", Date.now().toString());
                 
-                resetIdleTimer();   // ✅ Reset idle timer
+                resetIdleTimer();
                 
                 (async () => {
                     await loadDashboardWithLoading();
@@ -683,21 +703,21 @@ function checkPinComplete() {
     }
 }
 
-
 // =========================================================
 // LOGOUT
 // =========================================================
 function logout() {
     if (!confirm("Yakin mau logout?")) return;
     localStorage.removeItem("so_logged_in");
+    localStorage.removeItem("so_login_timestamp");
     pinInput = "";
     updatePinDisplay();
     closeSidebar();
     stopDashboardAutoRefresh();
     if (clockInterval) clearInterval(clockInterval);
+    if (idleTimer) clearTimeout(idleTimer);
     showScreen("loginScreen");
 }
-
 
 // =========================================================
 // THEME
@@ -726,7 +746,6 @@ function setTheme(theme) {
     });
 }
 
-
 // =========================================================
 // SIDEBAR
 // =========================================================
@@ -734,7 +753,6 @@ function toggleSidebar() {
     const sidebar = document.getElementById("sidebar");
     const overlay = document.getElementById("sidebarOverlay");
     const isOpen = sidebar.classList.contains("open");
-
     if (isOpen) closeSidebar();
     else {
         sidebar.classList.add("open");
@@ -748,7 +766,6 @@ function closeSidebar() {
     if (sidebar) sidebar.classList.remove("open");
     if (overlay) overlay.classList.remove("active");
 }
-
 
 // =========================================================
 // BOT SWITCHING
@@ -771,7 +788,6 @@ function switchBot(botId) {
     closeSidebar();
 }
 
-
 // =========================================================
 // CHAT HISTORIES
 // =========================================================
@@ -782,7 +798,6 @@ function loadChatHistories() {
     } catch (e) {
         chatHistories = {};
     }
-
     Object.keys(BOTS).forEach(botId => {
         if (!chatHistories[botId]) chatHistories[botId] = [];
     });
@@ -813,7 +828,6 @@ function resetAllChat() {
     showToastMini("✅ Semua chat dihapus", "success");
 }
 
-
 // =========================================================
 // API KEY
 // =========================================================
@@ -840,7 +854,6 @@ function changeApiKey() {
     showToastMini("✅ API Key diupdate", "success");
 }
 
-
 // =========================================================
 // PIN MANAGEMENT
 // =========================================================
@@ -859,69 +872,47 @@ function changePin() {
     showToastMini("✅ PIN berhasil diubah", "success");
 }
 
-
 // =========================================================
-// STREAMLIT — External Browser Only
-// Streamlit Cloud pake auth redirect yg gak works di WebView
-// Solusi: buka di browser eksternal
+// STREAMLIT
 // =========================================================
 function loadStreamlit() {
-    console.log("[Streamlit] Screen shown — user will click button to open in browser");
-    // Nggak perlu load iframe lagi — langsung tampilkan halaman redirect
+    console.log("[Streamlit] Screen shown");
 }
 
 function openStreamlitInBrowser() {
-    console.log("[Streamlit] Opening:", CONFIG.STREAMLIT_URL);
-    
-    // Coba buka di browser eksternal
     try {
         window.open(CONFIG.STREAMLIT_URL, "_blank");
     } catch (e) {
-        // Fallback: redirect via location
-        console.error("[Streamlit] window.open failed:", e);
         window.location.href = CONFIG.STREAMLIT_URL;
     }
 }
 
 // =========================================================
-// MASTER SHIFT v1.3 — LOAD & RENDER
-// =========================================================
-
-// =========================================================
-// SET PERIOD
+// MASTER SHIFT
 // =========================================================
 function setShiftPeriod(period) {
     shiftPeriod = period;
-
     document.querySelectorAll(".filter-tab").forEach(tab => {
         tab.classList.toggle("active", tab.getAttribute("data-period") === period);
     });
-
     const customRow = document.getElementById("customDateRow");
     if (customRow) {
         if (period === "custom") customRow.classList.remove("hidden");
         else customRow.classList.add("hidden");
     }
-
     loadMasterShift();
 }
 
-
-// =========================================================
-// HELPER — Hitung tanggal berdasarkan period
-// =========================================================
 function getShiftDateRange() {
     const today = new Date();
     let start = new Date();
     let end = new Date();
 
     if (shiftPeriod === "hari_ini") {
-        start = today;
-        end = today;
+        start = today; end = today;
     } else if (shiftPeriod === "minggu") {
-        // Senin s/d Minggu minggu ini
-        const dayOfWeek = today.getDay();  // 0=Sunday
-        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;  // mundur ke Senin
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
         start = new Date(today);
         start.setDate(today.getDate() + diff);
         end = new Date(start);
@@ -935,14 +926,9 @@ function getShiftDateRange() {
         if (customStart && customStart.value) start = new Date(customStart.value);
         if (customEnd && customEnd.value) end = new Date(customEnd.value);
     }
-
     return { start, end };
 }
 
-
-// =========================================================
-// HELPER — Format tanggal
-// =========================================================
 function formatTanggalLong(dateStr) {
     const d = new Date(dateStr);
     const hari = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
@@ -956,10 +942,6 @@ function formatTanggalShort(dateStr) {
     return `${d.getDate()} ${bulan[d.getMonth()]}`;
 }
 
-
-// =========================================================
-// LOAD PERSONIL LIST
-// =========================================================
 async function loadPersonilList() {
     const filterSelect = document.getElementById("personilFilter");
     const personilList = document.getElementById("personilList");
@@ -970,13 +952,10 @@ async function loadPersonilList() {
             method: "GET",
             headers: { "X-API-Key": _key },
         });
-
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
         const data = await resp.json();
         personilData = data.data || [];
 
-        // Update filter dropdown
         if (filterSelect) {
             const currentValue = filterSelect.value;
             filterSelect.innerHTML = '<option value="">👥 Semua Personil</option>';
@@ -989,7 +968,6 @@ async function loadPersonilList() {
             filterSelect.value = currentValue;
         }
 
-        // Render di modal
         renderPersonilList();
 
     } catch (err) {
@@ -1004,20 +982,12 @@ async function loadPersonilList() {
     }
 }
 
-
-// =========================================================
-// RENDER PERSONIL LIST (di modal)
-// =========================================================
 function renderPersonilList() {
     const container = document.getElementById("personilList");
     if (!container) return;
 
     if (!personilData || personilData.length === 0) {
-        container.innerHTML = `
-            <div class="loading-state">
-                <p>Belum ada personil</p>
-            </div>
-        `;
+        container.innerHTML = `<div class="loading-state"><p>Belum ada personil</p></div>`;
         return;
     }
 
@@ -1044,10 +1014,6 @@ function renderPersonilList() {
     container.innerHTML = html;
 }
 
-
-// =========================================================
-// LOAD MASTER SHIFT
-// =========================================================
 async function loadMasterShift() {
     const container = document.getElementById("shiftList");
     const summary = document.getElementById("shiftSummary");
@@ -1055,7 +1021,6 @@ async function loadMasterShift() {
 
     if (!container) return;
 
-    // Loading state
     container.innerHTML = `
         <div class="loading-state">
             <div class="spinner"></div>
@@ -1071,10 +1036,7 @@ async function loadMasterShift() {
         const filterSelect = document.getElementById("personilFilter");
         const namaFilter = filterSelect ? filterSelect.value : "";
 
-        const body = {
-            tgl_start: startStr,
-            tgl_end: endStr,
-        };
+        const body = { tgl_start: startStr, tgl_end: endStr };
         if (namaFilter) body.nama_filter = namaFilter;
 
         const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, {
@@ -1089,13 +1051,9 @@ async function loadMasterShift() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
         const data = await resp.json();
-
-        if (!data.success) {
-            throw new Error(data.error || "Gagal load data");
-        }
+        if (!data.success) throw new Error(data.error || "Gagal load data");
 
         masterShiftData = data.data || [];
-
         renderShiftList();
         renderShiftSummary(data);
 
@@ -1111,10 +1069,6 @@ async function loadMasterShift() {
     }
 }
 
-
-// =========================================================
-// RENDER SHIFT LIST
-// =========================================================
 function renderShiftList() {
     const container = document.getElementById("shiftList");
     if (!container) return;
@@ -1129,7 +1083,6 @@ function renderShiftList() {
         return;
     }
 
-    // Group by date
     const grouped = {};
     masterShiftData.forEach(row => {
         const tgl = row.tanggal;
@@ -1137,10 +1090,8 @@ function renderShiftList() {
         grouped[tgl].push(row);
     });
 
-    // Sort dates
     const sortedDates = Object.keys(grouped).sort();
 
-    // Render
     const html = sortedDates.map(tgl => {
         const rows = grouped[tgl];
         const rowsHtml = rows.map(r => {
@@ -1169,10 +1120,6 @@ function renderShiftList() {
     container.innerHTML = html;
 }
 
-
-// =========================================================
-// HELPER — Badge class
-// =========================================================
 function getBadgeClass(kode) {
     switch (kode) {
         case "P7":   return "shift-badge-p7";
@@ -1184,10 +1131,6 @@ function getBadgeClass(kode) {
     }
 }
 
-
-// =========================================================
-// RENDER SHIFT SUMMARY
-// =========================================================
 function renderShiftSummary(data) {
     const summary = document.getElementById("shiftSummary");
     if (!summary) return;
@@ -1195,7 +1138,6 @@ function renderShiftSummary(data) {
     const total = data.data ? data.data.length : 0;
     const periode = data.periode || "—";
 
-    // Hitung statistik per kode
     const stats = { P7: 0, S15: 0, M22: 0, O: 0, CUTI: 0 };
     if (data.data) {
         data.data.forEach(r => {
@@ -1217,18 +1159,128 @@ function renderShiftSummary(data) {
         </div>
     `;
 }
-// =========================================================
-// RAK LIST — Load & Render
-// =========================================================
-let rakListData = [];
-let rakFilterCurrent = "semua";
-let rakSearchQuery = "";
 
+// =========================================================
+// MODAL PERSONIL
+// =========================================================
+function openPersonilModal() {
+    const modal = document.getElementById("personilModal");
+    if (!modal) return;
+    modal.classList.add("active");
+    loadPersonilList();
+}
+
+function closePersonilModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const modal = document.getElementById("personilModal");
+    if (modal) modal.classList.remove("active");
+}
+
+async function addNewPersonil() {
+    const input = document.getElementById("newPersonilName");
+    if (!input) return;
+    const nama = input.value.trim().toUpperCase();
+    if (!nama || nama.length < 2) {
+        showToastMini("❌ Nama minimal 2 karakter", "error");
+        return;
+    }
+    const _key = getApiKey();
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/add`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ nama: nama }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.detail || `HTTP ${resp.status}`);
+        input.value = "";
+        showToastMini(`✅ ${nama} ditambahkan`, "success");
+        _personilCache = null;
+        await loadPersonilList();
+    } catch (err) {
+        console.error("[AddPersonil] Error:", err);
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+function deletePersonilConfirm(nama) {
+    const html = `
+        <div style="text-align: left;">
+            <p style="font-size: 14px; margin-bottom: 12px;">
+                Hapus personil <b style="color: var(--accent-orange);">${nama}</b>?
+            </p>
+            <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; cursor: pointer; margin-bottom: 12px;">
+                <input type="checkbox" id="forceDeleteCheck" style="width: 18px; height: 18px; accent-color: var(--danger);">
+                <span style="font-size: 12px;">⚠️ <b>Force delete</b> — hapus history juga</span>
+            </label>
+            <div style="display: flex; gap: 8px;">
+                <button class="confirm-btn confirm-btn-cancel" onclick="closeDeleteModal()">❌ Batal</button>
+                <button class="confirm-btn confirm-btn-save" style="background: linear-gradient(135deg, #ee5253, #c73133);" onclick="deletePersonilExecute('${nama}')">🗑️ Hapus</button>
+            </div>
+        </div>
+    `;
+
+    let confirmModal = document.getElementById("deleteConfirmModal");
+    if (!confirmModal) {
+        confirmModal = document.createElement("div");
+        confirmModal.id = "deleteConfirmModal";
+        confirmModal.className = "modal-overlay active";
+        confirmModal.style.zIndex = "300";
+        confirmModal.innerHTML = `
+            <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 400px;">
+                <div class="modal-header">
+                    <div class="modal-title">⚠️ Konfirmasi Hapus</div>
+                    <button class="modal-close" onclick="closeDeleteModal()">✕</button>
+                </div>
+                <div class="modal-body" id="deleteConfirmBody"></div>
+            </div>
+        `;
+        document.body.appendChild(confirmModal);
+        confirmModal.onclick = (e) => { if (e.target === confirmModal) closeDeleteModal(); };
+    }
+    document.getElementById("deleteConfirmBody").innerHTML = html;
+}
+
+function closeDeleteModal() {
+    const modal = document.getElementById("deleteConfirmModal");
+    if (modal) modal.remove();
+}
+
+async function deletePersonilExecute(nama) {
+    const checkbox = document.getElementById("forceDeleteCheck");
+    const force = checkbox ? checkbox.checked : false;
+    const _key = getApiKey();
+    closeDeleteModal();
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/delete`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ nama: nama, force: force }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.detail || `HTTP ${resp.status}`);
+        showToastMini(data.message || `✅ ${nama} dihapus`, "success");
+        _personilCache = null;
+        await loadPersonilList();
+    } catch (err) {
+        console.error("[DeletePersonil] Error:", err);
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+// =========================================================
+// RAK LIST
+// =========================================================
 async function loadRakList() {
     const container = document.getElementById("rakList");
     if (!container) return;
 
-    // Loading
     container.innerHTML = `
         <div class="loading-state">
             <div class="spinner"></div>
@@ -1238,7 +1290,6 @@ async function loadRakList() {
 
     try {
         const _key = getApiKey();
-
         const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, {
             method: "POST",
             headers: {
@@ -1254,14 +1305,10 @@ async function loadRakList() {
         }
 
         const data = await resp.json();
-
-        if (!data.success) {
-            throw new Error(data.error || "Gagal load data rak");
-        }
+        if (!data.success) throw new Error(data.error || "Gagal load data rak");
 
         rakListData = data.list_rak || [];
 
-        // Update summary
         const elTotal = document.getElementById("rakSummaryTotal");
         const elSudah = document.getElementById("rakSummarySudah");
         const elBelum = document.getElementById("rakSummaryBelum");
@@ -1270,7 +1317,6 @@ async function loadRakList() {
         if (elSudah) elSudah.textContent = data.sudah_so;
         if (elBelum) elBelum.textContent = data.belum_so;
 
-        // Render
         renderRakList();
 
     } catch (err) {
@@ -1284,36 +1330,23 @@ async function loadRakList() {
     }
 }
 
-
-// =========================================================
-// RAK LIST — Filter
-// =========================================================
 function setRakFilter(filter) {
     rakFilterCurrent = filter;
-
     document.querySelectorAll(".rak-filter-tab").forEach(tab => {
         tab.classList.toggle("active", tab.getAttribute("data-filter") === filter);
     });
-
     renderRakList();
 }
 
-
-// =========================================================
-// RAK LIST — Search
-// =========================================================
 function filterRakList() {
     const input = document.getElementById("rakSearchInput");
     const clearBtn = document.getElementById("rakSearchClear");
     if (!input) return;
-
     rakSearchQuery = input.value.trim().toLowerCase();
-
     if (clearBtn) {
         if (rakSearchQuery) clearBtn.classList.remove("hidden");
         else clearBtn.classList.add("hidden");
     }
-
     renderRakList();
 }
 
@@ -1326,24 +1359,18 @@ function clearRakSearch() {
     renderRakList();
 }
 
-
-// =========================================================
-// RAK LIST — Render
-// =========================================================
 function renderRakList() {
     const container = document.getElementById("rakList");
     if (!container) return;
 
     let filtered = rakListData || [];
 
-    // Filter status
     if (rakFilterCurrent === "sudah") {
         filtered = filtered.filter(r => r.status === "SUDAH");
     } else if (rakFilterCurrent === "belum") {
         filtered = filtered.filter(r => r.status === "BELUM");
     }
 
-    // Filter search
     if (rakSearchQuery) {
         filtered = filtered.filter(r => {
             const _id = (r.rak_id || "").toLowerCase();
@@ -1364,7 +1391,6 @@ function renderRakList() {
 
     const html = filtered.map(rak => {
         const isSudah = rak.status === "SUDAH";
-
         if (isSudah) {
             const nominalText = formatRupiahFull(rak.nominal);
             const nominalClass = rak.nominal < 0 ? "rak-nominal-minus" : "rak-nominal-plus";
@@ -1410,88 +1436,44 @@ function renderRakList() {
 }
 
 // =========================================================
-// SPD LIST SCREEN v1.5
-// =========================================================
-let spdListData = [];
-let spdPeriodCurrent = "bulan_ini";
-let spdSortValue = "tanggal_desc";  // ← state sort
-
-function goToSpdListScreen() {
-    closeSidebar();
-    stopDashboardAutoRefresh();
-    showScreen("spdListScreen");
-    loadSpdList();
-}
-
-
-// =========================================================
-// SPD LIST — Set Sort (via button)
+// SPD LIST
 // =========================================================
 function setSpdSort(sortValue) {
-    console.log("[SPD] Sort button clicked:", sortValue);
-    
-    // Update state
     spdSortValue = sortValue;
-
-    // Update active button
     document.querySelectorAll(".spd-sort-btn").forEach(btn => {
-        const isActive = btn.getAttribute("data-sort") === sortValue;
-        btn.classList.toggle("active", isActive);
+        btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue);
     });
-
-    // Reload with new sort
     loadSpdList();
 }
 
-// =========================================================
-// SPD LIST — Set Period
-// =========================================================
 function setSpdPeriod(period) {
-    console.log("[SPD] Period clicked:", period);
-
-    // Update state
     spdPeriodCurrent = period;
-
-    // Update active tab
     document.querySelectorAll(".spd-period-tab").forEach(tab => {
-        const isActive = tab.getAttribute("data-period") === period;
-        tab.classList.toggle("active", isActive);
+        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
     });
-
-    // Show/hide custom date range
     const customRow = document.getElementById("spdCustomDateRow");
     if (customRow) {
         if (period === "custom") {
             customRow.classList.remove("hidden");
-
-            // Auto-set default date kalau kosong
             const s = document.getElementById("spdCustomStart");
             const e = document.getElementById("spdCustomEnd");
             const today = new Date();
             const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             const todayStr = today.toISOString().slice(0, 10);
             const startStr = startOfMonth.toISOString().slice(0, 10);
-
             if (s && !s.value) s.value = startStr;
             if (e && !e.value) e.value = todayStr;
         } else {
             customRow.classList.add("hidden");
         }
     }
-
-    // Reload
     loadSpdList();
 }
 
-
-// =========================================================
-// SPD LIST — Helper: Date Range
-// =========================================================
 function getSpdDateRange() {
     const today = new Date();
     let start = new Date();
     let end = new Date();
-
     if (spdPeriodCurrent === "bulan_ini") {
         start = new Date(today.getFullYear(), today.getMonth(), 1);
         end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -1504,13 +1486,9 @@ function getSpdDateRange() {
         if (s && s.value) start = new Date(s.value);
         if (e && e.value) end = new Date(e.value);
     }
-
     return { start, end };
 }
 
-// =========================================================
-// SPD LIST — Load
-// =========================================================
 async function loadSpdList() {
     const container = document.getElementById("spdList");
     if (!container) return;
@@ -1549,27 +1527,11 @@ async function loadSpdList() {
         }
 
         const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal load SPD");
 
-        if (!data.success) {
-            throw new Error(data.error || "Gagal load SPD");
-        }
-
-        // ✅ 1. Simpan data
         spdListData = data.list_spd || [];
+        spdListData = sortSpdData(spdListData, spdSortValue);
 
-        // ✅ 2. Ambil sort value dari dropdown
-        const sortValue = spdSortValue || "tanggal_desc";
-
-        console.log("[SPD] Data loaded:", spdListData.length, "items");
-        console.log("[SPD] Sort value:", sortValue);
-        console.log("[SPD] Before sort (first):", spdListData[0]?.tanggal);
-
-        // ✅ 3. Sort
-        spdListData = sortSpdData(spdListData, sortValue);
-
-        console.log("[SPD] After sort (first):", spdListData[0]?.tanggal);
-
-        // ✅ 4. Render
         renderSpdSummary(data);
         renderSpdList();
 
@@ -1584,12 +1546,8 @@ async function loadSpdList() {
     }
 }
 
-// =========================================================
-// SPD LIST — Sort
-// =========================================================
 function sortSpdData(data, sortBy) {
     const arr = [...data];
-
     if (sortBy === "tanggal_asc") {
         arr.sort((a, b) => (b.tanggal || "").localeCompare(a.tanggal || ""));
     } else if (sortBy === "tanggal_desc") {
@@ -1599,13 +1557,9 @@ function sortSpdData(data, sortBy) {
     } else if (sortBy === "spd_asc") {
         arr.sort((a, b) => (a.spd || 0) - (b.spd || 0));
     }
-
     return arr;
 }
 
-// =========================================================
-// SPD LIST — Render Summary
-// =========================================================
 function renderSpdSummary(data) {
     const elTotal = document.getElementById("spdSummaryTotal");
     const elMeta = document.getElementById("spdSummaryMeta");
@@ -1623,10 +1577,6 @@ function renderSpdSummary(data) {
     if (elAvg) elAvg.textContent = formatRupiahFull(avgSpd);
 }
 
-
-// =========================================================
-// SPD LIST — Render List
-// =========================================================
 function renderSpdList() {
     const container = document.getElementById("spdList");
     if (!container) return;
@@ -1648,7 +1598,6 @@ function renderSpdList() {
         const deltaPersen = item.delta_persen || 0;
         const trend = item.trend || "flat";
 
-        // Format delta
         let deltaHtml = "";
         if (trend === "flat") {
             deltaHtml = `<span class="spd-delta spd-delta-flat">— Flat</span>`;
@@ -1657,18 +1606,15 @@ function renderSpdList() {
             const sign = deltaNominal >= 0 ? "+" : "";
             const deltaNominalText = `${sign}${formatRupiahFull(deltaNominal)}`;
             const deltaPersenText = `${sign}${deltaPersen.toFixed(2)}%`;
-
             const deltaClass = trend === "up" ? "spd-delta-up" : "spd-delta-down";
             deltaHtml = `<span class="spd-delta ${deltaClass}">${arrow} ${deltaNominalText} (${deltaPersenText})</span>`;
         }
 
-        // Keterangan (kalau ada)
         const ket = item.keterangan || "";
         const ketHtml = ket
             ? `<div class="spd-item-ket">📝 ${escapeHtml(ket.substring(0, 80))}${ket.length > 80 ? "..." : ""}</div>`
             : "";
 
-        // PIC (kalau ada)
         const pic = item.pic || "-";
         const picHtml = pic && pic !== "-"
             ? `<div class="spd-item-pic">👤 ${escapeHtml(pic)}</div>`
@@ -1680,9 +1626,7 @@ function renderSpdList() {
                     <div class="spd-item-tgl">📅 ${formatTanggalLong(tgl)}</div>
                     <div class="spd-item-spd">${spdText}</div>
                 </div>
-                <div class="spd-item-delta-row">
-                    ${deltaHtml}
-                </div>
+                <div class="spd-item-delta-row">${deltaHtml}</div>
                 ${ketHtml}
                 ${picHtml}
             </div>
@@ -1693,63 +1637,494 @@ function renderSpdList() {
 }
 
 // =========================================================
-// MODAL KONFIRMASI UPDATE SHIFT v1.4
+// TOP MINUS
 // =========================================================
-function openConfirmShiftModal(data) {
-    const modal = document.getElementById("confirmShiftModal");
-    if (!modal) {
-        console.error("[Modal] confirmShiftModal tidak ditemukan");
+function setTopPeriod(period) {
+    topPeriodCurrent = period;
+    document.querySelectorAll("#topMinusScreen .spd-period-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
+    });
+    const customRow = document.getElementById("topCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("topCustomStart");
+            const e = document.getElementById("topCustomEnd");
+            const today = new Date();
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const todayStr = today.toISOString().slice(0, 10);
+            const startStr = startOfMonth.toISOString().slice(0, 10);
+            if (s && !s.value) s.value = startStr;
+            if (e && !e.value) e.value = todayStr;
+        } else {
+            customRow.classList.add("hidden");
+        }
+    }
+    loadTopMinus();
+}
+
+function setTopTab(tab) {
+    topTabCurrent = tab;
+    document.querySelectorAll(".top-subtab").forEach(t => {
+        t.classList.toggle("active", t.getAttribute("data-tab") === tab);
+    });
+    const searchWrapper = document.getElementById("topSearchWrapper");
+    if (searchWrapper) {
+        if (tab === "item") searchWrapper.classList.remove("hidden");
+        else searchWrapper.classList.add("hidden");
+    }
+    const filterSign = document.getElementById("topFilterSign");
+    if (filterSign) {
+        if (tab === "item") filterSign.classList.remove("hidden");
+        else filterSign.classList.add("hidden");
+    }
+    topSearchQuery = "";
+    const searchInput = document.getElementById("topSearchInput");
+    if (searchInput) searchInput.value = "";
+    const clearBtn = document.getElementById("topSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    loadTopMinus();
+}
+
+function setTopSign(sign) {
+    topSignCurrent = sign;
+    document.querySelectorAll(".top-filter-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-sign") === sign);
+    });
+    loadTopMinus();
+}
+
+function setTopSort(sortValue) {
+    topSortValue = sortValue;
+    document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue);
+    });
+    renderTopList();
+}
+
+function getTopDateRange() {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
+    if (topPeriodCurrent === "bulan_ini") {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (topPeriodCurrent === "bulan_lalu") {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (topPeriodCurrent === "custom") {
+        const s = document.getElementById("topCustomStart");
+        const e = document.getElementById("topCustomEnd");
+        if (s && s.value) start = new Date(s.value);
+        if (e && e.value) end = new Date(e.value);
+    }
+    return { start, end };
+}
+
+async function loadTopMinus() {
+    const container = document.getElementById("topList");
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat data...</p>
+        </div>
+    `;
+
+    const summaryTitle = document.getElementById("topSummaryTitle");
+    if (summaryTitle) {
+        if (topTabCurrent === "rak") {
+            summaryTitle.textContent = "💰 TOTAL MINUS RAK";
+        } else {
+            if (topSignCurrent === "minus") summaryTitle.textContent = "💰 TOTAL MINUS ITEM";
+            else if (topSignCurrent === "plus") summaryTitle.textContent = "💰 TOTAL PLUS ITEM";
+            else summaryTitle.textContent = "💰 TOTAL ADJUST ITEM";
+        }
+    }
+
+    try {
+        const _key = getApiKey();
+        const range = getTopDateRange();
+        const startStr = range.start.toISOString().slice(0, 10);
+        const endStr = range.end.toISOString().slice(0, 10);
+
+        const body = { mode: topPeriodCurrent };
+        if (topPeriodCurrent === "custom") {
+            body.tgl_start = startStr;
+            body.tgl_end = endStr;
+        }
+
+        let url = "";
+        if (topTabCurrent === "rak") {
+            url = `${CONFIG.BACKEND_URL}/api/yui/top-rak`;
+            body.limit = 500;
+        } else {
+            url = `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
+            body.limit = null;
+            body.search = topSearchQuery || "";
+            body.order_by = topSortValue;
+            body.sign = topSignCurrent;
+        }
+
+        const resp = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal load data");
+
+        if (topTabCurrent === "rak") {
+            topData = data.list_rak || [];
+        } else {
+            topData = data.items || [];
+        }
+
+        renderTopSummary(data);
+        renderTopList();
+
+    } catch (err) {
+        console.error("[Top] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load data: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
+    }
+}
+
+function renderTopSummary(data) {
+    const elTotal = document.getElementById("topSummaryTotal");
+    const elMeta = document.getElementById("topSummaryMeta");
+
+    let totalNominal = 0;
+    let totalCount = 0;
+    let periode = data.periode || "—";
+
+    if (topTabCurrent === "rak") {
+        totalNominal = data.total_nominal || 0;
+        totalCount = data.total_rak || 0;
+    } else {
+        totalNominal = data.total_nominal || 0;
+        totalCount = data.total_items || 0;
+    }
+
+    if (elTotal) elTotal.textContent = formatRupiahFull(totalNominal);
+    if (elMeta) elMeta.textContent = `${totalCount} ${topTabCurrent === "rak" ? "rak" : "item"} • ${periode}`;
+}
+
+function renderTopList() {
+    const container = document.getElementById("topList");
+    if (!container) return;
+
+    if (!topData || topData.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">💰</span>
+                <p>Belum ada data di periode ini</p>
+            </div>
+        `;
         return;
     }
 
-    // Simpan data di state
-    currentConfirmData = data;
+    const sorted = sortTopData([...topData], topSortValue);
+    if (topTabCurrent === "rak") renderTopRakList(container, sorted);
+    else renderTopItemList(container, sorted);
+}
 
-    // Format tanggal
-    const tglEl = document.getElementById("confirmModalDate");
-    if (tglEl) tglEl.textContent = formatTanggalLong(data.tanggal);
+function renderTopRakList(container, data) {
+    const html = data.map((rak, idx) => {
+        const rank = idx + 1;
+        const nominal = rak.nominal_adjust || 0;
+        const nominalText = formatRupiahFull(nominal);
+        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+        const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
+        const pic = rak.pic || "-";
+        const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
 
-    // Total
-    const countEl = document.getElementById("confirmModalCount");
-    if (countEl) countEl.textContent = `${data.items.length} orang`;
+        return `
+            <div class="top-item-card" onclick="openRakDetail('${escapeHtml(rak.rak_id)}')">
+                <div class="top-item-header">
+                    <span class="top-item-rank">${medal}</span>
+                    <span class="top-item-title">${escapeHtml(rak.rak_id)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
+                </div>
+                <div class="top-item-meta">
+                    <span>📅 ${tglShort}</span>
+                    <span>👤 ${escapeHtml(pic)}</span>
+                    <span>📦 ${rak.total_item || 0} item</span>
+                </div>
+                <div class="top-item-hint">Tap untuk detail item →</div>
+            </div>
+        `;
+    }).join("");
+    container.innerHTML = html;
+}
 
-    // Render list items
-    renderConfirmModalItems(data.items);
-
-    // Reset tombol save
-    const saveBtn = document.getElementById("confirmModalSaveBtn");
-    if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = "✅ Konfirmasi";
+function renderTopItemList(container, data) {
+    if (data.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">🔍</span>
+                <p>Tidak ada item yang cocok</p>
+            </div>
+        `;
+        return;
     }
 
-    // Tampilkan modal
-    modal.classList.add("active");
+    const html = data.map((item, idx) => {
+        const rank = idx + 1;
+        const nominal = item.nominal_adjust || 0;
+        const nominalText = formatRupiahFull(nominal);
+        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+        const tglShort = item.so_date ? formatTanggalShort(item.so_date) : "-";
+        const pic = item.pic || "-";
+        const plu = item.plu || "-";
+        const nama = cleanHtmlEntities(item.nama_produk) || "(tanpa nama)";
+        const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+
+        return `
+            <div class="top-item-card top-item-card-item">
+                <div class="top-item-header">
+                    <span class="top-item-rank">${medal}</span>
+                    <span class="top-item-title">${escapeHtml(plu)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
+                </div>
+                <div class="top-item-name">${escapeHtml(nama)}</div>
+                <div class="top-item-meta">
+                    <span>📅 ${tglShort}</span>
+                    <span>🏪 ${escapeHtml(item.rak_id || "-")}</span>
+                    <span>👤 ${escapeHtml(pic)}</span>
+                </div>
+            </div>
+        `;
+    }).join("");
+    container.innerHTML = html;
 }
 
-
-function closeConfirmShiftModal() {
-    const modal = document.getElementById("confirmShiftModal");
-    if (modal) modal.classList.remove("active");
-
-    // Reset state kalau user batal (bukan setelah save)
-    currentConfirmData = null;
+function sortTopData(data, sortBy) {
+    if (sortBy === "nominal_desc") {
+        data.sort((a, b) => (a.nominal_adjust || 0) - (b.nominal_adjust || 0));
+    } else if (sortBy === "nominal_asc") {
+        data.sort((a, b) => (b.nominal_adjust || 0) - (a.nominal_adjust || 0));
+    } else if (sortBy === "tanggal_desc") {
+        data.sort((a, b) => {
+            const ta = a.tgl_so || a.so_date || "";
+            const tb = b.tgl_so || b.so_date || "";
+            return tb.localeCompare(ta);
+        });
+    } else if (sortBy === "tanggal_asc") {
+        data.sort((a, b) => {
+            const ta = a.tgl_so || a.so_date || "";
+            const tb = b.tgl_so || b.so_date || "";
+            return ta.localeCompare(tb);
+        });
+    }
+    return data;
 }
 
+function searchTopItems() {
+    const input = document.getElementById("topSearchInput");
+    const clearBtn = document.getElementById("topSearchClear");
+    if (!input) return;
+    topSearchQuery = input.value.trim();
+    if (clearBtn) {
+        if (topSearchQuery) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+    clearTimeout(topSearchTimeout);
+    topSearchTimeout = setTimeout(() => { loadTopMinus(); }, 500);
+}
 
-function renderConfirmModalItems(items) {
-    const container = document.getElementById("confirmModalList");
+function clearTopSearch() {
+    const input = document.getElementById("topSearchInput");
+    if (input) input.value = "";
+    topSearchQuery = "";
+    const clearBtn = document.getElementById("topSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    loadTopMinus();
+}
+
+// =========================================================
+// RAK DETAIL
+// =========================================================
+async function openRakDetail(rakId) {
+    if (!rakId) return;
+    rakDetailCurrentRak = rakId;
+    rakDetailFilter = "semua";
+    rakDetailSearchQuery = "";
+    rakDetailData = [];
+
+    const titleEl = document.getElementById("rakDetailTitle");
+    if (titleEl) titleEl.textContent = `Detail ${rakId}`;
+
+    document.querySelectorAll(".rak-detail-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-filter") === "semua");
+    });
+
+    const searchInput = document.getElementById("rakDetailSearchInput");
+    if (searchInput) searchInput.value = "";
+    const clearBtn = document.getElementById("rakDetailSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+
+    showScreen("rakDetailScreen");
+    await loadRakDetail(rakId);
+}
+
+async function loadRakDetail(rakId) {
+    const container = document.getElementById("rakDetailList");
     if (!container) return;
 
-    const html = items.map(it => {
-        const kode = it.kode_shift || "O";
-        const shiftClass = getShiftModalClass(kode);
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat item...</p>
+        </div>
+    `;
+
+    try {
+        const _key = getApiKey();
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/items-by-rak/${encodeURIComponent(rakId)}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ mode: "bulan_ini" }),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal load data");
+
+        rakDetailData = data.items || [];
+        renderRakDetailInfo(data);
+        renderRakDetailList();
+
+    } catch (err) {
+        console.error("[RakDetail] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load item: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
+    }
+}
+
+function renderRakDetailInfo(data) {
+    const elRak = document.getElementById("rakDetailInfoRak");
+    const elTgl = document.getElementById("rakDetailInfoTgl");
+    const elPic = document.getElementById("rakDetailInfoPic");
+    const elMinus = document.getElementById("rakDetailStatMinus");
+    const elPlus = document.getElementById("rakDetailStatPlus");
+    const elNet = document.getElementById("rakDetailStatNet");
+
+    if (elRak) elRak.textContent = data.rak_id || "-";
+    if (elTgl) elTgl.textContent = data.tgl_so ? formatTanggalLong(data.tgl_so) : "-";
+    if (elPic) elPic.textContent = data.pic || "-";
+
+    if (elMinus) elMinus.textContent = formatRupiahFull(data.total_minus || 0);
+    if (elPlus) elPlus.textContent = formatRupiahFull(data.total_plus || 0);
+    if (elNet) elNet.textContent = formatRupiahFull(data.total_nominal || 0);
+}
+
+function setRakDetailFilter(filter) {
+    rakDetailFilter = filter;
+    document.querySelectorAll(".rak-detail-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-filter") === filter);
+    });
+    renderRakDetailList();
+}
+
+function filterRakDetail() {
+    const input = document.getElementById("rakDetailSearchInput");
+    const clearBtn = document.getElementById("rakDetailSearchClear");
+    if (!input) return;
+    rakDetailSearchQuery = input.value.trim().toLowerCase();
+    if (clearBtn) {
+        if (rakDetailSearchQuery) clearBtn.classList.remove("hidden");
+        else clearBtn.classList.add("hidden");
+    }
+    renderRakDetailList();
+}
+
+function clearRakDetailSearch() {
+    const input = document.getElementById("rakDetailSearchInput");
+    if (input) input.value = "";
+    rakDetailSearchQuery = "";
+    const clearBtn = document.getElementById("rakDetailSearchClear");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    renderRakDetailList();
+}
+
+function renderRakDetailList() {
+    const container = document.getElementById("rakDetailList");
+    if (!container) return;
+
+    let filtered = [...(rakDetailData || [])];
+
+    if (rakDetailFilter === "minus") {
+        filtered = filtered.filter(it => (it.nominal_adjust || 0) < 0);
+    } else if (rakDetailFilter === "plus") {
+        filtered = filtered.filter(it => (it.nominal_adjust || 0) > 0);
+    }
+
+    if (rakDetailSearchQuery) {
+        filtered = filtered.filter(it => {
+            const _plu = (it.plu || "").toLowerCase();
+            const _nama = (it.nama_produk || "").toLowerCase();
+            return _plu.includes(rakDetailSearchQuery) || _nama.includes(rakDetailSearchQuery);
+        });
+    }
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">🔍</span>
+                <p>Tidak ada item yang cocok</p>
+            </div>
+        `;
+        return;
+    }
+
+    filtered.sort((a, b) => (a.nominal_adjust || 0) - (b.nominal_adjust || 0));
+
+    const html = filtered.map((item, idx) => {
+        const rank = idx + 1;
+        const nominal = item.nominal_adjust || 0;
+        const nominalText = formatRupiahFull(nominal);
+        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+        const plu = item.plu || "-";
+        const nama = cleanHtmlEntities(item.nama_produk) || "(tanpa nama)";
+        const icon = nominal < 0 ? "📉" : nominal > 0 ? "📈" : "➖";
+
         return `
-            <div class="confirm-modal-item ${shiftClass}">
-                <span class="confirm-modal-item-icon">👤</span>
-                <span class="confirm-modal-item-name">${it.nama}</span>
-                <span class="confirm-modal-item-arrow">→</span>
-                <span class="confirm-modal-item-shift">${it.shift_nama || kode}</span>
+            <div class="rak-detail-item">
+                <div class="rak-detail-item-header">
+                    <span class="rak-detail-item-rank">${rank}</span>
+                    <span class="rak-detail-item-plu">${escapeHtml(plu)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
+                </div>
+                <div class="rak-detail-item-name">${escapeHtml(nama)}</div>
+                <div class="rak-detail-item-footer">
+                    <span>${icon} Selisih: ${item.qty_var || 0} pcs</span>
+                </div>
             </div>
         `;
     }).join("");
@@ -1757,271 +2132,155 @@ function renderConfirmModalItems(items) {
     container.innerHTML = html;
 }
 
-
-function getShiftModalClass(kode) {
-    switch (kode) {
-        case "P7":   return "shift-p7";
-        case "S15":  return "shift-s15";
-        case "M22":  return "shift-m22";
-        case "O":    return "shift-o";
-        case "CUTI": return "shift-cuti";
-        default:     return "shift-o";
+// =========================================================
+// STATUS ANALYSIS
+// =========================================================
+function setStatusPeriod(period) {
+    statusPeriodCurrent = period;
+    document.querySelectorAll("#statusScreen .spd-period-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
+    });
+    const customRow = document.getElementById("statusCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("statusCustomStart");
+            const e = document.getElementById("statusCustomEnd");
+            const today = new Date();
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const todayStr = today.toISOString().slice(0, 10);
+            const startStr = startOfMonth.toISOString().slice(0, 10);
+            if (s && !s.value) s.value = startStr;
+            if (e && !e.value) e.value = todayStr;
+        } else {
+            customRow.classList.add("hidden");
+        }
     }
+    loadStatusAnalysis();
 }
 
-
-// =========================================================
-// EKSEKUSI KONFIRMASI — klik tombol ✅
-// =========================================================
-async function executeConfirmShift() {
-    if (!currentConfirmData) {
-        showToastMini("❌ Tidak ada data untuk dikonfirmasi", "error");
-        return;
+function getStatusDateRange() {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
+    if (statusPeriodCurrent === "bulan_ini") {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (statusPeriodCurrent === "bulan_lalu") {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+    } else if (statusPeriodCurrent === "custom") {
+        const s = document.getElementById("statusCustomStart");
+        const e = document.getElementById("statusCustomEnd");
+        if (s && s.value) start = new Date(s.value);
+        if (e && e.value) end = new Date(e.value);
     }
+    return { start, end };
+}
 
-    const saveBtn = document.getElementById("confirmModalSaveBtn");
-    if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...';
-    }
-
-    const _key = getApiKey();
-    const data = currentConfirmData;
-
+async function loadStatusAnalysis() {
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
+        const _key = getApiKey();
+        const range = getStatusDateRange();
+        const startStr = range.start.toISOString().slice(0, 10);
+        const endStr = range.end.toISOString().slice(0, 10);
+
+        const body = { mode: statusPeriodCurrent };
+        if (statusPeriodCurrent === "custom") {
+            body.tgl_start = startStr;
+            body.tgl_end = endStr;
+        }
+
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "X-API-Key": _key,
             },
-            body: JSON.stringify({
-                tanggal: data.tanggal,
-                items: data.items.map(it => ({
-                    nama: it.nama,
-                    kode_shift: it.kode_shift,
-                })),
-            }),
+            body: JSON.stringify(body),
         });
 
-        const result = await resp.json();
-
-        if (!resp.ok || !result.success) {
-            throw new Error(result.detail || result.message || `HTTP ${resp.status}`);
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
         }
-
-        const savedCount = result.saved || data.items.length;
-
-        // Tutup modal
-        const modal = document.getElementById("confirmShiftModal");
-        if (modal) modal.classList.remove("active");
-
-        // Push success bubble ke chat
-        const successMsg = {
-            role: "assistant",
-            content: `✅ ${savedCount} shift tersimpan!\n\n${getShiftSummaryText(data.items)}`,
-            timestamp: Date.now(),
-            isSuccess: true,
-        };
-        chatHistories[currentBot].push(successMsg);
-        saveChatHistories();
-        renderChatHistory();
-        scrollToBottom();
-
-        // Refresh Master Shift kalau lagi di screen itu
-        const masterScreen = document.getElementById("masterShiftScreen");
-        if (masterScreen && masterScreen.classList.contains("active")) {
-            loadMasterShift();
-        }
-
-        // Refresh running text di home (kalau lagi di home)
-        const homeScreen = document.getElementById("homeScreen");
-        if (homeScreen && homeScreen.classList.contains("active")) {
-            loadMiniDashboard();
-        }
-
-        showToastMini(`✅ ${savedCount} shift tersimpan`, "success");
-
-        // Clear state
-        currentConfirmData = null;
-
-    } catch (err) {
-        console.error("[ConfirmShift] Error:", err);
-
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = "✅ Konfirmasi";
-        }
-
-        // Push error bubble
-        const errMsg = {
-            role: "assistant",
-            content: `⚠️ Gagal simpan: ${err.message}`,
-            timestamp: Date.now(),
-            isError: true,
-        };
-        chatHistories[currentBot].push(errMsg);
-        saveChatHistories();
-        renderChatHistory();
-        scrollToBottom();
-
-        showToastMini(`❌ Gagal: ${err.message}`, "error");
-    }
-}
-
-// =========================================================
-// MODAL — KELOLA PERSONIL v1.3
-// =========================================================
-function openPersonilModal() {
-    const modal = document.getElementById("personilModal");
-    if (!modal) return;
-
-    modal.classList.add("active");
-    loadPersonilList();
-}
-
-function closePersonilModal(event) {
-    if (event && event.target !== event.currentTarget) return;
-    const modal = document.getElementById("personilModal");
-    if (modal) modal.classList.remove("active");
-}
-
-
-// =========================================================
-// TAMBAH PERSONIL
-// =========================================================
-async function addNewPersonil() {
-    const input = document.getElementById("newPersonilName");
-    if (!input) return;
-
-    const nama = input.value.trim().toUpperCase();
-    if (!nama || nama.length < 2) {
-        showToastMini("❌ Nama minimal 2 karakter", "error");
-        return;
-    }
-
-    const _key = getApiKey();
-
-    try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/add`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
-            body: JSON.stringify({ nama: nama }),
-        });
 
         const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal load status");
 
-        if (!resp.ok || !data.success) {
-            throw new Error(data.detail || data.message || `HTTP ${resp.status}`);
-        }
-
-        input.value = "";
-        showToastMini(`✅ ${nama} ditambahkan`, "success");
-
-        // Reload personil list
-        await loadPersonilList();
+        renderStatusCard(data);
+        renderStatusMetrics(data);
+        renderStatusRekomendasi(data);
 
     } catch (err) {
-        console.error("[AddPersonil] Error:", err);
-        showToastMini(`❌ Gagal: ${err.message}`, "error");
+        console.error("[Status] Error:", err);
+        const elEmoji = document.getElementById("statusBigEmoji");
+        const elLabel = document.getElementById("statusBigLabel");
+        const elPersen = document.getElementById("statusBigPersen");
+        const elMeta = document.getElementById("statusBigMeta");
+        const elRekom = document.getElementById("statusRekomendasi");
+        if (elEmoji) elEmoji.textContent = "⚠️";
+        if (elLabel) elLabel.textContent = "Error";
+        if (elPersen) elPersen.textContent = "—";
+        if (elMeta) elMeta.textContent = err.message;
+        if (elRekom) elRekom.textContent = "Gagal load data.";
     }
 }
 
+function renderStatusCard(data) {
+    const elEmoji = document.getElementById("statusBigEmoji");
+    const elLabel = document.getElementById("statusBigLabel");
+    const elPersen = document.getElementById("statusBigPersen");
+    const elMeta = document.getElementById("statusBigMeta");
+    const elCard = document.getElementById("statusBigCard");
 
-// =========================================================
-// HAPUS PERSONIL — dengan konfirmasi soft/force
-// =========================================================
-function deletePersonilConfirm(nama) {
-    // Modal konfirmasi custom
-    const html = `
-        <div style="text-align: left;">
-            <p style="font-size: 14px; margin-bottom: 12px;">
-                Hapus personil <b style="color: var(--accent-orange);">${nama}</b>?
-            </p>
-            <label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; cursor: pointer; margin-bottom: 12px;">
-                <input type="checkbox" id="forceDeleteCheck" style="width: 18px; height: 18px; accent-color: var(--danger);">
-                <span style="font-size: 12px;">⚠️ <b>Force delete</b> — hapus history juga (permanent)</span>
-            </label>
-            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 16px;">
-                Kalau gak dicentang, personil cuma dinonaktifkan (history tetap tersimpan).
-            </p>
-            <div style="display: flex; gap: 8px;">
-                <button class="confirm-btn confirm-btn-cancel" onclick="closeDeleteModal()">
-                    ❌ Batal
-                </button>
-                <button class="confirm-btn confirm-btn-save" style="background: linear-gradient(135deg, #ee5253, #c73133);" onclick="deletePersonilExecute('${nama}')">
-                    🗑️ Hapus
-                </button>
-            </div>
-        </div>
-    `;
+    const statusEmoji = data.status_emoji || "⏳";
+    const statusLabel = data.status_label || "—";
+    const statusColor = data.status_color || "hijau";
+    const persen = data.persen || 0;
+    const periode = data.periode || "—";
 
-    // Pakai modal personil yang udah ada — inject konfirmasi
-    let confirmModal = document.getElementById("deleteConfirmModal");
-    if (!confirmModal) {
-        confirmModal = document.createElement("div");
-        confirmModal.id = "deleteConfirmModal";
-        confirmModal.className = "modal-overlay active";
-        confirmModal.style.zIndex = "300";
-        confirmModal.innerHTML = `
-            <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 400px;">
-                <div class="modal-header">
-                    <div class="modal-title">⚠️ Konfirmasi Hapus</div>
-                    <button class="modal-close" onclick="closeDeleteModal()">✕</button>
-                </div>
-                <div class="modal-body" id="deleteConfirmBody"></div>
-            </div>
-        `;
-        document.body.appendChild(confirmModal);
-        confirmModal.onclick = (e) => { if (e.target === confirmModal) closeDeleteModal(); };
-    }
+    if (elEmoji) elEmoji.textContent = statusEmoji;
+    if (elLabel) elLabel.textContent = statusLabel;
+    if (elPersen) elPersen.textContent = `${persen.toFixed(3)}%`;
+    if (elMeta) elMeta.textContent = periode;
 
-    document.getElementById("deleteConfirmBody").innerHTML = html;
-}
-
-function closeDeleteModal() {
-    const modal = document.getElementById("deleteConfirmModal");
-    if (modal) modal.remove();
-}
-
-async function deletePersonilExecute(nama) {
-    const checkbox = document.getElementById("forceDeleteCheck");
-    const force = checkbox ? checkbox.checked : false;
-    const _key = getApiKey();
-
-    closeDeleteModal();
-
-    try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/delete`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
-            body: JSON.stringify({ nama: nama, force: force }),
-        });
-
-        const data = await resp.json();
-
-        if (!resp.ok || !data.success) {
-            throw new Error(data.detail || data.message || `HTTP ${resp.status}`);
-        }
-
-        showToastMini(data.message || `✅ ${nama} dihapus`, "success");
-        await loadPersonilList();
-
-    } catch (err) {
-        console.error("[DeletePersonil] Error:", err);
-        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    if (elCard) {
+        elCard.classList.remove("status-big-card-aman", "status-big-card-waspada", "status-big-card-bahaya");
+        const _class = statusColor === "merah" ? "bahaya" : statusColor === "kuning" ? "waspada" : "aman";
+        elCard.classList.add(`status-big-card-${_class}`);
     }
 }
 
+function renderStatusMetrics(data) {
+    const elNSB = document.getElementById("metricNSB");
+    const elAdjust = document.getElementById("metricAdjust");
+    const elBTSB = document.getElementById("metricBTSB");
+    const elNSBPersonil = document.getElementById("metricNSBPersonil");
 
+    if (elNSB) elNSB.textContent = formatRupiahFull(data.net_sales || 0);
+    if (elAdjust) elAdjust.textContent = formatRupiahFull(data.total_adjust || 0);
+    if (elBTSB) elBTSB.textContent = formatRupiahFull(data.btsb_rupiah || 0);
+    if (elNSBPersonil) {
+        const nsbPersonil = data.nsb_personil || 0;
+        elNSBPersonil.textContent = formatRupiahFull(nsbPersonil);
+        elNSBPersonil.classList.remove("status-metric-value-minus", "status-metric-value-plus");
+        if (nsbPersonil > 0) elNSBPersonil.classList.add("status-metric-value-minus");
+        else elNSBPersonil.classList.add("status-metric-value-plus");
+    }
+}
+
+function renderStatusRekomendasi(data) {
+    const elRekom = document.getElementById("statusRekomendasi");
+    const elCard = document.getElementById("statusRekomendasiCard");
+    if (elRekom) elRekom.textContent = data.rekomendasi || "Tidak ada rekomendasi.";
+    if (elCard) {
+        elCard.classList.remove("status-rekomendasi-aman", "status-rekomendasi-waspada", "status-rekomendasi-bahaya");
+        elCard.classList.add(`status-rekomendasi-${data.status || "aman"}`);
+    }
+}
 // =========================================================
-// CHAT — RENDER HISTORY (dengan konfirmasi)
+// CHAT RENDERING
 // =========================================================
 function renderChatHistory() {
     const container = document.getElementById("chatMessages");
@@ -2030,7 +2289,6 @@ function renderChatHistory() {
     const history = chatHistories[currentBot] || [];
     const bot = BOTS[currentBot];
 
-    // Empty state — welcome bubble
     if (history.length === 0) {
         container.innerHTML = `
             <div class="chat-message-wrapper ai">
@@ -2054,15 +2312,9 @@ ${getWelcomeText(currentBot)}
     history.forEach((msg, idx) => {
         const isUser = msg.role === "user";
 
-        // ============================================================
-        // WRAPPER
-        // ============================================================
         const wrapper = document.createElement("div");
         wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
 
-        // ============================================================
-        // AVATAR
-        // ============================================================
         const avatar = document.createElement("div");
         if (isUser) {
             avatar.className = "chat-avatar avatar-user";
@@ -2073,15 +2325,9 @@ ${getWelcomeText(currentBot)}
         }
         wrapper.appendChild(avatar);
 
-        // ============================================================
-        // BUBBLE CONTENT WRAPPER — class baru, gak ada inline flex!
-        // ============================================================
         const bubbleContent = document.createElement("div");
         bubbleContent.className = `bubble-content ${isUser ? "user" : "ai"}`;
 
-        // ============================================================
-        // BUBBLE / KONTEN
-        // ============================================================
         if (msg.isConfirm && msg.confirmData) {
             const confirmBubble = renderConfirmBubble(msg, idx);
             bubbleContent.appendChild(confirmBubble);
@@ -2089,13 +2335,9 @@ ${getWelcomeText(currentBot)}
             const bubble = document.createElement("div");
             bubble.className = `bubble bubble-${isUser ? "user" : "ai"}`;
 
-            if (msg.isSuccess) {
-                bubble.classList.add("bubble-success");
-            } else if (msg.isError) {
-                bubble.classList.add("bubble-error");
-            } else if (msg.isCancel) {
-                bubble.classList.add("bubble-error");
-            }
+            if (msg.isSuccess) bubble.classList.add("bubble-success");
+            else if (msg.isError) bubble.classList.add("bubble-error");
+            else if (msg.isCancel) bubble.classList.add("bubble-error");
 
             if (msg.isSuccess && msg.content.includes("🌸")) {
                 bubble.innerHTML = formatSuccessMessage(msg.content);
@@ -2106,9 +2348,6 @@ ${getWelcomeText(currentBot)}
             bubbleContent.appendChild(bubble);
         }
 
-        // ============================================================
-        // TIMESTAMP
-        // ============================================================
         const time = document.createElement("div");
         time.className = "bubble-time";
         time.textContent = formatTime(msg.timestamp);
@@ -2119,13 +2358,8 @@ ${getWelcomeText(currentBot)}
     });
 }
 
-// =========================================================
-// HELPER — Format Success Message
-// =========================================================
 function formatSuccessMessage(text) {
     if (!text) return "";
-
-    // Split by line
     const lines = text.split("\n");
     let html = "";
     let inSummary = false;
@@ -2133,23 +2367,18 @@ function formatSuccessMessage(text) {
 
     lines.forEach(line => {
         const trimmed = line.trim();
-
         if (trimmed.startsWith("✅")) {
-            // Header success
             html += `<div class="success-header">${escapeHtml(trimmed)}</div>`;
         } else if (trimmed.startsWith("🌸")) {
-            // Start shift summary
             inSummary = true;
             summaryLines = [];
         } else if (inSummary && trimmed) {
-            // Item dalam summary
             summaryLines.push(trimmed);
         } else if (trimmed) {
             html += `<div style="margin-top: 4px;">${escapeHtml(trimmed)}</div>`;
         }
     });
 
-    // Render summary
     if (summaryLines.length > 0) {
         html += `<div class="shift-summary-chat">`;
         summaryLines.forEach(line => {
@@ -2157,28 +2386,21 @@ function formatSuccessMessage(text) {
         });
         html += `</div>`;
     }
-
     return html;
 }
 
-// =========================================================
-// RENDER BUBBLE KONFIRMASI
-// =========================================================
 function renderConfirmBubble(msg, idx) {
     const bubble = document.createElement("div");
     bubble.className = "bubble bubble-ai bubble-confirm";
-
     if (msg.resolved) bubble.classList.add("resolved");
 
     const data = msg.confirmData;
     const items = data.items || [];
     const itemsCount = items.length;
-
     const showAll = itemsCount <= 4;
     const displayItems = showAll ? items : items.slice(0, 4);
     const remaining = itemsCount - 4;
 
-    // Item sejajar horizontal — inline
     const itemsHtml = displayItems.map(it => 
         `<span class="confirm-chip">👤 ${it.nama} → ${it.shift_nama || it.kode_shift}</span>`
     ).join("");
@@ -2211,19 +2433,13 @@ function renderConfirmBubble(msg, idx) {
             <span class="confirm-title">KONFIRMASI UPDATE</span>
             <span class="confirm-date">📅 ${formatTanggalShort(data.tanggal)}</span>
         </div>
-        <div class="confirm-chips">
-            ${itemsHtml}
-            ${moreHtml}
-        </div>
+        <div class="confirm-chips">${itemsHtml}${moreHtml}</div>
         ${actionsHtml}
         ${statusHtml}
     `;
-
     return bubble;
 }
-// =========================================================
-// HANDLE KONFIRMASI — SIMPAN
-// =========================================================
+
 async function handleConfirmSave(idx) {
     const history = chatHistories[currentBot] || [];
     const msg = history[idx];
@@ -2255,16 +2471,11 @@ async function handleConfirmSave(idx) {
         });
 
         const result = await resp.json();
+        if (!resp.ok || !result.success) throw new Error(result.detail || `HTTP ${resp.status}`);
 
-        if (!resp.ok || !result.success) {
-            throw new Error(result.detail || result.message || `HTTP ${resp.status}`);
-        }
-
-        // Mark as resolved
         msg.resolved = true;
         msg.resolvedStatus = "saved";
 
-        // Add success message
         const savedCount = result.saved || data.items.length;
         const successMsg = {
             role: "assistant",
@@ -2277,7 +2488,6 @@ async function handleConfirmSave(idx) {
         renderChatHistory();
         scrollToBottom();
 
-        // Refresh shift list kalau di master shift screen
         if (document.getElementById("masterShiftScreen")?.classList.contains("active")) {
             loadMasterShift();
         }
@@ -2286,10 +2496,8 @@ async function handleConfirmSave(idx) {
 
     } catch (err) {
         console.error("[ConfirmSave] Error:", err);
-
         msg.resolved = true;
         msg.resolvedStatus = "error";
-
         const errMsg = {
             role: "assistant",
             content: `⚠️ Gagal simpan: ${err.message}`,
@@ -2300,15 +2508,10 @@ async function handleConfirmSave(idx) {
         saveChatHistories();
         renderChatHistory();
         scrollToBottom();
-
         showToastMini(`❌ Gagal: ${err.message}`, "error");
     }
 }
 
-
-// =========================================================
-// HANDLE KONFIRMASI — BATAL
-// =========================================================
 function handleConfirmCancel(idx) {
     const history = chatHistories[currentBot] || [];
     const msg = history[idx];
@@ -2327,32 +2530,26 @@ function handleConfirmCancel(idx) {
     saveChatHistories();
     renderChatHistory();
     scrollToBottom();
-
     showToastMini("❌ Dibatalkan", "error");
 }
 
-
-// =========================================================
-// HELPER — Shift summary text untuk chat
-// =========================================================
 function getShiftSummaryText(items) {
     const grouped = { P7: [], S15: [], M22: [], O: [], CUTI: [] };
     items.forEach(it => {
         const kode = it.kode_shift;
         if (grouped[kode]) grouped[kode].push(it.nama);
     });
-
     const lines = ["🌸 Shift terbaru:"];
     if (grouped.P7.length) lines.push(`🟢 Pagi: ${grouped.P7.join(", ")}`);
     if (grouped.S15.length) lines.push(`🟡 Siang: ${grouped.S15.join(", ")}`);
     if (grouped.M22.length) lines.push(`🔴 Malam: ${grouped.M22.join(", ")}`);
     if (grouped.O.length) lines.push(`⚪ Off: ${grouped.O.join(", ")}`);
     if (grouped.CUTI.length) lines.push(`⚫ Cuti: ${grouped.CUTI.join(", ")}`);
-
     return lines.join("\n");
 }
+
 // =========================================================
-// CHAT — BIND INPUT & SEND MESSAGE
+// CHAT INPUT & SEND
 // =========================================================
 function bindChatInput() {
     const input = document.getElementById("chatInput");
@@ -2371,10 +2568,6 @@ function bindChatInput() {
     });
 }
 
-
-// =========================================================
-// SEND MESSAGE
-// =========================================================
 async function sendMessage() {
     const input = document.getElementById("chatInput");
     const sendBtn = document.getElementById("chatSend");
@@ -2388,38 +2581,84 @@ async function sendMessage() {
     input.style.height = "auto";
     sendBtn.disabled = true;
 
-    // ✅ Deteksi intent khusus — SEBELUM kirim ke backend
     const _msgLower = text.toLowerCase().trim();
 
-    // 1. Konfirmasi simpan SO
-    if (_msgLower === "simpan so" || _msgLower === "save so" || _msgLower === "simpan") {
+    if (_msgLower === "konfirmasi baru" || _msgLower === "ya konfirmasi") {
+        if (window._pendingUploadSo) {
+            window._pendingUploadSo.force_new_pic = true;
+            const userMsg = { role: "user", content: text, timestamp: Date.now() };
+            chatHistories[currentBot].push(userMsg);
+            const aiMsg = {
+                role: "assistant",
+                content: `✅ Oke, PIC baru dikonfirmasi. Ketik **"simpan so"**.`,
+                timestamp: Date.now(),
+            };
+            chatHistories[currentBot].push(aiMsg);
+            saveChatHistories();
+            renderChatHistory();
+            scrollToBottom();
+            sendBtn.disabled = false;
+            return;
+        }
+    }
+
+    if (window._pendingUploadSo) {
+        if (_msgLower.startsWith("tanggal") || _msgLower.startsWith("pic ") || _msgLower.includes(" pic ")) {
+            const _handled = await handleTanggalPicInput(text);
+            if (_handled) {
+                sendBtn.disabled = false;
+                return;
+            }
+        }
+    }
+
+    if (_msgLower === "simpan so" || _msgLower === "save so") {
         await confirmSaveSo();
         sendBtn.disabled = false;
         return;
     }
 
-    // 2. Batal upload SO
+    if (_msgLower === "simpan spd" || _msgLower === "save spd") {
+        await confirmSaveSpd();
+        sendBtn.disabled = false;
+        return;
+    }
+
     if (_msgLower === "batal" || _msgLower === "cancel") {
         if (window._pendingUploadSo) {
             cancelUploadSo();
             sendBtn.disabled = false;
             return;
         }
+        if (window._pendingSpd) {
+            window._pendingSpd = null;
+            const userMsg = { role: "user", content: text, timestamp: Date.now() };
+            chatHistories[currentBot].push(userMsg);
+            const aiMsg = {
+                role: "assistant",
+                content: `Oke, SPD dibatalkan.`,
+                timestamp: Date.now(),
+            };
+            chatHistories[currentBot].push(aiMsg);
+            saveChatHistories();
+            renderChatHistory();
+            scrollToBottom();
+            sendBtn.disabled = false;
+            return;
+        }
     }
 
-    // 3. Input SPD via chat (khusus Yui)
     const _isSpdInput = currentBot === "yui" && (
         (_msgLower.includes("spd") && (
-            _msgLower.includes("input") ||
-            _msgLower.includes("catat") ||
-            _msgLower.includes("simpan") ||
+            _msgLower.includes("input") || 
+            _msgLower.includes("catat") || 
+            _msgLower.includes("simpan") || 
             _msgLower.includes("tambah")
         )) ||
         (_msgLower.includes("spd") && /\d{3,}/.test(_msgLower.replace(/[.,]/g, "")))
     );
 
     if (_isSpdInput) {
-        // Push user message
         const userMsg = {
             role: "user",
             content: text,
@@ -2429,18 +2668,12 @@ async function sendMessage() {
         saveChatHistories();
         renderChatHistory();
         scrollToBottom();
-
-        // Handle SPD
+        
         await handleSpdChat(text);
-
         sendBtn.disabled = false;
         return;
     }
 
-    // ============================================================
-    // CHAT BIASA (FALLBACK)
-    // ============================================================
-    // Push user message
     const userMsg = {
         role: "user",
         content: text,
@@ -2455,7 +2688,6 @@ async function sendMessage() {
 
     try {
         const bot = BOTS[currentBot];
-
         const history = chatHistories[currentBot]
             .slice(-7, -1)
             .filter(m => !m.isConfirm && !m.isSuccess && !m.isCancel && !m.isError)
@@ -2478,24 +2710,22 @@ async function sendMessage() {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            const errMsg = errorData.detail || errorData.message || `Error ${response.status}`;
-            throw new Error(errMsg);
+            throw new Error(errorData.detail || `Error ${response.status}`);
         }
 
         const data = await response.json();
 
-        // === KALAU HANA MINTA KONFIRMASI ===
         if (data.needs_confirm && data.parsed && data.parsed.items) {
             const shortMsg = {
                 role: "assistant",
-                content: data.text || `Oke Bos, aku catat ${data.parsed.items.length} perubahan shift. Cek detailnya ya! 🌸`,
+                content: data.text || `Oke, aku catat ${data.parsed.items.length} perubahan shift.`,
                 timestamp: Date.now(),
             };
             chatHistories[currentBot].push(shortMsg);
             saveChatHistories();
             renderChatHistory();
             scrollToBottom();
-
+        
             setTimeout(() => {
                 openConfirmShiftModal({
                     tanggal: data.parsed.tanggal,
@@ -2503,8 +2733,7 @@ async function sendMessage() {
                     raw: data.parsed.raw || text,
                 });
             }, 400);
-
-            hideLoadingBubble();
+        
             sendBtn.disabled = false;
             input.focus();
             return;
@@ -2513,10 +2742,7 @@ async function sendMessage() {
                 role: "assistant",
                 content: data.text || "(kosong)",
                 timestamp: Date.now(),
-                meta: {
-                    model: data.model || null,
-                    intent: data.intent || null,
-                },
+                meta: { model: data.model || null, intent: data.intent || null },
             };
             chatHistories[currentBot].push(aiMsg);
         }
@@ -2527,10 +2753,9 @@ async function sendMessage() {
 
     } catch (err) {
         hideLoadingBubble();
-
         const errMsg = {
             role: "assistant",
-            content: `⚠️ Error: ${err.message}\n\nCek koneksi atau API key di Pengaturan.`,
+            content: `⚠️ Error: ${err.message}`,
             timestamp: Date.now(),
             isError: true,
         };
@@ -2543,7 +2768,7 @@ async function sendMessage() {
     sendBtn.disabled = false;
     input.focus();
 }
-    
+
 // =========================================================
 // LOADING BUBBLE
 // =========================================================
@@ -2570,10 +2795,6 @@ function hideLoadingBubble() {
     loadingEl = null;
 }
 
-
-// =========================================================
-// SCROLL
-// =========================================================
 function scrollToBottom() {
     const container = document.getElementById("chatMessages");
     if (!container) return;
@@ -2582,1429 +2803,611 @@ function scrollToBottom() {
     }, 50);
 }
 
-
 // =========================================================
-// HELPERS
+// PERSONIL MASTER + AUTO CORRECT
 // =========================================================
-function formatTime(timestamp) {
-    if (!timestamp) return "";
-    const d = new Date(timestamp);
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    return `${hh}:${mm}`;
-}
-
-function getSessionDate() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}${m}${day}`;
-}
-
-function formatMessage(text) {
-    if (!text) return "";
-    let html = escapeHtml(text);
-
-    html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
-    html = html.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<i>$1</i>");
-    html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
-    html = html.replace(/^[\-\*]\s+(.+)$/gm, "• $1");
-    html = html.replace(/^(\d+)\.\s+(.+)$/gm, "$1. $2");
-
-    return html;
-}
-
-function cleanHtmlEntities(str) {
-    if (!str) return "";
-    return str
-        .replace(/&#39;/g, "'")
-        .replace(/&amp;/g, "&")
-        .replace(/&quot;/g, '"')
-        .replace(/&nbsp;/g, " ")
-        .replace(/&#x27;/g, "'")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">");
-}
-
-function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function getWelcomeText(botId) {
-    switch (botId) {
-        case "yui":
-            return "Aku bisa:\n• Rekap SO (harian/mingguan/bulanan)\n• Input SO via chat\n• Top item minus/plus\n• List item per rak";
-        case "hana":
-            return "Aku bisa:\n• Cek jadwal shift\n• Update/hapus shift (ketik natural)\n• Saran pengganti\n• Cek konflik jadwal\n\nContoh: <i>\"Pagi: Pandu, Tika. Siang: Reza\"</i>";
-        case "rei":
-            return "Aku bisa:\n• Analisis trend SO\n• LPJ & laporan\n• Prediksi SO\n• Insight & rekomendasi";
-        case "kurumi":
-            return "Aku bisa:\n• Rangkum laporan\n• Kirim report (text)\n• Chat general\n• Koordinasi antar bot";
-        default:
-            return "";
+async function loadPersonilMaster() {
+    const _now = Date.now();
+    if (_personilCache && (_now - _personilCacheTime) < 5 * 60 * 1000) {
+        return _personilCache;
+    }
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, {
+            method: "GET",
+            headers: { "X-API-Key": getApiKey() },
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const _list = (data.data || [])
+            .filter(p => p.aktif !== false)
+            .map(p => String(p.nama).trim().toUpperCase());
+        _personilCache = _list;
+        _personilCacheTime = _now;
+        console.log("[Personil] Loaded:", _list.length);
+        return _list;
+    } catch (e) {
+        console.error("[Personil] Gagal:", e);
+        return _personilCache || [];
     }
 }
 
-// =========================================================
-// AUTO REFRESH MINI DASHBOARD tiap 5 menit (kalau di home)
-// =========================================================
-setInterval(() => {
-    const homeScreen = document.getElementById("homeScreen");
-    if (homeScreen && homeScreen.classList.contains("active")) {
-        loadMiniDashboard();
+async function autoCorrectPic(userInput) {
+    const _input = String(userInput).trim().toUpperCase();
+    if (!_input) return { status: "empty", pic: null, suggestions: [], original: _input };
+
+    const _list = await loadPersonilMaster();
+    if (_list.length === 0) return { status: "exact", pic: _input, suggestions: [], original: _input };
+
+    const _exact = _list.find(p => p === _input);
+    if (_exact) return { status: "exact", pic: _exact, suggestions: [], original: _input };
+
+    const _matches = _list.filter(p => 
+        p.startsWith(_input) || p.includes(_input) || _input.includes(p)
+    );
+
+    if (_matches.length === 1) {
+        return { status: "corrected", pic: _matches[0], original: _input, suggestions: _matches };
     }
-}, 5 * 60 * 1000);
-
-// =========================================================
-// TOP MINUS SCREEN v1.6
-// =========================================================
-let topData = [];
-let topPeriodCurrent = "bulan_ini";
-let topSortValue = "tanggal_desc";
-let topTabCurrent = "rak";
-let topSearchQuery = "";
-let topSignCurrent = "minus";   // ✅ NEW: "minus" | "plus" | "all"
-
-
-// =========================================================
-// TOP MINUS — Navigate
-// =========================================================
-function goToTopMinusScreen() {
-    closeSidebar();
-    stopDashboardAutoRefresh();
-    showScreen("topMinusScreen");
-    loadTopMinus();
+    if (_matches.length > 1) {
+        return { status: "multiple", pic: null, original: _input, suggestions: _matches.slice(0, 5) };
+    }
+    return { status: "not_found", pic: null, original: _input, suggestions: [] };
 }
 
-
-// =========================================================
-// TOP MINUS — Set Period
-// =========================================================
-function setTopPeriod(period) {
-    console.log("[Top] Period:", period);
-    topPeriodCurrent = period;
-
-    document.querySelectorAll("#topMinusScreen .spd-period-tab").forEach(tab => {
-        const isActive = tab.getAttribute("data-period") === period;
-        tab.classList.toggle("active", isActive);
+function groupItemsByRak(items) {
+    const grouped = {};
+    (items || []).forEach(it => {
+        const rak = (it.rak_id || "UNKNOWN").toUpperCase();
+        if (!grouped[rak]) grouped[rak] = [];
+        grouped[rak].push(it);
     });
+    return grouped;
+}
 
-    const customRow = document.getElementById("topCustomDateRow");
-    if (customRow) {
-        if (period === "custom") {
-            customRow.classList.remove("hidden");
-            const s = document.getElementById("topCustomStart");
-            const e = document.getElementById("topCustomEnd");
-            const today = new Date();
-            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-            const todayStr = today.toISOString().slice(0, 10);
-            const startStr = startOfMonth.toISOString().slice(0, 10);
-            if (s && !s.value) s.value = startStr;
-            if (e && !e.value) e.value = todayStr;
-        } else {
-            customRow.classList.add("hidden");
+/ =========================================================
+// PARSER TANGGAL + PIC
+// =========================================================
+async function parseTanggalPicInput(text) {
+    const _lower = text.toLowerCase().trim();
+    const _result = { tanggal: null, pic_per_rak: null, pic_issues: [], is_new_pic: false };
+    
+    let _match = _lower.match(/tanggal\s+(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (_match) {
+        _result.tanggal = `${_match[1]}-${String(_match[2]).padStart(2,'0')}-${String(_match[3]).padStart(2,'0')}`;
+    }
+    if (!_result.tanggal) {
+        _match = _lower.match(/tanggal\s+(\d{1,2})-(\d{1,2})-(\d{4})/);
+        if (_match) {
+            _result.tanggal = `${_match[3]}-${String(_match[2]).padStart(2,'0')}-${String(_match[1]).padStart(2,'0')}`;
         }
     }
-
-    loadTopMinus();
-}
-
-
-// =========================================================
-// TOP MINUS — Set Tab (Rak / Item)
-// =========================================================
-function setTopTab(tab) {
-    console.log("[Top] Tab:", tab);
-    topTabCurrent = tab;
-
-    document.querySelectorAll(".top-subtab").forEach(t => {
-        const isActive = t.getAttribute("data-tab") === tab;
-        t.classList.toggle("active", isActive);
-    });
-
-    // Show/hide search (cuma di tab Item)
-    const searchWrapper = document.getElementById("topSearchWrapper");
-    if (searchWrapper) {
-        if (tab === "item") searchWrapper.classList.remove("hidden");
-        else searchWrapper.classList.add("hidden");
+    if (!_result.tanggal) {
+        _match = _lower.match(/tanggal\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (_match) {
+            _result.tanggal = `${_match[3]}-${String(_match[2]).padStart(2,'0')}-${String(_match[1]).padStart(2,'0')}`;
+        }
     }
-
-    // ✅ NEW: Show/hide filter sign (cuma di tab Item)
-    const filterSign = document.getElementById("topFilterSign");
-    if (filterSign) {
-        if (tab === "item") filterSign.classList.remove("hidden");
-        else filterSign.classList.add("hidden");
-    }
-
-    // Reset search
-    topSearchQuery = "";
-    const searchInput = document.getElementById("topSearchInput");
-    if (searchInput) searchInput.value = "";
-    const clearBtn = document.getElementById("topSearchClear");
-    if (clearBtn) clearBtn.classList.add("hidden");
-
-    loadTopMinus();
-}
-
-// =========================================================
-// ✅ NEW: Set Sign (Minus / Plus / Semua)
-// =========================================================
-function setTopSign(sign) {
-    console.log("[Top] Sign:", sign);
-    topSignCurrent = sign;
-
-    document.querySelectorAll(".top-filter-btn").forEach(btn => {
-        const isActive = btn.getAttribute("data-sign") === sign;
-        btn.classList.toggle("active", isActive);
-    });
-
-    loadTopMinus();
-}
-
-// =========================================================
-// TOP MINUS — Set Sort
-// =========================================================
-function setTopSort(sortValue) {
-    console.log("[Top] Sort:", sortValue);
-    topSortValue = sortValue;
-
-    document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => {
-        const isActive = btn.getAttribute("data-sort") === sortValue;
-        btn.classList.toggle("active", isActive);
-    });
-
-    // Reload from data yang udah ada (gak perlu fetch ulang)
-    renderTopList();
-}
-
-
-// =========================================================
-// TOP MINUS — Date Range Helper
-// =========================================================
-function getTopDateRange() {
-    const today = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (topPeriodCurrent === "bulan_ini") {
-        start = new Date(today.getFullYear(), today.getMonth(), 1);
-        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    } else if (topPeriodCurrent === "bulan_lalu") {
-        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        end = new Date(today.getFullYear(), today.getMonth(), 0);
-    } else if (topPeriodCurrent === "custom") {
-        const s = document.getElementById("topCustomStart");
-        const e = document.getElementById("topCustomEnd");
-        if (s && s.value) start = new Date(s.value);
-        if (e && e.value) end = new Date(e.value);
-    }
-
-    return { start, end };
-}
-
-
-// =========================================================
-// TOP MINUS — Load Data
-// =========================================================
-async function loadTopMinus() {
-    const container = document.getElementById("topList");
-    if (!container) return;
-
-    // Loading
-    container.innerHTML = `
-        <div class="loading-state">
-            <div class="spinner"></div>
-            <p>Memuat data...</p>
-        </div>
-    `;
-
-    // Update summary title
-    const summaryTitle = document.getElementById("topSummaryTitle");
-    if (summaryTitle) {
-        if (topTabCurrent === "rak") {
-            summaryTitle.textContent = "💰 TOTAL MINUS RAK";
-        } else {
-            // Item — beda berdasarkan sign
-            if (topSignCurrent === "minus") {
-                summaryTitle.textContent = "💰 TOTAL MINUS ITEM";
-            } else if (topSignCurrent === "plus") {
-                summaryTitle.textContent = "💰 TOTAL PLUS ITEM";
+    
+    let _picRaw = {};
+    const _picMatch = text.match(/pic\s+(.+?)(?:\s+tanggal|$)/i);
+    
+    if (_picMatch) {
+        let _picStr = _picMatch[1].trim();
+        const _picStrLower = _picStr.toLowerCase();
+        
+        if (_picStrLower.startsWith("semua ")) {
+            _picRaw["_ALL"] = _picStr.substring(6).trim();
+        }
+        else if (_picStrLower.startsWith("baru ")) {
+            _picRaw["_ALL"] = _picStr.substring(5).trim();
+            _result.is_new_pic = true;
+        }
+        else if (_picStr.includes(",")) {
+            const _parts = _picStr.split(",").map(p => p.trim());
+            _parts.forEach(part => {
+                const _rakMatch = part.match(/^([A-Za-z0-9]+)\s*[:]?\s+(.+)$/);
+                if (_rakMatch) {
+                    _picRaw[_rakMatch[1].toUpperCase()] = _rakMatch[2].trim();
+                }
+            });
+        }
+        else {
+            const _rakMatch = _picStr.match(/^([A-Za-z0-9]+)\s+(.+)$/);
+            if (_rakMatch && /^[A-Z]{1,3}\d{1,4}$/i.test(_rakMatch[1])) {
+                _picRaw[_rakMatch[1].toUpperCase()] = _rakMatch[2].trim();
             } else {
-                summaryTitle.textContent = "💰 TOTAL ADJUST ITEM";
+                _picRaw["_ALL"] = _picStr;
             }
         }
     }
-
-    try {
-        const _key = getApiKey();
-        const range = getTopDateRange();
-        const startStr = range.start.toISOString().slice(0, 10);
-        const endStr = range.end.toISOString().slice(0, 10);
-
-        const body = { mode: topPeriodCurrent };
-        if (topPeriodCurrent === "custom") {
-            body.tgl_start = startStr;
-            body.tgl_end = endStr;
+    
+    if (Object.keys(_picRaw).length > 0) {
+        _result.pic_per_rak = {};
+        for (const [key, namaRaw] of Object.entries(_picRaw)) {
+            const _corrected = await autoCorrectPic(namaRaw);
+            if (_corrected.status === "exact") {
+                _result.pic_per_rak[key] = _corrected.pic;
+            } else if (_corrected.status === "corrected") {
+                _result.pic_per_rak[key] = _corrected.pic;
+                _result.pic_issues.push({ type: "corrected", key, original: namaRaw, corrected: _corrected.pic });
+            } else if (_corrected.status === "multiple") {
+                _result.pic_issues.push({ type: "multiple", key, original: namaRaw, suggestions: _corrected.suggestions });
+            } else if (_corrected.status === "not_found") {
+                _result.pic_issues.push({ type: "not_found", key, original: namaRaw, is_new: _result.is_new_pic });
+            }
         }
-
-        let url = "";
-        if (topTabCurrent === "rak") {
-            url = `${CONFIG.BACKEND_URL}/api/yui/top-rak`;
-            body.limit = 500;
-        } else {
-            url = `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
-            body.limit = null;  // semua
-            body.search = topSearchQuery || "";
-            body.order_by = topSortValue;
-            body.sign = topSignCurrent;   // ✅ NEW: minus/plus/all
-        }
-
-        console.log("[Top] Fetch:", url, body);
-
-        const resp = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({}));
-            throw new Error(errData.detail || `HTTP ${resp.status}`);
-        }
-
-        const data = await resp.json();
-
-        if (!data.success) {
-            throw new Error(data.error || "Gagal load data");
-        }
-
-        // Simpan data
-        if (topTabCurrent === "rak") {
-            topData = data.list_rak || [];
-        } else {
-            topData = data.items || [];
-        }
-
-        // Update summary
-        renderTopSummary(data);
-
-        // Render list
-        renderTopList();
-
-    } catch (err) {
-        console.error("[Top] Error:", err);
-        container.innerHTML = `
-            <div class="shift-summary-empty">
-                <span class="empty-icon">⚠️</span>
-                <p>Gagal load data: ${escapeHtml(err.message)}</p>
-            </div>
-        `;
     }
+    return _result;
 }
 
-
-// =========================================================
-// TOP MINUS — Render Summary
-// =========================================================
-function renderTopSummary(data) {
-    const elTotal = document.getElementById("topSummaryTotal");
-    const elMeta = document.getElementById("topSummaryMeta");
-
-    let totalNominal = 0;
-    let totalCount = 0;
-    let periode = data.periode || "—";
-
-    if (topTabCurrent === "rak") {
-        totalNominal = data.total_nominal || 0;
-        totalCount = data.total_rak || 0;
+async function handleTanggalPicInput(text) {
+    const _pending = window._pendingUploadSo;
+    if (!_pending) return false;
+    
+    const _lower = text.toLowerCase().trim();
+    if (!_lower.startsWith("tanggal") && !_lower.includes("pic ") && !_lower.startsWith("pic ")) {
+        return false;
+    }
+    
+    const _parsed = await parseTanggalPicInput(text);
+    
+    const userMsg = { role: "user", content: text, timestamp: Date.now() };
+    chatHistories[currentBot].push(userMsg);
+    
+    if (_parsed.tanggal) _pending.tanggal = _parsed.tanggal;
+    
+    let _responseText = "";
+    
+    if (_parsed.pic_issues.some(i => i.type === "corrected")) {
+        _responseText += `🔍 **Auto-correct PIC:**\n\n`;
+        _parsed.pic_issues.filter(i => i.type === "corrected").forEach(i => {
+            _responseText += `- "${i.original}" → **${i.corrected}** ✅\n`;
+        });
+        _responseText += `\n`;
+    }
+    
+    if (_parsed.pic_issues.some(i => i.type === "multiple")) {
+        _responseText += `⚠️ **Nama ambigu, pilih:**\n\n`;
+        _parsed.pic_issues.filter(i => i.type === "multiple").forEach(i => {
+            _responseText += `Ketik untuk **"${i.original}"**:\n`;
+            i.suggestions.forEach(s => {
+                _responseText += `   • \`pic ${i.key} ${s}\`\n`;
+            });
+            _responseText += `\n`;
+        });
+        const aiMsg = { role: "assistant", content: _responseText, timestamp: Date.now() };
+        chatHistories[currentBot].push(aiMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        return true;
+    }
+    
+    if (_parsed.pic_issues.some(i => i.type === "not_found")) {
+        const _notFound = _parsed.pic_issues.filter(i => i.type === "not_found");
+        _responseText += `⚠️ **Nama gak ada di database:**\n\n`;
+        _notFound.forEach(i => {
+            _responseText += `- "${i.original}" ❌\n`;
+        });
+        _responseText += `\n**Kalau typo**, ketik:\n`;
+        _notFound.forEach(i => {
+            _responseText += `   • \`pic ${i.key} NAMA_BENER\`\n`;
+        });
+        _responseText += `\n**Kalau personil BARU**, ketik:\n`;
+        _responseText += `   • \`pic baru ${_notFound[0].original}\``;
+        
+        const aiMsg = { role: "assistant", content: _responseText, timestamp: Date.now() };
+        chatHistories[currentBot].push(aiMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        return true;
+    }
+    
+    if (_parsed.pic_per_rak && Object.keys(_parsed.pic_per_rak).length > 0) {
+        if (_parsed.pic_per_rak["_ALL"]) {
+            const _rakList = Object.keys(groupItemsByRak(_pending.items));
+            _pending.pic_per_rak = {};
+            _rakList.forEach(rak => { _pending.pic_per_rak[rak] = _parsed.pic_per_rak["_ALL"]; });
+        } else {
+            _pending.pic_per_rak = { ...(_pending.pic_per_rak || {}), ..._parsed.pic_per_rak };
+        }
+    }
+    
+    window._pendingUploadSo = _pending;
+    
+    const _rakList = Object.keys(groupItemsByRak(_pending.items));
+    const _picPerRak = _pending.pic_per_rak || {};
+    const _rakMissing = _rakList.filter(rak => !_picPerRak[rak]);
+    
+    _responseText += `📝 **Update konfirmasi:**\n\n`;
+    if (_pending.tanggal) {
+        _responseText += `📅 Tanggal: ✅ **${_pending.tanggal}**\n\n`;
     } else {
-        totalNominal = data.total_nominal || 0;
-        totalCount = data.total_items || 0;
+        _responseText += `📅 Tanggal: ❌ Belum\n`;
+        _responseText += `   \`tanggal 2026-10-14\`\n\n`;
     }
-
-    if (elTotal) elTotal.textContent = formatRupiahFull(totalNominal);
-    if (elMeta) elMeta.textContent = `${totalCount} ${topTabCurrent === "rak" ? "rak" : "item"} • ${periode}`;
-}
-
-
-// =========================================================
-// TOP MINUS — Render List
-// =========================================================
-function renderTopList() {
-    const container = document.getElementById("topList");
-    if (!container) return;
-
-    if (!topData || topData.length === 0) {
-        container.innerHTML = `
-            <div class="shift-summary-empty">
-                <span class="empty-icon">💰</span>
-                <p>Belum ada data di periode ini</p>
-            </div>
-        `;
-        return;
-    }
-
-    // Sort data
-    const sorted = sortTopData([...topData], topSortValue);
-
-    if (topTabCurrent === "rak") {
-        renderTopRakList(container, sorted);
+    
+    _responseText += `👤 **PIC per Rak:**\n`;
+    _rakList.forEach(rak => {
+        if (_picPerRak[rak]) _responseText += `   • ${rak} → **${_picPerRak[rak]}** ✅\n`;
+        else _responseText += `   • ${rak} → ❌ belum\n`;
+    });
+    _responseText += `\n`;
+    
+    const _isComplete = _pending.tanggal && _rakMissing.length === 0;
+    if (_isComplete) {
+        const _totalNominal = _pending.items.reduce((sum, it) => sum + (it.nominal_adjust || 0), 0);
+        _responseText += `🎉 **Lengkap!**\n\n`;
+        _responseText += `📊 Final:\n`;
+        _responseText += `- 📅 ${_pending.tanggal}\n`;
+        _responseText += `- 🏪 ${_rakList.length} rak\n`;
+        _responseText += `- 📦 ${_pending.items.length} item\n`;
+        _responseText += `- 💰 ${formatRupiahFull(_totalNominal)}\n\n`;
+        _responseText += `Ketik **"simpan so"** buat save! 🚀`;
     } else {
-        renderTopItemList(container, sorted);
+        _responseText += `⚠️ Masih ada yang kosong.\n`;
+        if (!_pending.tanggal) _responseText += `\n- \`tanggal 2026-10-14\``;
+        if (_rakMissing.length > 0) _responseText += `\n- \`pic ${_rakMissing[0]} NAMA_PIC\``;
     }
+    
+    const aiMsg = { role: "assistant", content: _responseText, timestamp: Date.now() };
+    chatHistories[currentBot].push(aiMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    showToastMini("✅ Info diupdate", "success");
+    return true;
 }
 
-
 // =========================================================
-// TOP MINUS — Render Top Rak
+// CONFIRM SAVE SO
 // =========================================================
-function renderTopRakList(container, data) {
-    const html = data.map((rak, idx) => {
-        const rank = idx + 1;
-        const nominal = rak.nominal_adjust || 0;
-        const nominalText = formatRupiahFull(nominal);
-        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
-        const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
-        const pic = rak.pic || "-";
-
-        const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
-
-        return `
-            <div class="top-item-card" onclick="openRakDetail('${escapeHtml(rak.rak_id)}')">
-                <div class="top-item-header">
-                    <span class="top-item-rank">${medal}</span>
-                    <span class="top-item-title">${escapeHtml(rak.rak_id)}</span>
-                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
-                </div>
-                <div class="top-item-meta">
-                    <span>📅 ${tglShort}</span>
-                    <span>👤 ${escapeHtml(pic)}</span>
-                    <span>📦 ${rak.total_item || 0} item</span>
-                </div>
-                <div class="top-item-hint">Tap untuk detail item →</div>
-            </div>
-        `;
-    }).join("");
-
-    container.innerHTML = html;
-}
-
-
-// =========================================================
-// TOP MINUS — Render Top Item
-// =========================================================
-function renderTopItemList(container, data) {
-    if (data.length === 0) {
-        container.innerHTML = `
-            <div class="shift-summary-empty">
-                <span class="empty-icon">🔍</span>
-                <p>Tidak ada item yang cocok</p>
-            </div>
-        `;
+async function confirmSaveSo() {
+    const _pending = window._pendingUploadSo;
+    if (!_pending || !_pending.items) {
+        showToastMini("❌ Gak ada data", "error");
         return;
     }
-
-    const html = data.map((item, idx) => {
-        const rank = idx + 1;
-        const nominal = item.nominal_adjust || 0;
-        const nominalText = formatRupiahFull(nominal);
-        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
-        const tglShort = item.so_date ? formatTanggalShort(item.so_date) : "-";
-        const pic = item.pic || "-";
-        const plu = item.plu || "-";
-        const nama = cleanHtmlEntities(item.nama_produk) || "(tanpa nama)";
-
-        const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
-
-        return `
-            <div class="top-item-card top-item-card-item">
-                <div class="top-item-header">
-                    <span class="top-item-rank">${medal}</span>
-                    <span class="top-item-title">${escapeHtml(plu)}</span>
-                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
-                </div>
-                <div class="top-item-name">${escapeHtml(nama)}</div>
-                <div class="top-item-meta">
-                    <span>📅 ${tglShort}</span>
-                    <span>🏪 ${escapeHtml(item.rak_id || "-")}</span>
-                    <span>👤 ${escapeHtml(pic)}</span>
-                </div>
-            </div>
-        `;
-    }).join("");
-
-    container.innerHTML = html;
-}
-
-
-// =========================================================
-// TOP MINUS — Sort Data
-// =========================================================
-function sortTopData(data, sortBy) {
-    if (sortBy === "nominal_desc") {
-        // Minus terbesar dulu (paling negatif) → plus terbesar
-        data.sort((a, b) => (a.nominal_adjust || 0) - (b.nominal_adjust || 0));
-    } else if (sortBy === "nominal_asc") {
-        // Plus terbesar dulu → minus terbesar
-        data.sort((a, b) => (b.nominal_adjust || 0) - (a.nominal_adjust || 0));
-    } else if (sortBy === "tanggal_desc") {
-        // Tanggal terbaru dulu
-        data.sort((a, b) => {
-            const ta = a.tgl_so || a.so_date || "";
-            const tb = b.tgl_so || b.so_date || "";
-            return tb.localeCompare(ta);
-        });
-    } else if (sortBy === "tanggal_asc") {
-        // Tanggal lama dulu
-        data.sort((a, b) => {
-            const ta = a.tgl_so || a.so_date || "";
-            const tb = b.tgl_so || b.so_date || "";
-            return ta.localeCompare(tb);
-        });
+    if (!_pending.tanggal) {
+        showToastMini("❌ Tanggal belum! Ketik: tanggal 2026-10-14", "error");
+        return;
     }
-
-    return data;
-}
-
-
-// =========================================================
-// TOP MINUS — Search (cuma tab Item)
-// =========================================================
-let topSearchTimeout = null;
-
-function searchTopItems() {
-    const input = document.getElementById("topSearchInput");
-    const clearBtn = document.getElementById("topSearchClear");
-    if (!input) return;
-
-    topSearchQuery = input.value.trim();
-
-    if (clearBtn) {
-        if (topSearchQuery) clearBtn.classList.remove("hidden");
-        else clearBtn.classList.add("hidden");
+    
+    const _rakList = Object.keys(groupItemsByRak(_pending.items));
+    const _picPerRak = _pending.pic_per_rak || {};
+    const _rakMissing = _rakList.filter(rak => !_picPerRak[rak]);
+    
+    if (_rakMissing.length > 0) {
+        showToastMini(`❌ PIC belum: ${_rakMissing.join(", ")}`, "error");
+        return;
     }
-
-    // Debounce 500ms
-    clearTimeout(topSearchTimeout);
-    topSearchTimeout = setTimeout(() => {
-        loadTopMinus();
-    }, 500);
-}
-
-function clearTopSearch() {
-    const input = document.getElementById("topSearchInput");
-    if (input) input.value = "";
-    topSearchQuery = "";
-    const clearBtn = document.getElementById("topSearchClear");
-    if (clearBtn) clearBtn.classList.add("hidden");
-    loadTopMinus();
-}
-// =========================================================
-// RAK DETAIL SCREEN v1.6
-// =========================================================
-let rakDetailData = [];
-let rakDetailCurrentRak = null;
-let rakDetailFilter = "semua";
-let rakDetailSearchQuery = "";
-
-
-// =========================================================
-// RAK DETAIL — Buka
-// =========================================================
-async function openRakDetail(rakId) {
-    console.log("[RakDetail] Open:", rakId);
     
-    if (!rakId) return;
+    const _listMaster = await loadPersonilMaster();
+    const _picNotInMaster = [];
+    for (const rak of _rakList) {
+        const _pic = _picPerRak[rak];
+        if (_pic && !_listMaster.includes(_pic) && !_picNotInMaster.includes(_pic)) {
+            _picNotInMaster.push(_pic);
+        }
+    }
     
-    rakDetailCurrentRak = rakId;
-    rakDetailFilter = "semua";
-    rakDetailSearchQuery = "";
-    rakDetailData = [];
-
-    // Update title
-    const titleEl = document.getElementById("rakDetailTitle");
-    if (titleEl) titleEl.textContent = `Detail ${rakId}`;
-
-    // Reset tabs
-    document.querySelectorAll(".rak-detail-tab").forEach(tab => {
-        tab.classList.toggle("active", tab.getAttribute("data-filter") === "semua");
+    if (_picNotInMaster.length > 0 && !_pending.force_new_pic) {
+        let _warnText = `⚠️ **Konfirmasi PIC Baru:**\n\n`;
+        _warnText += `Nama ini gak ada di master:\n`;
+        _picNotInMaster.forEach(p => { _warnText += `   • **${p}**\n`; });
+        _warnText += `\n**Kalau personil BARU:**\n`;
+        _warnText += `Ketik: \`konfirmasi baru\`\n\n`;
+        _warnText += `**Kalau typo**, ketik ulang:\n`;
+        _warnText += `Ketik: \`pic ${_rakList[0]} NAMA_BENER\``;
+        
+        const aiMsg = { role: "assistant", content: _warnText, timestamp: Date.now() };
+        chatHistories[currentBot].push(aiMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        return;
+    }
+    
+    const _key = getApiKey();
+    const userMsg = { role: "user", content: `💾 simpan so`, timestamp: Date.now() };
+    chatHistories[currentBot].push(userMsg);
+    
+    const aiLoadingMsg = {
+        role: "assistant",
+        content: `⏳ Menyimpan ${_pending.items.length} item...`,
+        timestamp: Date.now(),
+        isTemp: true,
+    };
+    chatHistories[currentBot].push(aiLoadingMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    
+    const _itemsWithPic = _pending.items.map(it => {
+        const _rak = (it.rak_id || "").toUpperCase();
+        return { ...it, pic: _picPerRak[_rak] || "" };
     });
-
-    // Reset search
-    const searchInput = document.getElementById("rakDetailSearchInput");
-    if (searchInput) searchInput.value = "";
-    const clearBtn = document.getElementById("rakDetailSearchClear");
-    if (clearBtn) clearBtn.classList.add("hidden");
-
-    // Tampilkan halaman
-    showScreen("rakDetailScreen");
-
-    // Load data
-    await loadRakDetail(rakId);
-}
-
-
-// =========================================================
-// RAK DETAIL — Load Data
-// =========================================================
-async function loadRakDetail(rakId) {
-    const container = document.getElementById("rakDetailList");
-    if (!container) return;
-
-    // Loading
-    container.innerHTML = `
-        <div class="loading-state">
-            <div class="spinner"></div>
-            <p>Memuat item...</p>
-        </div>
-    `;
-
-    try {
-        const _key = getApiKey();
-
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/items-by-rak/${encodeURIComponent(rakId)}`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
-            body: JSON.stringify({ mode: "bulan_ini" }),
-        });
-
-        if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({}));
-            throw new Error(errData.detail || `HTTP ${resp.status}`);
-        }
-
-        const data = await resp.json();
-
-        if (!data.success) {
-            throw new Error(data.error || "Gagal load data");
-        }
-
-        // Simpan data
-        rakDetailData = data.items || [];
-
-        // Update info
-        renderRakDetailInfo(data);
-
-        // Render list
-        renderRakDetailList();
-
-    } catch (err) {
-        console.error("[RakDetail] Error:", err);
-        container.innerHTML = `
-            <div class="shift-summary-empty">
-                <span class="empty-icon">⚠️</span>
-                <p>Gagal load item: ${escapeHtml(err.message)}</p>
-            </div>
-        `;
-    }
-}
-
-
-// =========================================================
-// RAK DETAIL — Render Info Card
-// =========================================================
-function renderRakDetailInfo(data) {
-    const elRak = document.getElementById("rakDetailInfoRak");
-    const elTgl = document.getElementById("rakDetailInfoTgl");
-    const elPic = document.getElementById("rakDetailInfoPic");
-
-    const elMinus = document.getElementById("rakDetailStatMinus");
-    const elPlus = document.getElementById("rakDetailStatPlus");
-    const elNet = document.getElementById("rakDetailStatNet");
-
-    // Info card
-    if (elRak) elRak.textContent = data.rak_id || "-";
-    if (elTgl) elTgl.textContent = data.tgl_so ? formatTanggalLong(data.tgl_so) : "-";
-    if (elPic) elPic.textContent = data.pic || "-";
-
-    // Stats
-    if (elMinus) elMinus.textContent = formatRupiahFull(data.total_minus || 0);
-    if (elPlus) elPlus.textContent = formatRupiahFull(data.total_plus || 0);
-    if (elNet) elNet.textContent = formatRupiahFull(data.total_nominal || 0);
-}
-
-
-// =========================================================
-// RAK DETAIL — Set Filter (Semua / Minus / Plus)
-// =========================================================
-function setRakDetailFilter(filter) {
-    console.log("[RakDetail] Filter:", filter);
-    rakDetailFilter = filter;
-
-    document.querySelectorAll(".rak-detail-tab").forEach(tab => {
-        const isActive = tab.getAttribute("data-filter") === filter;
-        tab.classList.toggle("active", isActive);
-    });
-
-    renderRakDetailList();
-}
-
-
-// =========================================================
-// RAK DETAIL — Search
-// =========================================================
-function filterRakDetail() {
-    const input = document.getElementById("rakDetailSearchInput");
-    const clearBtn = document.getElementById("rakDetailSearchClear");
-    if (!input) return;
-
-    rakDetailSearchQuery = input.value.trim().toLowerCase();
-
-    if (clearBtn) {
-        if (rakDetailSearchQuery) clearBtn.classList.remove("hidden");
-        else clearBtn.classList.add("hidden");
-    }
-
-    renderRakDetailList();
-}
-
-function clearRakDetailSearch() {
-    const input = document.getElementById("rakDetailSearchInput");
-    if (input) input.value = "";
-    rakDetailSearchQuery = "";
-    const clearBtn = document.getElementById("rakDetailSearchClear");
-    if (clearBtn) clearBtn.classList.add("hidden");
-    renderRakDetailList();
-}
-
-
-// =========================================================
-// RAK DETAIL — Render List
-// =========================================================
-function renderRakDetailList() {
-    const container = document.getElementById("rakDetailList");
-    if (!container) return;
-
-    let filtered = [...(rakDetailData || [])];
-
-    // Filter minus/plus/semua
-    if (rakDetailFilter === "minus") {
-        filtered = filtered.filter(it => (it.nominal_adjust || 0) < 0);
-    } else if (rakDetailFilter === "plus") {
-        filtered = filtered.filter(it => (it.nominal_adjust || 0) > 0);
-    }
-
-    // Search
-    if (rakDetailSearchQuery) {
-        filtered = filtered.filter(it => {
-            const _plu = (it.plu || "").toLowerCase();
-            const _nama = (it.nama_produk || "").toLowerCase();
-            return _plu.includes(rakDetailSearchQuery) || _nama.includes(rakDetailSearchQuery);
-        });
-    }
-
-    if (filtered.length === 0) {
-        container.innerHTML = `
-            <div class="shift-summary-empty">
-                <span class="empty-icon">🔍</span>
-                <p>Tidak ada item yang cocok</p>
-            </div>
-        `;
-        return;
-    }
-
-    // Sort: minus terbesar → plus terbesar
-    filtered.sort((a, b) => (a.nominal_adjust || 0) - (b.nominal_adjust || 0));
-
-    const html = filtered.map((item, idx) => {
-        const rank = idx + 1;
-        const nominal = item.nominal_adjust || 0;
-        const nominalText = formatRupiahFull(nominal);
-        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
-        const plu = item.plu || "-";
-        const nama = cleanHtmlEntities(item.nama_produk) || "(tanpa nama)";
-
-        // Icon minus/plus
-        const icon = nominal < 0 ? "📉" : nominal > 0 ? "📈" : "➖";
-
-        return `
-            <div class="rak-detail-item">
-                <div class="rak-detail-item-header">
-                    <span class="rak-detail-item-rank">${rank}</span>
-                    <span class="rak-detail-item-plu">${escapeHtml(plu)}</span>
-                    <span class="top-item-nominal ${nominalClass}">${nominalText}</span>
-                </div>
-                <div class="rak-detail-item-name">${escapeHtml(nama)}</div>
-                <div class="rak-detail-item-footer">
-                    <span>${icon} Selisih: ${item.qty_var || 0} pcs</span>
-                </div>
-            </div>
-        `;
-    }).join("");
-
-    container.innerHTML = html;
-}
-// =========================================================
-// STATUS ANALYSIS SCREEN v1.6
-// =========================================================
-let statusPeriodCurrent = "bulan_ini";
-
-
-// =========================================================
-// STATUS — Navigate
-// =========================================================
-function goToStatusScreen() {
-    closeSidebar();
-    stopDashboardAutoRefresh();
-    showScreen("statusScreen");
-    loadStatusAnalysis();
-}
-
-
-// =========================================================
-// STATUS — Set Period
-// =========================================================
-function setStatusPeriod(period) {
-    console.log("[Status] Period:", period);
-    statusPeriodCurrent = period;
-
-    document.querySelectorAll("#statusScreen .spd-period-tab").forEach(tab => {
-        const isActive = tab.getAttribute("data-period") === period;
-        tab.classList.toggle("active", isActive);
-    });
-
-    const customRow = document.getElementById("statusCustomDateRow");
-    if (customRow) {
-        if (period === "custom") {
-            customRow.classList.remove("hidden");
-            const s = document.getElementById("statusCustomStart");
-            const e = document.getElementById("statusCustomEnd");
-            const today = new Date();
-            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-            const todayStr = today.toISOString().slice(0, 10);
-            const startStr = startOfMonth.toISOString().slice(0, 10);
-            if (s && !s.value) s.value = startStr;
-            if (e && !e.value) e.value = todayStr;
-        } else {
-            customRow.classList.add("hidden");
-        }
-    }
-
-    loadStatusAnalysis();
-}
-
-
-// =========================================================
-// STATUS — Date Range Helper
-// =========================================================
-function getStatusDateRange() {
-    const today = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (statusPeriodCurrent === "bulan_ini") {
-        start = new Date(today.getFullYear(), today.getMonth(), 1);
-        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    } else if (statusPeriodCurrent === "bulan_lalu") {
-        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        end = new Date(today.getFullYear(), today.getMonth(), 0);
-    } else if (statusPeriodCurrent === "custom") {
-        const s = document.getElementById("statusCustomStart");
-        const e = document.getElementById("statusCustomEnd");
-        if (s && s.value) start = new Date(s.value);
-        if (e && e.value) end = new Date(e.value);
-    }
-
-    return { start, end };
-}
-
-
-// =========================================================
-// STATUS — Load Data
-// =========================================================
-async function loadStatusAnalysis() {
-    console.log("[Status] Loading...");
-
-    try {
-        const _key = getApiKey();
-        const range = getStatusDateRange();
-        const startStr = range.start.toISOString().slice(0, 10);
-        const endStr = range.end.toISOString().slice(0, 10);
-
-        const body = { mode: statusPeriodCurrent };
-        if (statusPeriodCurrent === "custom") {
-            body.tgl_start = startStr;
-            body.tgl_end = endStr;
-        }
-
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({}));
-            throw new Error(errData.detail || `HTTP ${resp.status}`);
-        }
-
-        const data = await resp.json();
-
-        if (!data.success) {
-            throw new Error(data.error || "Gagal load status");
-        }
-
-        console.log("[Status] Data:", data);
-
-        // Render
-        renderStatusCard(data);
-        renderStatusMetrics(data);
-        renderStatusRekomendasi(data);
-
-    } catch (err) {
-        console.error("[Status] Error:", err);
-
-        // Error state
-        const elEmoji = document.getElementById("statusBigEmoji");
-        const elLabel = document.getElementById("statusBigLabel");
-        const elPersen = document.getElementById("statusBigPersen");
-        const elMeta = document.getElementById("statusBigMeta");
-        const elRekom = document.getElementById("statusRekomendasi");
-
-        if (elEmoji) elEmoji.textContent = "⚠️";
-        if (elLabel) elLabel.textContent = "Error";
-        if (elPersen) elPersen.textContent = "—";
-        if (elMeta) elMeta.textContent = err.message;
-        if (elRekom) elRekom.textContent = "Gagal load data. Cek koneksi.";
-    }
-}
-
-
-// =========================================================
-// STATUS — Render Big Card
-// =========================================================
-function renderStatusCard(data) {
-    const elEmoji = document.getElementById("statusBigEmoji");
-    const elLabel = document.getElementById("statusBigLabel");
-    const elPersen = document.getElementById("statusBigPersen");
-    const elMeta = document.getElementById("statusBigMeta");
-    const elCard = document.getElementById("statusBigCard");
-
-    const statusEmoji = data.status_emoji || "⏳";
-    const statusLabel = data.status_label || "—";
-    const statusColor = data.status_color || "hijau";
-    const persen = data.persen || 0;
-    const periode = data.periode || "—";
-
-    if (elEmoji) elEmoji.textContent = statusEmoji;
-    if (elLabel) elLabel.textContent = statusLabel;
-    if (elPersen) elPersen.textContent = `${persen.toFixed(3)}%`;
-    if (elMeta) elMeta.textContent = periode;
-
-    // Update warna card
-    if (elCard) {
-        elCard.classList.remove("status-big-card-aman", "status-big-card-waspada", "status-big-card-bahaya");
-        elCard.classList.add(`status-big-card-${statusColor === "merah" ? "bahaya" : statusColor === "kuning" ? "waspada" : "aman"}`);
-    }
-}
-
-
-// =========================================================
-// STATUS — Render Metrics
-// =========================================================
-function renderStatusMetrics(data) {
-    const elNSB = document.getElementById("metricNSB");
-    const elAdjust = document.getElementById("metricAdjust");
-    const elBTSB = document.getElementById("metricBTSB");
-    const elNSBPersonil = document.getElementById("metricNSBPersonil");
-
-    if (elNSB) elNSB.textContent = formatRupiahFull(data.net_sales || 0);
-    if (elAdjust) elAdjust.textContent = formatRupiahFull(data.total_adjust || 0);
-    if (elBTSB) elBTSB.textContent = formatRupiahFull(data.btsb_rupiah || 0);
-    if (elNSBPersonil) {
-        const nsbPersonil = data.nsb_personil || 0;
-        elNSBPersonil.textContent = formatRupiahFull(nsbPersonil);
-        // Warna: negatif = aman (hijau), positif = bahaya (merah)
-        if (nsbPersonil > 0) {
-            elNSBPersonil.classList.add("status-metric-value-minus");
-        } else {
-            elNSBPersonil.classList.add("status-metric-value-plus");
-        }
-    }
-}
-
-
-// =========================================================
-// STATUS — Render Rekomendasi
-// =========================================================
-function renderStatusRekomendasi(data) {
-    const elRekom = document.getElementById("statusRekomendasi");
-    const elCard = document.getElementById("statusRekomendasiCard");
-
-    if (elRekom) {
-        elRekom.textContent = data.rekomendasi || "Tidak ada rekomendasi.";
-    }
-
-    // Update warna border kiri
-    if (elCard) {
-        elCard.classList.remove("status-rekomendasi-aman", "status-rekomendasi-waspada", "status-rekomendasi-bahaya");
-        const status = data.status || "aman";
-        elCard.classList.add(`status-rekomendasi-${status}`);
-    }
-}
-// =========================================================
-// HANDLE TOMBOL BACK ANDROID
-// Screen lain → balik Home
-// Home → modal LOGOUT
-// =========================================================
-let exitModalShown = false;
-
-window.addEventListener("popstate", function(event) {
-    console.log("[Back] Back button pressed");
     
-    const activeScreen = document.querySelector(".screen.active");
-    if (!activeScreen) return;
-    
-    const screenId = activeScreen.id;
-    
-    // Sidebar kebuka → close sidebar
-    const sidebar = document.getElementById("sidebar");
-    if (sidebar && sidebar.classList.contains("open")) {
-        event.preventDefault();
-        closeSidebar();
-        pushBackGuard();
-        return;
-    }
-    
-    // Modal lain kebuka → close
-    const modalOpen = document.querySelector(".modal-overlay.active:not(#exitModal)");
-    if (modalOpen) {
-        event.preventDefault();
-        modalOpen.classList.remove("active");
-        pushBackGuard();
-        return;
-    }
-    
-    // Exit modal udah tampil → force logout
-    if (exitModalShown) {
-        event.preventDefault();
-        confirmLogout();
-        return;
-    }
-    
-    // Di HOME / LOGIN → tampil modal
-    if (screenId === "homeScreen" || screenId === "loginScreen") {
-        event.preventDefault();
-        showExitModal();
-        pushBackGuard();
-        return;
-    }
-    
-    // Di screen lain → balik Home
-    event.preventDefault();
-    
-    if (screenId === "rakDetailScreen") {
-        goToTopMinusScreen();
-        pushBackGuard();
-        return;
-    }
-    
-    goToHomeScreen();
-    pushBackGuard();
-});
-
-
-// =========================================================
-// LOGOUT MODAL
-// =========================================================
-function showExitModal() {
-    console.log("[Logout] Showing modal");
-    exitModalShown = true;
-    const modal = document.getElementById("exitModal");
-    if (modal) modal.classList.add("active");
-}
-
-function closeExitModal() {
-    console.log("[Logout] Cancelled");
-    exitModalShown = false;
-    const modal = document.getElementById("exitModal");
-    if (modal) modal.classList.remove("active");
-    pushBackGuard();
-}
-
-function confirmLogout() {
-    console.log("[Logout] Confirmed");
-    
-    const modal = document.getElementById("exitModal");
-    if (modal) modal.classList.remove("active");
-    
-    // Clear session
-    localStorage.removeItem("so_logged_in");
-    localStorage.removeItem("so_login_timestamp");
-    
-    // Clear idle timer
-    if (typeof idleTimer !== "undefined" && idleTimer) {
-        clearTimeout(idleTimer);
-        idleTimer = null;
-    }
-    
-    exitModalShown = false;
-    pinInput = "";
-    updatePinDisplay();
-    
-    if (clockInterval) clearInterval(clockInterval);
-    stopDashboardAutoRefresh();
-    
-    showToastMini("👋 Logout berhasil!", "success");
-    
-    setTimeout(() => {
-        showScreen("loginScreen");
-        pushBackGuard();
-    }, 300);
-}
-
-
-// =========================================================
-// PUSH BACK GUARD
-// =========================================================
-function pushBackGuard() {
-    try {
-        history.pushState({ guard: true, ts: Date.now() }, "", "");
-    } catch (e) {}
-}
-
-setTimeout(pushBackGuard, 800);
-
-
-// =========================================================
-// AUTO-LOGOUT IDLE TIMER — 5 MENIT
-// =========================================================
-let idleTimer = null;
-const IDLE_TIMEOUT = 5 * 60 * 1000;   // 5 menit
-
-function resetIdleTimer() {
-    if (idleTimer) clearTimeout(idleTimer);
-    
-    const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
-    if (!isLoggedIn) return;
-    
-    const activeScreen = document.querySelector(".screen.active");
-    if (activeScreen && activeScreen.id === "loginScreen") return;
-    
-    idleTimer = setTimeout(() => {
-        console.log("[Idle] 5 menit idle — auto logout");
-        autoLogout();
-    }, IDLE_TIMEOUT);
-}
-
-function autoLogout() {
-    console.log("[Idle] Auto logout");
-    
-    localStorage.removeItem("so_logged_in");
-    localStorage.removeItem("so_login_timestamp");
-    
-    pinInput = "";
-    updatePinDisplay();
-    
-    if (clockInterval) clearInterval(clockInterval);
-    stopDashboardAutoRefresh();
-    
-    showToastMini("⏰ Idle 5 menit — auto logout", "error");
-    
-    setTimeout(() => {
-        showScreen("loginScreen");
-        pushBackGuard();
-    }, 300);
-}
-
-// Listen aktivitas user
-["click", "touchstart", "keydown", "scroll"].forEach(evt => {
-    document.addEventListener(evt, resetIdleTimer, { passive: true });
-});
-
-// =========================================================
-// CHECK UPDATE — Sistem Update APK
-// =========================================================
-let updateInfo = null;
-
-async function checkForUpdate(manual = false) {
-    console.log("[Update] Checking... (manual:", manual, ")");
-    
-    if (manual) {
-        showToastMini("🔍 Cek update...", "success");
-    }
-    
-    try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/config/`, {
-            method: "GET",
-        });
-        
-        if (!resp.ok) {
-            console.warn("[Update] Fetch failed:", resp.status);
-            if (manual) showToastMini("❌ Gagal cek update", "error");
-            return;
-        }
-        
-        const data = await resp.json();
-        
-        // Backend nggak punya field "success" — cek "app" aja
-        if (!data.app) {
-            console.warn("[Update] Invalid response — nggak ada field 'app'");
-            if (manual) showToastMini("❌ Response invalid", "error");
-            return;
-        }
-        
-        const latestVersion = data.app.latest_version;
-        const currentVersion = CONFIG.APP_VERSION;
-        const forceUpdate = data.app.force_update || false;
-        
-        // Update display di Pengaturan
-        const elCurrent = document.getElementById("settingsCurrentVersion");
-        const elLatest = document.getElementById("settingsLatestVersion");
-        if (elCurrent) elCurrent.textContent = currentVersion;
-        if (elLatest) elLatest.textContent = latestVersion;
-        
-        console.log("[Update] Current:", currentVersion, "| Latest:", latestVersion);
-        
-        if (isNewerVersion(latestVersion, currentVersion)) {
-            console.log("[Update] ✅ Update available!");
-            updateInfo = data.app;
-            showUpdateModal(data.app, forceUpdate);
-        } else {
-            console.log("[Update] Up to date");
-            if (manual) showToastMini("✅ App sudah versi terbaru!", "success");
-        }
-        
-    } catch (e) {
-        console.warn("[Update] Error:", e);
-        if (manual) showToastMini("❌ Gagal cek update", "error");
-    }
-}
-
-function isNewerVersion(latest, current) {
-    const l = String(latest).split(".").map(Number);
-    const c = String(current).split(".").map(Number);
-    
-    for (let i = 0; i < 3; i++) {
-        if ((l[i] || 0) > (c[i] || 0)) return true;
-        if ((l[i] || 0) < (c[i] || 0)) return false;
-    }
-    return false;
-}
-
-function showUpdateModal(appInfo, force) {
-    const modal = document.getElementById("updateModal");
-    if (!modal) return;
-    
-    const elVersion = document.getElementById("updateLatestVersion");
-    const elChangelog = document.getElementById("updateChangelog");
-    const elHint = document.getElementById("updateHint");
-    const btnCancel = modal.querySelector(".update-btn-cancel");
-    
-    if (elVersion) elVersion.textContent = appInfo.latest_version;
-    if (elChangelog) elChangelog.textContent = appInfo.changelog || "Ada update terbaru!";
-    
-    if (force) {
-        if (btnCancel) {
-            btnCancel.disabled = true;
-            btnCancel.style.opacity = "0.4";
-        }
-        if (elHint) {
-            elHint.innerHTML = "⚠️ <b>Update wajib</b> — versi kamu terlalu lama.";
-        }
-    }
-    
-    modal.classList.add("active");
-}
-
-function closeUpdateModal() {
-    const modal = document.getElementById("updateModal");
-    if (modal) modal.classList.remove("active");
-}
-
-function openUpdateDownload() {
-    if (!updateInfo || !updateInfo.download_url) {
-        showToastMini("❌ URL download nggak ada", "error");
-        return;
-    }
-    
-    console.log("[Update] Opening:", updateInfo.download_url);
-    
-    try {
-        window.open(updateInfo.download_url, "_blank");
-    } catch (e) {
-        window.location.href = updateInfo.download_url;
-    }
-    
-    showToastMini("⬇️ Download dimulai. Cek File Manager → Downloads", "success");
-    
-    setTimeout(() => {
-        closeUpdateModal();
-    }, 1000);
-    
-    setTimeout(() => {
-        showToastMini("📥 Cek Downloads → Tap APK → Install", "success");
-    }, 8000);
-}
-
-// =========================================================
-// YUI — Input SPD via Chat
-// =========================================================
-async function parseSpdFromChat(text) {
-    console.log("[SPD] Parse:", text);
-    try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/parse-spd`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": getApiKey(),
-            },
-            body: JSON.stringify({ text: text }),
-        });
-        const data = await resp.json();
-        return data;
-    } catch (e) {
-        console.error("[SPD Parse] Error:", e);
-        return { success: false, error: e.message };
-    }
-}
-
-async function saveSpd(tanggal, nominal, keterangan = "Input via APK chat") {
-    console.log("[SPD] Save:", tanggal, nominal);
-    try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-spd`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": getApiKey(),
-            },
-            body: JSON.stringify({
-                tanggal: tanggal,
-                nominal: nominal,
-                keterangan: keterangan,
-            }),
-        });
-        const data = await resp.json();
-        return data;
-    } catch (e) {
-        console.error("[SPD Save] Error:", e);
-        return { success: false, error: e.message };
-    }
-}
-
-// =========================================================
-// YUI — Upload SO
-// =========================================================
-async function uploadSoFile(file) {
-    console.log("[Upload SO] File:", file.name, file.size);
-    try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, {
-            method: "POST",
-            headers: {
-                "X-API-Key": getApiKey(),
-                // JANGAN set Content-Type — biar browser yg set boundary
-            },
-            body: formData,
-        });
-
-        const data = await resp.json();
-        return data;
-    } catch (e) {
-        console.error("[Upload SO] Error:", e);
-        return { success: false, error: e.message };
-    }
-}
-
-async function saveSoItems(tanggal, items, keterangan = "Input via APK upload") {
-    console.log("[Save SO] Items:", items.length);
     try {
         const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-so`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-API-Key": getApiKey(),
+                "X-API-Key": _key,
             },
             body: JSON.stringify({
-                tanggal: tanggal,
-                items: items,
-                keterangan: keterangan,
+                tanggal: _pending.tanggal,
+                items: _itemsWithPic,
+                keterangan: _pending.keterangan,
             }),
         });
+        
         const data = await resp.json();
-        return data;
-    } catch (e) {
-        console.error("[Save SO] Error:", e);
-        return { success: false, error: e.message };
-    }
-}
-
-// =========================================================
-// HANDLER — Input SPD via Chat
-// =========================================================
-async function handleSpdChat(text) {
-    const parse = await parseSpdFromChat(text);
-
-    if (!parse.success || !parse.nominal) {
-        showToastMini("❌ Gak nemu nominal SPD", "error");
-        return;
-    }
-
-    const _tanggal = parse.tanggal;
-    const _nominal = parse.nominal;
-    const _budget = _nominal * 0.0015;
-
-    // Konfirmasi
-    const konfirmasi = confirm(
-        `💰 KONFIRMASI SPD\n\n` +
-        `📅 Tanggal: ${_tanggal}\n` +
-        `💵 SPD: ${formatRupiahFull(_nominal)}\n` +
-        `🎯 Budget SO (0,15%): ${formatRupiahFull(_budget)}\n\n` +
-        `Simpan?`
-    );
-
-    if (!konfirmasi) {
-        showToastMini("❌ Dibatalkan", "error");
-        return;
-    }
-
-    const result = await saveSpd(_tanggal, _nominal);
-
-    if (result.success) {
-        showToastMini(`✅ SPD tersimpan: ${formatRupiahFull(_nominal)}`, "success");
-        // Refresh dashboard kalau di home
+        chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp);
+        
+        if (!resp.ok || !data.success) throw new Error(data.detail || data.error || "Gagal simpan");
+        
+        const _saved = data.saved_count || 0;
+        const _total = data.total_nominal || 0;
+        
+        let _picSummary = "";
+        Object.entries(_picPerRak).forEach(([rak, pic]) => {
+            _picSummary += `   • **${rak}** → ${pic}\n`;
+        });
+        
+        const successMsg = {
+            role: "assistant",
+            content: 
+                `🎉 **Beres Bos!**\n\n` +
+                `- 📅 Tanggal: **${_pending.tanggal}**\n` +
+                `- ✅ **${_saved} rak** tersimpan\n` +
+                `- 💰 Total: **${formatRupiahFull(_total)}**\n\n` +
+                `**PIC per rak:**\n${_picSummary}\n` +
+                `Data SO udah masuk database! 🚀`,
+            timestamp: Date.now(),
+            isSuccess: true,
+        };
+        chatHistories[currentBot].push(successMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        window._pendingUploadSo = null;
+        
         const homeScreen = document.getElementById("homeScreen");
         if (homeScreen && homeScreen.classList.contains("active")) {
             loadMiniDashboard();
         }
-    } else {
-        showToastMini(`❌ Gagal: ${result.error || result.message}`, "error");
+        
+        showToastMini(`✅ ${_saved} rak tersimpan`, "success");
+        
+    } catch (err) {
+        console.error("[Save SO] Error:", err);
+        chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp);
+        const errMsg = { role: "assistant", content: `⚠️ Gagal: ${err.message}`, timestamp: Date.now(), isError: true };
+        chatHistories[currentBot].push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
     }
 }
 
 // =========================================================
-// CONFIRM SAVE SPD
+// UPLOAD FILE VIA CHAT
 // =========================================================
+async function handleChatFileUpload(file) {
+    if (!file) return;
+    if (currentBot !== "yui") {
+        showToastMini("❌ Upload cuma di chat Yui", "error");
+        return;
+    }
+    
+    const _key = getApiKey();
+    
+    const userMsg = {
+        role: "user",
+        content: `📎 **Upload file:** ${file.name}\n_(sedang diproses...)_`,
+        timestamp: Date.now(),
+        isFile: true,
+    };
+    chatHistories[currentBot].push(userMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    
+    showLoadingBubble();
+    
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, {
+            method: "POST",
+            headers: { "X-API-Key": _key },
+            body: formData,
+        });
+        
+        hideLoadingBubble();
+        
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal parse file");
+        
+        window._pendingUploadSo = {
+            tanggal: data.tanggal,
+            items: data.items,
+            keterangan: `Upload ${file.name}`,
+            filename: file.name,
+        };
+        
+        const _totalRak = data.total_rak || 0;
+        const _totalItem = data.total_items || 0;
+        const _totalNominal = data.total_nominal || 0;
+        const _items = data.items || [];
+        
+        let _previewText = "";
+        _items.slice(0, 5).forEach((it, idx) => {
+            const _nom = it.nominal_adjust || 0;
+            const _sign = _nom >= 0 ? "+" : "";
+            _previewText += `${idx + 1}. \`${it.plu || "-"}\` ${(it.nama_produk || "-").substring(0, 30)}\n`;
+            _previewText += `   🏪 ${it.rak_id || "-"} • ${_sign}${formatRupiahFull(_nom)}\n`;
+        });
+        
+        if (_items.length > 5) _previewText += `   ... +${_items.length - 5} item\n`;
+        
+        let _aiContent = 
+            `✅ File **${file.name}** berhasil dibaca!\n\n` +
+            `📊 **Ringkasan:**\n` +
+            `- 📅 Tanggal: **${data.tanggal || "❌ belum ada"}**\n` +
+            `- 🏪 Rak: **${_totalRak}**\n` +
+            `- 📦 Item: **${_totalItem}**\n` +
+            `- 💰 Total: **${formatRupiahFull(_totalNominal)}**\n\n` +
+            `**Preview:**\n${_previewText}\n`;
+        
+        if (!data.tanggal) {
+            _aiContent += `⚠️ **Isi tanggal + PIC:**\n\n`;
+            _aiContent += `📅 \`tanggal 2026-10-14\`\n`;
+            _aiContent += `👤 \`pic ZAKI\` (semua rak)\n`;
+            _aiContent += `👤 \`pic AT1 ZAKI, AU1 PANDU\` (per rak)\n`;
+            _aiContent += `🔗 Gabung: \`tanggal 2026-10-14 pic ZAKI\``;
+        } else {
+            _aiContent += `⚠️ **Isi PIC:**\n\n`;
+            _aiContent += `👤 \`pic ZAKI\` (semua rak)\n`;
+            _aiContent += `👤 \`pic AT1 ZAKI, AU1 PANDU\``;
+        }
+        
+        const aiMsg = {
+            role: "assistant",
+            content: _aiContent,
+            timestamp: Date.now(),
+            isUploadPreview: true,
+        };
+        chatHistories[currentBot].push(aiMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        showToastMini(`✅ ${_totalItem} item siap`, "success");
+        
+    } catch (err) {
+        hideLoadingBubble();
+        console.error("[Upload] Error:", err);
+        const errMsg = {
+            role: "assistant",
+            content: `⚠️ Gagal upload: ${err.message}`,
+            timestamp: Date.now(),
+            isError: true,
+        };
+        chatHistories[currentBot].push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+function cancelUploadSo() {
+    window._pendingUploadSo = null;
+    const userMsg = { role: "user", content: `❌ batal`, timestamp: Date.now() };
+    chatHistories[currentBot].push(userMsg);
+    const aiMsg = { role: "assistant", content: `Oke, data dibuang. 👍`, timestamp: Date.now() };
+    chatHistories[currentBot].push(aiMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    showToastMini("❌ Dibatalkan", "error");
+}
+
+/ =========================================================
+// HANDLE SPD VIA CHAT
+// =========================================================
+async function handleSpdChat(text) {
+    const _key = getApiKey();
+    
+    showLoadingBubble();
+    
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/parse-spd`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({ text: text }),
+        });
+        
+        const parse = await resp.json();
+        hideLoadingBubble();
+        
+        if (!parse.success || !parse.nominal) {
+            const errMsg = {
+                role: "assistant",
+                content: `Hmm, gak nemu nominal SPD Bos.\n\nContoh:\n• \`input spd hari ini 12.750.800\`\n• \`spd 5jt\``,
+                timestamp: Date.now(),
+            };
+            chatHistories[currentBot].push(errMsg);
+            saveChatHistories();
+            renderChatHistory();
+            scrollToBottom();
+            return;
+        }
+        
+        const _tanggal = parse.tanggal;
+        const _nominal = parse.nominal;
+        const _budget = _nominal * 0.0015;
+        
+        window._pendingSpd = {
+            tanggal: _tanggal,
+            nominal: _nominal,
+        };
+        
+        const confirmMsg = {
+            role: "assistant",
+            content: 
+                `💰 **Konfirmasi Input SPD**\n\n` +
+                `- 📅 Tanggal: **${_tanggal}**\n` +
+                `- 💵 SPD: **${formatRupiahFull(_nominal)}**\n` +
+                `- 🎯 Budget SO (0,15%): **${formatRupiahFull(_budget)}**\n\n` +
+                `Ketik **"simpan spd"** buat simpan.`,
+            timestamp: Date.now(),
+            isSpdConfirm: true,
+        };
+        chatHistories[currentBot].push(confirmMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+    } catch (err) {
+        hideLoadingBubble();
+        console.error("[SPD Chat] Error:", err);
+        const errMsg = {
+            role: "assistant",
+            content: `⚠️ Error: ${err.message}`,
+            timestamp: Date.now(),
+            isError: true,
+        };
+        chatHistories[currentBot].push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+    }
+}
+
 async function confirmSaveSpd() {
     const _pending = window._pendingSpd;
-    
     if (!_pending) {
         showToastMini("❌ Gak ada SPD pending", "error");
         return;
     }
     
     const _key = getApiKey();
-    
-    // Push user message
-    const userMsg = {
-        role: "user",
-        content: `💾 simpan spd`,
-        timestamp: Date.now(),
-    };
+    const userMsg = { role: "user", content: `💾 simpan spd`, timestamp: Date.now() };
     chatHistories[currentBot].push(userMsg);
     saveChatHistories();
     renderChatHistory();
@@ -4050,16 +3453,14 @@ async function confirmSaveSpd() {
         scrollToBottom();
         
         window._pendingSpd = null;
-        
         showToastMini(`✅ SPD tersimpan`, "success");
         
     } catch (err) {
         hideLoadingBubble();
         console.error("[SPD Save] Error:", err);
-        
         const errMsg = {
             role: "assistant",
-            content: `⚠️ Gagal simpan SPD: ${err.message}`,
+            content: `⚠️ Gagal: ${err.message}`,
             timestamp: Date.now(),
             isError: true,
         };
@@ -4067,349 +3468,107 @@ async function confirmSaveSpd() {
         saveChatHistories();
         renderChatHistory();
         scrollToBottom();
-        
         showToastMini(`❌ Gagal: ${err.message}`, "error");
     }
 }
+// =========================================================
+// MODAL KONFIRMASI UPDATE SHIFT
+// =========================================================
+function openConfirmShiftModal(data) {
+    const modal = document.getElementById("confirmShiftModal");
+    if (!modal) return;
+    currentConfirmData = data;
 
-// =========================================================
-// HANDLER — Upload SO
-// =========================================================
-function goToUploadSoScreen() {
-    showScreen("uploadSoScreen");
-    resetUploadSo();
+    const tglEl = document.getElementById("confirmModalDate");
+    if (tglEl) tglEl.textContent = formatTanggalLong(data.tanggal);
+
+    const countEl = document.getElementById("confirmModalCount");
+    if (countEl) countEl.textContent = `${data.items.length} orang`;
+
+    renderConfirmModalItems(data.items);
+
+    const saveBtn = document.getElementById("confirmModalSaveBtn");
+    if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = "✅ Konfirmasi";
+    }
+
+    modal.classList.add("active");
 }
 
-function resetUploadSo() {
-    const fileInput = document.getElementById("uploadSoFile");
-    if (fileInput) fileInput.value = "";
-    const preview = document.getElementById("uploadSoPreview");
-    if (preview) preview.innerHTML = "";
-    const btnSave = document.getElementById("uploadSoSave");
-    if (btnSave) btnSave.disabled = true;
-    window._uploadSoData = null;
+function closeConfirmShiftModal() {
+    const modal = document.getElementById("confirmShiftModal");
+    if (modal) modal.classList.remove("active");
+    currentConfirmData = null;
 }
 
-async function handleUploadSoFile(file) {
-    const preview = document.getElementById("uploadSoPreview");
-    if (!preview) return;
-
-    preview.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <div class="spinner" style="margin: 0 auto 12px;"></div>
-            <p>📄 Baca file <b>${escapeHtml(file.name)}</b>...</p>
-        </div>
-    `;
-
-    const result = await uploadSoFile(file);
-
-    if (!result.success) {
-        preview.innerHTML = `
-            <div class="shift-summary-empty">
-                <span class="empty-icon">⚠️</span>
-                <p>Gagal: ${escapeHtml(result.error || result.detail || "Unknown")}</p>
+function renderConfirmModalItems(items) {
+    const container = document.getElementById("confirmModalList");
+    if (!container) return;
+    const html = items.map(it => {
+        const kode = it.kode_shift || "O";
+        const shiftClass = getShiftModalClass(kode);
+        return `
+            <div class="confirm-modal-item ${shiftClass}">
+                <span class="confirm-modal-item-icon">👤</span>
+                <span class="confirm-modal-item-name">${it.nama}</span>
+                <span class="confirm-modal-item-arrow">→</span>
+                <span class="confirm-modal-item-shift">${it.shift_nama || kode}</span>
             </div>
         `;
-        showToastMini("❌ Gagal parse file", "error");
-        return;
-    }
-
-    // Simpan data untuk save
-    window._uploadSoData = {
-        tanggal: result.tanggal,
-        items: result.items,
-        keterangan: `Upload ${file.name}`,
-    };
-
-    // Tampilkan preview
-    const _items = result.items || [];
-    const _totalRak = result.total_rak || 0;
-    const _totalItem = result.total_items || 0;
-    const _totalNominal = result.total_nominal || 0;
-
-    let _html = `
-        <div class="top-summary-card">
-            <div class="top-summary-title">📊 PREVIEW UPLOAD</div>
-            <div class="top-summary-meta" style="margin-top: 8px;">
-                📅 ${escapeHtml(result.tanggal || "-")} • 
-                🏪 ${_totalRak} rak • 
-                📦 ${_totalItem} item
-            </div>
-            <div class="top-summary-total" style="margin-top: 12px; color: ${_totalNominal < 0 ? '#ee5253' : '#06d6a0'};">
-                ${formatRupiahFull(_totalNominal)}
-            </div>
-        </div>
-    `;
-
-    // Preview 20 item pertama
-    if (_items.length > 0) {
-        _html += `<div style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">📦 Preview ${Math.min(20, _items.length)} item pertama:</div>`;
-        _items.slice(0, 20).forEach((it, idx) => {
-            const _nom = it.nominal_adjust || 0;
-            const _class = _nom < 0 ? "top-nominal-minus" : "top-nominal-plus";
-            _html += `
-                <div class="top-item-card top-item-card-item" style="margin-top: 8px;">
-                    <div class="top-item-header">
-                        <span class="top-item-rank">${idx + 1}</span>
-                        <span class="top-item-title">${escapeHtml(it.plu || "-")}</span>
-                        <span class="top-item-nominal ${_class}">${formatRupiahFull(_nom)}</span>
-                    </div>
-                    <div class="top-item-name">${escapeHtml(it.nama_produk || "-")}</div>
-                    <div class="top-item-meta">
-                        <span>🏪 ${escapeHtml(it.rak_id || "-")}</span>
-                        <span>📊 var: ${it.qty_var || 0}</span>
-                    </div>
-                </div>
-            `;
-        });
-        if (_items.length > 20) {
-            _html += `<div style="text-align: center; padding: 12px; color: var(--text-muted); font-style: italic;">... +${_items.length - 20} item lainnya</div>`;
-        }
-    }
-
-    preview.innerHTML = _html;
-
-    // Enable save button
-    const btnSave = document.getElementById("uploadSoSave");
-    if (btnSave) btnSave.disabled = false;
-
-    showToastMini(`✅ ${_totalItem} item siap disimpan`, "success");
+    }).join("");
+    container.innerHTML = html;
 }
 
-async function handleUploadSoSave() {
-    const data = window._uploadSoData;
-    if (!data || !data.items) {
-        showToastMini("❌ Gak ada data", "error");
-        return;
-    }
-
-    const konfirmasi = confirm(
-        `💾 SIMPAN SO?\n\n` +
-        `📅 Tanggal: ${data.tanggal}\n` +
-        `📦 Total item: ${data.items.length}\n\n` +
-        `Simpan ke database?`
-    );
-
-    if (!konfirmasi) return;
-
-    const btnSave = document.getElementById("uploadSoSave");
-    if (btnSave) {
-        btnSave.disabled = true;
-        btnSave.textContent = "⏳ Menyimpan...";
-    }
-
-    const result = await saveSoItems(data.tanggal, data.items, data.keterangan);
-
-    if (result.success) {
-        showToastMini(`✅ ${result.saved_count || 0} rak tersimpan!`, "success");
-        // Redirect ke home
-        setTimeout(() => {
-            goToHomeScreen();
-        }, 1500);
-    } else {
-        showToastMini(`❌ Gagal: ${result.error || result.message || "Unknown"}`, "error");
-        if (btnSave) {
-            btnSave.disabled = false;
-            btnSave.textContent = "💾 Simpan SO";
-        }
+function getShiftModalClass(kode) {
+    switch (kode) {
+        case "P7":   return "shift-p7";
+        case "S15":  return "shift-s15";
+        case "M22":  return "shift-m22";
+        case "O":    return "shift-o";
+        case "CUTI": return "shift-cuti";
+        default:     return "shift-o";
     }
 }
 
-// =========================================================
-// UPLOAD FILE VIA CHAT YUI
-// =========================================================
-async function handleChatFileUpload(file) {
-    if (!file) return;
-    
-    console.log("[Chat Upload] File:", file.name, file.size);
-    
-    // Cek bot aktif — cuma Yui yang bisa upload SO
-    if (currentBot !== "yui") {
-        showToastMini("❌ Upload file cuma di chat Yui", "error");
+async function executeConfirmShift() {
+    if (!currentConfirmData) {
+        showToastMini("❌ Tidak ada data", "error");
         return;
     }
-    
+    const saveBtn = document.getElementById("confirmModalSaveBtn");
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...';
+    }
     const _key = getApiKey();
-    
-    // Push ke chat history — pesan user (file indicator)
-    const userMsg = {
-        role: "user",
-        content: `📎 **Upload file:** ${file.name}\n_(sedang diproses...)_`,
-        timestamp: Date.now(),
-        isFile: true,
-    };
-    chatHistories[currentBot].push(userMsg);
-    saveChatHistories();
-    renderChatHistory();
-    scrollToBottom();
-    
-    // Show loading bubble
-    showLoadingBubble();
-    
-    try {
-        const formData = new FormData();
-        formData.append("file", file);
-        
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, {
-            method: "POST",
-            headers: {
-                "X-API-Key": _key,
-                // JANGAN set Content-Type — biar browser auto-set boundary
-            },
-            body: formData,
-        });
-        
-        hideLoadingBubble();
-        
-        if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({}));
-            throw new Error(errData.detail || `HTTP ${resp.status}`);
-        }
-        
-        const data = await resp.json();
-        
-        if (!data.success) {
-            throw new Error(data.error || "Gagal parse file");
-        }
-        
-        // Simpan data untuk save nanti
-        window._pendingUploadSo = {
-            tanggal: data.tanggal,
-            items: data.items,
-            keterangan: `Upload ${file.name}`,
-            filename: file.name,
-        };
-        
-        // Push respon Yui — preview
-        const _totalRak = data.total_rak || 0;
-        const _totalItem = data.total_items || 0;
-        const _totalNominal = data.total_nominal || 0;
-        const _items = data.items || [];
-        
-        // Preview 5 item pertama
-        let _previewText = "";
-        _items.slice(0, 5).forEach((it, idx) => {
-            const _nom = it.nominal_adjust || 0;
-            const _sign = _nom >= 0 ? "+" : "";
-            _previewText += `${idx + 1}. \`${it.plu || "-"}\` ${(it.nama_produk || "-").substring(0, 30)}\n`;
-            _previewText += `   🏪 ${it.rak_id || "-"} • ${_sign}${formatRupiahFull(_nom)}\n`;
-        });
-        
-        if (_items.length > 5) {
-            _previewText += `   ... +${_items.length - 5} item lainnya\n`;
-        }
-        
-        const _aiContent = 
-            `✅ File **${file.name}** berhasil aku baca!\n\n` +
-            `📊 **Ringkasan:**\n` +
-            `- 📅 Tanggal: **${data.tanggal || "-"}**\n` +
-            `- 🏪 Rak: **${_totalRak} rak**\n` +
-            `- 📦 Total item: **${_totalItem}**\n` +
-            `- 💰 Total: **${formatRupiahFull(_totalNominal)}**\n\n` +
-            `**Preview 5 item pertama:**\n${_previewText}\n` +
-            `Ketik **"simpan so"** buat save ke database.\n` +
-            `Ketik **"batal"** buat buang data ini.`;
-        
-        const aiMsg = {
-            role: "assistant",
-            content: _aiContent,
-            timestamp: Date.now(),
-            isUploadPreview: true,
-        };
-        chatHistories[currentBot].push(aiMsg);
-        saveChatHistories();
-        renderChatHistory();
-        scrollToBottom();
-        
-        showToastMini(`✅ ${_totalItem} item siap disimpan`, "success");
-        
-    } catch (err) {
-        hideLoadingBubble();
-        console.error("[Chat Upload] Error:", err);
-        
-        const errMsg = {
-            role: "assistant",
-            content: `⚠️ Gagal upload: ${err.message}\n\nCoba lagi atau cek format file.`,
-            timestamp: Date.now(),
-            isError: true,
-        };
-        chatHistories[currentBot].push(errMsg);
-        saveChatHistories();
-        renderChatHistory();
-        scrollToBottom();
-        
-        showToastMini(`❌ Gagal: ${err.message}`, "error");
-    }
-}
+    const data = currentConfirmData;
 
-
-// =========================================================
-// CONFIRM SAVE SO DARI CHAT
-// =========================================================
-async function confirmSaveSo() {
-    const _pending = window._pendingUploadSo;
-    
-    if (!_pending || !_pending.items) {
-        showToastMini("❌ Gak ada data untuk disimpan", "error");
-        return;
-    }
-    
-    const _key = getApiKey();
-    
-    // Push pesan user
-    const userMsg = {
-        role: "user",
-        content: `💾 simpan so`,
-        timestamp: Date.now(),
-    };
-    chatHistories[currentBot].push(userMsg);
-    
-    // Show loading
-    const aiLoadingMsg = {
-        role: "assistant",
-        content: `⏳ Menyimpan ${_pending.items.length} item...`,
-        timestamp: Date.now(),
-        isTemp: true,
-    };
-    chatHistories[currentBot].push(aiLoadingMsg);
-    saveChatHistories();
-    renderChatHistory();
-    scrollToBottom();
-    
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-so`, {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "X-API-Key": _key,
             },
             body: JSON.stringify({
-                tanggal: _pending.tanggal,
-                items: _pending.items,
-                keterangan: _pending.keterangan,
+                tanggal: data.tanggal,
+                items: data.items.map(it => ({
+                    nama: it.nama,
+                    kode_shift: it.kode_shift,
+                })),
             }),
         });
-        
-        const data = await resp.json();
-        
-        // Hapus pesan loading
-        chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp);
-        
-        if (!resp.ok || !data.success) {
-            throw new Error(data.detail || data.error || "Gagal simpan");
-        }
-        
-        const _saved = data.saved_count || 0;
-        const _total = data.total_nominal || 0;
-        
-        // Push success message
+        const result = await resp.json();
+        if (!resp.ok || !result.success) throw new Error(result.detail || `HTTP ${resp.status}`);
+
+        const savedCount = result.saved || data.items.length;
+        const modal = document.getElementById("confirmShiftModal");
+        if (modal) modal.classList.remove("active");
+
         const successMsg = {
             role: "assistant",
-            content: 
-                `🎉 **Beres Bos!**\n\n` +
-                `- ✅ **${_saved} rak** tersimpan\n` +
-                `- 💰 Total: **${formatRupiahFull(_total)}**\n\n` +
-                `Data SO udah masuk ke database. Cek di Top Minus ya! 🚀`,
+            content: `✅ ${savedCount} shift tersimpan!\n\n${getShiftSummaryText(data.items)}`,
             timestamp: Date.now(),
             isSuccess: true,
         };
@@ -4417,21 +3576,23 @@ async function confirmSaveSo() {
         saveChatHistories();
         renderChatHistory();
         scrollToBottom();
-        
-        // Reset pending
-        window._pendingUploadSo = null;
-        
-        showToastMini(`✅ ${_saved} rak tersimpan`, "success");
-        
+
+        if (document.getElementById("masterShiftScreen")?.classList.contains("active")) {
+            loadMasterShift();
+        }
+
+        showToastMini(`✅ ${savedCount} shift tersimpan`, "success");
+        currentConfirmData = null;
+
     } catch (err) {
-        console.error("[Confirm Save SO] Error:", err);
-        
-        // Hapus pesan loading
-        chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp);
-        
+        console.error("[ConfirmShift] Error:", err);
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = "✅ Konfirmasi";
+        }
         const errMsg = {
             role: "assistant",
-            content: `⚠️ Gagal simpan: ${err.message}`,
+            content: `⚠️ Gagal: ${err.message}`,
             timestamp: Date.now(),
             isError: true,
         };
@@ -4439,37 +3600,229 @@ async function confirmSaveSo() {
         saveChatHistories();
         renderChatHistory();
         scrollToBottom();
-        
         showToastMini(`❌ Gagal: ${err.message}`, "error");
     }
 }
 
+// =========================================================
+// BACK BUTTON + LOGOUT MODAL
+// =========================================================
+window.addEventListener("popstate", function(event) {
+    const activeScreen = document.querySelector(".screen.active");
+    if (!activeScreen) return;
+    const screenId = activeScreen.id;
+
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar && sidebar.classList.contains("open")) {
+        event.preventDefault();
+        closeSidebar();
+        pushBackGuard();
+        return;
+    }
+
+    const modalOpen = document.querySelector(".modal-overlay.active:not(#exitModal)");
+    if (modalOpen) {
+        event.preventDefault();
+        modalOpen.classList.remove("active");
+        pushBackGuard();
+        return;
+    }
+
+    if (exitModalShown) {
+        event.preventDefault();
+        confirmLogout();
+        return;
+    }
+
+    if (screenId === "homeScreen" || screenId === "loginScreen") {
+        event.preventDefault();
+        showExitModal();
+        pushBackGuard();
+        return;
+    }
+
+    event.preventDefault();
+
+    if (screenId === "rakDetailScreen") {
+        goToTopMinusScreen();
+        pushBackGuard();
+        return;
+    }
+
+    goToHomeScreen();
+    pushBackGuard();
+});
+
+function showExitModal() {
+    exitModalShown = true;
+    const modal = document.getElementById("exitModal");
+    if (modal) modal.classList.add("active");
+}
+
+function closeExitModal() {
+    exitModalShown = false;
+    const modal = document.getElementById("exitModal");
+    if (modal) modal.classList.remove("active");
+    pushBackGuard();
+}
+
+function confirmLogout() {
+    const modal = document.getElementById("exitModal");
+    if (modal) modal.classList.remove("active");
+
+    localStorage.removeItem("so_logged_in");
+    localStorage.removeItem("so_login_timestamp");
+
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+
+    exitModalShown = false;
+    pinInput = "";
+    updatePinDisplay();
+
+    if (clockInterval) clearInterval(clockInterval);
+    stopDashboardAutoRefresh();
+
+    showToastMini("👋 Logout berhasil!", "success");
+
+    setTimeout(() => {
+        showScreen("loginScreen");
+        pushBackGuard();
+    }, 300);
+}
+
+function pushBackGuard() {
+    try {
+        history.pushState({ guard: true, ts: Date.now() }, "", "");
+    } catch (e) {}
+}
+
+setTimeout(pushBackGuard, 800);
 
 // =========================================================
-// CANCEL UPLOAD
+// IDLE TIMER
 // =========================================================
-function cancelUploadSo() {
-    window._pendingUploadSo = null;
-    
-    const userMsg = {
-        role: "user",
-        content: `❌ batal`,
-        timestamp: Date.now(),
-    };
-    chatHistories[currentBot].push(userMsg);
-    
-    const aiMsg = {
-        role: "assistant",
-        content: `Oke Bos, data dibuang. Upload lagi kalau perlu. 👍`,
-        timestamp: Date.now(),
-    };
-    chatHistories[currentBot].push(aiMsg);
-    saveChatHistories();
-    renderChatHistory();
-    scrollToBottom();
-    
-    showToastMini("❌ Dibatalkan", "error");
+function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
+    const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
+    if (!isLoggedIn) return;
+    const activeScreen = document.querySelector(".screen.active");
+    if (activeScreen && activeScreen.id === "loginScreen") return;
+
+    idleTimer = setTimeout(() => {
+        console.log("[Idle] Auto logout");
+        autoLogout();
+    }, IDLE_TIMEOUT);
 }
+
+function autoLogout() {
+    localStorage.removeItem("so_logged_in");
+    localStorage.removeItem("so_login_timestamp");
+    pinInput = "";
+    updatePinDisplay();
+    if (clockInterval) clearInterval(clockInterval);
+    stopDashboardAutoRefresh();
+    showToastMini("⏰ Idle 5 menit — auto logout", "error");
+    setTimeout(() => {
+        showScreen("loginScreen");
+        pushBackGuard();
+    }, 300);
+}
+
+["click", "touchstart", "keydown", "scroll"].forEach(evt => {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+});
+
+// =========================================================
+// CHECK UPDATE
+// =========================================================
+async function checkForUpdate(manual = false) {
+    if (manual) showToastMini("🔍 Cek update...", "success");
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/config/`, { method: "GET" });
+        if (!resp.ok) {
+            if (manual) showToastMini("❌ Gagal cek update", "error");
+            return;
+        }
+        const data = await resp.json();
+        if (!data.app) {
+            if (manual) showToastMini("❌ Response invalid", "error");
+            return;
+        }
+        const latestVersion = data.app.latest_version;
+        const currentVersion = CONFIG.APP_VERSION;
+        const forceUpdate = data.app.force_update || false;
+
+        const elCurrent = document.getElementById("settingsCurrentVersion");
+        const elLatest = document.getElementById("settingsLatestVersion");
+        if (elCurrent) elCurrent.textContent = currentVersion;
+        if (elLatest) elLatest.textContent = latestVersion;
+
+        if (isNewerVersion(latestVersion, currentVersion)) {
+            updateInfo = data.app;
+            showUpdateModal(data.app, forceUpdate);
+        } else {
+            if (manual) showToastMini("✅ App sudah versi terbaru!", "success");
+        }
+    } catch (e) {
+        console.warn("[Update] Error:", e);
+        if (manual) showToastMini("❌ Gagal cek update", "error");
+    }
+}
+
+function isNewerVersion(latest, current) {
+    const l = String(latest).split(".").map(Number);
+    const c = String(current).split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+        if ((l[i] || 0) > (c[i] || 0)) return true;
+        if ((l[i] || 0) < (c[i] || 0)) return false;
+    }
+    return false;
+}
+
+function showUpdateModal(appInfo, force) {
+    const modal = document.getElementById("updateModal");
+    if (!modal) return;
+    const elVersion = document.getElementById("updateLatestVersion");
+    const elChangelog = document.getElementById("updateChangelog");
+    const elHint = document.getElementById("updateHint");
+    const btnCancel = modal.querySelector(".update-btn-cancel");
+    if (elVersion) elVersion.textContent = appInfo.latest_version;
+    if (elChangelog) elChangelog.textContent = appInfo.changelog || "Ada update terbaru!";
+    if (force) {
+        if (btnCancel) { btnCancel.disabled = true; btnCancel.style.opacity = "0.4"; }
+        if (elHint) elHint.innerHTML = "⚠️ <b>Update wajib</b> — versi kamu terlalu lama.";
+    }
+    modal.classList.add("active");
+}
+
+function closeUpdateModal() {
+    const modal = document.getElementById("updateModal");
+    if (modal) modal.classList.remove("active");
+}
+
+function openUpdateDownload() {
+    if (!updateInfo || !updateInfo.download_url) {
+        showToastMini("❌ URL download nggak ada", "error");
+        return;
+    }
+    try {
+        window.open(updateInfo.download_url, "_blank");
+    } catch (e) {
+        window.location.href = updateInfo.download_url;
+    }
+    showToastMini("⬇️ Download dimulai...", "success");
+    setTimeout(() => closeUpdateModal(), 1000);
+}
+
+// =========================================================
+// AUTO REFRESH MINI DASHBOARD
+// =========================================================
+setInterval(() => {
+    const homeScreen = document.getElementById("homeScreen");
+    if (homeScreen && homeScreen.classList.contains("active")) {
+        loadMiniDashboard();
+    }
+}, 5 * 60 * 1000);
 
 // =========================================================
 // BOOT
