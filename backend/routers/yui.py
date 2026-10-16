@@ -895,22 +895,60 @@ _BULAN_MAP = {
 
 
 def _extract_nominal(text):
-    """Extract nominal dari text. Support 12.750.800 / 5jt / 500rb / 500k."""
+    """
+    Extract nominal dari text.
+    Support: 12.750.800 / 5jt / 500rb / 500k
+    
+    Skip angka yang diikuti bulan (tanggal), skip tahun (20xx).
+    """
     _lower = text.lower()
-    _match = re.search(r'(\d[\d.,]*)\s*(jt|juta|rb|ribu|k)?', _lower)
-    if not _match:
+    
+    # Hapus dulu bagian "tanggal" biar nggak salah match
+    # Pattern: "1 oktober 2026" → hapus
+    _cleaned = re.sub(
+        r'\d{1,2}\s+(januari|jan|februari|feb|maret|mar|april|apr|mei|'
+        r'juni|jun|juli|jul|agustus|agu|ags|september|sep|oktober|okt|'
+        r'november|nov|desember|des)\s*(\d{4})?',
+        ' ',
+        _lower,
+    )
+    
+    # Hapus juga format ISO date "2026-10-01"
+    _cleaned = re.sub(r'\d{4}-\d{1,2}-\d{1,2}', ' ', _cleaned)
+    _cleaned = re.sub(r'\d{1,2}-\d{1,2}-\d{4}', ' ', _cleaned)
+    _cleaned = re.sub(r'\d{1,2}/\d{1,2}/\d{4}', ' ', _cleaned)
+    
+    # Cari semua angka + optional suffix
+    _matches = re.findall(r'(\d[\d.,]*)\s*(jt|juta|rb|ribu|k)?', _cleaned)
+    
+    if not _matches:
         return 0
-    _raw = _match.group(1).replace(".", "").replace(",", "")
-    try:
-        _nominal = int(_raw)
-        _suffix = _match.group(2)
-        if _suffix in ("jt", "juta"):
-            _nominal *= 1_000_000
-        elif _suffix in ("rb", "ribu", "k"):
-            _nominal *= 1_000
-        return _nominal
-    except Exception:
-        return 0
+    
+    # Pilih nominal TERBESAR (biasanya SPD)
+    _best_nominal = 0
+    for _raw, _suffix in _matches:
+        _raw_clean = _raw.replace(".", "").replace(",", "")
+        try:
+            _nominal = int(_raw_clean)
+            if _suffix in ("jt", "juta"):
+                _nominal *= 1_000_000
+            elif _suffix in ("rb", "ribu", "k"):
+                _nominal *= 1_000
+            
+            # Skip kalau cuma 1 digit (kemungkinan tanggal)
+            if _nominal < 100:
+                continue
+            
+            # Skip kalau 2020-2099 (kemungkinan tahun)
+            if 2020 <= _nominal <= 2099:
+                continue
+            
+            if _nominal > _best_nominal:
+                _best_nominal = _nominal
+        except Exception:
+            continue
+    
+    return _best_nominal
 
 
 def _extract_tanggal(text):
