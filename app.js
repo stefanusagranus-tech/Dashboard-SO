@@ -72,13 +72,13 @@ async function initApp() {
     }
 
     // ✅ 3. BIND EVENT LISTENER
-    console.log("[App] Binding PIN keypad...");
-    bindPinKeypad();
-    bindChatInput();
-    console.log("[App] Binding done");
-    
-    // ✅ 4. AUTO-CHECK UPDATE (3 detik setelah init)
-    setTimeout(() => checkForUpdate(false), 3000);
+console.log("[App] Binding PIN keypad...");
+bindPinKeypad();
+bindChatInput();
+console.log("[App] Binding done");
+
+// ✅ 4. AUTO-CHECK UPDATE (3 detik setelah init)
+setTimeout(() => checkForUpdate(false), 3000);
 
     // ✅ 4. Cek login status (session 30 menit)
     const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
@@ -3701,8 +3701,9 @@ async function checkForUpdate(manual = false) {
         
         const data = await resp.json();
         
-        if (!data.success || !data.app) {
-            console.warn("[Update] Invalid response");
+        // Backend nggak punya field "success" — cek "app" aja
+        if (!data.app) {
+            console.warn("[Update] Invalid response — nggak ada field 'app'");
             if (manual) showToastMini("❌ Response invalid", "error");
             return;
         }
