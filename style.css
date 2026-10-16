@@ -426,10 +426,10 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    padding: 16px 14px;
+    padding: 16px 14px 18px 14px;   /* ← Padding bawah ditambah */
     box-shadow: var(--shadow-md), 0 0 30px rgba(255, 140, 66, 0.08);
     position: relative;
-    overflow: hidden;
+    overflow: visible;               /* ← GANTI: visible */
 }
 
 .mini-dashboard::before {
@@ -442,6 +442,7 @@ body {
     background: linear-gradient(90deg, var(--accent-orange), var(--accent-purple), var(--accent-orange));
     background-size: 200% 100%;
     animation: shimmer 3s linear infinite;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;   /* ← Biar rounded */
 }
 
 @keyframes shimmer {
@@ -562,11 +563,11 @@ body {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     position: relative;
-    overflow: hidden;
-    min-height: 72px;        /* ← Dinaikin biar cukup */
-    box-sizing: border-box;   /* ← PENTING */
+    overflow: visible;        /* ← GANTI: visible */
+    min-height: 72px;
+    box-sizing: border-box;
 }
 
 .status-bar::before {
@@ -577,6 +578,7 @@ body {
     bottom: 0;
     width: 4px;
     background: var(--accent-orange);
+    border-radius: var(--radius-md) 0 0 var(--radius-md);   /* ← Rounded */
 }
 
 .status-bar-clickable {
@@ -606,9 +608,10 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 0;                /* ← Hapus gap */
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;     /* ← GANTI: visible */
+    padding: 2px 0;        /* ← Kasih padding vertikal */
 }
 
 .status-label {
