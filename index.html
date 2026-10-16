@@ -814,6 +814,32 @@
 </div>
 
 <!-- ========================================================= -->
+<!-- MODAL — UPDATE TERSEDIA -->
+<!-- ========================================================= -->
+<div id="updateModal" class="modal-overlay">
+    <div class="modal-content modal-update" onclick="event.stopPropagation()">
+        <div class="update-icon">🎉</div>
+        <div class="update-title">Update Tersedia!</div>
+        <div class="update-desc">
+            Versi <b id="updateLatestVersion">1.0.0</b> udah rilis, Bos.<br>
+            <small id="updateChangelog">Ada update terbaru!</small>
+        </div>
+        <div class="update-actions">
+            <button class="update-btn update-btn-cancel" onclick="closeUpdateModal()">
+                ⏰ Nanti
+            </button>
+            <button class="update-btn update-btn-confirm" onclick="openUpdateDownload()">
+                ⬇️ Update Sekarang
+            </button>
+        </div>
+        <div class="update-hint" id="updateHint">
+            APK bakal di-download via browser.<br>
+            Setelah selesai, buka <b>File Manager → Downloads</b> → tap file APK → install.
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
 <!-- SIDEBAR -->
 <!-- ========================================================= -->
 <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
@@ -913,15 +939,26 @@
         <div class="settings-group">
             <div class="settings-group-title">ℹ️ Info</div>
             <div class="settings-item">
-                <div class="settings-label">Versi</div>
-                <div class="settings-item-value">1.0.0</div>
+                <div class="settings-label">Versi Terinstall</div>
+                <div class="settings-item-value" id="settingsCurrentVersion">1.0.0</div>
+            </div>
+            <div class="settings-item">
+                <div class="settings-label">Versi Terbaru</div>
+                <div class="settings-item-value" id="settingsLatestVersion">Belum dicek</div>
             </div>
             <div class="settings-item">
                 <div class="settings-label">Backend</div>
                 <div class="settings-item-value">dashboard-so.fastapicloud.dev</div>
             </div>
         </div>
-
+        
+        <div class="settings-group">
+            <div class="settings-group-title">🔄 Update</div>
+            <button class="settings-btn" onclick="checkForUpdate(true)">
+                🔄 Cek Update
+            </button>
+        </div>
+        
         <div class="settings-group">
             <div class="settings-group-title">🗑️ Data</div>
             <button class="settings-btn settings-btn-danger" onclick="resetAllChat()">

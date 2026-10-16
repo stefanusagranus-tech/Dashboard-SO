@@ -71,11 +71,14 @@ async function initApp() {
         if (hint) hint.textContent = "";
     }
 
-    // ✅ 3. BIND EVENT LISTENER — INI YANG HILANG!
+    // ✅ 3. BIND EVENT LISTENER
     console.log("[App] Binding PIN keypad...");
     bindPinKeypad();
     bindChatInput();
     console.log("[App] Binding done");
+    
+    // ✅ 4. AUTO-CHECK UPDATE (3 detik setelah init)
+    setTimeout(() => checkForUpdate(false), 3000);
 
     // ✅ 4. Cek login status (session 30 menit)
     const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
@@ -3672,6 +3675,130 @@ function autoLogout() {
 ["click", "touchstart", "keydown", "scroll"].forEach(evt => {
     document.addEventListener(evt, resetIdleTimer, { passive: true });
 });
+
+// =========================================================
+// CHECK UPDATE — Sistem Update APK
+// =========================================================
+let updateInfo = null;
+
+async function checkForUpdate(manual = false) {
+    console.log("[Update] Checking... (manual:", manual, ")");
+    
+    if (manual) {
+        showToastMini("🔍 Cek update...", "success");
+    }
+    
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/config/`, {
+            method: "GET",
+        });
+        
+        if (!resp.ok) {
+            console.warn("[Update] Fetch failed:", resp.status);
+            if (manual) showToastMini("❌ Gagal cek update", "error");
+            return;
+        }
+        
+        const data = await resp.json();
+        
+        if (!data.success || !data.app) {
+            console.warn("[Update] Invalid response");
+            if (manual) showToastMini("❌ Response invalid", "error");
+            return;
+        }
+        
+        const latestVersion = data.app.latest_version;
+        const currentVersion = CONFIG.APP_VERSION;
+        const forceUpdate = data.app.force_update || false;
+        
+        // Update display di Pengaturan
+        const elCurrent = document.getElementById("settingsCurrentVersion");
+        const elLatest = document.getElementById("settingsLatestVersion");
+        if (elCurrent) elCurrent.textContent = currentVersion;
+        if (elLatest) elLatest.textContent = latestVersion;
+        
+        console.log("[Update] Current:", currentVersion, "| Latest:", latestVersion);
+        
+        if (isNewerVersion(latestVersion, currentVersion)) {
+            console.log("[Update] ✅ Update available!");
+            updateInfo = data.app;
+            showUpdateModal(data.app, forceUpdate);
+        } else {
+            console.log("[Update] Up to date");
+            if (manual) showToastMini("✅ App sudah versi terbaru!", "success");
+        }
+        
+    } catch (e) {
+        console.warn("[Update] Error:", e);
+        if (manual) showToastMini("❌ Gagal cek update", "error");
+    }
+}
+
+function isNewerVersion(latest, current) {
+    const l = String(latest).split(".").map(Number);
+    const c = String(current).split(".").map(Number);
+    
+    for (let i = 0; i < 3; i++) {
+        if ((l[i] || 0) > (c[i] || 0)) return true;
+        if ((l[i] || 0) < (c[i] || 0)) return false;
+    }
+    return false;
+}
+
+function showUpdateModal(appInfo, force) {
+    const modal = document.getElementById("updateModal");
+    if (!modal) return;
+    
+    const elVersion = document.getElementById("updateLatestVersion");
+    const elChangelog = document.getElementById("updateChangelog");
+    const elHint = document.getElementById("updateHint");
+    const btnCancel = modal.querySelector(".update-btn-cancel");
+    
+    if (elVersion) elVersion.textContent = appInfo.latest_version;
+    if (elChangelog) elChangelog.textContent = appInfo.changelog || "Ada update terbaru!";
+    
+    if (force) {
+        if (btnCancel) {
+            btnCancel.disabled = true;
+            btnCancel.style.opacity = "0.4";
+        }
+        if (elHint) {
+            elHint.innerHTML = "⚠️ <b>Update wajib</b> — versi kamu terlalu lama.";
+        }
+    }
+    
+    modal.classList.add("active");
+}
+
+function closeUpdateModal() {
+    const modal = document.getElementById("updateModal");
+    if (modal) modal.classList.remove("active");
+}
+
+function openUpdateDownload() {
+    if (!updateInfo || !updateInfo.download_url) {
+        showToastMini("❌ URL download nggak ada", "error");
+        return;
+    }
+    
+    console.log("[Update] Opening:", updateInfo.download_url);
+    
+    try {
+        window.open(updateInfo.download_url, "_blank");
+    } catch (e) {
+        window.location.href = updateInfo.download_url;
+    }
+    
+    showToastMini("⬇️ Download dimulai. Cek File Manager → Downloads", "success");
+    
+    setTimeout(() => {
+        closeUpdateModal();
+    }, 1000);
+    
+    setTimeout(() => {
+        showToastMini("📥 Cek Downloads → Tap APK → Install", "success");
+    }, 8000);
+}
 
 // =========================================================
 // BOOT

@@ -4462,5 +4462,122 @@ html, body {
 }
 
 /* =========================================================
+   UPDATE MODAL
+   ========================================================= */
+.modal-update {
+    max-width: 360px !important;
+    text-align: center;
+    padding: 32px 24px;
+    border-radius: var(--radius-xl) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    background: var(--bg-secondary);
+    position: relative;
+    overflow: hidden;
+}
+
+.modal-update::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #06d6a0, #a259ff, #06d6a0);
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+}
+
+.update-icon {
+    font-size: 64px;
+    line-height: 1;
+    margin-bottom: 16px;
+    animation: pumpkinFloat 3s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px #06d6a0);
+}
+
+.update-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+
+.update-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
+.update-desc b {
+    color: #06d6a0;
+    font-weight: 800;
+}
+
+.update-desc small {
+    display: block;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    white-space: pre-line;
+    text-align: left;
+    background: rgba(0,0,0,0.2);
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    border-left: 3px solid #06d6a0;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.update-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.update-btn {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.update-btn:active {
+    transform: scale(0.96);
+}
+
+.update-btn-cancel {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.update-btn-confirm {
+    background: linear-gradient(135deg, #06d6a0, #04a97c);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(6, 214, 160, 0.4);
+}
+
+.update-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.5;
+}
+
+@media (max-width: 360px) {
+    .modal-update { padding: 24px 20px; }
+    .update-icon { font-size: 52px; }
+    .update-title { font-size: 17px; }
+}
+
+/* =========================================================
    END OF STYLE v2.1
    ========================================================= */
