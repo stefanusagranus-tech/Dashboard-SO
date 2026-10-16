@@ -36,6 +36,7 @@ PUBLIC_PATHS = {
     "/api/auth/login",
     "/api/auth/verify-pin",
     "/api/auth/forgot-pin",
+    "/api/auth/setup",
     "/api/auth/register",   # ⚠️ SEMENTARA public buat bikin admin pertama
     "/api/auth/logout",     # logout juga public biar bisa logout walau token expired
 }

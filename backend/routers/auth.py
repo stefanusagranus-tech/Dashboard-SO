@@ -385,3 +385,42 @@ async def admin_delete_user_endpoint(request: Request, user_id: int, authorizati
     revoke_all_sessions(user_id)
 
     return {"success": True, "message": f"User {_target.get('username')} dinonaktifkan"}
+    
+    # =========================================================
+# SETUP — Bikin admin pertama (hanya jalan kalau belum ada admin)
+# =========================================================
+@router.post("/setup")
+@limiter.limit("3/hour")
+async def setup_endpoint(request: Request, req: RegisterRequest):
+    """
+    Bikin admin pertama.
+    Otomatis disabled kalau udah ada admin di DB.
+    """
+    from services.auth import list_users
+    
+    _users = list_users()
+    _has_admin = any(u.get("role") == "admin" for u in _users)
+    
+    if _has_admin:
+        raise HTTPException(
+            403,
+            "Setup udah selesai. Admin udah ada. Pakai /register (butuh login admin)."
+        )
+    
+    # Force role = admin
+    _result = create_user(
+        username=req.username,
+        password=req.password,
+        nama_lengkap=req.nama_lengkap,
+        role="admin",     # ← paksa admin
+        pin=req.pin,
+    )
+    
+    if not _result.get("success"):
+        raise HTTPException(400, _result.get("error", "Gagal bikin admin"))
+    
+    return {
+        "success": True,
+        "message": "Admin pertama berhasil dibuat. Endpoint /setup sekarang disabled.",
+        "user": _result.get("user"),
+    }
