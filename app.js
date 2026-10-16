@@ -2388,6 +2388,58 @@ async function sendMessage() {
     input.style.height = "auto";
     sendBtn.disabled = true;
 
+    // ✅ Deteksi intent khusus — SEBELUM kirim ke backend
+    const _msgLower = text.toLowerCase().trim();
+
+    // 1. Konfirmasi simpan SO
+    if (_msgLower === "simpan so" || _msgLower === "save so" || _msgLower === "simpan") {
+        await confirmSaveSo();
+        sendBtn.disabled = false;
+        return;
+    }
+
+    // 2. Batal upload SO
+    if (_msgLower === "batal" || _msgLower === "cancel") {
+        if (window._pendingUploadSo) {
+            cancelUploadSo();
+            sendBtn.disabled = false;
+            return;
+        }
+    }
+
+    // 3. Input SPD via chat (khusus Yui)
+    const _isSpdInput = currentBot === "yui" && (
+        (_msgLower.includes("spd") && (
+            _msgLower.includes("input") ||
+            _msgLower.includes("catat") ||
+            _msgLower.includes("simpan") ||
+            _msgLower.includes("tambah")
+        )) ||
+        (_msgLower.includes("spd") && /\d{3,}/.test(_msgLower.replace(/[.,]/g, "")))
+    );
+
+    if (_isSpdInput) {
+        // Push user message
+        const userMsg = {
+            role: "user",
+            content: text,
+            timestamp: Date.now(),
+        };
+        chatHistories[currentBot].push(userMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+
+        // Handle SPD
+        await handleSpdChat(text);
+
+        sendBtn.disabled = false;
+        return;
+    }
+
+    // ============================================================
+    // CHAT BIASA (FALLBACK)
+    // ============================================================
     // Push user message
     const userMsg = {
         role: "user",
@@ -2434,7 +2486,6 @@ async function sendMessage() {
 
         // === KALAU HANA MINTA KONFIRMASI ===
         if (data.needs_confirm && data.parsed && data.parsed.items) {
-            // Push bubble pendek
             const shortMsg = {
                 role: "assistant",
                 content: data.text || `Oke Bos, aku catat ${data.parsed.items.length} perubahan shift. Cek detailnya ya! 🌸`,
@@ -2444,8 +2495,7 @@ async function sendMessage() {
             saveChatHistories();
             renderChatHistory();
             scrollToBottom();
-        
-            // Trigger modal
+
             setTimeout(() => {
                 openConfirmShiftModal({
                     tanggal: data.parsed.tanggal,
@@ -2453,13 +2503,12 @@ async function sendMessage() {
                     raw: data.parsed.raw || text,
                 });
             }, 400);
-        
+
             hideLoadingBubble();
             sendBtn.disabled = false;
             input.focus();
-            return;  // Stop di sini, jangan render bubble konfirmasi lama
+            return;
         } else {
-            // === CHAT BIASA ===
             const aiMsg = {
                 role: "assistant",
                 content: data.text || "(kosong)",
@@ -2494,68 +2543,6 @@ async function sendMessage() {
     sendBtn.disabled = false;
     input.focus();
 }
-
-async function sendMessage() {
-    const input = document.getElementById("chatInput");
-    const sendBtn = document.getElementById("chatSend");
-
-    if (!input || !sendBtn) return;
-
-    const text = input.value.trim();
-    if (!text) return;
-
-    input.value = "";
-    input.style.height = "auto";
-    sendBtn.disabled = true;
-
-    // ✅ Deteksi intent khusus — SEBELUM kirim ke backend
-    const _msgLower = text.toLowerCase().trim();
-    
-    // 1. Konfirmasi simpan SO
-    if (_msgLower === "simpan so" || _msgLower === "save so" || _msgLower === "simpan") {
-        await confirmSaveSo();
-        sendBtn.disabled = false;
-        return;
-    }
-    
-    // 2. Batal upload SO
-    if (_msgLower === "batal" || _msgLower === "cancel") {
-        if (window._pendingUploadSo) {
-            cancelUploadSo();
-            sendBtn.disabled = false;
-            return;
-        }
-    }
-    
-    // 3. Input SPD via chat (khusus Yui)
-    const _isSpdInput = currentBot === "yui" && (
-        (_msgLower.includes("spd") && (
-            _msgLower.includes("input") || 
-            _msgLower.includes("catat") || 
-            _msgLower.includes("simpan") || 
-            _msgLower.includes("tambah")
-        )) ||
-        (_msgLower.includes("spd") && /\d{3,}/.test(_msgLower.replace(/[.,]/g, "")))
-    );
-    
-    if (_isSpdInput) {
-        // Push user message
-        const userMsg = {
-            role: "user",
-            content: text,
-            timestamp: Date.now(),
-        };
-        chatHistories[currentBot].push(userMsg);
-        saveChatHistories();
-        renderChatHistory();
-        scrollToBottom();
-        
-        // Handle SPD
-        await handleSpdChat(text);
-        
-        sendBtn.disabled = false;
-        return;
-    }
     
 // =========================================================
 // LOADING BUBBLE
