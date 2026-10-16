@@ -2649,13 +2649,14 @@ async function sendMessage() {
     }
 
     const _isSpdInput = currentBot === "yui" && (
-        (_msgLower.includes("spd") && (
-            _msgLower.includes("input") || 
-            _msgLower.includes("catat") || 
-            _msgLower.includes("simpan") || 
-            _msgLower.includes("tambah")
-        )) ||
-        (_msgLower.includes("spd") && /\d{3,}/.test(_msgLower.replace(/[.,]/g, "")))
+        // Keyword: spd ATAU sales
+        (_msgLower.includes("spd") || _msgLower.includes("sales")) && (
+            _msgLower.includes("input") ||
+            _msgLower.includes("catat") ||
+            _msgLower.includes("simpan") ||
+            _msgLower.includes("tambah") ||
+            /\d{3,}/.test(_msgLower.replace(/[.,]/g, ""))
+        )
     );
 
     if (_isSpdInput) {
