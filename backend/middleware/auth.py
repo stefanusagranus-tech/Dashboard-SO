@@ -18,7 +18,6 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional
 
-
 # =========================================================
 # KONFIGURASI
 # =========================================================
@@ -33,12 +32,11 @@ PUBLIC_PATHS = {
     "/api/config",
     "/api/config/",
     # === AUTH (public — belum punya token) ===
+    "/api/auth/setup",        # ← bikin admin pertama (auto-lock setelah ada admin)
     "/api/auth/login",
     "/api/auth/verify-pin",
     "/api/auth/forgot-pin",
-    "/api/auth/setup",
-    "/api/auth/register",   # ⚠️ SEMENTARA public buat bikin admin pertama
-    "/api/auth/logout",     # logout juga public biar bisa logout walau token expired
+    "/api/auth/logout",       # logout public biar bisa logout walau token expired
 }
 
 # Prefix yang TIDAK butuh API key
