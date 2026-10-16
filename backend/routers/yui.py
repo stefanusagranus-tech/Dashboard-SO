@@ -2,12 +2,19 @@
 Router Yui — Data Entry (AI-2)
 ================================
 Endpoint untuk bot Yui.
-Fokus: input SO, rekap SO, list item, top items.
+Fokus: chat, rekap, list item, top items, save SPD/SO, upload file.
+
+Rewrite v2 — bersih dari duplikat + 4 endpoint baru:
+- POST /save-spd       ← Simpan SPD
+- POST /save-so        ← Simpan SO
+- POST /upload-so      ← Upload file (Excel/PDF/image)
+- POST /parse-spd      ← Parse "spd 5jt"
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, File, UploadFile
 from pydantic import BaseModel, Field
 from typing import Optional
+import re
 
 from middleware.rate_limit import limiter
 
@@ -24,6 +31,9 @@ try:
         get_top_items,
         get_items_by_rak,
     )
+    from services.input_handler import save_input_harian
+    from services.spd_calculator import save_spd_harian
+    from services.file_reader import read_file, detect_file_type
     _YUI_OK = True
     _import_error = None
 except ImportError as _e:
@@ -57,21 +67,49 @@ class ChatResponse(BaseModel):
 
 
 class ParseRequest(BaseModel):
-    text: str = Field(..., description="Text natural language")
-    rak_list: list[str] = Field(default_factory=list, description="List rak valid")
+    text: str
+    rak_list: list[str] = Field(default_factory=list)
 
 
 class RekapRequest(BaseModel):
-    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'custom'")
-    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
-    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
+    mode: str = Field("bulan_ini")
+    tgl_start: Optional[str] = None
+    tgl_end: Optional[str] = None
 
 
 class TopItemsRequest(BaseModel):
     mode: str = Field("bulan_ini")
     limit: int = Field(10, ge=1, le=100)
-    only_minus: bool = Field(True, description="True: minus, False: plus")
-    order: str = Field("desc", description="'desc' atau 'asc'")
+    only_minus: bool = Field(True)
+    order: str = Field("desc")
+
+
+class SaveSpdRequest(BaseModel):
+    tanggal: str = Field(..., description="YYYY-MM-DD")
+    nominal: int = Field(..., description="Nominal SPD dalam rupiah")
+    keterangan: Optional[str] = ""
+
+
+class SaveSoItem(BaseModel):
+    rak_id: str
+    plu: str
+    nama_produk: str
+    qty_sistem: int = 0
+    qty_fisik: int = 0
+    qty_var: int = 0
+    nominal_adjust: float = 0
+    pic: Optional[str] = ""
+
+
+class SaveSoRequest(BaseModel):
+    tanggal: str = Field(..., description="YYYY-MM-DD")
+    items: list[SaveSoItem]
+    keterangan: Optional[str] = ""
+    pic_default: Optional[str] = ""
+
+
+class ParseSpdRequest(BaseModel):
+    text: str
 
 
 # =========================================================
@@ -79,7 +117,6 @@ class TopItemsRequest(BaseModel):
 # =========================================================
 @router.get("/health")
 async def yui_health():
-    """Cek status Yui."""
     return {
         "bot": "yui",
         "role": "Data Entry",
@@ -89,15 +126,11 @@ async def yui_health():
 
 
 # =========================================================
-# CHAT — dengan intent detection
+# CHAT
 # =========================================================
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
 async def yui_chat_endpoint(request: Request, req: ChatRequest):
-    """
-    Endpoint chat Yui dengan intent detection.
-    Rekap → fetch data dulu, baru LLM.
-    """
     if not _YUI_OK:
         raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
 
@@ -108,9 +141,7 @@ async def yui_chat_endpoint(request: Request, req: ChatRequest):
         _msg = req.message.strip().lower()
         _history = [{"role": m.role, "content": m.content} for m in req.history]
 
-        # ============================================================
         # INTENT: REKAP
-        # ============================================================
         _is_rekap = any(k in _msg for k in [
             "rekap", "rekapan", "total so", "list so",
             "breakdown", "rincian so", "summary so",
@@ -167,9 +198,7 @@ DETAIL RAK:
                 error=_resp.get("error"),
             )
 
-        # ============================================================
         # INTENT: TOP ITEMS
-        # ============================================================
         _is_top = any(k in _msg for k in [
             "top item", "item minus", "item plus",
             "minus tertinggi", "plus tertinggi",
@@ -204,9 +233,7 @@ DETAIL RAK:
                     error=_resp.get("error"),
                 )
 
-        # ============================================================
-        # FALLBACK: CHAT BIASA
-        # ============================================================
+        # FALLBACK
         _resp = yui_chat(req.message, _history)
 
         if isinstance(_resp, dict):
@@ -220,20 +247,264 @@ DETAIL RAK:
     except Exception as _e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(_e)[:200])# =========================================================
-# PARSE — Natural language
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# PARSE NATURAL LANGUAGE (SO)
 # =========================================================
 @router.post("/parse")
 @limiter.limit("30/minute")
 async def yui_parse_endpoint(request: Request, req: ParseRequest):
-    """Parse natural language input SO. Response flat."""
     if not _YUI_OK:
         raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
     try:
         _parsed = parse_natural_language(req.text, req.rak_list or [])
         return _parsed
     except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# PARSE SPD — Parse "spd 5jt" jadi nominal
+# =========================================================
+@router.post("/parse-spd")
+@limiter.limit("30/minute")
+async def yui_parse_spd_endpoint(request: Request, req: ParseSpdRequest):
+    """Parse natural language SPD."""
+    try:
+        _text = req.text.strip().lower()
+        _nominal = 0
+
+        # Pattern: 12.750.800 / 5jt / 500rb / 500k
+        _match = re.search(r'(\d[\d.,]*)\s*(jt|juta|rb|ribu|k)?', _text)
+        if _match:
+            _raw = _match.group(1).replace(".", "").replace(",", "")
+            try:
+                _nominal = int(_raw)
+                _suffix = _match.group(2)
+                if _suffix in ("jt", "juta"):
+                    _nominal *= 1_000_000
+                elif _suffix in ("rb", "ribu", "k"):
+                    _nominal *= 1_000
+            except Exception:
+                _nominal = 0
+
+        # Deteksi tanggal
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        _today = datetime.now(ZoneInfo("Asia/Jakarta")).date().isoformat()
+
+        return {
+            "success": _nominal > 0,
+            "nominal": _nominal,
+            "tanggal": _today,
+            "raw_text": req.text,
+            "error": None if _nominal > 0 else "Gak nemu nominal SPD",
+        }
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# SAVE SPD
+# =========================================================
+@router.post("/save-spd")
+@limiter.limit("20/minute")
+async def yui_save_spd_endpoint(request: Request, req: SaveSpdRequest):
+    """Simpan SPD ke tabel spd_harian."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+        _tgl = datetime.strptime(req.tanggal, "%Y-%m-%d").date()
+
+        _ok, _msg = save_spd_harian(_tgl, req.nominal, req.keterangan or "")
+
+        if not _ok:
+            raise HTTPException(status_code=500, detail=_msg)
+
+        # Hitung budget SO (0,15%)
+        _budget_so = req.nominal * 0.0015
+
+        return {
+            "success": True,
+            "message": _msg,
+            "tanggal": req.tanggal,
+            "nominal": req.nominal,
+            "budget_so": _budget_so,
+        }
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# SAVE SO
+# =========================================================
+@router.post("/save-so")
+@limiter.limit("10/minute")
+async def yui_save_so_endpoint(request: Request, req: SaveSoRequest):
+    """Simpan SO ke so_hasil + so_rak_harian."""
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        from datetime import datetime
+        _tgl = datetime.strptime(req.tanggal, "%Y-%m-%d").date()
+
+        if not req.items:
+            raise HTTPException(status_code=400, detail="Items kosong")
+
+        # Group by rak untuk save
+        _items_by_rak = {}
+        for _it in req.items:
+            _rak = _it.rak_id.upper().strip()
+            if not _rak:
+                continue
+            _items_by_rak.setdefault(_rak, []).append({
+                "rak_id": _rak,
+                "plu": _it.plu,
+                "nama_produk": _it.nama_produk,
+                "qty_sistem": _it.qty_sistem,
+                "qty_fisik": _it.qty_fisik,
+                "qty_var": _it.qty_var,
+                "nominal_adjust": _it.nominal_adjust,
+                "pic": (_it.pic or req.pic_default or "").upper(),
+            })
+
+        # Save per rak
+        _saved_count = 0
+        _error_count = 0
+        _errors = []
+        _total_nominal = 0
+        _total_items = 0
+
+        for _rak_id, _rak_items in _items_by_rak.items():
+            _pic = _rak_items[0].get("pic", "")
+            if not _pic:
+                _error_count += 1
+                _errors.append(f"Rak {_rak_id}: PIC kosong")
+                continue
+
+            try:
+                _ok, _msg, _detail = save_input_harian(
+                    tanggal=_tgl,
+                    spd=0,
+                    rak_items=_rak_items,
+                    keterangan=req.keterangan or "Input via APK",
+                    pic=_pic,
+                    update_status_rak=True,
+                )
+                if _ok:
+                    _saved_count += 1
+                    _total_nominal += float(_detail.get("total_nominal", 0) or 0)
+                    _total_items += int(_detail.get("hasil_saved", 0) or 0)
+                else:
+                    _error_count += 1
+                    _errors.append(f"Rak {_rak_id}: {_msg[:100]}")
+            except Exception as _e:
+                _error_count += 1
+                _errors.append(f"Rak {_rak_id}: {str(_e)[:100]}")
+
+        return {
+            "success": _saved_count > 0,
+            "saved_count": _saved_count,
+            "error_count": _error_count,
+            "errors": _errors,
+            "total_nominal": _total_nominal,
+            "total_items": _total_items,
+            "rak_saved": list(_items_by_rak.keys()),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
+
+
+# =========================================================
+# UPLOAD SO — File Excel/PDF/Image
+# =========================================================
+@router.post("/upload-so")
+@limiter.limit("10/minute")
+async def yui_upload_so_endpoint(
+    request: Request,
+    file: UploadFile = File(...),
+    tanggal: Optional[str] = None,
+    rak_id: Optional[str] = None,
+):
+    """
+    Upload file SO — parse & return preview.
+    User confirm dulu, baru save via /save-so.
+    """
+    if not _YUI_OK:
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+
+    try:
+        _bytes = await file.read()
+        _filename = file.filename or "unknown"
+
+        print(f"[UPLOAD-SO] File: {_filename} ({len(_bytes)} bytes)")
+
+        # Read file
+        _read = read_file(_bytes, _filename)
+
+        if not _read.get("success"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Gagal baca file: {_read.get('error', 'unknown')[:200]}"
+            )
+
+        # Parse
+        _ctx = {"tanggal": tanggal, "rak_id": rak_id, "pic": None}
+        _parse = parse_file_text(
+            _read.get("text", ""),
+            file_type=_read.get("type", "unknown"),
+            context=_ctx,
+            primary_df=_read.get("primary_df"),
+        )
+
+        if not _parse.get("success"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Gagal parse: {_parse.get('warnings', ['unknown'])[0][:200]}"
+            )
+
+        _data = _parse.get("data", {}) or {}
+        _items = _data.get("items", [])
+        _items_by_rak = _data.get("items_by_rak", {})
+        _total_nominal = _data.get("total_nominal", 0)
+        _tanggal_hasil = _data.get("tanggal") or tanggal
+
+        if not _items_by_rak and _items:
+            _grouped = {}
+            for _it in _items:
+                _r = _it.get("rak_id") or "UNKNOWN"
+                _grouped.setdefault(_r, []).append(_it)
+            _items_by_rak = _grouped
+
+        return {
+            "success": True,
+            "filename": _filename,
+            "file_type": _read.get("type", "unknown"),
+            "tanggal": _tanggal_hasil,
+            "total_items": len(_items),
+            "total_rak": len(_items_by_rak),
+            "total_nominal": _total_nominal,
+            "items": _items,
+            "items_by_rak": _items_by_rak,
+            "model": _parse.get("model", ""),
+            "warnings": _parse.get("warnings", []),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as _e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
@@ -243,40 +514,26 @@ async def yui_parse_endpoint(request: Request, req: ParseRequest):
 @router.post("/rekap")
 @limiter.limit("30/minute")
 async def yui_rekap_endpoint(request: Request, req: RekapRequest):
-    """Rekap SO."""
     if not _YUI_OK:
         raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
     try:
         from datetime import datetime
-
         _tgl_start = None
         _tgl_end = None
-
         if req.mode == "custom":
             if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Mode custom butuh tgl_start dan tgl_end",
-                )
+                raise HTTPException(400, "Mode custom butuh tgl_start & tgl_end")
             _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
             _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
 
-        _hasil = rekap_so(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-        )
-
+        _hasil = rekap_so(mode=req.mode, tgl_start=_tgl_start, tgl_end=_tgl_end)
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal rekap"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal rekap"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
 
 
 # =========================================================
@@ -285,27 +542,20 @@ async def yui_rekap_endpoint(request: Request, req: RekapRequest):
 @router.post("/top-items")
 @limiter.limit("30/minute")
 async def yui_top_items_endpoint(request: Request, req: TopItemsRequest):
-    """Top item berdasarkan selisih."""
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
         _hasil = get_top_items(
-            mode=req.mode,
-            limit=req.limit,
-            only_minus=req.only_minus,
-            order=req.order,
+            mode=req.mode, limit=req.limit,
+            only_minus=req.only_minus, order=req.order,
         )
-
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
 
 
 # =========================================================
@@ -314,402 +564,221 @@ async def yui_top_items_endpoint(request: Request, req: TopItemsRequest):
 @router.get("/items-by-rak/{rak_id}")
 @limiter.limit("30/minute")
 async def yui_items_by_rak_endpoint(request: Request, rak_id: str):
-    """List item di rak tertentu — semua item (minus + plus)."""
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
-        _hasil = get_items_by_rak(rak_id, mode="bulan_ini", show_all=True)
-        return _hasil
+        return get_items_by_rak(rak_id, mode="bulan_ini", show_all=True)
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-# =========================================================
-# PARSE — Natural language
-# =========================================================
-@router.post("/parse")
-@limiter.limit("30/minute")
-async def yui_parse_endpoint(request: Request, req: ParseRequest):
-    """Parse natural language input SO. Response flat."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        _parsed = parse_natural_language(req.text, req.rak_list or [])
-        return _parsed
-    except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
 
 
 # =========================================================
-# REKAP
-# =========================================================
-@router.post("/rekap")
-@limiter.limit("30/minute")
-async def yui_rekap_endpoint(request: Request, req: RekapRequest):
-    """Rekap SO."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        from datetime import datetime
-
-        _tgl_start = None
-        _tgl_end = None
-
-        if req.mode == "custom":
-            if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Mode custom butuh tgl_start dan tgl_end",
-                )
-            _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
-            _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
-        _hasil = rekap_so(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-        )
-
-        if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal rekap"))
-
-        return _hasil
-
-    except HTTPException:
-        raise
-    except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-
-# =========================================================
-# TOP ITEMS
-# =========================================================
-@router.post("/top-items")
-@limiter.limit("30/minute")
-async def yui_top_items_endpoint(request: Request, req: TopItemsRequest):
-    """Top item berdasarkan selisih."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        _hasil = get_top_items(
-            mode=req.mode,
-            limit=req.limit,
-            only_minus=req.only_minus,
-            order=req.order,
-        )
-
-        if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal"))
-
-        return _hasil
-
-    except HTTPException:
-        raise
-    except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-
-# =========================================================
-# ITEMS BY RAK
-# =========================================================
-@router.get("/items-by-rak/{rak_id}")
-@limiter.limit("30/minute")
-async def yui_items_by_rak_endpoint(request: Request, rak_id: str):
-    """List item di rak tertentu — semua item (minus + plus)."""
-    if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
-    try:
-        _hasil = get_items_by_rak(rak_id, mode="bulan_ini", show_all=True)
-        return _hasil
-    except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
-
-# =========================================================
-# GET RAK STATUS
+# RAK STATUS
 # =========================================================
 class RakStatusRequest(BaseModel):
-    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'custom'")
-    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
-    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
+    mode: str = "bulan_ini"
+    tgl_start: Optional[str] = None
+    tgl_end: Optional[str] = None
 
 
 @router.post("/rak-status")
 @limiter.limit("30/minute")
 async def yui_rak_status_endpoint(request: Request, req: RakStatusRequest):
-    """List semua rak: sudah/belum SO."""
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
         from datetime import datetime
-
+        from services.yui_rekap import get_rak_status
         _tgl_start = None
         _tgl_end = None
-
         if req.mode == "custom":
             if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+                raise HTTPException(400, "Butuh tgl_start & tgl_end")
             _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
             _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
-        # Panggil fungsi
-        from services.yui_rekap import get_rak_status
-
-        _hasil = get_rak_status(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-        )
-
+        _hasil = get_rak_status(mode=req.mode, tgl_start=_tgl_start, tgl_end=_tgl_end)
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load rak status"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
+
 
 # =========================================================
-# GET SPD LIST
+# SPD LIST
 # =========================================================
 class SpdListRequest(BaseModel):
-    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'custom'")
-    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
-    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD (buat custom)")
+    mode: str = "bulan_ini"
+    tgl_start: Optional[str] = None
+    tgl_end: Optional[str] = None
 
 
 @router.post("/spd-list")
 @limiter.limit("30/minute")
 async def yui_spd_list_endpoint(request: Request, req: SpdListRequest):
-    """List SPD (Sales Per Day) + delta."""
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
         from datetime import datetime
-
+        from services.yui_rekap import get_spd_list
         _tgl_start = None
         _tgl_end = None
-
         if req.mode == "custom":
             if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+                raise HTTPException(400, "Butuh tgl_start & tgl_end")
             _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
             _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
-        from services.yui_rekap import get_spd_list
-
-        _hasil = get_spd_list(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-        )
-
+        _hasil = get_spd_list(mode=req.mode, tgl_start=_tgl_start, tgl_end=_tgl_end)
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load SPD"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
+
 
 # =========================================================
-# GET TOP RAK
+# TOP RAK
 # =========================================================
 class TopRakRequest(BaseModel):
-    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
-    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
-    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+    mode: str = "bulan_ini"
+    tgl_start: Optional[str] = None
+    tgl_end: Optional[str] = None
     limit: int = Field(500, ge=1, le=1000)
 
 
 @router.post("/top-rak")
 @limiter.limit("30/minute")
 async def yui_top_rak_endpoint(request: Request, req: TopRakRequest):
-    """Ranking rak by nominal adjust (minus terbesar)."""
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
         from datetime import datetime
         from services.yui_rekap import get_top_rak
-
         _tgl_start = None
         _tgl_end = None
-
         if req.mode == "custom":
             if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+                raise HTTPException(400, "Butuh tgl_start & tgl_end")
             _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
             _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
-        _hasil = get_top_rak(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-            limit=req.limit,
-        )
-
+        _hasil = get_top_rak(mode=req.mode, tgl_start=_tgl_start, tgl_end=_tgl_end, limit=req.limit)
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load top rak"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
 
 
 # =========================================================
-# GET ITEMS BY RAK — DETAIL
+# ITEMS BY RAK EXTENDED
 # =========================================================
 class ItemsByRakRequest(BaseModel):
-    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
-    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
-    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+    mode: str = "bulan_ini"
+    tgl_start: Optional[str] = None
+    tgl_end: Optional[str] = None
 
 
 @router.post("/items-by-rak/{rak_id}")
 @limiter.limit("60/minute")
-async def yui_items_by_rak_detail_endpoint(request: Request, rak_id: str, req: ItemsByRakRequest):
-    """Detail item di rak tertentu (minus + plus)."""
+async def yui_items_by_rak_extended_endpoint(request: Request, rak_id: str, req: ItemsByRakRequest):
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
         from datetime import datetime
         from services.yui_rekap import get_items_by_rak_extended
-
         _tgl_start = None
         _tgl_end = None
-
         if req.mode == "custom":
             if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+                raise HTTPException(400, "Butuh tgl_start & tgl_end")
             _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
             _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
-        _hasil = get_items_by_rak_extended(
-            rak_id=rak_id,
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-        )
-
+        _hasil = get_items_by_rak_extended(rak_id=rak_id, mode=req.mode, tgl_start=_tgl_start, tgl_end=_tgl_end)
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load items"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
 
 
 # =========================================================
-# GET TOP ITEMS — Extended (search + sort)
+# TOP ITEMS EXTENDED
 # =========================================================
 class TopItemsExtendedRequest(BaseModel):
-    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
-    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
-    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
-    limit: Optional[int] = Field(None, description="None = semua")
-    search: str = Field("", description="Cari by PLU atau nama")
-    order_by: str = Field("nominal_desc", description="'nominal_desc' | 'nominal_asc' | 'tanggal_desc' | 'tanggal_asc'")
-    sign: str = Field("minus", description="'minus' | 'plus' | 'all'")  # ✅ NEW
+    mode: str = "bulan_ini"
+    tgl_start: Optional[str] = None
+    tgl_end: Optional[str] = None
+    limit: Optional[int] = None
+    search: str = ""
+    order_by: str = "nominal_desc"
+    sign: str = "minus"
 
 
 @router.post("/top-items-extended")
 @limiter.limit("30/minute")
 async def yui_top_items_extended_endpoint(request: Request, req: TopItemsExtendedRequest):
-    """Top items extended — search + sort."""
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
         from datetime import datetime
         from services.yui_rekap import get_top_items_extended
-
         _tgl_start = None
         _tgl_end = None
-
         if req.mode == "custom":
             if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+                raise HTTPException(400, "Butuh tgl_start & tgl_end")
             _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
             _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
         _hasil = get_top_items_extended(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-            limit=req.limit,
-            search=req.search,
-            order_by=req.order_by,
-            sign=req.sign,   # ✅ NEW
+            mode=req.mode, tgl_start=_tgl_start, tgl_end=_tgl_end,
+            limit=req.limit, search=req.search, order_by=req.order_by, sign=req.sign,
         )
-
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load items"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
+
 
 # =========================================================
-# GET STATUS ANALYSIS
+# STATUS ANALYSIS
 # =========================================================
 class StatusAnalysisRequest(BaseModel):
-    mode: str = Field("bulan_ini", description="'hari_ini', 'minggu_ini', 'bulan_ini', 'bulan_lalu', 'custom'")
-    tgl_start: Optional[str] = Field(None, description="YYYY-MM-DD")
-    tgl_end: Optional[str] = Field(None, description="YYYY-MM-DD")
+    mode: str = "bulan_ini"
+    tgl_start: Optional[str] = None
+    tgl_end: Optional[str] = None
 
 
 @router.post("/status-analysis")
 @limiter.limit("30/minute")
 async def yui_status_analysis_endpoint(request: Request, req: StatusAnalysisRequest):
-    """Analisis status SO: NSB, BTSB, NSB Personil, Status, Rekomendasi."""
     if not _YUI_OK:
-        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
-
+        raise HTTPException(503, f"Yui error: {_import_error}")
     try:
         from datetime import datetime
         from services.yui_rekap import get_status_analysis
-
         _tgl_start = None
         _tgl_end = None
-
         if req.mode == "custom":
             if not req.tgl_start or not req.tgl_end:
-                raise HTTPException(status_code=400, detail="Mode custom butuh tgl_start & tgl_end")
+                raise HTTPException(400, "Butuh tgl_start & tgl_end")
             _tgl_start = datetime.strptime(req.tgl_start, "%Y-%m-%d").date()
             _tgl_end = datetime.strptime(req.tgl_end, "%Y-%m-%d").date()
-
-        _hasil = get_status_analysis(
-            mode=req.mode,
-            tgl_start=_tgl_start,
-            tgl_end=_tgl_end,
-        )
-
+        _hasil = get_status_analysis(mode=req.mode, tgl_start=_tgl_start, tgl_end=_tgl_end)
         if not _hasil.get("success"):
-            raise HTTPException(status_code=500, detail=_hasil.get("error", "Gagal load status"))
-
+            raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
-
     except HTTPException:
         raise
     except Exception as _e:
-        raise HTTPException(status_code=500, detail=str(_e)[:200])
+        raise HTTPException(500, str(_e)[:200])
