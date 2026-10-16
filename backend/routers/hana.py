@@ -3,31 +3,30 @@ Router Hana — Master Shift (AI-1)
 ====================================
 Endpoint untuk bot Hana.
 
-Bot ini fokus handle jadwal shift:
-- Cek jadwal (hari ini, besok, dst)
-- Update shift (atur/pindah)
-- Hapus shift
-- Saran pengganti
-- Chat general tentang shift
+Bot ini fokus handle jadwal shift.
+
+Rewrite v2 — Sprint 3 PART 2:
+- Semua endpoint POST diproteksi Bearer token
+- Personil add/delete khusus admin
+- Save shift khusus operator+
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 
 from middleware.rate_limit import limiter
+from middleware.role import require_token, require_operator, require_admin
 
 
 try:
     from services.ai_shift_manager import (
-        # Fungsi lama
         chat_response,
         parse_shift_update,
         suggest_pengganti,
         ai_suggest_pengganti_text,
         check_conflict,
         ai_check_conflict_text,
-        # Fungsi baru v2
         save_shift,
         save_batch,
         get_master_shift,
@@ -85,9 +84,7 @@ class ConflictRequest(BaseModel):
     tanggal: str = Field(..., description="Tanggal (YYYY-MM-DD)")
     shift_map: dict = Field(..., description="Mapping nama -> kode shift")
 
-# =========================================================
-# SCHEMA v2 — CRUD Shift & Personil
-# =========================================================
+
 class SaveShiftRequest(BaseModel):
     tanggal: str = Field(..., description="Tanggal (YYYY-MM-DD) atau natural language")
     nama: str = Field(..., description="Nama personil")
@@ -115,13 +112,13 @@ class PersonilRequest(BaseModel):
 class DeletePersonilRequest(BaseModel):
     nama: str = Field(..., description="Nama personil")
     force: bool = Field(False, description="True: hard delete + history")
-    
+
+
 # =========================================================
-# HEALTH
+# HEALTH — PUBLIC
 # =========================================================
 @router.get("/health")
 async def hana_health():
-    """Cek status Hana."""
     return {
         "bot": "hana",
         "role": "Master Shift",
@@ -135,8 +132,11 @@ async def hana_health():
 # =========================================================
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
-async def hana_chat_endpoint(request: Request, req: ChatRequest):
-    """Endpoint chat Hana dengan intent detection."""
+async def hana_chat_endpoint(
+    request: Request,
+    req: ChatRequest,
+    user: dict = Depends(require_token),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -145,7 +145,6 @@ async def hana_chat_endpoint(request: Request, req: ChatRequest):
 
     try:
         _history = [{"role": m.role, "content": m.content} for m in req.history]
-
         _resp = chat_response(req.message, _history)
 
         return ChatResponse(
@@ -166,12 +165,11 @@ async def hana_chat_endpoint(request: Request, req: ChatRequest):
 # =========================================================
 @router.post("/parse")
 @limiter.limit("30/minute")
-async def hana_parse_endpoint(request: Request, req: ParseRequest):
-    """
-    Parse natural language jadi struktur shift.
-    
-    Body: {"text": "Atur Reza dan Pandu libur besok"}
-    """
+async def hana_parse_endpoint(
+    request: Request,
+    req: ParseRequest,
+    user: dict = Depends(require_token),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -198,12 +196,11 @@ async def hana_parse_endpoint(request: Request, req: ParseRequest):
 # =========================================================
 @router.post("/suggest")
 @limiter.limit("30/minute")
-async def hana_suggest_endpoint(request: Request, req: SuggestRequest):
-    """
-    Saran pengganti kalau ada yang libur.
-    
-    Body: {"nama_libur": "REZA", "tanggal": "2026-10-14"}
-    """
+async def hana_suggest_endpoint(
+    request: Request,
+    req: SuggestRequest,
+    user: dict = Depends(require_token),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -232,15 +229,11 @@ async def hana_suggest_endpoint(request: Request, req: SuggestRequest):
 # =========================================================
 @router.post("/conflict")
 @limiter.limit("30/minute")
-async def hana_conflict_endpoint(request: Request, req: ConflictRequest):
-    """
-    Cek konflik shift.
-    
-    Body: {
-        "tanggal": "2026-10-14",
-        "shift_map": {"REZA": "S15", "PANDU": "P7"}
-    }
-    """
+async def hana_conflict_endpoint(
+    request: Request,
+    req: ConflictRequest,
+    user: dict = Depends(require_token),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -262,21 +255,24 @@ async def hana_conflict_endpoint(request: Request, req: ConflictRequest):
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
+
 # =========================================================
-# SAVE SHIFT — 1 shift
+# SAVE SHIFT — Butuh operator+
 # =========================================================
 @router.post("/save-shift")
 @limiter.limit("30/minute")
-async def hana_save_shift_endpoint(request: Request, req: SaveShiftRequest):
+async def hana_save_shift_endpoint(
+    request: Request,
+    req: SaveShiftRequest,
+    user: dict = Depends(require_operator),
+):
     """Simpan/update/hapus 1 shift."""
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
     try:
-        # Parse tanggal natural
         from datetime import datetime
         _tgl = req.tanggal
-        # Kalau bukan format YYYY-MM-DD, parse natural
         if not (len(_tgl) == 10 and _tgl[4] == "-"):
             _tgl = parse_tanggal(_tgl)
 
@@ -300,12 +296,15 @@ async def hana_save_shift_endpoint(request: Request, req: SaveShiftRequest):
 
 
 # =========================================================
-# SAVE BATCH — banyak shift sekaligus
+# SAVE BATCH — Butuh operator+
 # =========================================================
 @router.post("/save-batch")
 @limiter.limit("20/minute")
-async def hana_save_batch_endpoint(request: Request, req: SaveBatchRequest):
-    """Simpan banyak shift sekaligus."""
+async def hana_save_batch_endpoint(
+    request: Request,
+    req: SaveBatchRequest,
+    user: dict = Depends(require_operator),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -328,12 +327,15 @@ async def hana_save_batch_endpoint(request: Request, req: SaveBatchRequest):
 
 
 # =========================================================
-# GET MASTER SHIFT — list + filter
+# MASTER SHIFT — query
 # =========================================================
 @router.post("/master-shift")
 @limiter.limit("60/minute")
-async def hana_master_shift_endpoint(request: Request, req: MasterShiftQuery):
-    """Ambil daftar shift dari Supabase."""
+async def hana_master_shift_endpoint(
+    request: Request,
+    req: MasterShiftQuery,
+    user: dict = Depends(require_token),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -356,12 +358,14 @@ async def hana_master_shift_endpoint(request: Request, req: MasterShiftQuery):
 
 
 # =========================================================
-# GET PERSONIL — list aktif
+# PERSONIL — list
 # =========================================================
 @router.get("/personil")
 @limiter.limit("60/minute")
-async def hana_personil_endpoint(request: Request):
-    """List semua personil aktif."""
+async def hana_personil_endpoint(
+    request: Request,
+    user: dict = Depends(require_token),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -378,12 +382,15 @@ async def hana_personil_endpoint(request: Request):
 
 
 # =========================================================
-# PERSONIL — ADD / DELETE
+# PERSONIL — ADD (admin only)
 # =========================================================
 @router.post("/personil/add")
 @limiter.limit("20/minute")
-async def hana_personil_add_endpoint(request: Request, req: PersonilRequest):
-    """Tambah personil baru."""
+async def hana_personil_add_endpoint(
+    request: Request,
+    req: PersonilRequest,
+    user: dict = Depends(require_admin),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -401,10 +408,16 @@ async def hana_personil_add_endpoint(request: Request, req: PersonilRequest):
         raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 
+# =========================================================
+# PERSONIL — DELETE (admin only)
+# =========================================================
 @router.post("/personil/delete")
 @limiter.limit("20/minute")
-async def hana_personil_delete_endpoint(request: Request, req: DeletePersonilRequest):
-    """Hapus personil (soft/hard delete)."""
+async def hana_personil_delete_endpoint(
+    request: Request,
+    req: DeletePersonilRequest,
+    user: dict = Depends(require_admin),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 
@@ -423,12 +436,14 @@ async def hana_personil_delete_endpoint(request: Request, req: DeletePersonilReq
 
 
 # =========================================================
-# SHIFT HARI INI — untuk running text
+# SHIFT HARI INI
 # =========================================================
 @router.get("/shift-hari-ini")
 @limiter.limit("60/minute")
-async def hana_shift_hari_ini_endpoint(request: Request):
-    """Ambil ringkasan shift hari ini."""
+async def hana_shift_hari_ini_endpoint(
+    request: Request,
+    user: dict = Depends(require_token),
+):
     if not _HANA_OK:
         raise HTTPException(status_code=503, detail=f"Hana error: {_import_error}")
 

@@ -3,22 +3,17 @@ Router Rei — Analis SO (AI-3)
 ================================
 Endpoint untuk bot Rei.
 
-Bot ini fokus analisis:
-- Analisis trend SO
-- LPJ (Laporan Pertanggungjawaban)
-- Prediksi SO bulan depan
-- Insight & rekomendasi audit
-- Top item minus/plus
-
-Flow: Android → FastAPI → Gemini/Groq/OpenRouter → balik ke Android
+Rewrite v2 — Sprint 3 PART 2:
+- Semua endpoint POST diproteksi Bearer token
+- Health tetep public
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 
-# Rate limiter
 from middleware.rate_limit import limiter
+from middleware.role import require_token
 
 
 try:
@@ -60,11 +55,10 @@ class AnalisisRequest(BaseModel):
 
 
 # =========================================================
-# HEALTH
+# HEALTH — PUBLIC
 # =========================================================
 @router.get("/health")
 async def rei_health():
-    """Cek status Rei."""
     return {
         "bot": "rei",
         "role": "Analis SO",
@@ -78,12 +72,11 @@ async def rei_health():
 # =========================================================
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("15/minute")
-async def rei_chat_endpoint(request: Request, req: ChatRequest):
-    """
-    Endpoint chat Rei.
-    
-    Triple hybrid: Gemini → Groq → OpenRouter.
-    """
+async def rei_chat_endpoint(
+    request: Request,
+    req: ChatRequest,
+    user: dict = Depends(require_token),
+):
     if not _REI_OK:
         raise HTTPException(status_code=503, detail=f"Rei error: {_import_error}")
 
@@ -116,12 +109,11 @@ async def rei_chat_endpoint(request: Request, req: ChatRequest):
 # =========================================================
 @router.post("/analisis", response_model=ChatResponse)
 @limiter.limit("15/minute")
-async def rei_analisis_endpoint(request: Request, req: AnalisisRequest):
-    """
-    Endpoint analisis (single-turn, tanpa history).
-    
-    Body: {"prompt": "Analisis trend SO bulan ini", "prefer": "gemini"}
-    """
+async def rei_analisis_endpoint(
+    request: Request,
+    req: AnalisisRequest,
+    user: dict = Depends(require_token),
+):
     if not _REI_OK:
         raise HTTPException(status_code=503, detail=f"Rei error: {_import_error}")
 

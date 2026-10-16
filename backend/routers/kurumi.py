@@ -3,20 +3,19 @@ Router Kurumi — Chief of Staff (AI-0)
 ========================================
 Endpoint untuk bot Kurumi.
 
-Bot ini adalah LEADER — bisa jawab semua, tapi fokusnya:
-- Rangkum laporan (hari/minggu/bulan)
-- Kirim laporan (text/PDF/Excel)
-- Chat general
+Rewrite v2 — Sprint 3 PART 2:
+- Semua endpoint POST diproteksi Bearer token
+- Health tetep public
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 
-# Rate limiter
 from middleware.rate_limit import limiter
+from middleware.role import require_token
 
-# Import service
+
 try:
     from services.ai_core import (
         kurumi_chat_response,
@@ -64,11 +63,10 @@ class ReportRequest(BaseModel):
 
 
 # =========================================================
-# HEALTH
+# HEALTH — PUBLIC
 # =========================================================
 @router.get("/health")
 async def kurumi_health():
-    """Cek status Kurumi."""
     return {
         "bot": "kurumi",
         "role": "Chief of Staff",
@@ -82,17 +80,11 @@ async def kurumi_health():
 # =========================================================
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
-async def kurumi_chat_endpoint(request: Request, req: ChatRequest):
-    """
-    Endpoint chat Kurumi.
-    
-    Body:
-    {
-        "message": "Rangkum hari ini dong",
-        "session_id": "kurumi_20261013_140500",
-        "history": [...]
-    }
-    """
+async def kurumi_chat_endpoint(
+    request: Request,
+    req: ChatRequest,
+    user: dict = Depends(require_token),
+):
     if not _KURUMI_OK:
         raise HTTPException(
             status_code=503,
@@ -104,7 +96,6 @@ async def kurumi_chat_endpoint(request: Request, req: ChatRequest):
 
     try:
         _history = [{"role": m.role, "content": m.content} for m in req.history]
-
         _resp = kurumi_chat_response(req.message, _history)
 
         if isinstance(_resp, dict):
@@ -127,12 +118,11 @@ async def kurumi_chat_endpoint(request: Request, req: ChatRequest):
 # =========================================================
 @router.post("/summarize", response_model=ChatResponse)
 @limiter.limit("30/minute")
-async def kurumi_summarize_endpoint(request: Request, req: SummarizeRequest):
-    """
-    Endpoint rangkum Kurumi.
-    
-    Body: {"period": "hari" | "minggu" | "bulan"}
-    """
+async def kurumi_summarize_endpoint(
+    request: Request,
+    req: SummarizeRequest,
+    user: dict = Depends(require_token),
+):
     if not _KURUMI_OK:
         raise HTTPException(status_code=503, detail=f"Kurumi error: {_import_error}")
 
@@ -156,12 +146,11 @@ async def kurumi_summarize_endpoint(request: Request, req: SummarizeRequest):
 # =========================================================
 @router.post("/report")
 @limiter.limit("10/minute")
-async def kurumi_report_endpoint(request: Request, req: ReportRequest):
-    """
-    Endpoint generate laporan.
-    
-    Body: {"period": "hari", "format": "text" | "pdf" | "excel"}
-    """
+async def kurumi_report_endpoint(
+    request: Request,
+    req: ReportRequest,
+    user: dict = Depends(require_token),
+):
     if not _KURUMI_OK:
         raise HTTPException(status_code=503, detail=f"Kurumi error: {_import_error}")
 
@@ -198,4 +187,3 @@ async def kurumi_report_endpoint(request: Request, req: ReportRequest):
         raise
     except Exception as _e:
         raise HTTPException(status_code=500, detail=str(_e)[:200])
-        
