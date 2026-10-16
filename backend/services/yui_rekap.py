@@ -626,6 +626,31 @@ def get_top_rak(mode="bulan_ini", tgl_start=None, tgl_end=None, limit=500):
                 if r.get("so_date") and (not _rak_map[_rid]["tgl_so"] or r["so_date"] > _rak_map[_rid]["tgl_so"]):
                     _rak_map[_rid]["tgl_so"] = r["so_date"]
 
+        # ✅ HITUNG total_item dari so_hasil
+        if _rak_map:
+            _rak_ids = list(_rak_map.keys())
+            try:
+                _res_items = (
+                    _sb.table("so_hasil")
+                    .select("rak_id")
+                    .in_("rak_id", _rak_ids)
+                    .gte("so_date", _start_str)
+                    .lte("so_date", _end_str)
+                    .execute()
+                )
+                _item_rows = _res_items.data if _res_items.data else []
+                
+                # Count per rak
+                from collections import Counter
+                _item_count = Counter(r["rak_id"] for r in _item_rows if r.get("rak_id"))
+                
+                for _rid in _rak_map:
+                    _rak_map[_rid]["total_item"] = _item_count.get(_rid, 0)
+                    
+                print(f"[TOP_RAK] Counted items for {len(_rak_ids)} rak, total {len(_item_rows)} items")
+            except Exception as _e:
+                print(f"[TOP_RAK] Gagal hitung total_item: {_e}")
+
         _list_rak = list(_rak_map.values())
         _list_rak.sort(key=lambda x: x["nominal_adjust"])
 
@@ -646,8 +671,7 @@ def get_top_rak(mode="bulan_ini", tgl_start=None, tgl_end=None, limit=500):
         import traceback
         print(traceback.format_exc())
         return {"success": False, "error": str(e)[:200], "list_rak": []}
-
-
+        
 # =========================================================
 # GET ITEMS BY RAK EXTENDED — Fitur #3 Detail
 # =========================================================
