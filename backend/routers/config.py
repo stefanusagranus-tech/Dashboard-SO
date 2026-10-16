@@ -85,7 +85,7 @@ async def get_config():
         "app": {
             "name": "Dashboard SO C383",
             "current_version": "1.0.0",
-            "latest_version": _get_latest_app_version(),
+            "latest_version": "9.9.9",   # ← Test fake update,
             "min_version": _get_min_app_version(),
             "download_url": _get_download_url(),
             "changelog": _get_changelog(),
