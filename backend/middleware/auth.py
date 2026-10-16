@@ -8,6 +8,8 @@ Cara pakai:
 - Set env: SO_API_KEY=<key_panjang_random>
 - APK kirim: X-API-Key: <key_panjang_random>
 - Kalau gak cocok → 401 Unauthorized
+
+Update v2: Tambah whitelist /api/auth/* endpoints
 """
 
 import os
@@ -30,6 +32,12 @@ PUBLIC_PATHS = {
     "/api/bots",
     "/api/config",
     "/api/config/",
+    # === AUTH (public — belum punya token) ===
+    "/api/auth/login",
+    "/api/auth/verify-pin",
+    "/api/auth/forgot-pin",
+    "/api/auth/register",   # ⚠️ SEMENTARA public buat bikin admin pertama
+    "/api/auth/logout",     # logout juga public biar bisa logout walau token expired
 }
 
 # Prefix yang TIDAK butuh API key
