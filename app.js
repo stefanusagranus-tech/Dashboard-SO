@@ -2495,7 +2495,68 @@ async function sendMessage() {
     input.focus();
 }
 
+async function sendMessage() {
+    const input = document.getElementById("chatInput");
+    const sendBtn = document.getElementById("chatSend");
 
+    if (!input || !sendBtn) return;
+
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = "";
+    input.style.height = "auto";
+    sendBtn.disabled = true;
+
+    // ✅ Deteksi intent khusus — SEBELUM kirim ke backend
+    const _msgLower = text.toLowerCase().trim();
+    
+    // 1. Konfirmasi simpan SO
+    if (_msgLower === "simpan so" || _msgLower === "save so" || _msgLower === "simpan") {
+        await confirmSaveSo();
+        sendBtn.disabled = false;
+        return;
+    }
+    
+    // 2. Batal upload SO
+    if (_msgLower === "batal" || _msgLower === "cancel") {
+        if (window._pendingUploadSo) {
+            cancelUploadSo();
+            sendBtn.disabled = false;
+            return;
+        }
+    }
+    
+    // 3. Input SPD via chat (khusus Yui)
+    const _isSpdInput = currentBot === "yui" && (
+        (_msgLower.includes("spd") && (
+            _msgLower.includes("input") || 
+            _msgLower.includes("catat") || 
+            _msgLower.includes("simpan") || 
+            _msgLower.includes("tambah")
+        )) ||
+        (_msgLower.includes("spd") && /\d{3,}/.test(_msgLower.replace(/[.,]/g, "")))
+    );
+    
+    if (_isSpdInput) {
+        // Push user message
+        const userMsg = {
+            role: "user",
+            content: text,
+            timestamp: Date.now(),
+        };
+        chatHistories[currentBot].push(userMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        // Handle SPD
+        await handleSpdChat(text);
+        
+        sendBtn.disabled = false;
+        return;
+    }
+    
 // =========================================================
 // LOADING BUBBLE
 // =========================================================
@@ -3939,6 +4000,92 @@ async function handleSpdChat(text) {
 }
 
 // =========================================================
+// CONFIRM SAVE SPD
+// =========================================================
+async function confirmSaveSpd() {
+    const _pending = window._pendingSpd;
+    
+    if (!_pending) {
+        showToastMini("❌ Gak ada SPD pending", "error");
+        return;
+    }
+    
+    const _key = getApiKey();
+    
+    // Push user message
+    const userMsg = {
+        role: "user",
+        content: `💾 simpan spd`,
+        timestamp: Date.now(),
+    };
+    chatHistories[currentBot].push(userMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    
+    showLoadingBubble();
+    
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-spd`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({
+                tanggal: _pending.tanggal,
+                nominal: _pending.nominal,
+                keterangan: "Input via APK chat",
+            }),
+        });
+        
+        const data = await resp.json();
+        hideLoadingBubble();
+        
+        if (!resp.ok || !data.success) {
+            throw new Error(data.detail || data.message || "Gagal simpan");
+        }
+        
+        const successMsg = {
+            role: "assistant",
+            content: 
+                `✅ **SPD tersimpan!**\n\n` +
+                `- 📅 Tanggal: **${_pending.tanggal}**\n` +
+                `- 💰 SPD: **${formatRupiahFull(_pending.nominal)}**\n` +
+                `- 🎯 Budget SO: **${formatRupiahFull(data.budget_so)}**\n\n` +
+                `Gas input SO-nya Bos 🚀`,
+            timestamp: Date.now(),
+            isSuccess: true,
+        };
+        chatHistories[currentBot].push(successMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        window._pendingSpd = null;
+        
+        showToastMini(`✅ SPD tersimpan`, "success");
+        
+    } catch (err) {
+        hideLoadingBubble();
+        console.error("[SPD Save] Error:", err);
+        
+        const errMsg = {
+            role: "assistant",
+            content: `⚠️ Gagal simpan SPD: ${err.message}`,
+            timestamp: Date.now(),
+            isError: true,
+        };
+        chatHistories[currentBot].push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+// =========================================================
 // HANDLER — Upload SO
 // =========================================================
 function goToUploadSoScreen() {
@@ -4079,6 +4226,262 @@ async function handleUploadSoSave() {
             btnSave.textContent = "💾 Simpan SO";
         }
     }
+}
+
+// =========================================================
+// UPLOAD FILE VIA CHAT YUI
+// =========================================================
+async function handleChatFileUpload(file) {
+    if (!file) return;
+    
+    console.log("[Chat Upload] File:", file.name, file.size);
+    
+    // Cek bot aktif — cuma Yui yang bisa upload SO
+    if (currentBot !== "yui") {
+        showToastMini("❌ Upload file cuma di chat Yui", "error");
+        return;
+    }
+    
+    const _key = getApiKey();
+    
+    // Push ke chat history — pesan user (file indicator)
+    const userMsg = {
+        role: "user",
+        content: `📎 **Upload file:** ${file.name}\n_(sedang diproses...)_`,
+        timestamp: Date.now(),
+        isFile: true,
+    };
+    chatHistories[currentBot].push(userMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    
+    // Show loading bubble
+    showLoadingBubble();
+    
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, {
+            method: "POST",
+            headers: {
+                "X-API-Key": _key,
+                // JANGAN set Content-Type — biar browser auto-set boundary
+            },
+            body: formData,
+        });
+        
+        hideLoadingBubble();
+        
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        
+        const data = await resp.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || "Gagal parse file");
+        }
+        
+        // Simpan data untuk save nanti
+        window._pendingUploadSo = {
+            tanggal: data.tanggal,
+            items: data.items,
+            keterangan: `Upload ${file.name}`,
+            filename: file.name,
+        };
+        
+        // Push respon Yui — preview
+        const _totalRak = data.total_rak || 0;
+        const _totalItem = data.total_items || 0;
+        const _totalNominal = data.total_nominal || 0;
+        const _items = data.items || [];
+        
+        // Preview 5 item pertama
+        let _previewText = "";
+        _items.slice(0, 5).forEach((it, idx) => {
+            const _nom = it.nominal_adjust || 0;
+            const _sign = _nom >= 0 ? "+" : "";
+            _previewText += `${idx + 1}. \`${it.plu || "-"}\` ${(it.nama_produk || "-").substring(0, 30)}\n`;
+            _previewText += `   🏪 ${it.rak_id || "-"} • ${_sign}${formatRupiahFull(_nom)}\n`;
+        });
+        
+        if (_items.length > 5) {
+            _previewText += `   ... +${_items.length - 5} item lainnya\n`;
+        }
+        
+        const _aiContent = 
+            `✅ File **${file.name}** berhasil aku baca!\n\n` +
+            `📊 **Ringkasan:**\n` +
+            `- 📅 Tanggal: **${data.tanggal || "-"}**\n` +
+            `- 🏪 Rak: **${_totalRak} rak**\n` +
+            `- 📦 Total item: **${_totalItem}**\n` +
+            `- 💰 Total: **${formatRupiahFull(_totalNominal)}**\n\n` +
+            `**Preview 5 item pertama:**\n${_previewText}\n` +
+            `Ketik **"simpan so"** buat save ke database.\n` +
+            `Ketik **"batal"** buat buang data ini.`;
+        
+        const aiMsg = {
+            role: "assistant",
+            content: _aiContent,
+            timestamp: Date.now(),
+            isUploadPreview: true,
+        };
+        chatHistories[currentBot].push(aiMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        showToastMini(`✅ ${_totalItem} item siap disimpan`, "success");
+        
+    } catch (err) {
+        hideLoadingBubble();
+        console.error("[Chat Upload] Error:", err);
+        
+        const errMsg = {
+            role: "assistant",
+            content: `⚠️ Gagal upload: ${err.message}\n\nCoba lagi atau cek format file.`,
+            timestamp: Date.now(),
+            isError: true,
+        };
+        chatHistories[currentBot].push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+
+// =========================================================
+// CONFIRM SAVE SO DARI CHAT
+// =========================================================
+async function confirmSaveSo() {
+    const _pending = window._pendingUploadSo;
+    
+    if (!_pending || !_pending.items) {
+        showToastMini("❌ Gak ada data untuk disimpan", "error");
+        return;
+    }
+    
+    const _key = getApiKey();
+    
+    // Push pesan user
+    const userMsg = {
+        role: "user",
+        content: `💾 simpan so`,
+        timestamp: Date.now(),
+    };
+    chatHistories[currentBot].push(userMsg);
+    
+    // Show loading
+    const aiLoadingMsg = {
+        role: "assistant",
+        content: `⏳ Menyimpan ${_pending.items.length} item...`,
+        timestamp: Date.now(),
+        isTemp: true,
+    };
+    chatHistories[currentBot].push(aiLoadingMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-so`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": _key,
+            },
+            body: JSON.stringify({
+                tanggal: _pending.tanggal,
+                items: _pending.items,
+                keterangan: _pending.keterangan,
+            }),
+        });
+        
+        const data = await resp.json();
+        
+        // Hapus pesan loading
+        chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp);
+        
+        if (!resp.ok || !data.success) {
+            throw new Error(data.detail || data.error || "Gagal simpan");
+        }
+        
+        const _saved = data.saved_count || 0;
+        const _total = data.total_nominal || 0;
+        
+        // Push success message
+        const successMsg = {
+            role: "assistant",
+            content: 
+                `🎉 **Beres Bos!**\n\n` +
+                `- ✅ **${_saved} rak** tersimpan\n` +
+                `- 💰 Total: **${formatRupiahFull(_total)}**\n\n` +
+                `Data SO udah masuk ke database. Cek di Top Minus ya! 🚀`,
+            timestamp: Date.now(),
+            isSuccess: true,
+        };
+        chatHistories[currentBot].push(successMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        // Reset pending
+        window._pendingUploadSo = null;
+        
+        showToastMini(`✅ ${_saved} rak tersimpan`, "success");
+        
+    } catch (err) {
+        console.error("[Confirm Save SO] Error:", err);
+        
+        // Hapus pesan loading
+        chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp);
+        
+        const errMsg = {
+            role: "assistant",
+            content: `⚠️ Gagal simpan: ${err.message}`,
+            timestamp: Date.now(),
+            isError: true,
+        };
+        chatHistories[currentBot].push(errMsg);
+        saveChatHistories();
+        renderChatHistory();
+        scrollToBottom();
+        
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
+
+
+// =========================================================
+// CANCEL UPLOAD
+// =========================================================
+function cancelUploadSo() {
+    window._pendingUploadSo = null;
+    
+    const userMsg = {
+        role: "user",
+        content: `❌ batal`,
+        timestamp: Date.now(),
+    };
+    chatHistories[currentBot].push(userMsg);
+    
+    const aiMsg = {
+        role: "assistant",
+        content: `Oke Bos, data dibuang. Upload lagi kalau perlu. 👍`,
+        timestamp: Date.now(),
+    };
+    chatHistories[currentBot].push(aiMsg);
+    saveChatHistories();
+    renderChatHistory();
+    scrollToBottom();
+    
+    showToastMini("❌ Dibatalkan", "error");
 }
 
 // =========================================================
