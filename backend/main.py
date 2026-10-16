@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from routers import kurumi, hana, yui, rei, config
+from routers import kurumi, hana, yui, rei, config, auth
 
 # Import auth middleware
 from middleware.auth import AuthMiddleware
@@ -61,6 +61,7 @@ setup_rate_limit(app)                     # ← BARU
 # =========================================================
 # ROUTERS
 # =========================================================
+app.include_router(auth.router)      # ← TAMBAH INI
 app.include_router(kurumi.router)
 app.include_router(hana.router)
 app.include_router(yui.router)
