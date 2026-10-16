@@ -3251,35 +3251,71 @@ async function handleChatFileUpload(file) {
         const _totalNominal = data.total_nominal || 0;
         const _items = data.items || [];
         
-        let _previewText = "";
-        _items.slice(0, 5).forEach((it, idx) => {
-            const _nom = it.nominal_adjust || 0;
-            const _sign = _nom >= 0 ? "+" : "";
-            _previewText += `${idx + 1}. \`${it.plu || "-"}\` ${(it.nama_produk || "-").substring(0, 30)}\n`;
-            _previewText += `   🏪 ${it.rak_id || "-"} • ${_sign}${formatRupiahFull(_nom)}\n`;
+        // === GROUP BY RAK ===
+        const _grouped = {};
+        _items.forEach(it => {
+            const rak = (it.rak_id || "UNKNOWN").toUpperCase();
+            if (!_grouped[rak]) _grouped[rak] = [];
+            _grouped[rak].push(it);
         });
         
-        if (_items.length > 5) _previewText += `   ... +${_items.length - 5} item\n`;
+        // Sort rak by rak_id
+        const _rakList = Object.keys(_grouped).sort();
         
-        let _aiContent = 
+        // Build preview per rak
+        let _previewText = "";
+        _rakList.forEach((rak, idx) => {
+            const _rakItems = _grouped[rak];
+            const _rakTotal = _rakItems.reduce((sum, it) => sum + (it.nominal_adjust || 0), 0);
+            const _sign = _rakTotal >= 0 ? "+" : "";
+            
+            _previewText += `**${idx + 1}. 🏪 ${rak}** (${_rakItems.length} item) — ${_sign}${formatRupiahFull(_rakTotal)}\n`;
+            
+            // Tampilkan max 3 item pertama per rak
+            _rakItems.slice(0, 3).forEach(it => {
+                const _nom = it.nominal_adjust || 0;
+                const _itemSign = _nom >= 0 ? "+" : "";
+                const _namaShort = (it.nama_produk || "-").substring(0, 25);
+                _previewText += `   • \`${it.plu || "-"}\` ${_namaShort} — ${_itemSign}${formatRupiahFull(_nom)}\n`;
+            });
+            
+            if (_rakItems.length > 3) {
+                _previewText += `   _... +${_rakItems.length - 3} item lainnya_\n`;
+            }
+        });
+        
+        // Build header
+        let _aiContent =
             `✅ File **${file.name}** berhasil dibaca!\n\n` +
             `📊 **Ringkasan:**\n` +
             `- 📅 Tanggal: **${data.tanggal || "❌ belum ada"}**\n` +
             `- 🏪 Rak: **${_totalRak}**\n` +
             `- 📦 Item: **${_totalItem}**\n` +
             `- 💰 Total: **${formatRupiahFull(_totalNominal)}**\n\n` +
-            `**Preview:**\n${_previewText}\n`;
+            `**Detail per Rak:**\n\n${_previewText}\n`;
         
+        // Instructions
         if (!data.tanggal) {
-            _aiContent += `⚠️ **Isi tanggal + PIC:**\n\n`;
-            _aiContent += `📅 \`tanggal 2026-10-14\`\n`;
-            _aiContent += `👤 \`pic ZAKI\` (semua rak)\n`;
-            _aiContent += `👤 \`pic AT1 ZAKI, AU1 PANDU\` (per rak)\n`;
-            _aiContent += `🔗 Gabung: \`tanggal 2026-10-14 pic ZAKI\``;
+            _aiContent += `⚠️ **Langkah selanjutnya:**\n\n`;
+            _aiContent += `**1. Isi tanggal:**\n`;
+            _aiContent += `Ketik: \`tanggal 2026-10-14\`\n\n`;
+            _aiContent += `**2. Isi PIC (pilih salah satu):**\n`;
+            _aiContent += `**a) Semua rak PIC sama:**\n`;
+            _aiContent += `Ketik: \`pic ZAKI\`\n\n`;
+            _aiContent += `**b) Per rak beda PIC:**\n`;
+            _aiContent += `Ketik: \`pic ${_rakList[0]} ZAKI, ${_rakList[1] || _rakList[0]} PANDU\`\n\n`;
+            _aiContent += `**3. Gabung sekaligus (opsional):**\n`;
+            _aiContent += `Ketik: \`tanggal 2026-10-14 pic ZAKI\``;
         } else {
             _aiContent += `⚠️ **Isi PIC:**\n\n`;
-            _aiContent += `👤 \`pic ZAKI\` (semua rak)\n`;
-            _aiContent += `👤 \`pic AT1 ZAKI, AU1 PANDU\``;
+            _aiContent += `**a) Semua rak PIC sama:**\n`;
+            _aiContent += `Ketik: \`pic ZAKI\`\n\n`;
+            _aiContent += `**b) Per rak beda PIC:**\n`;
+            _aiContent += `Ketik: \`pic ${_rakList[0]} ZAKI, ${_rakList[1] || _rakList[0]} PANDU\`\n\n`;
+            _aiContent += `**Rak yang perlu diisi PIC:**\n`;
+            _rakList.forEach((rak, i) => {
+                _aiContent += `${i + 1}. \`${rak}\`\n`;
+            });
         }
         
         const aiMsg = {
