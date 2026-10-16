@@ -4,21 +4,16 @@ Auth Service — Backend Version
 Password hashing, token generation, verification.
 
 Dependencies:
-- passlib[bcrypt] untuk hashing
+- bcrypt (langsung, TANPA passlib — biar nggak konflik versi)
 - secrets untuk token generation
 """
 
 import os
 import secrets
-import hashlib
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-try:
-    from passlib.context import CryptContext
-    PASSLIB_OK = True
-except ImportError:
-    PASSLIB_OK = False
+import bcrypt
 
 
 def _now_jkt():
@@ -31,31 +26,25 @@ def _get_supabase():
 
 
 # =========================================================
-# PASSWORD HASHING
+# PASSWORD HASHING — bcrypt langsung
 # =========================================================
-if PASSLIB_OK:
-    _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-else:
-    _pwd_context = None
-
-
 def hash_password(password: str) -> str:
     """Hash password pakai bcrypt."""
-    if not PASSLIB_OK or not _pwd_context:
-        # Fallback: SHA256 (kurang aman, tapi works)
-        return hashlib.sha256(password.encode()).hexdigest()
-    return _pwd_context.hash(password)
+    if not password:
+        raise ValueError("Password kosong")
+    _salt = bcrypt.gensalt(rounds=12)
+    _hashed = bcrypt.hashpw(password.encode("utf-8"), _salt)
+    return _hashed.decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify password."""
     if not plain or not hashed:
         return False
-    if not PASSLIB_OK or not _pwd_context:
-        return hashlib.sha256(plain.encode()).hexdigest() == hashed
     try:
-        return _pwd_context.verify(plain, hashed)
-    except Exception:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception as e:
+        print(f"[VERIFY_PASSWORD ERROR] {e}")
         return False
 
 
@@ -224,7 +213,12 @@ def get_user_by_username(username: str) -> dict:
         _sb = _get_supabase()
         if _sb is None:
             return None
-        _res = _sb.table("users").select("*").eq("username", username.upper()).execute()
+        _res = (
+            _sb.table("users")
+            .select("*")
+            .eq("username", username.upper())
+            .execute()
+        )
         if _res.data and len(_res.data) > 0:
             return _res.data[0]
         return None
@@ -253,9 +247,12 @@ def list_users() -> list:
         _sb = _get_supabase()
         if _sb is None:
             return []
-        _res = _sb.table("users").select(
-            "id, username, nama_lengkap, role, aktif, last_login, created_at"
-        ).order("username").execute()
+        _res = (
+            _sb.table("users")
+            .select("id, username, nama_lengkap, role, aktif, last_login, created_at")
+            .order("username")
+            .execute()
+        )
         return _res.data if _res.data else []
     except Exception as e:
         print(f"[LIST_USERS ERROR] {e}")

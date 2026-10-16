@@ -2,7 +2,8 @@
 Router Auth — Multi-User Authentication
 =========================================
 Endpoint:
-- POST /api/auth/register       ← Admin bikin user
+- POST /api/auth/setup          ← Bikin admin pertama (public, sekali pakai)
+- POST /api/auth/register       ← Admin bikin user baru
 - POST /api/auth/login          ← Username + Password → temp token
 - POST /api/auth/verify-pin     ← PIN → full access
 - POST /api/auth/logout         ← Revoke token
@@ -99,11 +100,52 @@ def _require_admin(user: dict):
 
 
 # =========================================================
+# SETUP — Bikin admin pertama (public, auto-disable kalau udah ada admin)
+# =========================================================
+@router.post("/setup")
+@limiter.limit("3/hour")
+async def setup_endpoint(request: Request, req: RegisterRequest):
+    """
+    Bikin admin pertama.
+    Otomatis disabled kalau udah ada user role='admin' di DB.
+    """
+    _users = list_users()
+    _has_admin = any(u.get("role") == "admin" for u in _users)
+
+    if _has_admin:
+        raise HTTPException(
+            403,
+            "Setup udah selesai. Admin udah ada. Pakai /register (butuh login admin)."
+        )
+
+    _result = create_user(
+        username=req.username,
+        password=req.password,
+        nama_lengkap=req.nama_lengkap,
+        role="admin",
+        pin=req.pin,
+    )
+
+    if not _result.get("success"):
+        raise HTTPException(400, _result.get("error", "Gagal bikin admin"))
+
+    return {
+        "success": True,
+        "message": "Admin pertama berhasil dibuat. Endpoint /setup sekarang disabled.",
+        "user": _result.get("user"),
+    }
+
+
+# =========================================================
 # REGISTER (admin only)
 # =========================================================
 @router.post("/register")
 @limiter.limit("10/minute")
-async def register_endpoint(request: Request, req: RegisterRequest, authorization: str = Header(None)):
+async def register_endpoint(
+    request: Request,
+    req: RegisterRequest,
+    authorization: str = Header(None),
+):
     """Bikin user baru (admin only)."""
     _user, _ = _get_current_user(authorization)
     _require_admin(_user)
@@ -141,11 +183,9 @@ async def login_endpoint(request: Request, req: LoginRequest):
     if not verify_password(req.password, _user.get("password_hash", "")):
         raise HTTPException(401, "Username atau password salah")
 
-    # Cek user punya PIN
     if not _user.get("pin_hash"):
         raise HTTPException(400, "User belum set PIN. Hubungi admin.")
 
-    # Bikin temp token (belum full access — cuma buat verify PIN)
     _ip = request.client.host if request.client else ""
     _session = create_session(
         user_id=_user.get("id"),
@@ -188,7 +228,6 @@ async def verify_pin_endpoint(request: Request, req: VerifyPinRequest):
     if not verify_pin(req.pin, _user.get("pin_hash", "")):
         raise HTTPException(401, "PIN salah")
 
-    # Update last login
     update_last_login(_uid)
 
     return {
@@ -250,7 +289,11 @@ async def forgot_pin_endpoint(request: Request, req: ForgotPinRequest):
 # =========================================================
 @router.post("/change-pin")
 @limiter.limit("10/minute")
-async def change_pin_endpoint(request: Request, req: ChangePinRequest, authorization: str = Header(None)):
+async def change_pin_endpoint(
+    request: Request,
+    req: ChangePinRequest,
+    authorization: str = Header(None),
+):
     _user, _ = _get_current_user(authorization)
     _full_user = get_user_by_id(_user["id"])
 
@@ -269,7 +312,11 @@ async def change_pin_endpoint(request: Request, req: ChangePinRequest, authoriza
 # =========================================================
 @router.post("/change-password")
 @limiter.limit("10/minute")
-async def change_password_endpoint(request: Request, req: ChangePasswordRequest, authorization: str = Header(None)):
+async def change_password_endpoint(
+    request: Request,
+    req: ChangePasswordRequest,
+    authorization: str = Header(None),
+):
     _user, _ = _get_current_user(authorization)
     _full_user = get_user_by_id(_user["id"])
 
@@ -317,7 +364,10 @@ async def admin_reset_password_endpoint(
     if not _result.get("success"):
         raise HTTPException(500, _result.get("error", "Gagal reset"))
 
-    return {"success": True, "message": f"Password {_target.get('username')} berhasil direset"}
+    return {
+        "success": True,
+        "message": f"Password {_target.get('username')} berhasil direset",
+    }
 
 
 # =========================================================
@@ -342,7 +392,10 @@ async def admin_reset_pin_endpoint(
     if not _result.get("success"):
         raise HTTPException(500, _result.get("error", "Gagal reset"))
 
-    return {"success": True, "message": f"PIN {_target.get('username')} berhasil direset"}
+    return {
+        "success": True,
+        "message": f"PIN {_target.get('username')} berhasil direset",
+    }
 
 
 # =========================================================
@@ -350,7 +403,11 @@ async def admin_reset_pin_endpoint(
 # =========================================================
 @router.post("/users/{user_id}/force-logout")
 @limiter.limit("10/minute")
-async def admin_force_logout_endpoint(request: Request, user_id: int, authorization: str = Header(None)):
+async def admin_force_logout_endpoint(
+    request: Request,
+    user_id: int,
+    authorization: str = Header(None),
+):
     _user, _ = _get_current_user(authorization)
     _require_admin(_user)
 
@@ -367,7 +424,11 @@ async def admin_force_logout_endpoint(request: Request, user_id: int, authorizat
 # =========================================================
 @router.post("/users/{user_id}/delete")
 @limiter.limit("10/minute")
-async def admin_delete_user_endpoint(request: Request, user_id: int, authorization: str = Header(None)):
+async def admin_delete_user_endpoint(
+    request: Request,
+    user_id: int,
+    authorization: str = Header(None),
+):
     _user, _ = _get_current_user(authorization)
     _require_admin(_user)
 
@@ -378,49 +439,12 @@ async def admin_delete_user_endpoint(request: Request, user_id: int, authorizati
     if not _target:
         raise HTTPException(404, "User nggak ditemukan")
 
-    # Soft delete: nonaktifkan + revoke session
     from services.supabase_client import get_supabase
     _sb = get_supabase()
     _sb.table("users").update({"aktif": False}).eq("id", user_id).execute()
     revoke_all_sessions(user_id)
 
-    return {"success": True, "message": f"User {_target.get('username')} dinonaktifkan"}
-    
-    # =========================================================
-# SETUP — Bikin admin pertama (hanya jalan kalau belum ada admin)
-# =========================================================
-@router.post("/setup")
-@limiter.limit("3/hour")
-async def setup_endpoint(request: Request, req: RegisterRequest):
-    """
-    Bikin admin pertama.
-    Otomatis disabled kalau udah ada admin di DB.
-    """
-    from services.auth import list_users
-    
-    _users = list_users()
-    _has_admin = any(u.get("role") == "admin" for u in _users)
-    
-    if _has_admin:
-        raise HTTPException(
-            403,
-            "Setup udah selesai. Admin udah ada. Pakai /register (butuh login admin)."
-        )
-    
-    # Force role = admin
-    _result = create_user(
-        username=req.username,
-        password=req.password,
-        nama_lengkap=req.nama_lengkap,
-        role="admin",     # ← paksa admin
-        pin=req.pin,
-    )
-    
-    if not _result.get("success"):
-        raise HTTPException(400, _result.get("error", "Gagal bikin admin"))
-    
     return {
         "success": True,
-        "message": "Admin pertama berhasil dibuat. Endpoint /setup sekarang disabled.",
-        "user": _result.get("user"),
+        "message": f"User {_target.get('username')} dinonaktifkan",
     }
