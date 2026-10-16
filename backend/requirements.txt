@@ -35,3 +35,4 @@ slowapi>=0.1.9
 # === Utils ===
 python-dateutil>=2.9.0
 pytz>=2024.1
+passlib[bcrypt]>=1.7.4
