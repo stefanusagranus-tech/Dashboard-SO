@@ -228,11 +228,25 @@ async def verify_pin_endpoint(request: Request, req: VerifyPinRequest):
     if not verify_pin(req.pin, _user.get("pin_hash", "")):
         raise HTTPException(401, "PIN salah")
 
+    # ✅ FIX: Revoke temp_token (dari /login)
+    revoke_session(req.temp_token)
+
+    # ✅ FIX: Bikin session BARU (full verified)
+    _ip = request.client.host if request.client else ""
+    _new_session = create_session(
+        user_id=_uid,
+        device_info=_verify.get("session", {}).get("device_info", ""),
+        ip=_ip,
+    )
+
+    if not _new_session.get("success"):
+        raise HTTPException(500, "Gagal bikin session baru")
+
     update_last_login(_uid)
 
     return {
         "success": True,
-        "token": req.temp_token,
+        "token": _new_session.get("token"),   # ← TOKEN BARU!
         "user": {
             "id": _user.get("id"),
             "username": _user.get("username"),
@@ -240,8 +254,6 @@ async def verify_pin_endpoint(request: Request, req: VerifyPinRequest):
             "role": _user.get("role", "operator"),
         },
     }
-
-
 # =========================================================
 # LOGOUT
 # =========================================================
