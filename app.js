@@ -645,6 +645,14 @@ function goToSettingsScreen() {
     updateApiKeyDisplay();
     updateAutoThemeDisplay();
     updateSettingsUserInfo();
+    
+    // Tampilkan menu kelola user cuma buat admin
+    const _user = getUser();
+    const _menuAdmin = document.getElementById("menuKelolaUser");
+    if (_menuAdmin) {
+        _menuAdmin.style.display = (_user && _user.role === "admin") ? "block" : "none";
+    }
+
     showScreen("settingsScreen");
 }
 
@@ -4089,6 +4097,160 @@ setInterval(() => {
         loadMiniDashboard();
     }
 }, 5 * 60 * 1000);
+// =========================================================
+// USER MANAGEMENT (ADMIN)
+// =========================================================
+function goToUserManagementScreen() {
+    // Cek role dulu
+    const _user = getUser();
+    if (!_user || _user.role !== "admin") {
+        showToastMini("❌ Akses ditolak. Khusus Admin.", "error");
+        return;
+    }
+    
+    showScreen("userManagementScreen");
+    loadUsers();
+}
+
+async function loadUsers() {
+    const container = document.getElementById("userListContainer");
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Memuat data user...</p>
+        </div>
+    `;
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users`, {
+            method: "GET",
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.detail || "Gagal load user");
+
+        renderUserList(data.users);
+    } catch (err) {
+        console.error("[UserMgmt] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load data: ${err.message}</p>
+            </div>
+        `;
+    }
+}
+
+function renderUserList(users) {
+    const container = document.getElementById("userListContainer");
+    if (!container) return;
+
+    if (!users || users.length === 0) {
+        container.innerHTML = `<p style="text-align:center; padding: 20px;">Belum ada user.</p>`;
+        return;
+    }
+
+    const html = users.map(u => {
+        const isMe = u.id === getUser().id;
+        const statusClass = u.aktif ? "shift-badge-p7" : "shift-badge-m22";
+        const statusText = u.aktif ? "Aktif" : "Nonaktif";
+        
+        return `
+            <div class="rak-card" style="margin-bottom: 10px;">
+                <div class="rak-card-header">
+                    <span class="rak-card-id">${u.username}</span>
+                    <span class="shift-badge ${statusClass}">${statusText}</span>
+                </div>
+                <div class="rak-card-body">
+                    <div class="rak-card-row">
+                        <span class="rak-card-label">Nama</span>
+                        <span class="rak-card-value">${u.nama_lengkap}</span>
+                    </div>
+                    <div class="rak-card-row">
+                        <span class="rak-card-label">Role</span>
+                        <span class="rak-card-value" style="text-transform: uppercase;">${u.role}</span>
+                    </div>
+                    <div class="rak-card-row">
+                        <span class="rak-card-label">Last Login</span>
+                        <span class="rak-card-value">${u.last_login ? formatTanggalLong(u.last_login.split('T')[0]) : "-"}</span>
+                    </div>
+                    
+                    ${!isMe ? `
+                    <div style="display: flex; gap: 8px; margin-top: 12px;">
+                        <button class="settings-btn" style="padding: 8px; font-size: 12px;" onclick="resetUserPin(${u.id}, '${u.username}')">🔑 Reset PIN</button>
+                        <button class="settings-btn" style="padding: 8px; font-size: 12px;" onclick="resetUserPassword(${u.id}, '${u.username}')">🔒 Reset Pass</button>
+                        <button class="settings-btn settings-btn-danger" style="padding: 8px; font-size: 12px;" onclick="forceLogoutUser(${u.id}, '${u.username}')">🚪 Force Out</button>
+                    </div>
+                    ` : `<p style="font-size: 12px; color: var(--accent-orange); margin-top: 12px; text-align: center;">(Ini akun Anda)</p>`}
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    container.innerHTML = html;
+}
+
+// Action Buttons
+async function resetUserPin(userId, username) {
+    const newPin = prompt(`Masukkan PIN baru untuk ${username} (6 digit):`);
+    if (!newPin || newPin.length !== 6 || !/^\d+$/.test(newPin)) {
+        showToastMini("❌ PIN harus 6 digit angka", "error");
+        return;
+    }
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users/${userId}/reset-pin`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ new_pin: newPin })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Gagal");
+        showToastMini(`✅ PIN ${username} direset`, "success");
+    } catch (err) {
+        showToastMini(`❌ ${err.message}`, "error");
+    }
+}
+
+async function resetUserPassword(userId, username) {
+    const newPass = prompt(`Masukkan Password baru untuk ${username} (min 6 char):`);
+    if (!newPass || newPass.length < 6) {
+        showToastMini("❌ Password minimal 6 karakter", "error");
+        return;
+    }
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users/${userId}/reset-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ new_password: newPass })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Gagal");
+        showToastMini(`✅ Password ${username} direset`, "success");
+    } catch (err) {
+        showToastMini(`❌ ${err.message}`, "error");
+    }
+}
+
+async function forceLogoutUser(userId, username) {
+    if (!confirm(`Tendang ${username} dari semua device?`)) return;
+    
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users/${userId}/force-logout`, {
+            method: "POST"
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Gagal");
+        showToastMini(`✅ ${username} ditendang`, "success");
+    } catch (err) {
+        showToastMini(`❌ ${err.message}`, "error");
+    }
+}
 
 // =========================================================
 // BOOT

@@ -941,6 +941,13 @@
         <button class="sidebar-item" onclick="clearCurrentChat()">
             <span>🗑️</span> <span>Hapus Chat Bot Ini</span>
         </button>
+        <!-- Cuma muncul kalau admin -->
+        <div class="settings-group" id="menuKelolaUser" style="display: none;">
+            <div class="settings-group-title">👥 Manajemen</div>
+            <button class="settings-btn" onclick="goToUserManagementScreen()">
+                👥 Kelola User
+            </button>
+        </div>
         <button class="sidebar-item sidebar-item-danger" onclick="logout()">
             <span>🚪</span> <span>Logout</span>
         </button>
@@ -1042,7 +1049,25 @@
         </div>
     </div>
 </div>
+<!-- ========================================================= -->
+<!-- USER MANAGEMENT SCREEN (ADMIN ONLY) -->
+<!-- ========================================================= -->
+<div id="userManagementScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToSettingsScreen()">←</button>
+        <div class="screen-title">Kelola User</div>
+        <button class="screen-header-action" onclick="openAddUserModal()" title="Tambah User">➕</button>
+    </div>
 
+    <div class="settings-content">
+        <div id="userListContainer" class="rak-list">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Memuat data user...</p>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- ========================================================= -->
 <!-- STREAMLIT SCREEN — External Browser Only -->
 <!-- ========================================================= -->
