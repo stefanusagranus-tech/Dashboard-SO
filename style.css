@@ -4606,5 +4606,132 @@ html, body {
 }
 
 /* =========================================================
+   LOGIN FORM — Username + Password (v3.0)
+   ========================================================= */
+.login-input-group {
+    text-align: left;
+    margin-bottom: 14px;
+}
+
+.login-input-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.login-input {
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.login-input:focus {
+    border-color: var(--accent-orange);
+    box-shadow: 0 0 16px rgba(255, 140, 66, 0.3);
+}
+
+.login-input::placeholder {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.login-btn-submit {
+    width: 100%;
+    padding: 16px 24px;
+    margin-top: 8px;
+    background: linear-gradient(135deg, var(--accent-orange), var(--accent-pumpkin));
+    border: none;
+    border-radius: var(--radius-md);
+    color: #fff;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 0 24px rgba(255, 140, 66, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.login-btn-submit:active {
+    transform: scale(0.97);
+}
+
+.login-btn-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.login-error {
+    font-size: 13px;
+    color: var(--danger);
+    margin-top: 12px;
+    min-height: 18px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.login-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 16px;
+    font-style: italic;
+    text-align: center;
+}
+
+.pin-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.pin-back-btn {
+    margin-top: 20px;
+    padding: 10px 16px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pin-back-btn:active {
+    border-color: var(--accent-orange);
+    color: var(--accent-orange);
+}
+
+.btn-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+}
+
+/* =========================================================
    END OF STYLE v2.1
    ========================================================= */

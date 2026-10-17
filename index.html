@@ -41,7 +41,7 @@
 </div>
 
 <!-- ========================================================= -->
-<!-- LOGIN SCREEN -->
+<!-- LOGIN SCREEN — Username + Password (v3.0) -->
 <!-- ========================================================= -->
 <div id="loginScreen" class="screen">
     <div class="bat bat-1">🦇</div>
@@ -53,32 +53,73 @@
         <h1 class="login-title">Dashboard SO C383</h1>
         <p class="login-subtitle">Stock Opname Assistant</p>
 
-        <div class="pin-display">
-            <span class="pin-dot" data-index="0"></span>
-            <span class="pin-dot" data-index="1"></span>
-            <span class="pin-dot" data-index="2"></span>
-            <span class="pin-dot" data-index="3"></span>
-            <span class="pin-dot" data-index="4"></span>
-            <span class="pin-dot" data-index="5"></span>
+        <!-- VIEW 1: FORM LOGIN -->
+        <div id="loginFormView">
+            <div class="login-input-group">
+                <label class="login-input-label">👤 Username</label>
+                <input
+                    type="text"
+                    id="loginUsername"
+                    class="login-input"
+                    placeholder="ADMIN"
+                    autocomplete="username"
+                    autocapitalize="characters"
+                    spellcheck="false"
+                >
+            </div>
+
+            <div class="login-input-group">
+                <label class="login-input-label">🔒 Password</label>
+                <input
+                    type="password"
+                    id="loginPassword"
+                    class="login-input"
+                    placeholder="••••••••"
+                    autocomplete="current-password"
+                >
+            </div>
+
+            <button id="loginBtnSubmit" class="login-btn-submit">
+                🔓 MASUK
+            </button>
+
+            <p id="loginError" class="login-error"></p>
+            <p class="login-hint">Login pakai akun yang terdaftar di sistem</p>
         </div>
 
-        <div class="pin-keypad">
-            <button class="pin-key" data-num="1">1</button>
-            <button class="pin-key" data-num="2">2</button>
-            <button class="pin-key" data-num="3">3</button>
-            <button class="pin-key" data-num="4">4</button>
-            <button class="pin-key" data-num="5">5</button>
-            <button class="pin-key" data-num="6">6</button>
-            <button class="pin-key" data-num="7">7</button>
-            <button class="pin-key" data-num="8">8</button>
-            <button class="pin-key" data-num="9">9</button>
-            <button class="pin-key pin-key-empty"></button>
-            <button class="pin-key" data-num="0">0</button>
-            <button class="pin-key pin-key-back" data-action="back">←</button>
-        </div>
+        <!-- VIEW 2: PIN 2FA -->
+        <div id="pinFormView" class="hidden">
+            <p class="pin-title">🔐 Verifikasi PIN</p>
 
-        <p class="pin-hint">Default PIN: 123456</p>
-        <p id="pinError" class="pin-error"></p>
+            <div class="pin-display">
+                <span class="pin-dot" data-index="0"></span>
+                <span class="pin-dot" data-index="1"></span>
+                <span class="pin-dot" data-index="2"></span>
+                <span class="pin-dot" data-index="3"></span>
+                <span class="pin-dot" data-index="4"></span>
+                <span class="pin-dot" data-index="5"></span>
+            </div>
+
+            <div class="pin-keypad">
+                <button class="pin-key" data-num="1">1</button>
+                <button class="pin-key" data-num="2">2</button>
+                <button class="pin-key" data-num="3">3</button>
+                <button class="pin-key" data-num="4">4</button>
+                <button class="pin-key" data-num="5">5</button>
+                <button class="pin-key" data-num="6">6</button>
+                <button class="pin-key" data-num="7">7</button>
+                <button class="pin-key" data-num="8">8</button>
+                <button class="pin-key" data-num="9">9</button>
+                <button class="pin-key pin-key-empty"></button>
+                <button class="pin-key" data-num="0">0</button>
+                <button class="pin-key pin-key-back" data-action="back">←</button>
+            </div>
+
+            <p class="pin-hint"></p>
+            <p id="pinError" class="pin-error"></p>
+
+            <button class="pin-back-btn" onclick="backToLogin()">← Kembali ke Login</button>
+        </div>
     </div>
 </div>
 
@@ -926,8 +967,25 @@
         </div>
 
         <div class="settings-group">
-            <div class="settings-group-title">🔐 PIN</div>
-            <button class="settings-btn" onclick="changePin()">Ganti PIN</button>
+            <div class="settings-group-title">👤 Akun</div>
+            <div class="settings-item">
+                <div class="settings-label">Username</div>
+                <div class="settings-item-value" id="settingsUsername">-</div>
+            </div>
+            <div class="settings-item">
+                <div class="settings-label">Nama Lengkap</div>
+                <div class="settings-item-value" id="settingsNamaLengkap">-</div>
+            </div>
+            <div class="settings-item">
+                <div class="settings-label">Role</div>
+                <div class="settings-item-value" id="settingsRole">-</div>
+            </div>
+        </div>
+        
+        <div class="settings-group">
+            <div class="settings-group-title">🔐 Keamanan</div>
+            <button class="settings-btn" onclick="changePin()">🔑 Ganti PIN</button>
+            <button class="settings-btn" onclick="changePassword()" style="margin-top: 8px;">🔒 Ganti Password</button>
         </div>
 
         <div class="settings-group">

@@ -1,6 +1,6 @@
 /* =========================================================
-   DASHBOARD SO C383 — APP LOGIC v2.0
-   Sprint 2: Upload SO + Konfirmasi + SPD Custom Date
+   DASHBOARD SO C383 — APP LOGIC v3.0
+   Sprint 3 PART 3: Login + PIN 2FA + Token Management
    ========================================================= */
 
 // =========================================================
@@ -9,8 +9,7 @@
 const CONFIG = {
     BACKEND_URL: "https://dashboard-so.fastapicloud.dev",
     STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
-    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkV",
-    DEFAULT_PIN: "123456",
+    API_KEY: "so_c383_GOfNKuPRfhhdXnrGTYGBYnr5zV5kzFRkV",
     APP_VERSION: "1.0.0",
     TARGET_SO_PERSEN: 70,
 };
@@ -23,9 +22,21 @@ const BOTS = {
 };
 
 // =========================================================
+// AUTH STORAGE KEYS
+// =========================================================
+const AUTH_KEYS = {
+    TOKEN: "so_auth_token",
+    USER: "so_auth_user",
+    TEMP_TOKEN: "so_temp_token",
+    USERNAME: "so_temp_username",
+};
+
+// =========================================================
 // STATE
 // =========================================================
 let pinInput = "";
+let loginUsername = "";
+let loginPassword = "";
 let currentBot = "yui";
 let chatHistories = {};
 let clockInterval = null;
@@ -73,6 +84,79 @@ let currentConfirmData = null;
 const IDLE_TIMEOUT = 5 * 60 * 1000;
 
 // =========================================================
+// AUTH HELPERS
+// =========================================================
+function getApiKey() {
+    return localStorage.getItem("so_api_key") || CONFIG.API_KEY;
+}
+
+function getToken() {
+    return localStorage.getItem(AUTH_KEYS.TOKEN) || "";
+}
+
+function getUser() {
+    try {
+        const raw = localStorage.getItem(AUTH_KEYS.USER);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function setAuth(token, user) {
+    if (token) localStorage.setItem(AUTH_KEYS.TOKEN, token);
+    if (user) localStorage.setItem(AUTH_KEYS.USER, JSON.stringify(user));
+    localStorage.setItem("so_login_timestamp", Date.now().toString());
+}
+
+function clearAuth() {
+    localStorage.removeItem(AUTH_KEYS.TOKEN);
+    localStorage.removeItem(AUTH_KEYS.USER);
+    localStorage.removeItem(AUTH_KEYS.TEMP_TOKEN);
+    localStorage.removeItem(AUTH_KEYS.USERNAME);
+    localStorage.removeItem("so_logged_in");
+    localStorage.removeItem("so_login_timestamp");
+}
+
+function isLoggedIn() {
+    return !!getToken() && !!getUser();
+}
+
+// =========================================================
+// FETCH WRAPPER — Auto-attach X-API-Key + Bearer token
+// =========================================================
+async function apiFetch(url, options = {}) {
+    const headers = {
+        "X-API-Key": getApiKey(),
+        ...(options.headers || {}),
+    };
+    const _token = getToken();
+    if (_token) {
+        headers["Authorization"] = `Bearer ${_token}`;
+    }
+    const _opts = { ...options, headers };
+
+    const _resp = await fetch(url, _opts);
+
+    // Auto-logout kalau 401 (token expired/revoked)
+    if (_resp.status === 401) {
+        const _clone = _resp.clone();
+        try {
+            const _err = await _clone.json();
+            // Khusus: kalau bukan karena API key, berarti token problem
+            if (!_err.message || !_err.message.includes("API key")) {
+                console.warn("[Auth] 401 — auto logout");
+                clearAuth();
+                showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
+                setTimeout(() => showScreen("loginScreen"), 800);
+            }
+        } catch (e) {}
+    }
+
+    return _resp;
+}
+
+// =========================================================
 // INIT
 // =========================================================
 async function initApp() {
@@ -87,34 +171,18 @@ async function initApp() {
     updateApiKeyDisplay();
     updateAutoThemeDisplay();
 
-    const savedPin = localStorage.getItem("so_pin");
-    if (savedPin) {
-        const hint = document.querySelector(".pin-hint");
-        if (hint) hint.textContent = "";
-    }
-
-    console.log("[App] Binding PIN keypad...");
+    bindLoginForm();
     bindPinKeypad();
     bindChatInput();
-    console.log("[App] Binding done");
 
     setTimeout(() => checkForUpdate(false), 3000);
 
-    const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
-    const lastLoginTime = parseInt(localStorage.getItem("so_login_timestamp") || "0");
-    const SESSION_DURATION = 30 * 60 * 1000;
-    const isSessionValid = (Date.now() - lastLoginTime) < SESSION_DURATION;
-
-    if (isLoggedIn && isSessionValid) {
-        console.log("[Auth] Session valid — auto-login");
+    if (isLoggedIn()) {
+        console.log("[Auth] Token found — auto-login");
         resetIdleTimer();
         await loadDashboardWithLoading();
     } else {
         console.log("[Auth] Need login");
-        if (isLoggedIn && !isSessionValid) {
-            localStorage.removeItem("so_logged_in");
-            localStorage.removeItem("so_login_timestamp");
-        }
         await hideSplashScreen();
         showScreen("loginScreen");
     }
@@ -143,7 +211,7 @@ function showSplashScreen() {
         ];
 
         const startTime = Date.now();
-        const MIN_DURATION = 1500;
+        const MIN_DURATION = 1200;
         let i = 0;
 
         const interval = setInterval(() => {
@@ -158,7 +226,7 @@ function showSplashScreen() {
                 const remaining = Math.max(0, MIN_DURATION - elapsed);
                 setTimeout(resolve, remaining);
             }
-        }, 350);
+        }, 300);
     });
 }
 
@@ -172,6 +240,277 @@ function hideSplashScreen() {
             resolve();
         }, 400);
     });
+}
+
+// =========================================================
+// LOGIN FORM (username + password)
+// =========================================================
+function bindLoginForm() {
+    const btnSubmit = document.getElementById("loginBtnSubmit");
+    const inputUser = document.getElementById("loginUsername");
+    const inputPass = document.getElementById("loginPassword");
+
+    if (inputUser) {
+        inputUser.addEventListener("input", () => {
+            loginUsername = inputUser.value.trim();
+        });
+        inputUser.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                inputPass && inputPass.focus();
+            }
+        });
+    }
+
+    if (inputPass) {
+        inputPass.addEventListener("input", () => {
+            loginPassword = inputPass.value;
+        });
+        inputPass.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                doLogin();
+            }
+        });
+    }
+
+    if (btnSubmit) {
+        btnSubmit.addEventListener("click", doLogin);
+    }
+}
+
+async function doLogin() {
+    const inputUser = document.getElementById("loginUsername");
+    const inputPass = document.getElementById("loginPassword");
+    const btnSubmit = document.getElementById("loginBtnSubmit");
+    const errEl = document.getElementById("loginError");
+
+    const _username = (inputUser ? inputUser.value : "").trim().toUpperCase();
+    const _password = (inputPass ? inputPass.value : "").trim();
+
+    if (errEl) errEl.textContent = "";
+
+    if (!_username || !_password) {
+        if (errEl) errEl.textContent = "❌ Username & password wajib diisi";
+        return;
+    }
+
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<span class="btn-spinner"></span> Memproses...';
+    }
+
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/auth/login`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": getApiKey(),
+            },
+            body: JSON.stringify({
+                username: _username,
+                password: _password,
+                device_info: "WebView APK",
+            }),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.success) {
+            throw new Error(data.detail || "Username atau password salah");
+        }
+
+        // Simpan temp_token + user
+        localStorage.setItem(AUTH_KEYS.TEMP_TOKEN, data.temp_token);
+        localStorage.setItem(AUTH_KEYS.USERNAME, _username);
+
+        // Pindah ke PIN screen
+        pinInput = "";
+        updatePinDisplay();
+        const pinError = document.getElementById("pinError");
+        if (pinError) pinError.textContent = "";
+        const pinHint = document.querySelector(".pin-hint");
+        if (pinHint) pinHint.textContent = `Login sebagai: ${_username}`;
+
+        showScreen("loginScreen");
+        // Toggle view login vs pin
+        showLoginView(false);
+
+        if (inputPass) inputPass.value = "";
+        loginPassword = "";
+
+    } catch (err) {
+        console.error("[Login] Error:", err);
+        if (errEl) errEl.textContent = `❌ ${err.message}`;
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = "🔓 MASUK";
+        }
+    }
+}
+
+function showLoginView(showLogin) {
+    const viewLogin = document.getElementById("loginFormView");
+    const viewPin = document.getElementById("pinFormView");
+    if (viewLogin) {
+        if (showLogin) viewLogin.classList.remove("hidden");
+        else viewLogin.classList.add("hidden");
+    }
+    if (viewPin) {
+        if (showLogin) viewPin.classList.add("hidden");
+        else viewPin.classList.remove("hidden");
+    }
+}
+
+function backToLogin() {
+    localStorage.removeItem(AUTH_KEYS.TEMP_TOKEN);
+    localStorage.removeItem(AUTH_KEYS.USERNAME);
+    pinInput = "";
+    updatePinDisplay();
+    showLoginView(true);
+}
+
+// =========================================================
+// PIN LOGIN (2FA)
+// =========================================================
+function bindPinKeypad() {
+    document.querySelectorAll(".pin-key").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const num = btn.getAttribute("data-num");
+            const action = btn.getAttribute("data-action");
+
+            if (action === "back") {
+                pinInput = pinInput.slice(0, -1);
+            } else if (num && pinInput.length < 6) {
+                pinInput += num;
+            }
+
+            updatePinDisplay();
+            checkPinComplete();
+        });
+    });
+}
+
+function updatePinDisplay() {
+    document.querySelectorAll(".pin-dot").forEach((dot, idx) => {
+        dot.classList.toggle("filled", idx < pinInput.length);
+    });
+}
+
+function checkPinComplete() {
+    const pinError = document.getElementById("pinError");
+    if (pinError) pinError.textContent = "";
+
+    if (pinInput.length === 6) {
+        setTimeout(verifyPin, 200);
+    }
+}
+
+async function verifyPin() {
+    const _tempToken = localStorage.getItem(AUTH_KEYS.TEMP_TOKEN);
+    const _username = localStorage.getItem(AUTH_KEYS.USERNAME) || "ADMIN";
+
+    if (!_tempToken) {
+        const pinError = document.getElementById("pinError");
+        if (pinError) pinError.textContent = "❌ Session login hilang, ulangi login";
+        pinInput = "";
+        updatePinDisplay();
+        return;
+    }
+
+    try {
+        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/auth/verify-pin`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": getApiKey(),
+            },
+            body: JSON.stringify({
+                temp_token: _tempToken,
+                pin: pinInput,
+            }),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || !data.success) {
+            throw new Error(data.detail || "PIN salah");
+        }
+
+        // Simpan full token + user
+        setAuth(data.token, data.user);
+        localStorage.setItem("so_logged_in", "true");
+        localStorage.removeItem(AUTH_KEYS.TEMP_TOKEN);
+        localStorage.removeItem(AUTH_KEYS.USERNAME);
+
+        pinInput = "";
+        updatePinDisplay();
+
+        resetIdleTimer();
+        await loadDashboardWithLoading();
+
+    } catch (err) {
+        console.error("[VerifyPIN] Error:", err);
+        const pinError = document.getElementById("pinError");
+        if (pinError) pinError.textContent = `❌ ${err.message}`;
+        pinInput = "";
+        updatePinDisplay();
+        if (navigator.vibrate) navigator.vibrate(200);
+    }
+}
+
+// =========================================================
+// LOGOUT
+// =========================================================
+function logout() {
+    const modal = document.getElementById("exitModal");
+    if (modal) modal.classList.add("active");
+    exitModalShown = true;
+}
+
+function closeExitModal() {
+    exitModalShown = false;
+    const modal = document.getElementById("exitModal");
+    if (modal) modal.classList.remove("active");
+    pushBackGuard();
+}
+
+async function confirmLogout() {
+    const modal = document.getElementById("exitModal");
+    if (modal) modal.classList.remove("active");
+
+    // Call backend logout (best-effort)
+    try {
+        const _token = getToken();
+        if (_token) {
+            await fetch(`${CONFIG.BACKEND_URL}/api/auth/logout`, {
+                method: "POST",
+                headers: {
+                    "X-API-Key": getApiKey(),
+                    "Authorization": `Bearer ${_token}`,
+                },
+            });
+        }
+    } catch (e) {
+        console.warn("[Logout] Backend call failed:", e);
+    }
+
+    clearAuth();
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    exitModalShown = false;
+    pinInput = "";
+    updatePinDisplay();
+
+    if (clockInterval) clearInterval(clockInterval);
+    stopDashboardAutoRefresh();
+
+    showToastMini("👋 Logout berhasil!", "success");
+    setTimeout(() => {
+        showLoginView(true);
+        showScreen("loginScreen");
+        pushBackGuard();
+    }, 300);
 }
 
 // =========================================================
@@ -256,7 +595,7 @@ async function updateLoadingStep(stepId, status, msg) {
     }
 }
 
-// =========================================================
+ =========================================================
 // SCREEN NAVIGATION
 // =========================================================
 function showScreen(screenId) {
@@ -284,6 +623,7 @@ function goToSettingsScreen() {
     closeSidebar();
     updateApiKeyDisplay();
     updateAutoThemeDisplay();
+    updateSettingsUserInfo();
     showScreen("settingsScreen");
 }
 
@@ -359,8 +699,20 @@ function updateClock() {
     else if (hour >= 11 && hour < 15) { greeting = "Selamat Siang"; emoji = "☀️"; }
     else if (hour >= 15 && hour < 18) { greeting = "Selamat Sore"; emoji = "🌆"; }
 
+    const _user = getUser();
+    const _name = _user ? (_user.nama_lengkap || _user.username || "Bos") : "Bos";
     const clockGreeting = document.getElementById("clockGreeting");
-    if (clockGreeting) clockGreeting.textContent = `${greeting}, Bos! ${emoji}`;
+    if (clockGreeting) clockGreeting.textContent = `${greeting}, ${_name}! ${emoji}`;
+}
+
+function updateSettingsUserInfo() {
+    const _user = getUser();
+    const elUser = document.getElementById("settingsUsername");
+    const elName = document.getElementById("settingsNamaLengkap");
+    const elRole = document.getElementById("settingsRole");
+    if (elUser) elUser.textContent = _user ? _user.username : "-";
+    if (elName) elName.textContent = _user ? (_user.nama_lengkap || "-") : "-";
+    if (elRole) elRole.textContent = _user ? (_user.role || "-").toUpperCase() : "-";
 }
 
 // =========================================================
@@ -409,15 +761,11 @@ async function loadMiniDashboard() {
     const runningTextContainer = document.getElementById("runningTextContainer");
 
     const _url = `${CONFIG.BACKEND_URL}/api/yui/rekap`;
-    const _key = getApiKey();
 
     try {
-        const resp = await fetch(_url, {
+        const resp = await apiFetch(_url, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ mode: "bulan_ini" }),
         });
 
@@ -472,9 +820,8 @@ async function loadMiniDashboard() {
             runningParts.push(`📊 Status: <b>${statusEmoji} ${statusText}</b> (${statusPersen.toFixed(2)}%)`);
 
             try {
-                const shiftResp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/shift-hari-ini`, {
+                const shiftResp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/shift-hari-ini`, {
                     method: "GET",
-                    headers: { "X-API-Key": _key },
                 });
                 if (shiftResp.ok) {
                     const shiftData = await shiftResp.json();
@@ -645,80 +992,6 @@ function getWelcomeText(botId) {
             return "";
     }
 }
-
-// =========================================================
-// PIN LOGIN
-// =========================================================
-function bindPinKeypad() {
-    document.querySelectorAll(".pin-key").forEach(btn => {
-        btn.addEventListener("click", () => {
-            const num = btn.getAttribute("data-num");
-            const action = btn.getAttribute("data-action");
-
-            if (action === "back") {
-                pinInput = pinInput.slice(0, -1);
-            } else if (num && pinInput.length < 6) {
-                pinInput += num;
-            }
-
-            updatePinDisplay();
-            checkPinComplete();
-        });
-    });
-}
-
-function updatePinDisplay() {
-    document.querySelectorAll(".pin-dot").forEach((dot, idx) => {
-        dot.classList.toggle("filled", idx < pinInput.length);
-    });
-}
-
-function checkPinComplete() {
-    const pinError = document.getElementById("pinError");
-    if (pinError) pinError.textContent = "";
-
-    if (pinInput.length === 6) {
-        setTimeout(() => {
-            const validPin = localStorage.getItem("so_pin") || CONFIG.DEFAULT_PIN;
-
-            if (pinInput === validPin) {
-                pinInput = "";
-                updatePinDisplay();
-                
-                localStorage.setItem("so_logged_in", "true");
-                localStorage.setItem("so_login_timestamp", Date.now().toString());
-                
-                resetIdleTimer();
-                
-                (async () => {
-                    await loadDashboardWithLoading();
-                })();
-            } else {
-                if (pinError) pinError.textContent = "❌ PIN salah, coba lagi";
-                pinInput = "";
-                updatePinDisplay();
-                if (navigator.vibrate) navigator.vibrate(200);
-            }
-        }, 200);
-    }
-}
-
-// =========================================================
-// LOGOUT
-// =========================================================
-function logout() {
-    if (!confirm("Yakin mau logout?")) return;
-    localStorage.removeItem("so_logged_in");
-    localStorage.removeItem("so_login_timestamp");
-    pinInput = "";
-    updatePinDisplay();
-    closeSidebar();
-    stopDashboardAutoRefresh();
-    if (clockInterval) clearInterval(clockInterval);
-    if (idleTimer) clearTimeout(idleTimer);
-    showScreen("loginScreen");
-}
-
 // =========================================================
 // THEME
 // =========================================================
@@ -841,10 +1114,6 @@ function updateApiKeyDisplay() {
     el.textContent = masked;
 }
 
-function getApiKey() {
-    return localStorage.getItem("so_api_key") || CONFIG.API_KEY;
-}
-
 function changeApiKey() {
     const current = getApiKey();
     const newKey = prompt("Masukkan API Key baru:", current);
@@ -857,7 +1126,9 @@ function changeApiKey() {
 // =========================================================
 // PIN MANAGEMENT
 // =========================================================
-function changePin() {
+async function changePin() {
+    const oldPin = prompt("Masukkan PIN lama:");
+    if (!oldPin) return;
     const newPin = prompt("Masukkan PIN baru (6 digit):");
     if (!newPin || newPin.length !== 6 || !/^\d+$/.test(newPin)) {
         showToastMini("❌ PIN harus 6 digit angka", "error");
@@ -868,8 +1139,47 @@ function changePin() {
         showToastMini("❌ PIN tidak sama", "error");
         return;
     }
-    localStorage.setItem("so_pin", newPin);
-    showToastMini("✅ PIN berhasil diubah", "success");
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/change-pin`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ old_pin: oldPin, new_pin: newPin }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.detail || "Gagal");
+        showToastMini("✅ PIN berhasil diubah", "success");
+    } catch (err) {
+        showToastMini(`❌ ${err.message}`, "error");
+    }
+}
+
+async function changePassword() {
+    const oldPass = prompt("Masukkan password lama:");
+    if (!oldPass) return;
+    const newPass = prompt("Masukkan password baru (min 6 karakter):");
+    if (!newPass || newPass.length < 6) {
+        showToastMini("❌ Password minimal 6 karakter", "error");
+        return;
+    }
+    const confirmPass = prompt("Konfirmasi password baru:");
+    if (newPass !== confirmPass) {
+        showToastMini("❌ Password tidak sama", "error");
+        return;
+    }
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/change-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ old_password: oldPass, new_password: newPass }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.detail || "Gagal");
+        showToastMini("✅ Password berhasil diubah", "success");
+    } catch (err) {
+        showToastMini(`❌ ${err.message}`, "error");
+    }
 }
 
 // =========================================================
@@ -945,13 +1255,9 @@ function formatTanggalShort(dateStr) {
 async function loadPersonilList() {
     const filterSelect = document.getElementById("personilFilter");
     const personilList = document.getElementById("personilList");
-    const _key = getApiKey();
 
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, {
-            method: "GET",
-            headers: { "X-API-Key": _key },
-        });
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, { method: "GET" });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         personilData = data.data || [];
@@ -1017,7 +1323,6 @@ function renderPersonilList() {
 async function loadMasterShift() {
     const container = document.getElementById("shiftList");
     const summary = document.getElementById("shiftSummary");
-    const _key = getApiKey();
 
     if (!container) return;
 
@@ -1039,12 +1344,9 @@ async function loadMasterShift() {
         const body = { tgl_start: startStr, tgl_end: endStr };
         if (namaFilter) body.nama_filter = namaFilter;
 
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
 
@@ -1159,7 +1461,6 @@ function renderShiftSummary(data) {
         </div>
     `;
 }
-
 // =========================================================
 // MODAL PERSONIL
 // =========================================================
@@ -1184,14 +1485,10 @@ async function addNewPersonil() {
         showToastMini("❌ Nama minimal 2 karakter", "error");
         return;
     }
-    const _key = getApiKey();
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/add`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil/add`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ nama: nama }),
         });
         const data = await resp.json();
@@ -1252,15 +1549,11 @@ function closeDeleteModal() {
 async function deletePersonilExecute(nama) {
     const checkbox = document.getElementById("forceDeleteCheck");
     const force = checkbox ? checkbox.checked : false;
-    const _key = getApiKey();
     closeDeleteModal();
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil/delete`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil/delete`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ nama: nama, force: force }),
         });
         const data = await resp.json();
@@ -1289,13 +1582,9 @@ async function loadRakList() {
     `;
 
     try {
-        const _key = getApiKey();
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ mode: "bulan_ini" }),
         });
 
@@ -1501,7 +1790,6 @@ async function loadSpdList() {
     `;
 
     try {
-        const _key = getApiKey();
         const range = getSpdDateRange();
         const startStr = range.start.toISOString().slice(0, 10);
         const endStr = range.end.toISOString().slice(0, 10);
@@ -1512,12 +1800,9 @@ async function loadSpdList() {
             body.tgl_end = endStr;
         }
 
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/spd-list`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/spd-list`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
 
@@ -1635,7 +1920,6 @@ function renderSpdList() {
 
     container.innerHTML = html;
 }
-
 // =========================================================
 // TOP MINUS
 // =========================================================
@@ -1744,7 +2028,6 @@ async function loadTopMinus() {
     }
 
     try {
-        const _key = getApiKey();
         const range = getTopDateRange();
         const startStr = range.start.toISOString().slice(0, 10);
         const endStr = range.end.toISOString().slice(0, 10);
@@ -1767,12 +2050,9 @@ async function loadTopMinus() {
             body.sign = topSignCurrent;
         }
 
-        const resp = await fetch(url, {
+        const resp = await apiFetch(url, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
 
@@ -1955,7 +2235,6 @@ function clearTopSearch() {
     if (clearBtn) clearBtn.classList.add("hidden");
     loadTopMinus();
 }
-
 // =========================================================
 // RAK DETAIL
 // =========================================================
@@ -1994,13 +2273,9 @@ async function loadRakDetail(rakId) {
     `;
 
     try {
-        const _key = getApiKey();
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/items-by-rak/${encodeURIComponent(rakId)}`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/items-by-rak/${encodeURIComponent(rakId)}`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ mode: "bulan_ini" }),
         });
 
@@ -2180,7 +2455,6 @@ function getStatusDateRange() {
 
 async function loadStatusAnalysis() {
     try {
-        const _key = getApiKey();
         const range = getStatusDateRange();
         const startStr = range.start.toISOString().slice(0, 10);
         const endStr = range.end.toISOString().slice(0, 10);
@@ -2191,12 +2465,9 @@ async function loadStatusAnalysis() {
             body.tgl_end = endStr;
         }
 
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
 
@@ -2451,16 +2722,12 @@ async function handleConfirmSave(idx) {
         btnSave.innerHTML = '<span class="btn-spinner"></span> Menyimpan...';
     }
 
-    const _key = getApiKey();
     const data = msg.confirmData;
 
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 tanggal: data.tanggal,
                 items: data.items.map(it => ({
@@ -2649,7 +2916,6 @@ async function sendMessage() {
     }
 
     const _isSpdInput = currentBot === "yui" && (
-        // Keyword: spd ATAU sales
         (_msgLower.includes("spd") || _msgLower.includes("sales")) && (
             _msgLower.includes("input") ||
             _msgLower.includes("catat") ||
@@ -2660,26 +2926,17 @@ async function sendMessage() {
     );
 
     if (_isSpdInput) {
-        const userMsg = {
-            role: "user",
-            content: text,
-            timestamp: Date.now(),
-        };
+        const userMsg = { role: "user", content: text, timestamp: Date.now() };
         chatHistories[currentBot].push(userMsg);
         saveChatHistories();
         renderChatHistory();
         scrollToBottom();
-        
         await handleSpdChat(text);
         sendBtn.disabled = false;
         return;
     }
 
-    const userMsg = {
-        role: "user",
-        content: text,
-        timestamp: Date.now(),
-    };
+    const userMsg = { role: "user", content: text, timestamp: Date.now() };
     chatHistories[currentBot].push(userMsg);
     saveChatHistories();
     renderChatHistory();
@@ -2694,12 +2951,9 @@ async function sendMessage() {
             .filter(m => !m.isConfirm && !m.isSuccess && !m.isCancel && !m.isError)
             .map(m => ({ role: m.role, content: m.content }));
 
-        const response = await fetch(`${CONFIG.BACKEND_URL}${bot.endpoint}`, {
+        const response = await apiFetch(`${CONFIG.BACKEND_URL}${bot.endpoint}`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": getApiKey(),
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 message: text,
                 session_id: `so_${currentBot}_${getSessionDate()}`,
@@ -2769,7 +3023,6 @@ async function sendMessage() {
     sendBtn.disabled = false;
     input.focus();
 }
-
 // =========================================================
 // LOADING BUBBLE
 // =========================================================
@@ -2813,10 +3066,7 @@ async function loadPersonilMaster() {
         return _personilCache;
     }
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, {
-            method: "GET",
-            headers: { "X-API-Key": getApiKey() },
-        });
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, { method: "GET" });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
         const _list = (data.data || [])
@@ -3110,7 +3360,6 @@ async function confirmSaveSo() {
         return;
     }
     
-    const _key = getApiKey();
     const userMsg = { role: "user", content: `💾 simpan so`, timestamp: Date.now() };
     chatHistories[currentBot].push(userMsg);
     
@@ -3131,12 +3380,9 @@ async function confirmSaveSo() {
     });
     
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-so`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/save-so`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 tanggal: _pending.tanggal,
                 items: _itemsWithPic,
@@ -3195,7 +3441,7 @@ async function confirmSaveSo() {
     }
 }
 
-// =========================================================
+/ =========================================================
 // UPLOAD FILE VIA CHAT
 // =========================================================
 async function handleChatFileUpload(file) {
@@ -3204,8 +3450,6 @@ async function handleChatFileUpload(file) {
         showToastMini("❌ Upload cuma di chat Yui", "error");
         return;
     }
-    
-    const _key = getApiKey();
     
     const userMsg = {
         role: "user",
@@ -3224,9 +3468,8 @@ async function handleChatFileUpload(file) {
         const formData = new FormData();
         formData.append("file", file);
         
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, {
             method: "POST",
-            headers: { "X-API-Key": _key },
             body: formData,
         });
         
@@ -3252,7 +3495,6 @@ async function handleChatFileUpload(file) {
         const _totalNominal = data.total_nominal || 0;
         const _items = data.items || [];
         
-        // === GROUP BY RAK ===
         const _grouped = {};
         _items.forEach(it => {
             const rak = (it.rak_id || "UNKNOWN").toUpperCase();
@@ -3260,10 +3502,8 @@ async function handleChatFileUpload(file) {
             _grouped[rak].push(it);
         });
         
-        // Sort rak by rak_id
         const _rakList = Object.keys(_grouped).sort();
         
-        // Build preview per rak
         let _previewText = "";
         _rakList.forEach((rak, idx) => {
             const _rakItems = _grouped[rak];
@@ -3272,7 +3512,6 @@ async function handleChatFileUpload(file) {
             
             _previewText += `**${idx + 1}. 🏪 ${rak}** (${_rakItems.length} item) — ${_sign}${formatRupiahFull(_rakTotal)}\n`;
             
-            // Tampilkan max 3 item pertama per rak
             _rakItems.slice(0, 3).forEach(it => {
                 const _nom = it.nominal_adjust || 0;
                 const _itemSign = _nom >= 0 ? "+" : "";
@@ -3285,7 +3524,6 @@ async function handleChatFileUpload(file) {
             }
         });
         
-        // Build header
         let _aiContent =
             `✅ File **${file.name}** berhasil dibaca!\n\n` +
             `📊 **Ringkasan:**\n` +
@@ -3295,7 +3533,6 @@ async function handleChatFileUpload(file) {
             `- 💰 Total: **${formatRupiahFull(_totalNominal)}**\n\n` +
             `**Detail per Rak:**\n\n${_previewText}\n`;
         
-        // Instructions
         if (!data.tanggal) {
             _aiContent += `⚠️ **Langkah selanjutnya:**\n\n`;
             _aiContent += `**1. Isi tanggal:**\n`;
@@ -3365,17 +3602,12 @@ function cancelUploadSo() {
 // HANDLE SPD VIA CHAT
 // =========================================================
 async function handleSpdChat(text) {
-    const _key = getApiKey();
-    
     showLoadingBubble();
     
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/parse-spd`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/parse-spd`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: text }),
         });
         
@@ -3443,7 +3675,6 @@ async function confirmSaveSpd() {
         return;
     }
     
-    const _key = getApiKey();
     const userMsg = { role: "user", content: `💾 simpan spd`, timestamp: Date.now() };
     chatHistories[currentBot].push(userMsg);
     saveChatHistories();
@@ -3453,12 +3684,9 @@ async function confirmSaveSpd() {
     showLoadingBubble();
     
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/yui/save-spd`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/save-spd`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 tanggal: _pending.tanggal,
                 nominal: _pending.nominal,
@@ -3508,6 +3736,7 @@ async function confirmSaveSpd() {
         showToastMini(`❌ Gagal: ${err.message}`, "error");
     }
 }
+
 // =========================================================
 // MODAL KONFIRMASI UPDATE SHIFT
 // =========================================================
@@ -3578,16 +3807,12 @@ async function executeConfirmShift() {
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...';
     }
-    const _key = getApiKey();
     const data = currentConfirmData;
 
     try {
-        const resp = await fetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": _key,
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 tanggal: data.tanggal,
                 items: data.items.map(it => ({
@@ -3640,7 +3865,6 @@ async function executeConfirmShift() {
         showToastMini(`❌ Gagal: ${err.message}`, "error");
     }
 }
-
 // =========================================================
 // BACK BUTTON + LOGOUT MODAL
 // =========================================================
@@ -3696,37 +3920,6 @@ function showExitModal() {
     if (modal) modal.classList.add("active");
 }
 
-function closeExitModal() {
-    exitModalShown = false;
-    const modal = document.getElementById("exitModal");
-    if (modal) modal.classList.remove("active");
-    pushBackGuard();
-}
-
-function confirmLogout() {
-    const modal = document.getElementById("exitModal");
-    if (modal) modal.classList.remove("active");
-
-    localStorage.removeItem("so_logged_in");
-    localStorage.removeItem("so_login_timestamp");
-
-    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-
-    exitModalShown = false;
-    pinInput = "";
-    updatePinDisplay();
-
-    if (clockInterval) clearInterval(clockInterval);
-    stopDashboardAutoRefresh();
-
-    showToastMini("👋 Logout berhasil!", "success");
-
-    setTimeout(() => {
-        showScreen("loginScreen");
-        pushBackGuard();
-    }, 300);
-}
-
 function pushBackGuard() {
     try {
         history.pushState({ guard: true, ts: Date.now() }, "", "");
@@ -3740,8 +3933,7 @@ setTimeout(pushBackGuard, 800);
 // =========================================================
 function resetIdleTimer() {
     if (idleTimer) clearTimeout(idleTimer);
-    const isLoggedIn = localStorage.getItem("so_logged_in") === "true";
-    if (!isLoggedIn) return;
+    if (!isLoggedIn()) return;
     const activeScreen = document.querySelector(".screen.active");
     if (activeScreen && activeScreen.id === "loginScreen") return;
 
@@ -3752,14 +3944,14 @@ function resetIdleTimer() {
 }
 
 function autoLogout() {
-    localStorage.removeItem("so_logged_in");
-    localStorage.removeItem("so_login_timestamp");
+    clearAuth();
     pinInput = "";
     updatePinDisplay();
     if (clockInterval) clearInterval(clockInterval);
     stopDashboardAutoRefresh();
     showToastMini("⏰ Idle 5 menit — auto logout", "error");
     setTimeout(() => {
+        showLoginView(true);
         showScreen("loginScreen");
         pushBackGuard();
     }, 300);
@@ -3856,7 +4048,7 @@ function openUpdateDownload() {
 // =========================================================
 setInterval(() => {
     const homeScreen = document.getElementById("homeScreen");
-    if (homeScreen && homeScreen.classList.contains("active")) {
+    if (homeScreen && homeScreen.classList.contains("active") && isLoggedIn()) {
         loadMiniDashboard();
     }
 }, 5 * 60 * 1000);
