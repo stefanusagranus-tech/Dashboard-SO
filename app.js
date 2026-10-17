@@ -136,25 +136,46 @@ async function apiFetch(url, options = {}) {
     }
     const _opts = { ...options, headers };
 
-    const _resp = await fetch(url, _opts);
+    let _resp;
+    try {
+        _resp = await fetch(url, _opts);
+    } catch (_networkErr) {
+        console.error("[apiFetch] Network error:", _networkErr);
+        throw _networkErr;
+    }
 
-    // Auto-logout kalau 401 (token expired/revoked)
+    // Handle 401 TANPA consume body caller
     if (_resp.status === 401) {
-        const _clone = _resp.clone();
+        let _bodyText = "";
         try {
-            const _err = await _clone.json();
-            // Khusus: kalau bukan karena API key, berarti token problem
-            if (!_err.message || !_err.message.includes("API key")) {
-                console.warn("[Auth] 401 — auto logout");
-                clearAuth();
-                showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
-                setTimeout(() => showScreen("loginScreen"), 800);
-            }
+            _bodyText = await _resp.text();
         } catch (e) {}
+
+        let _errMsg = "";
+        try {
+            const _parsed = JSON.parse(_bodyText);
+            _errMsg = _parsed.message || _parsed.detail || "";
+        } catch (e) {}
+
+        // Auto logout kalau BUKAN masalah API key
+        if (!_errMsg.toLowerCase().includes("api key")) {
+            console.warn("[Auth] 401 — auto logout:", _errMsg);
+            clearAuth();
+            showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
+            setTimeout(() => showScreen("loginScreen"), 800);
+        }
+
+        // Return Response BARU — biar caller bisa baca body
+        return new Response(_bodyText, {
+            status: _resp.status,
+            statusText: _resp.statusText,
+            headers: _resp.headers,
+        });
     }
 
     return _resp;
 }
+
 
 // =========================================================
 // INIT
@@ -768,13 +789,23 @@ async function loadMiniDashboard() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ mode: "bulan_ini" }),
         });
-
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
+        
+        if (!resp.ok) {
+            let _errText = "";
+            try { _errText = await resp.text(); } catch (e) {}
+            console.error("[Dashboard] HTTP Error:", resp.status, _errText.substring(0, 200));
+            throw new Error(`HTTP ${resp.status}`);
+        }
+        
         const data = await resp.json();
-        const totalRak = data.total_rak || 0;
-        const totalNominal = data.total_nominal || 0;
-        const salesPeriode = data.sales_periode || 0;
+        console.log("[Dashboard] Rekap response:", data);
+        
+        // Handle nested: data.data atau data
+        const _d = (data && data.data) ? data.data : data;
+        
+        const totalRak = _d.total_rak || 0;
+        const totalNominal = _d.total_nominal || 0;
+        const salesPeriode = _d.sales_periode || 0;
         const totalRakMaster = 145;
         const persenSo = totalRakMaster > 0 ? (totalRak / totalRakMaster) * 100 : 0;
 
@@ -1344,16 +1375,22 @@ async function loadMasterShift() {
         const body = { tgl_start: startStr, tgl_end: endStr };
         if (namaFilter) body.nama_filter = namaFilter;
 
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
-
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
+        
+        if (!resp.ok) {
+            let _errText = "";
+            try { _errText = await resp.text(); } catch (e) {}
+            console.error("[Status] HTTP Error:", resp.status, _errText.substring(0, 200));
+            throw new Error(`HTTP ${resp.status}`);
+        }
+        
         const data = await resp.json();
-        if (!data.success) throw new Error(data.error || "Gagal load data");
+        console.log("[Status] Response:", data);
+        if (!data.success) throw new Error(data.error || "Gagal load status");
 
         masterShiftData = data.data || [];
         renderShiftList();
