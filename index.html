@@ -941,13 +941,6 @@
         <button class="sidebar-item" onclick="clearCurrentChat()">
             <span>🗑️</span> <span>Hapus Chat Bot Ini</span>
         </button>
-        <!-- Cuma muncul kalau admin -->
-        <div class="settings-group" id="menuKelolaUser" style="display: none;">
-            <div class="settings-group-title">👥 Manajemen</div>
-            <button class="settings-btn" onclick="goToUserManagementScreen()">
-                👥 Kelola User
-            </button>
-        </div>
         <button class="sidebar-item sidebar-item-danger" onclick="logout()">
             <span>🚪</span> <span>Logout</span>
         </button>
@@ -1041,7 +1034,13 @@
                 Reset Semua Chat
             </button>
         </div>
-
+         <!-- Cuma muncul kalau admin -->
+        <div class="settings-group" id="menuKelolaUser" style="display: none;">
+            <div class="settings-group-title">👥 Manajemen</div>
+            <button class="settings-btn" onclick="goToUserManagementScreen()">
+                 👥 Kelola User
+            </button>
+        </div>
         <div class="settings-group">
             <button class="settings-btn settings-btn-danger" onclick="logout()">
                 🚪 Logout
