@@ -1,14 +1,12 @@
 """
-Middleware package untuk FastAPI backend Dashboard SO.
+Middleware package untuk FastAPI
 """
-from .auth import verify_api_key, AuthMiddleware, require_api_key
-from .rate_limit import limiter, setup_rate_limit, RateLimitExceeded
+from .auth import verify_api_key
+from .role import require_token, require_operator, require_admin
 
 __all__ = [
     "verify_api_key",
-    "AuthMiddleware",
-    "require_api_key",
-    "limiter",
-    "setup_rate_limit",
-    "RateLimitExceeded",
+    "require_token",
+    "require_operator",
+    "require_admin",
 ]
