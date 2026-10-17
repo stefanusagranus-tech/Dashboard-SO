@@ -97,7 +97,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Skip public prefixes
         if any(_path.startswith(p) for p in PUBLIC_PREFIXES):
             return await call_next(request)
-        
+
+        # === TAMBAHAN BUAT WEBVIEW APK ===
+        # 1. Cek token & API key dari URL (Query Parameter)
+        _query_token = request.query_params.get("auth_token")
+        _query_apikey = request.query_params.get("api_key")
+
+        if _query_token and _query_apikey:
+            # Kalau dari URL, bypass pengecekan header
+            if verify_api_key(_query_apikey):
+                # Simpan token ke request state biar bisa dibaca endpoint
+                request.state.auth_token = _query_token
+                return await call_next(request)
+            else:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"error": "unauthorized", "message": "API key di URL tidak valid."},
+                )
+        # ==================================
+
+        # --- KODE LAMA LU (HEADER) ---
         # Ambil API key dari header
         _api_key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
         
@@ -121,8 +140,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Lanjut
         return await call_next(request)
-
-
+        
 # =========================================================
 # DEPENDENCY (buat endpoint tertentu aja)
 # =========================================================

@@ -677,7 +677,7 @@ async def yui_upload_so_endpoint(
 # =========================================================
 # REKAP
 # =========================================================
-@router.post("/rekap")
+@router.api_route("/rekap", methods=["GET", "POST"])
 @limiter.limit("30/minute")
 async def yui_rekap_endpoint(
     request: Request,
