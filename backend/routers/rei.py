@@ -14,7 +14,7 @@ from typing import Optional
 
 from middleware.rate_limit import limiter
 from middleware.role import require_token
-
+from middleware.auth import AuthMiddleware, require_api_key
 
 try:
     from services.ai_rei import rei_chat, rei_analisis

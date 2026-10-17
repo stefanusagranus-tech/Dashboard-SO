@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 from middleware.rate_limit import limiter
 from middleware.role import require_token, require_operator
+from middleware.auth import AuthMiddleware, require_api_key
 
 
 try:
