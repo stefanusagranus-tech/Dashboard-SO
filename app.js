@@ -126,69 +126,57 @@ function isLoggedIn() {
 // FETCH WRAPPER — Auto-attach X-API-Key + Bearer token
 // =========================================================
 async function apiFetch(url, options = {}) {
-    return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        
-        const _token = getToken();
-        const _apiKey = getApiKey();
-        
-        // 🔥 Trik 1: Ubah POST jadi GET (Biar WebView gak preflight)
-        let _method = options.method || "GET";
-        if (_method === "POST" && !options.body?.includes("file")) {
-            _method = "GET";
-        }
-        
-        // 🔥 Trik 2: Sisipkan token & API Key ke URL
-        const _sep = url.includes("?") ? "&" : "?";
-        const _finalUrl = `${url}${_sep}auth_token=${_token}&api_key=${_apiKey}`;
-        
-        xhr.open(_method, _finalUrl, true);
-        
-        // 🔥 Trik 3: JANGAN SET HEADER X-API-KEY / AUTHORIZATION SAMA SEKALI!
-        
-        // Content-Type cuma boleh di-set kalau method POST asli (bukan GET)
-        if (_method === "POST" && options.headers && options.headers["Content-Type"]) {
-            xhr.setRequestHeader("Content-Type", options.headers["Content-Type"]);
-        }
-        
-        xhr.onload = () => {
-            const _bodyText = xhr.responseText || "";
-            
-            const response = {
-                ok: xhr.status >= 200 && xhr.status < 300,
-                status: xhr.status,
-                json: async () => JSON.parse(_bodyText),
-                text: async () => _bodyText,
-            };
-            
-            if (xhr.status === 401) {
-                let _errMsg = "";
-                try {
-                    const _parsed = JSON.parse(_bodyText);
-                    _errMsg = _parsed.message || _parsed.detail || "";
-                } catch (e) {}
-                
-                if (!_errMsg.toLowerCase().includes("api key")) {
-                    clearAuth();
-                    showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
-                    setTimeout(() => showScreen("loginScreen"), 800);
-                }
-            }
-            
-            resolve(response);
-        };
-        
-        xhr.onerror = () => reject(new TypeError("Failed to fetch"));
-        xhr.timeout = 30000;
-        
-        if (_method === "POST" && options.body) {
-            xhr.send(options.body);
-        } else {
-            xhr.send();
-        }
-    });
-}
+    const headers = {
+        "X-API-Key": getApiKey(),
+        ...(options.headers || {}),
+    };
+    
+    const _token = getToken();
+    if (_token) {
+        headers["Authorization"] = `Bearer ${_token}`;
+    }
+    
+    const _opts = { ...options, headers };
+    
+    let _resp;
+    try {
+        _resp = await fetch(url, _opts);
+    } catch (_err) {
+        console.error("[apiFetch] Network error:", _err);
+        throw _err;
+    }
 
+    // Handle 401 — TAPI jangan clear auth kalau errornya API key
+    if (_resp.status === 401) {
+        let _bodyText = "";
+        try {
+            _bodyText = await _resp.text();
+        } catch (e) {}
+        
+        let _errMsg = "";
+        try {
+            const _parsed = JSON.parse(_bodyText);
+            _errMsg = _parsed.message || _parsed.detail || "";
+        } catch (e) {}
+        
+        // Auto logout kalau BUKAN API key issue
+        if (!_errMsg.toLowerCase().includes("api key")) {
+            console.warn("[Auth] 401 — auto logout:", _errMsg);
+            clearAuth();
+            showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
+            setTimeout(() => showScreen("loginScreen"), 800);
+        }
+        
+        // Return response baru (biar caller bisa baca body)
+        return new Response(_bodyText, {
+            status: _resp.status,
+            statusText: _resp.statusText,
+            headers: _resp.headers,
+        });
+    }
+
+    return _resp;
+}
 // =========================================================
 // INIT
 // =========================================================
