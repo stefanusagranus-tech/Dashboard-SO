@@ -4251,6 +4251,75 @@ async function forceLogoutUser(userId, username) {
         showToastMini(`❌ ${err.message}`, "error");
     }
 }
+// =========================================================
+// TAMBAH USER BARU (ADMIN)
+// =========================================================
+function openAddUserModal() {
+    // Reset form
+    document.getElementById("newUserUsername").value = "";
+    document.getElementById("newUserNama").value = "";
+    document.getElementById("newUserPassword").value = "";
+    document.getElementById("newUserPin").value = "123456";
+    document.getElementById("newUserRole").value = "operator";
+    document.getElementById("addUserError").textContent = "";
+    
+    document.getElementById("addUserModal").classList.add("active");
+}
+
+function closeAddUserModal() {
+    document.getElementById("addUserModal").classList.remove("active");
+}
+
+async function submitAddUser() {
+    const btn = document.getElementById("btnSaveUser");
+    const errEl = document.getElementById("addUserError");
+    
+    const username = document.getElementById("newUserUsername").value.trim().toUpperCase();
+    const nama = document.getElementById("newUserNama").value.trim();
+    const password = document.getElementById("newUserPassword").value;
+    const pin = document.getElementById("newUserPin").value;
+    const role = document.getElementById("newUserRole").value;
+
+    if (!username || !nama || !password) {
+        errEl.textContent = "❌ Semua field wajib diisi!";
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...';
+    errEl.textContent = "";
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: username,
+                password: password,
+                nama_lengkap: nama,
+                role: role,
+                pin: pin
+            })
+        });
+
+        const data = await resp.json();
+        
+        if (!resp.ok || !data.success) {
+            throw new Error(data.detail || data.error || "Gagal menambah user");
+        }
+
+        showToastMini(`✅ User ${username} berhasil dibuat`, "success");
+        closeAddUserModal();
+        loadUsers(); // Refresh list
+
+    } catch (err) {
+        console.error("[AddUser] Error:", err);
+        errEl.textContent = `❌ ${err.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '✅ Simpan';
+    }
+}
 
 // =========================================================
 // BOOT

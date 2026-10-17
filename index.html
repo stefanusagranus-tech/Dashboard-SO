@@ -796,7 +796,55 @@
         </div>
     </div>
 </div>
+<!-- ========================================================= -->
+<!-- MODAL — TAMBAH USER BARU -->
+<!-- ========================================================= -->
+<div id="addUserModal" class="modal-overlay">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">👤 Tambah User Baru</div>
+            <button class="modal-close" onclick="closeAddUserModal()">✕</button>
+        </div>
 
+        <div class="modal-body">
+            <div class="login-input-group">
+                <label class="login-input-label">Username</label>
+                <input type="text" id="newUserUsername" class="login-input" placeholder="Contoh: BUDI" autocomplete="off">
+            </div>
+
+            <div class="login-input-group">
+                <label class="login-input-label">Nama Lengkap</label>
+                <input type="text" id="newUserNama" class="login-input" placeholder="Contoh: Budi Santoso" autocomplete="off">
+            </div>
+
+            <div class="login-input-group">
+                <label class="login-input-label">Password (min 6 char)</label>
+                <input type="password" id="newUserPassword" class="login-input" placeholder="••••••">
+            </div>
+
+            <div class="login-input-group">
+                <label class="login-input-label">PIN Awal (6 digit)</label>
+                <input type="text" id="newUserPin" class="login-input" placeholder="123456" maxlength="6">
+            </div>
+
+            <div class="login-input-group">
+                <label class="login-input-label">Role</label>
+                <select id="newUserRole" class="filter-select" style="width: 100%;">
+                    <option value="operator">Operator (Bisa input SO/SPD)</option>
+                    <option value="viewer">Viewer (Cuma bisa lihat)</option>
+                    <option value="admin">Admin (Full access)</option>
+                </select>
+            </div>
+
+            <p id="addUserError" class="login-error" style="text-align: center;"></p>
+        </div>
+
+        <div class="modal-footer" style="display: flex; gap: 10px; padding: 16px; border-top: 1px solid var(--border-color);">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeAddUserModal()" style="flex: 1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" id="btnSaveUser" onclick="submitAddUser()" style="flex: 1;">✅ Simpan</button>
+        </div>
+    </div>
+</div>
 <!-- ========================================================= -->
 <!-- MODAL — KONFIRMASI UPDATE SHIFT -->
 <!-- ========================================================= -->
