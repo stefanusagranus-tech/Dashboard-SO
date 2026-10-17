@@ -18,8 +18,6 @@ from typing import Optional
 from middleware.rate_limit import limiter
 from middleware.role import require_token, require_operator, require_admin
 
-from middleware.auth import AuthMiddleware, require_api_key
-
 try:
     from services.ai_shift_manager import (
         chat_response,
