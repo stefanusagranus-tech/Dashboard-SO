@@ -31,12 +31,17 @@ PUBLIC_PATHS = {
     "/api/bots",
     "/api/config",
     "/api/config/",
-    # === AUTH (public — belum punya token) ===
-    "/api/auth/setup",        # ← bikin admin pertama (auto-lock setelah ada admin)
+    # AUTH
+    "/api/auth/setup",
     "/api/auth/login",
     "/api/auth/verify-pin",
     "/api/auth/forgot-pin",
-    "/api/auth/logout",       # logout public biar bisa logout walau token expired
+    "/api/auth/logout",
+    # HEALTH SETIAP BOT
+    "/api/yui/health",
+    "/api/hana/health",
+    "/api/rei/health",
+    "/api/kurumi/health",
 }
 
 # Prefix yang TIDAK butuh API key
