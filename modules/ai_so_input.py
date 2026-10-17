@@ -377,7 +377,7 @@ def _extract_from_dataframe(df, context=None):
         "rak_id": None,
         "pic": None,
     }
-    
+
 # =========================================================
 # 📄 LAYER 2: PARSE FILE (PDF text / Screenshot OCR)
 # =========================================================
@@ -534,6 +534,150 @@ Output HANYA JSON.
         "raw": file_text,
     }
 
+# =========================================================
+# 📄 LAYER 4: REGEX FALLBACK
+# =========================================================
+def _regex_fallback(file_text):
+    """
+    Parse teks mentah (OCR/PDF) jadi items SO pakai regex.
+    Return: {"tanggal": None, "items": [...], "total_nominal": float}
+    atau None kalau tidak ada yang match.
+    """
+    if not file_text or not isinstance(file_text, str):
+        return None
+
+    _text = str(file_text)
+    # Bersihkan HTML entity & tag
+    _text = _text.replace("&#39;", "'").replace("&amp;", "&")
+    _text = _text.replace("&quot;", '"').replace("&nbsp;", " ")
+    _text = re.sub(r'</?(?:table|tr|td|th|div|span|p|br)[^>]*>', ' ', _text, flags=re.IGNORECASE)
+    _text = re.sub(r'[ \t]+', ' ', _text)
+
+    _items = []
+
+    # -----------------------------------------------------------
+    # POLA 1: Format tabel Excel (dari log kamu)
+    # Contoh: "444756 WOW SPAGETI Q51 51 51 0 -5.333,58"
+    # -----------------------------------------------------------
+    _pattern_table = re.compile(
+        r'(?P<plu>\d{4,8})\s+'
+        r'(?P<nama>[A-Za-z0-9][A-Za-z0-9 \.\-\'/&]+?)\s+'
+        r'(?P<rak>[A-Z]{1,3}\d{1,4}|[A-Z0-9]{2,6})\s+'
+        r'(?P<qty_sistem>-?\d+)\s+'
+        r'(?P<qty_fisik>-?\d+)\s+'
+        r'(?P<qty_var>-?\d+)\s+'
+        r'(?P<nominal>-?[\d.,]+)',
+        re.IGNORECASE,
+    )
+
+    for _m in _pattern_table.finditer(_text):
+        _plu = _m.group("plu").strip()
+        _nama = _m.group("nama").strip()[:120]
+        _rak = _m.group("rak").strip().upper()
+
+        # Skip header/row tidak valid
+        if _plu.lower() in ("plu", "no", "kode"):
+            continue
+        if _nama.lower() in ("nama barang", "nama produk", "produk"):
+            continue
+
+        _nominal = _parse_nominal_regex(_m.group("nominal"))
+
+        _items.append({
+            "rak_id": _rak,
+            "plu": _plu,
+            "nama_produk": _nama,
+            "qty_sistem": _safe_int(_m.group("qty_sistem")),
+            "qty_fisik": _safe_int(_m.group("qty_fisik")),
+            "qty_var": _safe_int(_m.group("qty_var")),
+            "nominal_adjust": _nominal,
+            "pic": None,
+        })
+
+    # -----------------------------------------------------------
+    # POLA 2: Format lebih longgar — PLU ... Nama ... Rak ... Nominal
+    # (untuk file yang kolomnya tidak lengkap)
+    # -----------------------------------------------------------
+    if not _items:
+        _pattern_loose = re.compile(
+            r'(?P<plu>\d{4,8})\s+'
+            r'(?P<nama>[A-Za-z][A-Za-z0-9 \.\-\'/&]{2,80}?)\s+'
+            r'(?P<rak>[A-Z]{1,3}\d{1,4})\s+'
+            r'[^\n]{0,60}?'
+            r'(?P<nominal>-?[\d.,]{3,})\s*$',
+            re.MULTILINE | re.IGNORECASE,
+        )
+
+        for _m in _pattern_loose.finditer(_text):
+            _plu = _m.group("plu").strip()
+            _nama = _m.group("nama").strip()[:120]
+            _rak = _m.group("rak").strip().upper()
+            _nominal = _parse_nominal_regex(_m.group("nominal"))
+
+            # Skip kalau nominal 0 (mungkin salah parse)
+            if _nominal == 0.0:
+                continue
+
+            _items.append({
+                "rak_id": _rak,
+                "plu": _plu,
+                "nama_produk": _nama,
+                "qty_sistem": 0,
+                "qty_fisik": 0,
+                "qty_var": 0,
+                "nominal_adjust": _nominal,
+                "pic": None,
+            })
+
+    if not _items:
+        _log("[Yui Regex] Tidak ada item yang match")
+        return None
+
+    _total = sum(i["nominal_adjust"] for i in _items)
+    _log(f"[Yui Regex] Extracted {len(_items)} items, total {_total}")
+
+    return {
+        "tanggal": None,
+        "items": _items,
+        "total_nominal": _total,
+        "rak_id": None,
+        "pic": None,
+    }
+
+
+def _parse_nominal_regex(raw):
+    """
+    Parse nominal dari string kayak:
+    '-5.333,58' (format ID) → -5333.58
+    '5333.58' (format EN)   → 5333.58
+    '-28.653'               → -28653
+    """
+    if not raw:
+        return 0.0
+    _s = str(raw).strip()
+    if _s in ("", "-", "nan", "none"):
+        return 0.0
+
+    # Deteksi format Indonesia (titik ribuan, koma desimal)
+    if re.match(r'^-?\d{1,3}(\.\d{3})+(,\d+)?$', _s):
+        _s = _s.replace(".", "").replace(",", ".")
+    # Deteksi format EN (koma ribuan, titik desimal)
+    elif re.match(r'^-?\d{1,3}(,\d{3})+(\.\d+)?$', _s):
+        _s = _s.replace(",", "")
+    # Kalau cuma koma → desimal
+    elif "," in _s and "." not in _s:
+        _s = _s.replace(",", ".")
+    # Kalau cuma titik → bisa ribuan atau desimal
+    elif "." in _s and "," not in _s:
+        _parts = _s.split(".")
+        if len(_parts) > 2 or (len(_parts) == 2 and len(_parts[1]) == 3):
+            _s = _s.replace(".", "")
+
+    try:
+        return float(re.sub(r'[^\d\.\-+]', '', _s))
+    except Exception:
+        return 0.0
+        
 # =========================================================
 # 💬 CHAT
 # =========================================================
