@@ -126,54 +126,101 @@ function isLoggedIn() {
 // FETCH WRAPPER — Auto-attach X-API-Key + Bearer token
 // =========================================================
 async function apiFetch(url, options = {}) {
-    const headers = {
-        "X-API-Key": getApiKey(),
-        ...(options.headers || {}),
-    };
-    const _token = getToken();
-    if (_token) {
-        headers["Authorization"] = `Bearer ${_token}`;
-    }
-    const _opts = { ...options, headers };
-
-    let _resp;
-    try {
-        _resp = await fetch(url, _opts);
-    } catch (_networkErr) {
-        console.error("[apiFetch] Network error:", _networkErr);
-        throw _networkErr;
-    }
-
-    // Handle 401 TANPA consume body caller
-    if (_resp.status === 401) {
-        let _bodyText = "";
-        try {
-            _bodyText = await _resp.text();
-        } catch (e) {}
-
-        let _errMsg = "";
-        try {
-            const _parsed = JSON.parse(_bodyText);
-            _errMsg = _parsed.message || _parsed.detail || "";
-        } catch (e) {}
-
-        // Auto logout kalau BUKAN masalah API key
-        if (!_errMsg.toLowerCase().includes("api key")) {
-            console.warn("[Auth] 401 — auto logout:", _errMsg);
-            clearAuth();
-            showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
-            setTimeout(() => showScreen("loginScreen"), 800);
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(options.method || "GET", url, true);
+        
+        // Set headers
+        xhr.setRequestHeader("X-API-Key", getApiKey());
+        
+        const _token = getToken();
+        if (_token) {
+            xhr.setRequestHeader("Authorization", `Bearer ${_token}`);
         }
-
-        // Return Response BARU — biar caller bisa baca body
-        return new Response(_bodyText, {
-            status: _resp.status,
-            statusText: _resp.statusText,
-            headers: _resp.headers,
-        });
-    }
-
-    return _resp;
+        
+        // Custom headers dari options
+        if (options.headers) {
+            Object.entries(options.headers).forEach(([k, v]) => {
+                if (k.toLowerCase() !== "x-api-key" && k.toLowerCase() !== "authorization") {
+                    try {
+                        xhr.setRequestHeader(k, v);
+                    } catch (e) {
+                        console.warn("[apiFetch] Skip header:", k, e.message);
+                    }
+                }
+            });
+        }
+        
+        // Handle FormData (biar Content-Type auto)
+        const _isFormData = options.body instanceof FormData;
+        
+        xhr.onload = () => {
+            const _headers = {
+                get: (name) => xhr.getResponseHeader(name),
+                has: (name) => xhr.getResponseHeader(name) !== null,
+            };
+            
+            const _bodyText = xhr.responseText || "";
+            
+            const response = {
+                ok: xhr.status >= 200 && xhr.status < 300,
+                status: xhr.status,
+                statusText: xhr.statusText,
+                headers: _headers,
+                url: xhr.responseURL || url,
+                json: async () => {
+                    try {
+                        return JSON.parse(_bodyText);
+                    } catch (e) {
+                        console.error("[apiFetch] JSON parse error:", e.message, _bodyText.substring(0, 200));
+                        throw new TypeError("Invalid JSON response");
+                    }
+                },
+                text: async () => _bodyText,
+                blob: async () => new Blob([_bodyText]),
+                clone: () => ({ ...response, json: response.json, text: response.text, blob: response.blob }),
+            };
+            
+            // Handle 401 — auto-logout
+            if (xhr.status === 401) {
+                let _errMsg = "";
+                try {
+                    const _parsed = JSON.parse(_bodyText);
+                    _errMsg = _parsed.message || _parsed.detail || "";
+                } catch (e) {}
+                
+                if (!_errMsg.toLowerCase().includes("api key")) {
+                    console.warn("[Auth] 401 — auto logout:", _errMsg);
+                    clearAuth();
+                    showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
+                    setTimeout(() => showScreen("loginScreen"), 800);
+                }
+            }
+            
+            resolve(response);
+        };
+        
+        xhr.onerror = () => {
+            console.error("[apiFetch] XHR Network error:", url);
+            reject(new TypeError("Failed to fetch"));
+        };
+        
+        xhr.ontimeout = () => {
+            console.error("[apiFetch] XHR Timeout:", url);
+            reject(new TypeError("Timeout"));
+        };
+        
+        xhr.timeout = 30000;   // 30 detik
+        
+        // Kirim body
+        if (_isFormData) {
+            xhr.send(options.body);
+        } else if (options.body) {
+            xhr.send(options.body);
+        } else {
+            xhr.send();
+        }
+    });
 }
 
 
