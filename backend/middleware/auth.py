@@ -100,24 +100,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # === TAMBAHAN BUAT WEBVIEW APK ===
         # 1. Cek token & API key dari URL (Query Parameter)
+        # Di dalam async def dispatch...
         _query_token = request.query_params.get("auth_token")
         _query_apikey = request.query_params.get("api_key")
-
+        
         if _query_token and _query_apikey:
-            # Kalau dari URL, bypass pengecekan header
             if verify_api_key(_query_apikey):
-                # Simpan token ke request state biar bisa dibaca endpoint
                 request.state.auth_token = _query_token
                 return await call_next(request)
             else:
-                return JSONResponse(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    content={"error": "unauthorized", "message": "API key di URL tidak valid."},
-                )
-        # ==================================
+                return JSONResponse(status_code=401, content={"error": "unauthorized", "message": "API key URL invalid"})
 
-        # --- KODE LAMA LU (HEADER) ---
-        # Ambil API key dari header
         _api_key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
         
         # Cek juga Authorization: Bearer <key>

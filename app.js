@@ -128,60 +128,39 @@ function isLoggedIn() {
 async function apiFetch(url, options = {}) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open(options.method || "GET", url, true);
-        
-        // Set headers
-        xhr.setRequestHeader("X-API-Key", getApiKey());
         
         const _token = getToken();
-        if (_token) {
-            xhr.setRequestHeader("Authorization", `Bearer ${_token}`);
+        const _apiKey = getApiKey();
+        
+        // 🔥 Trik 1: Ubah POST jadi GET (Biar WebView gak preflight)
+        let _method = options.method || "GET";
+        if (_method === "POST" && !options.body?.includes("file")) {
+            _method = "GET";
         }
         
-        // Custom headers dari options
-        if (options.headers) {
-            Object.entries(options.headers).forEach(([k, v]) => {
-                if (k.toLowerCase() !== "x-api-key" && k.toLowerCase() !== "authorization") {
-                    try {
-                        xhr.setRequestHeader(k, v);
-                    } catch (e) {
-                        console.warn("[apiFetch] Skip header:", k, e.message);
-                    }
-                }
-            });
-        }
+        // 🔥 Trik 2: Sisipkan token & API Key ke URL
+        const _sep = url.includes("?") ? "&" : "?";
+        const _finalUrl = `${url}${_sep}auth_token=${_token}&api_key=${_apiKey}`;
         
-        // Handle FormData (biar Content-Type auto)
-        const _isFormData = options.body instanceof FormData;
+        xhr.open(_method, _finalUrl, true);
+        
+        // 🔥 Trik 3: JANGAN SET HEADER X-API-KEY / AUTHORIZATION SAMA SEKALI!
+        
+        // Content-Type cuma boleh di-set kalau method POST asli (bukan GET)
+        if (_method === "POST" && options.headers && options.headers["Content-Type"]) {
+            xhr.setRequestHeader("Content-Type", options.headers["Content-Type"]);
+        }
         
         xhr.onload = () => {
-            const _headers = {
-                get: (name) => xhr.getResponseHeader(name),
-                has: (name) => xhr.getResponseHeader(name) !== null,
-            };
-            
             const _bodyText = xhr.responseText || "";
             
             const response = {
                 ok: xhr.status >= 200 && xhr.status < 300,
                 status: xhr.status,
-                statusText: xhr.statusText,
-                headers: _headers,
-                url: xhr.responseURL || url,
-                json: async () => {
-                    try {
-                        return JSON.parse(_bodyText);
-                    } catch (e) {
-                        console.error("[apiFetch] JSON parse error:", e.message, _bodyText.substring(0, 200));
-                        throw new TypeError("Invalid JSON response");
-                    }
-                },
+                json: async () => JSON.parse(_bodyText),
                 text: async () => _bodyText,
-                blob: async () => new Blob([_bodyText]),
-                clone: () => ({ ...response, json: response.json, text: response.text, blob: response.blob }),
             };
             
-            // Handle 401 — auto-logout
             if (xhr.status === 401) {
                 let _errMsg = "";
                 try {
@@ -190,7 +169,6 @@ async function apiFetch(url, options = {}) {
                 } catch (e) {}
                 
                 if (!_errMsg.toLowerCase().includes("api key")) {
-                    console.warn("[Auth] 401 — auto logout:", _errMsg);
                     clearAuth();
                     showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
                     setTimeout(() => showScreen("loginScreen"), 800);
@@ -200,29 +178,16 @@ async function apiFetch(url, options = {}) {
             resolve(response);
         };
         
-        xhr.onerror = () => {
-            console.error("[apiFetch] XHR Network error:", url);
-            reject(new TypeError("Failed to fetch"));
-        };
+        xhr.onerror = () => reject(new TypeError("Failed to fetch"));
+        xhr.timeout = 30000;
         
-        xhr.ontimeout = () => {
-            console.error("[apiFetch] XHR Timeout:", url);
-            reject(new TypeError("Timeout"));
-        };
-        
-        xhr.timeout = 30000;   // 30 detik
-        
-        // Kirim body
-        if (_isFormData) {
-            xhr.send(options.body);
-        } else if (options.body) {
+        if (_method === "POST" && options.body) {
             xhr.send(options.body);
         } else {
             xhr.send();
         }
     });
 }
-
 
 // =========================================================
 // INIT

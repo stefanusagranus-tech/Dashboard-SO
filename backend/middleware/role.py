@@ -46,32 +46,42 @@ def _role_level(role: str) -> int:
 # REQUIRE TOKEN — Cek Bearer token valid, return user info
 # =========================================================
 async def require_token(
-    request: Request,
     authorization: Optional[str] = Header(None),
 ) -> dict:
-    _token = ""
-    
-    # Cek dari header (cara lama)
-    if authorization and authorization.startswith("Bearer "):
-        _token = authorization.replace("Bearer ", "").strip()
-    
-    # Kalau nggak ada di header, cek dari URL (hasil set middleware)
-    if not _token:
-        _token = getattr(request.state, "auth_token", None)
+    """
+    Dependency: Verify Bearer token + return user info.
 
-    if not _token:
+    Raise 401 kalau:
+    - Header Authorization nggak ada
+    - Format bukan 'Bearer <token>'
+    - Token nggak valid / expired / revoked
+
+    Return: dict user {"id", "username", "nama_lengkap", "role", "aktif"}
+    """
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
             detail="Authorization header tidak valid. Format: 'Bearer <token>'",
         )
 
+    # Di dalam async def require_token...
+    _token = ""
+    if authorization and authorization.startswith("Bearer "):
+        _token = authorization.replace("Bearer ", "").strip()
+    
+    if not _token:
+        _token = getattr(request.state, "auth_token", None)
+
+    # Import di dalam fungsi biar nggak circular
     from services.auth import verify_session
+
     _verify = verify_session(_token)
     if not _verify.get("valid"):
         raise HTTPException(401, _verify.get("error", "Token invalid"))
 
     return _verify["user"]
-    
+
+
 # =========================================================
 # REQUIRE ROLE — Factory: cek role user punya akses minimal
 # =========================================================
