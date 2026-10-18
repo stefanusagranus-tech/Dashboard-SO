@@ -7,6 +7,7 @@
     <title>Dashboard SO C383</title>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="dungeon.css"> <!-- TAMBAHKAN INI -->
 </head>
 <body>
 
@@ -1143,7 +1144,13 @@
         </div>
     </div>
 </div>
-
+<!-- BOTTOM NAVIGATION (HOTBAR) -->
+<div id="bottomNav" class="bottom-nav" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 65px; display: none; justify-content: space-around; align-items: center; z-index: 90; padding-bottom: env(safe-area-inset-bottom);">
+    <button class="nav-item" id="navHome" onclick="goToHomeScreen()" style="flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: #a39e93; font-family: inherit; cursor: pointer;"><span style="font-size: 22px;">🏠</span><span style="font-size: 10px; font-weight: 600; margin-top: 2px;">Home</span></button>
+    <button class="nav-item" id="navChat" onclick="goToChatScreen()" style="flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: #a39e93; font-family: inherit; cursor: pointer;"><span style="font-size: 22px;">💬</span><span style="font-size: 10px; font-weight: 600; margin-top: 2px;">Chat</span></button>
+    <button class="nav-item" id="navShift" onclick="goToMasterShiftScreen()" style="flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: #a39e93; font-family: inherit; cursor: pointer;"><span style="font-size: 22px;">🌸</span><span style="font-size: 10px; font-weight: 600; margin-top: 2px;">Shift</span></button>
+    <button class="nav-item" id="navSettings" onclick="goToSettingsScreen()" style="flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: #a39e93; font-family: inherit; cursor: pointer;"><span style="font-size: 22px;">⚙️</span><span style="font-size: 10px; font-weight: 600; margin-top: 2px;">Settings</span></button>
+</div>
 <script src="app.js"></script>
 
 </body>

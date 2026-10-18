@@ -623,6 +623,34 @@ function showScreen(screenId) {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     const target = document.getElementById(screenId);
     if (target) target.classList.add("active");
+
+    const bottomNav = document.getElementById("bottomNav");
+    if (bottomNav) {
+        if (screenId === "loginScreen") {
+            bottomNav.style.display = "none";
+        } else {
+            bottomNav.style.display = "flex";
+            
+            document.querySelectorAll(".nav-item").forEach(item => {
+                item.classList.remove("active");
+                item.style.color = "#a39e93"; // Warna abu-abu default
+            });
+            
+            let activeId = "";
+            if (screenId === "homeScreen") activeId = "navHome";
+            else if (screenId === "chatScreen") activeId = "navChat";
+            else if (screenId === "masterShiftScreen") activeId = "navShift";
+            else if (screenId === "settingsScreen" || screenId === "userManagementScreen") activeId = "navSettings";
+
+            if (activeId) {
+                const el = document.getElementById(activeId);
+                if (el) {
+                    el.classList.add("active");
+                    el.style.color = "#ff7b00"; // Warna api saat aktif
+                }
+            }
+        }
+    }
 }
 
 function goToHomeScreen() {
