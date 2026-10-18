@@ -734,7 +734,6 @@ function goToSettingsScreen() {
 
     showScreen("settingsScreen");
 }
-
 // --- PROFIL ASLI (Ganti Placeholder) ---
 function goToProfileScreen() {
     const _user = getUser();
@@ -4577,6 +4576,101 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+// =========================================================
+// EDIT PROFIL & UPLOAD AVATAR
+// =========================================================
+function goToProfileScreen() {
+    const _user = getUser();
+    if (!_user) return;
+    
+    // Isi form dengan data sekarang
+    document.getElementById("editNamaLengkap").value = _user.nama_lengkap || "";
+    
+    // Set avatar preview
+    const preview = document.getElementById("editAvatarPreview");
+    if (_user.avatar_url) {
+        preview.style.backgroundImage = `url(${_user.avatar_url})`;
+        preview.textContent = "";
+    } else {
+        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+        preview.textContent = inisial;
+        preview.style.backgroundImage = "none";
+    }
+    
+    showScreen("profileScreen");
+}
+
+async function submitUpdateProfile() {
+    const btn = document.getElementById("btnSaveProfile");
+    const namaBaru = document.getElementById("editNamaLengkap").value.trim();
+    
+    if (!namaBaru) {
+        showToastMini("❌ Nama nggak boleh kosong", "error");
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.textContent = "Menyimpan...";
+    
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/me/update`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nama_lengkap: namaBaru })
+        });
+        
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Gagal");
+        
+        // Update localStorage
+        const _user = getUser();
+        _user.nama_lengkap = namaBaru;
+        setAuth(getToken(), _user);
+        
+        showToastMini("✅ Nama berhasil diupdate", "success");
+        goToSettingsScreen(); // Balik ke setting
+    } catch (err) {
+        showToastMini(`❌ ${err.message}`, "error");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Simpan Perubahan";
+    }
+}
+
+async function uploadAvatar(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    showToastMini("📸 Mengupload foto...", "success");
+    
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/me/upload-avatar`, {
+            method: "POST",
+            body: formData
+        });
+        
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "Gagal upload");
+        
+        // Update localStorage
+        const _user = getUser();
+        _user.avatar_url = data.avatar_url;
+        setAuth(getToken(), _user);
+        
+        // Update preview
+        const preview = document.getElementById("editAvatarPreview");
+        preview.style.backgroundImage = `url(${data.avatar_url})`;
+        preview.textContent = "";
+        
+        showToastMini("✅ Foto berhasil diupdate", "success");
+    } catch (err) {
+        showToastMini(`❌ ${err.message}`, "error");
+    }
+}
+
 // =========================================================
 // BOOT
 // =========================================================
