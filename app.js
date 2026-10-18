@@ -807,8 +807,8 @@ function updateSettingsUserInfo() {
     if (elUser) elUser.textContent = _user ? `@${_user.username}` : "-";
     if (elName) elName.textContent = _user ? (_user.nama_lengkap || "-") : "-";
     if (elRole) elRole.textContent = _user ? (_user.role || "-").toUpperCase() : "-";
-} "-").toUpperCase() : "-";
 }
+
 
 // =========================================================
 // AUTO TIME THEME
