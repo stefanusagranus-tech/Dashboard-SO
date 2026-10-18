@@ -128,97 +128,110 @@
 <!-- HOME SCREEN -->
 <!-- ========================================================= -->
 <div id="homeScreen" class="screen">
-    <div class="bat bat-1">🦇</div>
-    <div class="bat bat-2">🦇</div>
-
     <div class="home-header">
         <div class="home-header-title">
             <span class="home-logo">🎃</span>
             <span>Dashboard SO C383</span>
         </div>
-        <button class="theme-toggle" onclick="toggleTheme()">
-            <span id="themeIcon">🌙</span>
-        </button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="theme-toggle" onclick="goToNotificationsScreen()" style="position: relative;">
+                🔔
+                <span id="notifBadge" style="display: none; position: absolute; top: -2px; right: -2px; background: #e63946; color: white; font-size: 10px; font-weight: 800; padding: 2px 5px; border-radius: 10px; border: 2px solid var(--bg-dark);">0</span>
+            </button>
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span id="themeIcon">🌙</span>
+            </button>
+        </div>
     </div>
 
-    <div class="home-content">
-        <div class="live-clock">
-            <div class="clock-time" id="clockTime">--:--</div>
-            <div class="clock-date" id="clockDate">Loading...</div>
-            <div class="clock-greeting" id="clockGreeting">Selamat Datang</div>
+    <!-- CAROUSEL HOME -->
+    <div class="home-carousel-container">
+        
+        <!-- SLIDE 1: PROFIL & JAM -->
+        <div class="home-slide active">
+            <div class="slide-profile">
+                <div class="profile-avatar-large" id="homeAvatar">?</div>
+                <div class="slide-greeting" id="clockGreeting">Selamat Datang!</div>
+                <div class="slide-time" id="clockTime">--:--</div>
+                <div class="slide-date" id="clockDate">Memuat...</div>
+            </div>
+            
+            <!-- Running Text di Slide 1 -->
+            <div class="running-text" id="runningTextContainer" style="margin-top: 20px;">
+                <div class="running-inner" id="runningText">🎃 Memuat info...</div>
+            </div>
         </div>
 
-        <!-- MINI DASHBOARD -->
-        <div class="mini-dashboard" id="miniDashboard">
-            <div class="mini-title">📊 RINGKASAN HARI INI</div>
-
-            <div class="mini-stats">
-                <div class="stat stat-clickable" onclick="goToRakListScreen()">
-                    <div class="stat-icon">📦</div>
-                    <div class="stat-value" id="statRak">--</div>
-                    <div class="stat-label">TOTAL RAK</div>
-                    <div class="stat-tap-hint">Tap untuk detail →</div>
+        <!-- SLIDE 2: RINGKASAN -->
+        <div class="home-slide">
+            <div class="mini-dashboard" style="margin: 0;">
+                <div class="mini-title">📊 RINGKASAN HARI INI</div>
+                <div class="mini-stats">
+                    <div class="stat stat-clickable" onclick="goToRakListScreen()">
+                        <div class="stat-icon">📦</div>
+                        <div class="stat-value" id="statRak">--</div>
+                        <div class="stat-label">TOTAL RAK</div>
+                    </div>
+                    <div class="stat stat-clickable" onclick="goToSpdListScreen()">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-value" id="statSpd">--</div>
+                        <div class="stat-label">SPD</div>
+                    </div>
+                    <div class="stat stat-clickable" onclick="goToTopMinusScreen()">
+                        <div class="stat-icon">📉</div>
+                        <div class="stat-value" id="statNominal">--</div>
+                        <div class="stat-label">NOMINAL ADJ</div>
+                    </div>
                 </div>
-                <div class="stat stat-clickable" onclick="goToSpdListScreen()">
-                    <div class="stat-icon">💰</div>
-                    <div class="stat-value" id="statSpd">--</div>
-                    <div class="stat-label">SPD</div>
-                    <div class="stat-tap-hint">Tap untuk detail →</div>
+                <div class="status-bar status-bar-clickable" id="statusBar" onclick="goToStatusScreen()">
+                    <div class="status-icon" id="statusIcon">⏳</div>
+                    <div class="status-info">
+                        <div class="status-label">Status Selisih</div>
+                        <div class="status-value" id="statusValue">Memuat...</div>
+                    </div>
+                    <div class="status-percent" id="statusPercent">--%</div>
                 </div>
-                <div class="stat stat-clickable" onclick="goToTopMinusScreen()">
-                    <div class="stat-icon">📉</div>
-                    <div class="stat-value" id="statNominal">--</div>
-                    <div class="stat-label">NOMINAL ADJ</div>
-                    <div class="stat-tap-hint">Tap untuk detail →</div>
-                </div>
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="progress-label" id="progressLabel">Memuat...</div>
             </div>
-
-            <div class="status-bar status-bar-clickable" id="statusBar" onclick="goToStatusScreen()">
-                <div class="status-icon" id="statusIcon">⏳</div>
-                <div class="status-info">
-                    <div class="status-label">Status Selisih</div>
-                    <div class="status-value" id="statusValue">Memuat...</div>
-                    <div class="status-tap-hint">Tap untuk analisis →</div>
-                </div>
-                <div class="status-percent" id="statusPercent">--%</div>
-            </div>
-
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-            </div>
-            <div class="progress-label" id="progressLabel">Memuat data...</div>
         </div>
 
-        <!-- RUNNING TEXT -->
-        <div class="running-text" id="runningTextContainer">
-            <div class="running-inner" id="runningText">🎃 Memuat info terbaru...</div>
+        <!-- SLIDE 3: JADWAL HARI INI -->
+        <div class="home-slide">
+            <div class="mini-dashboard" style="margin: 0;">
+                <div class="mini-title">🌸 JADWAL HARI INI</div>
+                <div id="homeScheduleList">
+                    <div class="loading-state"><div class="spinner"></div><p>Memuat jadwal...</p></div>
+                </div>
+            </div>
         </div>
 
-        <!-- MENU CARDS -->
+    </div>
+
+    <!-- DOTS INDIKATOR -->
+    <div class="carousel-dots">
+        <span class="dot active" onclick="goToSlide(0)"></span>
+        <span class="dot" onclick="goToSlide(1)"></span>
+        <span class="dot" onclick="goToSlide(2)"></span>
+    </div>
+
+    <!-- MENU UTAMA -->
+    <div class="home-content" style="padding-top: 0; padding-bottom: 100px;">
         <div class="home-cards">
-            <button class="home-card" onclick="goToChatScreen()">
+            <button class="home-card" onclick="openChatSelectionModal()">
                 <div class="home-card-icon">📦</div>
                 <div class="home-card-info">
-                    <div class="home-card-title">Chat dengan AI</div>
-                    <div class="home-card-subtitle">Yui, Hana, Rei, Kurumi</div>
+                    <div class="home-card-title">Chat & Room</div>
+                    <div class="home-card-subtitle">Bot AI atau Room Bersama</div>
                 </div>
                 <div class="home-card-arrow">→</div>
             </button>
 
-            <button class="home-card" onclick="goToMasterShiftScreen()">
-                <div class="home-card-icon">🌸</div>
+            <button class="home-card" onclick="goToNotificationsScreen()">
+                <div class="home-card-icon">📢</div>
                 <div class="home-card-info">
-                    <div class="home-card-title">Master Shift</div>
-                    <div class="home-card-subtitle">Cek & atur jadwal</div>
-                </div>
-                <div class="home-card-arrow">→</div>
-            </button>
-
-            <button class="home-card" onclick="goToSettingsScreen()">
-                <div class="home-card-icon">⚙️</div>
-                <div class="home-card-info">
-                    <div class="home-card-title">Pengaturan</div>
-                    <div class="home-card-subtitle">API key, tema, info</div>
+                    <div class="home-card-title">Broadcast Info</div>
+                    <div class="home-card-subtitle">Pengumuman & Update</div>
                 </div>
                 <div class="home-card-arrow">→</div>
             </button>
@@ -227,14 +240,19 @@
                 <div class="home-card-icon">🌐</div>
                 <div class="home-card-info">
                     <div class="home-card-title">Web Streamlit</div>
-                    <div class="home-card-subtitle">PDF, PPT, Master Shift</div>
+                    <div class="home-card-subtitle">PDF, PPT, Report</div>
                 </div>
                 <div class="home-card-arrow">→</div>
             </button>
-        </div>
 
-        <div class="home-footer">
-            <span>v1.0.0 — Dashboard SO C383</span>
+            <button class="home-card" onclick="showToastMini('Fitur Report segera hadir!', 'error')">
+                <div class="home-card-icon">📈</div>
+                <div class="home-card-info">
+                    <div class="home-card-title">Report Daily</div>
+                    <div class="home-card-subtitle">Performance (Coming Soon)</div>
+                </div>
+                <div class="home-card-arrow">→</div>
+            </button>
         </div>
     </div>
 </div>

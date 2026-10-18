@@ -658,7 +658,44 @@ function goToHomeScreen() {
     showScreen("homeScreen");
     startLiveClock();
     loadMiniDashboard();
+    loadHomeSchedule(); // Fungsi baru
     startDashboardAutoRefresh();
+    
+    // Set Avatar di Home
+    const _user = getUser();
+    if (_user) {
+        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+        const elAvatar = document.getElementById("homeAvatar");
+        if (elAvatar) elAvatar.textContent = inisial;
+    }
+}
+
+// --- FUNGSI JADWAL DI HOME ---
+async function loadHomeSchedule() {
+    const container = document.getElementById("homeScheduleList");
+    if (!container) return;
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/shift-hari-ini`, { method: "GET" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        
+        if (data.success && data.grouped) {
+            let html = "";
+            const g = data.grouped;
+            if (g.P7 && g.P7.length) html += `<div style="margin-bottom:8px;"><b style="color:#06d6a0;">🟢 Pagi:</b> ${g.P7.join(", ")}</div>`;
+            if (g.S15 && g.S15.length) html += `<div style="margin-bottom:8px;"><b style="color:#feca57;">🟡 Siang:</b> ${g.S15.join(", ")}</div>`;
+            if (g.M22 && g.M22.length) html += `<div style="margin-bottom:8px;"><b style="color:#ee5253;">🔴 Malam:</b> ${g.M22.join(", ")}</div>`;
+            if (g.O && g.O.length) html += `<div style="margin-bottom:8px;"><b style="color:#a39e93;">⚪ Off:</b> ${g.O.join(", ")}</div>`;
+            
+            container.innerHTML = html || `<p style="text-align:center; color:var(--text-muted);">Tidak ada jadwal hari ini.</p>`;
+        } else {
+            container.innerHTML = `<p style="text-align:center; color:var(--text-muted);">Tidak ada jadwal.</p>`;
+        }
+    } catch (err) {
+        console.error("[HomeSchedule] Error:", err);
+        container.innerHTML = `<p style="text-align:center; color:var(--danger);">Gagal load jadwal.</p>`;
+    }
 }
 
 function goToChatScreen() {
@@ -4416,6 +4453,50 @@ async function submitAddUser() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = '✅ Simpan';
+    }
+}
+// --- CAROUSEL LOGIC ---
+let currentSlide = 0;
+function goToSlide(index) {
+    const container = document.querySelector('.home-carousel-container');
+    if (!container) return;
+    const slides = container.querySelectorAll('.home-slide');
+    if (slides[index]) {
+        slides[index].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        updateDots(index);
+        currentSlide = index;
+    }
+}
+
+function updateDots(index) {
+    document.querySelectorAll('.carousel-dots .dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === index);
+    });
+}
+
+// Deteksi swipe manual
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.querySelector('.home-carousel-container');
+    if (container) {
+        container.addEventListener('scroll', () => {
+            const slideWidth = container.clientWidth;
+            const scrollPos = container.scrollLeft;
+            const newIndex = Math.round(scrollPos / slideWidth);
+            if (newIndex !== currentSlide) {
+                currentSlide = newIndex;
+                updateDots(currentSlide);
+            }
+        });
+    }
+});
+
+// --- MODAL PILIHAN CHAT ---
+function openChatSelectionModal() {
+    const pilihan = prompt("Pilih Mode Chat:\n1. Chat dengan Bot AI (Yui/Hana/Rei/Kurumi)\n2. Room Chat Bersama (Coming Soon)\n\nKetik 1 atau 2:");
+    if (pilihan === "1") {
+        goToChatScreen(); // Fungsi lama lu
+    } else if (pilihan === "2") {
+        showToastMini("Fitur Room Chat segera hadir!", "error");
     }
 }
 
