@@ -658,15 +658,19 @@ function goToHomeScreen() {
     showScreen("homeScreen");
     startLiveClock();
     loadMiniDashboard();
-    loadHomeSchedule(); // Fungsi baru
+    loadHomeSchedule();
     startDashboardAutoRefresh();
     
-    // Set Avatar di Home
+    // Set Avatar di HEADER
     const _user = getUser();
     if (_user) {
         const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
-        const elAvatar = document.getElementById("homeAvatar");
-        if (elAvatar) elAvatar.textContent = inisial;
+        const elAvatarHeader = document.getElementById("homeAvatar");
+        if (elAvatarHeader) elAvatarHeader.textContent = inisial;
+        
+        // Set Avatar di SLIDE 1 (kiri)
+        const elAvatarSlide = document.getElementById("slideHomeAvatar");
+        if (elAvatarSlide) elAvatarSlide.textContent = inisial;
     }
 }
 

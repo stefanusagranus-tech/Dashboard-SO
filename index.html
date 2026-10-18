@@ -150,14 +150,22 @@
     <div class="home-carousel-container" id="homeCarousel">
         
         <!-- SLIDE 1: PROFIL & JAM -->
+        <!-- WIDGET 1: PROFIL KIRI, SAPAAN KANAN, RUNNING TEXT BAWAH -->
         <div class="home-slide active">
-            <div class="slide-profile">
-                <div class="profile-avatar-large" id="homeAvatar">?</div>
-                <div class="slide-greeting" id="clockGreeting">Selamat Datang!</div>
-                <div class="slide-time" id="clockTime">--:--</div>
-                <div class="slide-date" id="clockDate">Memuat...</div>
+            <div class="slide-profile-row">
+                <!-- KIRI: FOTO PROFIL -->
+                <div class="profile-avatar-large" id="slideHomeAvatar">?</div>
+                
+                <!-- KANAN: SAPAAN, JAM, TANGGAL -->
+                <div class="slide-greeting-col">
+                    <div class="slide-greeting" id="clockGreeting">Selamat Datang!</div>
+                    <div class="slide-time" id="clockTime">--:--</div>
+                    <div class="slide-date" id="clockDate">Memuat...</div>
+                </div>
             </div>
-            <div class="running-text" id="runningTextContainer" style="margin-top: 15px;">
+            
+            <!-- BAWAH: RUNNING TEXT -->
+            <div class="running-text" id="runningTextContainer" style="margin-top: 16px;">
                 <div class="running-inner" id="runningText">🎃 Memuat info...</div>
             </div>
         </div>
