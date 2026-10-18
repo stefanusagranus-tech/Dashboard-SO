@@ -177,3 +177,64 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
 .scroll-to-bottom-btn.show {
     display: flex;
 }
+/* =========================================================
+   SETTINGS MENU BOX v2
+   ========================================================= */
+
+/* Card Dasar */
+.settings-card {
+    background: var(--bg-card-dark) !important;
+    border: 1px solid var(--border-stone) !important;
+    border-radius: 12px !important;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+.settings-card:active { transform: scale(0.98); border-color: var(--accent-flame) !important; }
+
+/* 1. Kartu Profil */
+.profile-card {
+    display: flex; align-items: center; padding: 16px; gap: 16px;
+    background: linear-gradient(135deg, #2b2b36 0%, #1e1e26 100%) !important;
+    border-left: 4px solid var(--accent-flame) !important;
+}
+.profile-avatar {
+    width: 60px; height: 60px; border-radius: 50%;
+    background: var(--accent-flame); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 900;
+    box-shadow: 0 0 15px rgba(255, 123, 0, 0.4);
+}
+.profile-info { flex: 1; }
+.profile-name { font-size: 16px; font-weight: 800; color: var(--text-bone); }
+.profile-username { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.profile-role { font-size: 11px; color: var(--accent-flame); font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+.profile-arrow { font-size: 20px; opacity: 0.5; }
+
+/* 2-4. Kotak Menu (Admin, Tema, Sistem) */
+.menu-box {
+    display: flex; align-items: center; padding: 16px; gap: 16px;
+}
+.menu-box-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+}
+.menu-box-content { flex: 1; }
+.menu-box-title { font-size: 15px; font-weight: 800; color: var(--text-bone); margin-bottom: 2px; }
+.menu-box-desc { font-size: 12px; color: var(--text-muted); }
+.admin-box { border-left: 4px solid #8a2be2 !important; } /* Border ungu buat admin */
+
+/* 5. Tombol Logout */
+.logout-btn {
+    width: 100%; padding: 16px;
+    background: rgba(230, 57, 70, 0.1) !important;
+    border: 1px solid var(--danger) !important;
+    color: var(--danger) !important;
+    font-size: 15px; font-weight: 800;
+    border-radius: 12px;
+    box-shadow: none !important;
+}
+.logout-btn:active { background: rgba(230, 57, 70, 0.3) !important; transform: translateY(2px) !important; }

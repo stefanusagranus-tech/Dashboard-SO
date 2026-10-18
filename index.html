@@ -999,103 +999,59 @@
 <!-- ========================================================= -->
 <!-- SETTINGS SCREEN -->
 <!-- ========================================================= -->
-<div id="settingsScreen" class="screen">
-    <div class="screen-header">
-        <button class="back-btn" onclick="goToHomeScreen()">←</button>
-        <div class="screen-title">Pengaturan</div>
-        <div class="screen-header-spacer"></div>
+<div class="settings-content" style="padding: 16px; overflow-y: auto; height: 100%;">
+    
+    <!-- 1. KARTU PROFIL -->
+    <div class="settings-card profile-card" onclick="goToProfileScreen()">
+        <div class="profile-avatar" id="settingsAvatar">?</div>
+        <div class="profile-info">
+            <div class="profile-name" id="settingsNamaLengkap">Memuat...</div>
+            <div class="profile-username" id="settingsUsername">@...</div>
+            <div class="profile-role" id="settingsRole">...</div>
+        </div>
+        <div class="profile-arrow">✏️</div>
     </div>
 
-    <div class="settings-content">
-        <div class="settings-group">
-            <div class="settings-group-title">🔑 API Key</div>
-            <div class="settings-item">
-                <div class="settings-item-value" id="settingsApiKey">so_c383_***</div>
-            </div>
-            <button class="settings-btn" onclick="changeApiKey()">Ganti API Key</button>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-group-title">👤 Akun</div>
-            <div class="settings-item">
-                <div class="settings-label">Username</div>
-                <div class="settings-item-value" id="settingsUsername">-</div>
-            </div>
-            <div class="settings-item">
-                <div class="settings-label">Nama Lengkap</div>
-                <div class="settings-item-value" id="settingsNamaLengkap">-</div>
-            </div>
-            <div class="settings-item">
-                <div class="settings-label">Role</div>
-                <div class="settings-item-value" id="settingsRole">-</div>
-            </div>
-        </div>
-        
-        <div class="settings-group">
-            <div class="settings-group-title">🔐 Keamanan</div>
-            <button class="settings-btn" onclick="changePin()">🔑 Ganti PIN</button>
-            <button class="settings-btn" onclick="changePassword()" style="margin-top: 8px;">🔒 Ganti Password</button>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-group-title">🎨 Tema</div>
-            <div class="settings-theme-row">
-                <button class="theme-option" data-theme="halloween-dark" onclick="setTheme('halloween-dark')">
-                    🌙 Dark
-                </button>
-                <button class="theme-option" data-theme="halloween-light" onclick="setTheme('halloween-light')">
-                    ☀️ Light
-                </button>
-            </div>
-            <div class="settings-item" style="margin-top: 10px;">
-                <div class="settings-label">Auto Tema Jam</div>
-                <div class="settings-item-value" id="autoThemeValue">Aktif</div>
-            </div>
-            <button class="settings-btn" onclick="toggleAutoTheme()">Toggle Auto Tema</button>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-group-title">ℹ️ Info</div>
-            <div class="settings-item">
-                <div class="settings-label">Versi Terinstall</div>
-                <div class="settings-item-value" id="settingsCurrentVersion">1.0.0</div>
-            </div>
-            <div class="settings-item">
-                <div class="settings-label">Versi Terbaru</div>
-                <div class="settings-item-value" id="settingsLatestVersion">Belum dicek</div>
-            </div>
-            <div class="settings-item">
-                <div class="settings-label">Backend</div>
-                <div class="settings-item-value">dashboard-so.fastapicloud.dev</div>
-            </div>
-        </div>
-        
-        <div class="settings-group">
-            <div class="settings-group-title">🔄 Update</div>
-            <button class="settings-btn" onclick="checkForUpdate(true)">
-                🔄 Cek Update
-            </button>
-        </div>
-        
-        <div class="settings-group">
-            <div class="settings-group-title">🗑️ Data</div>
-            <button class="settings-btn settings-btn-danger" onclick="resetAllChat()">
-                Reset Semua Chat
-            </button>
-        </div>
-         <!-- Cuma muncul kalau admin -->
-        <div class="settings-group" id="menuKelolaUser" style="display: none;">
-            <div class="settings-group-title">👥 Manajemen</div>
-            <button class="settings-btn" onclick="goToUserManagementScreen()">
-                 👥 Kelola User
-            </button>
-        </div>
-        <div class="settings-group">
-            <button class="settings-btn settings-btn-danger" onclick="logout()">
-                🚪 Logout
-            </button>
+    <!-- 2. KOTAK ADMINISTRASI (Khusus Admin) -->
+    <div class="settings-card menu-box admin-box" id="menuKelolaUser" onclick="goToUserManagementScreen()" style="display: none;">
+        <div class="menu-box-icon">👥</div>
+        <div class="menu-box-content">
+            <div class="menu-box-title">Administrasi</div>
+            <div class="menu-box-desc">Kelola User, Role, Reset Akses</div>
         </div>
     </div>
+
+    <!-- 3. KOTAK TEMA -->
+    <div class="settings-card menu-box" onclick="openThemeModal()">
+        <div class="menu-box-icon">🎨</div>
+        <div class="menu-box-content">
+            <div class="menu-box-title">Tampilan & Tema</div>
+            <div class="menu-box-desc">Dark, Light, Auto Tema Jam</div>
+        </div>
+    </div>
+
+    <!-- 4. KOTAK SISTEM -->
+    <div class="settings-card menu-box" onclick="openSystemModal()">
+        <div class="menu-box-icon">⚙️</div>
+        <div class="menu-box-content">
+            <div class="menu-box-title">Sistem & Info</div>
+            <div class="menu-box-desc">Cek Update, API Key, Reset Data</div>
+        </div>
+    </div>
+
+    <!-- 5. TOMBOL LOGOUT -->
+    <div style="margin-top: 24px; margin-bottom: 80px;">
+        <button class="settings-btn logout-btn" onclick="logout()">
+            🚪 Logout dari Akun
+        </button>
+        
+        <!-- Footer kecil -->
+        <div style="text-align: center; margin-top: 16px; font-size: 11px; color: var(--text-muted);">
+            Dashboard SO C383 v1.0.0<br>
+            © 2026 Stefanus Agranus
+        </div>
+    </div>
+
 </div>
 <!-- ========================================================= -->
 <!-- USER MANAGEMENT SCREEN (ADMIN ONLY) -->

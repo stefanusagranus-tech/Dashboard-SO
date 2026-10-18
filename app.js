@@ -670,18 +670,54 @@ function goToChatScreen() {
 
 function goToSettingsScreen() {
     closeSidebar();
-    updateApiKeyDisplay();
-    updateAutoThemeDisplay();
     updateSettingsUserInfo();
     
-    // Tampilkan menu kelola user cuma buat admin
+    // Logic Avatar
     const _user = getUser();
+    if (_user) {
+        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+        const elAvatar = document.getElementById("settingsAvatar");
+        if (elAvatar) elAvatar.textContent = inisial;
+    }
+
+    // Tampilkan menu kelola user cuma buat admin
     const _menuAdmin = document.getElementById("menuKelolaUser");
     if (_menuAdmin) {
-        _menuAdmin.style.display = (_user && _user.role === "admin") ? "block" : "none";
+        _menuAdmin.style.display = (_user && _user.role === "admin") ? "flex" : "none";
     }
 
     showScreen("settingsScreen");
+}
+// --- PROFIL (Placeholder) ---
+function goToProfileScreen() {
+    showToastMini("Fitur Edit Profil segera hadir!", "success");
+    // Nanti bisa diarahkan ke halaman profil baru
+}
+
+// --- MODAL TEMA ---
+function openThemeModal() {
+    // Placeholder sederhana pakai prompt dulu, atau bisa bikin modal custom
+    const isDark = document.documentElement.getAttribute("data-theme") === "halloween-dark";
+    const pesan = isDark ? "Mode sekarang: DARK. Ganti ke LIGHT?" : "Mode sekarang: LIGHT. Ganti ke DARK?";
+    if (confirm(pesan)) {
+        toggleTheme();
+        showToastMini("✅ Tema berhasil diubah", "success");
+    }
+}
+
+// --- MODAL SISTEM ---
+function openSystemModal() {
+    const aksi = prompt(
+        "Menu Sistem:\n" +
+        "1. Cek Update\n" +
+        "2. Ganti API Key\n" +
+        "3. Reset Semua Chat\n\n" +
+        "Ketik angka (1/2/3):"
+    );
+    
+    if (aksi === "1") checkForUpdate(true);
+    else if (aksi === "2") changeApiKey();
+    else if (aksi === "3") resetAllChat();
 }
 
 function goToStreamlitScreen() {
@@ -767,9 +803,11 @@ function updateSettingsUserInfo() {
     const elUser = document.getElementById("settingsUsername");
     const elName = document.getElementById("settingsNamaLengkap");
     const elRole = document.getElementById("settingsRole");
-    if (elUser) elUser.textContent = _user ? _user.username : "-";
+    
+    if (elUser) elUser.textContent = _user ? `@${_user.username}` : "-";
     if (elName) elName.textContent = _user ? (_user.nama_lengkap || "-") : "-";
     if (elRole) elRole.textContent = _user ? (_user.role || "-").toUpperCase() : "-";
+} "-").toUpperCase() : "-";
 }
 
 // =========================================================
