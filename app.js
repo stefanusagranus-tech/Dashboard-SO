@@ -1303,7 +1303,12 @@ function getShiftDateRange() {
         if (customStart && customStart.value) start = new Date(customStart.value);
         if (customEnd && customEnd.value) end = new Date(customEnd.value);
     }
-    return { start, end };
+
+    // Paksa format ke YYYY-MM-DD pakai timezone lokal (biar gak meleset sehari)
+    const startStr = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, '0') + "-" + String(start.getDate()).padStart(2, '0');
+    const endStr = end.getFullYear() + "-" + String(end.getMonth() + 1).padStart(2, '0') + "-" + String(end.getDate()).padStart(2, '0');
+    
+    return { start, end, startStr, endStr };
 }
 
 function formatTanggalLong(dateStr) {
@@ -1390,20 +1395,15 @@ function renderPersonilList() {
 async function loadMasterShift() {
     const container = document.getElementById("shiftList");
     const summary = document.getElementById("shiftSummary");
-
     if (!container) return;
 
-    container.innerHTML = `
-        <div class="loading-state">
-            <div class="spinner"></div>
-            <p>Memuat jadwal shift...</p>
-        </div>
-    `;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat jadwal shift...</p></div>`;
 
     try {
         const range = getShiftDateRange();
-        const startStr = range.start.toISOString().slice(0, 10);
-        const endStr = range.end.toISOString().slice(0, 10);
+        // Langsung pakai string yang udah diformat
+        const startStr = range.startStr;
+        const endStr = range.endStr;
 
         const filterSelect = document.getElementById("personilFilter");
         const namaFilter = filterSelect ? filterSelect.value : "";
@@ -1411,35 +1411,32 @@ async function loadMasterShift() {
         const body = { tgl_start: startStr, tgl_end: endStr };
         if (namaFilter) body.nama_filter = namaFilter;
 
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, {
+        // Debugging: liat apa yang dikirim
+        console.log("[MasterShift] Request Body:", body);
+
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
         });
-        
-        if (!resp.ok) {
-            let _errText = "";
-            try { _errText = await resp.text(); } catch (e) {}
-            console.error("[Status] HTTP Error:", resp.status, _errText.substring(0, 200));
-            throw new Error(`HTTP ${resp.status}`);
-        }
-        
-        const data = await resp.json();
-        console.log("[Status] Response:", data);
-        if (!data.success) throw new Error(data.error || "Gagal load status");
 
-        masterShiftData = data.data || [];
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        
+        // Debugging: liat apa yang diterima
+        console.log("[MasterShift] Response Data:", data);
+
+        if (!data.success) throw new Error(data.error || "Gagal load data");
+
+        // PENTING: Ambil data dari field 'data', bukan 'list_shift'
+        masterShiftData = data.data || data.list_shift || [];
+        
         renderShiftList();
         renderShiftSummary(data);
 
     } catch (err) {
         console.error("[MasterShift] Error:", err);
-        container.innerHTML = `
-            <div class="shift-summary-empty">
-                <span class="empty-icon">⚠️</span>
-                <p>Gagal load data: ${err.message}</p>
-            </div>
-        `;
+        container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${err.message}</p></div>`;
         if (summary) summary.innerHTML = "";
     }
 }
