@@ -21,7 +21,9 @@ Endpoint:
 from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel, Field
 from typing import Optional
-
+from datetime import datetime
+from fastapi import File, UploadFile
+import base64
 from middleware.rate_limit import limiter
 from services.auth import (
     hash_password, verify_password, hash_pin, verify_pin,
