@@ -4467,17 +4467,22 @@ let currentSlide = 0;
 const totalSlides = 3;
 
 function goToSlide(index) {
-    if (index < 0) index = 0;
-    if (index >= totalSlides) index = totalSlides - 1;
+    const container = document.getElementById("homeCarousel");
+    if (!container) return;
     
-    currentSlide = index;
-    const slides = document.querySelectorAll('.home-slide');
+    // Hitung posisi scroll berdasarkan lebar container + gap
+    const slideWidth = container.clientWidth + 16; // 16 adalah gap
+    const scrollPosition = index * slideWidth;
     
-    slides.forEach((s, i) => {
-        s.classList.toggle('active', i === index);
+    container.scrollTo({
+        left: scrollPosition,
+        behavior: "smooth"
     });
     
-    updateDots(index);
+    // Update dots
+    document.querySelectorAll('.carousel-dots .dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === index);
+    });
 }
 
 function updateDots(index) {
