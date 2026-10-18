@@ -337,82 +337,85 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
 }
 
 /* =========================================================
-   LAYOUT SLIDE 1: AVATAR MENTOK KIRI, TEKS RAPAT
-   ========================================================= */
-/* =========================================================
-   FIX TOTAL LAYOUT SLIDE 1 (PROFIL & JAM)
+   BENTO GRID LAYOUT (3 SLIDE SERAGAM)
    ========================================================= */
 
-/* Container Utama Slide 1 */
+/* Container Utama Widget */
+.widget-container {
+    position: relative;
+    width: 100%;
+    height: 260px; /* Kunci tinggi biar seragam */
+    padding: 12px 16px;
+    overflow: hidden;
+    display: flex;
+    align-items: stretch;
+}
+
+.widget-slide {
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+}
+
 .widget-slide.active {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: flex-start !important;
-    padding: 16px !important;
-    /* Kunci tinggi cuma buat slide 1 biar gak melompong */
-    height: auto !important; 
-    min-height: 180px;
+    display: flex;
+    opacity: 1;
 }
 
-/* Baris Atas (Avatar + Teks) */
-.slide-profile-row {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    gap: 12px !important;
+/* Bento Grid */
+.bento-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 12px;
     width: 100%;
-    margin-bottom: 12px;
+    flex: 1; /* Penuhi sisa tinggi */
 }
 
-/* Avatar Bulat */
+/* Kotak Dasar Bento */
+.bento-box {
+    background: var(--bg-card-dark);
+    border: 1px solid var(--border-stone);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto; /* Biar bisa scroll kalau isinya banyak */
+}
+
+/* Box Khusus Profil (Kiri) */
+.avatar-box {
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #2b2b36 0%, #1e1e26 100%);
+    border-left: 4px solid var(--accent-flame);
+}
+
 .profile-avatar-large {
-    width: 64px !important;
-    height: 64px !important;
-    border-radius: 50% !important;
-    background: var(--accent-flame) !important;
-    color: #fff !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 24px !important;
-    font-weight: 900 !important;
-    box-shadow: 0 0 15px rgba(255, 123, 0, 0.4) !important;
-    flex-shrink: 0 !important;
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: var(--accent-flame);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 900;
+    box-shadow: 0 0 20px rgba(255, 123, 0, 0.4);
 }
 
-/* Kolom Teks (Kanan Avatar) */
-.slide-greeting-col {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    text-align: left !important;
-}
+/* Box Khusus Sapaan (Kanan) */
+.greeting-box { justify-content: center; align-items: flex-start; }
+.slide-greeting { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 600; }
+.slide-time { font-size: 32px; font-weight: 900; color: var(--accent-flame); line-height: 1; margin-bottom: 4px; }
+.slide-date { font-size: 12px; color: var(--text-muted); }
 
-.slide-greeting {
-    font-size: 13px !important;
-    color: var(--text-secondary) !important;
-    margin: 0 0 2px 0 !important;
-    line-height: 1.2;
-}
+/* Box Ringkasan (Slide 2) - Full Width */
+.summary-box { grid-column: span 2; }
+/* Box Jadwal (Slide 3) - Full Width */
+.schedule-box { grid-column: span 2; }
 
-.slide-time {
-    font-size: 28px !important;
-    font-weight: 900 !important;
-    color: var(--accent-flame) !important;
-    line-height: 1 !important;
-    margin: 0 !important;
-    text-shadow: 0 0 10px rgba(255, 123, 0, 0.3);
-}
-
-.slide-date {
-    font-size: 12px !important;
-    color: var(--text-muted) !important;
-    margin: 4px 0 0 0 !important;
-}
-
-/* Running Text di Bawah */
-.widget-slide.active .running-text {
-    margin-top: auto !important; /* Dorong ke bawah */
-    width: 100%;
-}
+/* Rapihin isi stat di Bento */
+.mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat { background: rgba(255,255,255,0.03); border: 1px solid var(--border-stone); border-radius: 8px; padding: 8px; text-align: center; }
+.stat-value { font-size: 16px; font-weight: 900; color: var(--accent-flame); }

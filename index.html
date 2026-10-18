@@ -150,66 +150,67 @@
     <div class="home-carousel-container" id="homeCarousel">
         
         <!-- SLIDE 1: PROFIL & JAM -->
-
+        <!-- SLIDE 1: BENTO PROFIL & JAM -->
         <div class="widget-slide active">
-            <div class="slide-profile-row">
-                <!-- KIRI: FOTO PROFIL -->
-                <div class="profile-avatar-large" id="slideHomeAvatar">?</div>
-                
-                <!-- KANAN: SAPAAN, JAM, TANGGAL -->
-                <div class="slide-greeting-col">
+            <div class="bento-grid">
+                <div class="bento-box avatar-box">
+                    <div class="profile-avatar-large" id="slideHomeAvatar">?</div>
+                </div>
+                <div class="bento-box greeting-box">
                     <div class="slide-greeting" id="clockGreeting">Selamat Datang!</div>
                     <div class="slide-time" id="clockTime">--:--</div>
                     <div class="slide-date" id="clockDate">Memuat...</div>
                 </div>
             </div>
-            
-            <!-- BAWAH: RUNNING TEXT -->
-            <div class="running-text" id="runningTextContainer" style="margin-top: 16px;">
+            <div class="running-text" id="runningTextContainer" style="margin-top: 12px; border-radius: 12px;">
                 <div class="running-inner" id="runningText">🎃 Memuat info...</div>
             </div>
         </div>
-
-        <!-- SLIDE 2: RINGKASAN -->
-        <div class="home-slide">
-            <div class="mini-dashboard" style="margin: 0; border: none; background: transparent; padding: 0;">
-                <div class="mini-title">📊 RINGKASAN HARI INI</div>
-                <div class="mini-stats">
-                    <div class="stat stat-clickable" onclick="goToRakListScreen()">
-                        <div class="stat-icon">📦</div>
-                        <div class="stat-value" id="statRak">--</div>
-                        <div class="stat-label">TOTAL RAK</div>
+        
+        <!-- SLIDE 2: BENTO RINGKASAN -->
+        <div class="widget-slide">
+            <div class="bento-grid">
+                <div class="bento-box summary-box">
+                    <div class="mini-title">📊 RINGKASAN HARI INI</div>
+                    <div class="mini-stats">
+                        <div class="stat stat-clickable" onclick="goToRakListScreen()">
+                            <div class="stat-icon">📦</div>
+                            <div class="stat-value" id="statRak">--</div>
+                            <div class="stat-label">TOTAL RAK</div>
+                        </div>
+                        <div class="stat stat-clickable" onclick="goToSpdListScreen()">
+                            <div class="stat-icon">💰</div>
+                            <div class="stat-value" id="statSpd">--</div>
+                            <div class="stat-label">SPD</div>
+                        </div>
+                        <div class="stat stat-clickable" onclick="goToTopMinusScreen()">
+                            <div class="stat-icon">📉</div>
+                            <div class="stat-value" id="statNominal">--</div>
+                            <div class="stat-label">NOMINAL ADJ</div>
+                        </div>
                     </div>
-                    <div class="stat stat-clickable" onclick="goToSpdListScreen()">
-                        <div class="stat-icon">💰</div>
-                        <div class="stat-value" id="statSpd">--</div>
-                        <div class="stat-label">SPD</div>
+                    <div class="status-bar status-bar-clickable" id="statusBar" onclick="goToStatusScreen()">
+                        <div class="status-icon" id="statusIcon">⏳</div>
+                        <div class="status-info">
+                            <div class="status-label">Status Selisih</div>
+                            <div class="status-value" id="statusValue">Memuat...</div>
+                        </div>
+                        <div class="status-percent" id="statusPercent">--%</div>
                     </div>
-                    <div class="stat stat-clickable" onclick="goToTopMinusScreen()">
-                        <div class="stat-icon">📉</div>
-                        <div class="stat-value" id="statNominal">--</div>
-                        <div class="stat-label">NOMINAL ADJ</div>
-                    </div>
+                    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                    <div class="progress-label" id="progressLabel">Memuat...</div>
                 </div>
-                <div class="status-bar status-bar-clickable" id="statusBar" onclick="goToStatusScreen()">
-                    <div class="status-icon" id="statusIcon">⏳</div>
-                    <div class="status-info">
-                        <div class="status-label">Status Selisih</div>
-                        <div class="status-value" id="statusValue">Memuat...</div>
-                    </div>
-                    <div class="status-percent" id="statusPercent">--%</div>
-                </div>
-                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-                <div class="progress-label" id="progressLabel">Memuat...</div>
             </div>
         </div>
-
-        <!-- SLIDE 3: JADWAL HARI INI -->
-        <div class="home-slide">
-            <div class="mini-dashboard" style="margin: 0; border: none; background: transparent; padding: 0;">
-                <div class="mini-title">🌸 JADWAL HARI INI</div>
-                <div id="homeScheduleList">
-                    <div class="loading-state"><div class="spinner"></div><p>Memuat jadwal...</p></div>
+        
+        <!-- SLIDE 3: BENTO JADWAL -->
+        <div class="widget-slide">
+            <div class="bento-grid">
+                <div class="bento-box schedule-box">
+                    <div class="mini-title">🌸 JADWAL HARI INI</div>
+                    <div id="homeScheduleList">
+                        <div class="loading-state"><div class="spinner"></div><p>Memuat jadwal...</p></div>
+                    </div>
                 </div>
             </div>
         </div>
