@@ -147,74 +147,71 @@
     </div>
 
     <!-- WIDGET CAROUSEL -->
-    <div class="widget-container" id="homeCarousel">
+    <!-- WIDGET CAROUSEL (FORCED STYLE) -->
+    <div class="widget-container" id="homeCarousel" style="display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding: 16px; gap: 16px; width: 100%; height: 240px; box-sizing: border-box; background: transparent;">
         
-        <!-- SLIDE 1: BENTO PROFIL & JAM -->
-        <div class="widget-slide active">
-            <div class="bento-grid">
-                <div class="bento-box avatar-box">
-                    <div class="profile-avatar-large" id="slideHomeAvatar">?</div>
+        <!-- SLIDE 1: PROFIL & JAM -->
+        <div class="widget-slide active" style="flex: 0 0 100%; scroll-snap-align: center; display: flex !important; flex-direction: column; height: 100%; box-sizing: border-box;">
+            
+            <!-- BENTO GRID -->
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; width: 100%; height: 100%;">
+                
+                <!-- KOTAK KIRI (AVATAR) -->
+                <div style="background: var(--bg-card-dark); border: 1px solid var(--border-stone); border-left: 4px solid var(--accent-flame); border-radius: 16px; display: flex; align-items: center; justify-content: center;">
+                    <div class="profile-avatar-large" id="slideHomeAvatar" style="width: 64px; height: 64px; border-radius: 50%; background: var(--accent-flame); color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; box-shadow: 0 0 20px rgba(255,123,0,0.4);">?</div>
                 </div>
-                <div class="bento-box greeting-box">
-                    <div class="slide-greeting" id="clockGreeting">Selamat Datang!</div>
-                    <div class="slide-time" id="clockTime">--:--</div>
-                    <div class="slide-date" id="clockDate">Memuat...</div>
+                
+                <!-- KOTAK KANAN (JAM) -->
+                <div style="background: var(--bg-card-dark); border: 1px solid var(--border-stone); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;">
+                    <div class="slide-greeting" id="clockGreeting" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 600;">Selamat Datang!</div>
+                    <div class="slide-time" id="clockTime" style="font-size: 32px; font-weight: 900; color: var(--accent-flame); line-height: 1; margin-bottom: 4px;">--:--</div>
+                    <div class="slide-date" id="clockDate" style="font-size: 12px; color: var(--text-muted);">Memuat...</div>
                 </div>
+                
             </div>
-            <div class="running-text" id="runningTextContainer" style="margin-top: 12px; border-radius: 12px;">
-                <div class="running-inner" id="runningText">🎃 Memuat info...</div>
+    
+            <!-- RUNNING TEXT -->
+            <div class="running-text" id="runningTextContainer" style="margin-top: 12px; border-radius: 12px; background: var(--bg-card-dark); border: 1px solid var(--border-stone);">
+                <div class="running-inner" id="runningText" style="color: var(--text-bone);">🎃 Memuat info...</div>
             </div>
         </div>
     
-        <!-- SLIDE 2: BENTO RINGKASAN -->
-        <div class="widget-slide">
-            <div class="bento-grid">
-                <div class="bento-box summary-box">
-                    <div class="mini-title">📊 RINGKASAN HARI INI</div>
-                    <div class="mini-stats">
-                        <div class="stat stat-clickable" onclick="goToRakListScreen()">
-                            <div class="stat-icon">📦</div>
-                            <div class="stat-value" id="statRak">--</div>
-                            <div class="stat-label">TOTAL RAK</div>
-                        </div>
-                        <div class="stat stat-clickable" onclick="goToSpdListScreen()">
-                            <div class="stat-icon">💰</div>
-                            <div class="stat-value" id="statSpd">--</div>
-                            <div class="stat-label">SPD</div>
-                        </div>
-                        <div class="stat stat-clickable" onclick="goToTopMinusScreen()">
-                            <div class="stat-icon">📉</div>
-                            <div class="stat-value" id="statNominal">--</div>
-                            <div class="stat-label">NOMINAL ADJ</div>
-                        </div>
+        <!-- SLIDE 2: RINGKASAN -->
+        <div class="widget-slide" style="flex: 0 0 100%; scroll-snap-align: center; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+            <div style="background: var(--bg-card-dark); border: 1px solid var(--border-stone); border-radius: 16px; padding: 16px; width: 100%; height: 100%; overflow-y: auto;">
+                <div class="mini-title">📊 RINGKASAN HARI INI</div>
+                <div class="mini-stats">
+                    <div class="stat stat-clickable" onclick="goToRakListScreen()">
+                        <div class="stat-icon">📦</div><div class="stat-value" id="statRak">--</div><div class="stat-label">TOTAL RAK</div>
                     </div>
-                    <div class="status-bar status-bar-clickable" id="statusBar" onclick="goToStatusScreen()">
-                        <div class="status-icon" id="statusIcon">⏳</div>
-                        <div class="status-info">
-                            <div class="status-label">Status Selisih</div>
-                            <div class="status-value" id="statusValue">Memuat...</div>
-                        </div>
-                        <div class="status-percent" id="statusPercent">--%</div>
+                    <div class="stat stat-clickable" onclick="goToSpdListScreen()">
+                        <div class="stat-icon">💰</div><div class="stat-value" id="statSpd">--</div><div class="stat-label">SPD</div>
                     </div>
-                    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-                    <div class="progress-label" id="progressLabel">Memuat...</div>
+                    <div class="stat stat-clickable" onclick="goToTopMinusScreen()">
+                        <div class="stat-icon">📉</div><div class="stat-value" id="statNominal">--</div><div class="stat-label">NOMINAL ADJ</div>
+                    </div>
                 </div>
+                <div class="status-bar status-bar-clickable" id="statusBar" onclick="goToStatusScreen()">
+                    <div class="status-icon" id="statusIcon">⏳</div>
+                    <div class="status-info"><div class="status-label">Status Selisih</div><div class="status-value" id="statusValue">Memuat...</div></div>
+                    <div class="status-percent" id="statusPercent">--%</div>
+                </div>
+                <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+                <div class="progress-label" id="progressLabel">Memuat...</div>
             </div>
         </div>
     
-        <!-- SLIDE 3: BENTO JADWAL -->
-        <div class="widget-slide">
-            <div class="bento-grid">
-                <div class="bento-box schedule-box">
-                    <div class="mini-title">🌸 JADWAL HARI INI</div>
-                    <div id="homeScheduleList">
-                        <div class="loading-state"><div class="spinner"></div><p>Memuat jadwal...</p></div>
-                    </div>
+        <!-- SLIDE 3: JADWAL -->
+        <div class="widget-slide" style="flex: 0 0 100%; scroll-snap-align: center; display: flex; flex-direction: column; height: 100%; box-sizing: border-box;">
+            <div style="background: var(--bg-card-dark); border: 1px solid var(--border-stone); border-radius: 16px; padding: 16px; width: 100%; height: 100%; overflow-y: auto;">
+                <div class="mini-title">🌸 JADWAL HARI INI</div>
+                <div id="homeScheduleList">
+                    <div class="loading-state"><div class="spinner"></div><p>Memuat jadwal...</p></div>
                 </div>
             </div>
         </div>
     
-    </div> <!-- ✅ TUTUP CAROUSEL (Cuma 1) -->
+    </div>
 
     <!-- DOTS INDIKATOR -->
     <div class="carousel-dots">
@@ -264,7 +261,7 @@
         </div>
     </div>
 
-</div> <!-- ✅ TUTUP HOME SCREEN -->
+</div> <!-- TUTUP HOME SCREEN -->
 <!-- ========================================================= -->
 <!-- LOADING OVERLAY — Fetch data setelah login -->
 <!-- ========================================================= -->
