@@ -337,32 +337,35 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
 }
 
 /* =========================================================
-   WIDGET CAROUSEL (SCROLL SNAP - PALING STABIL)
+   WIDGET CAROUSEL (BENTO GRID) - BERSIH
    ========================================================= */
 .widget-container {
     display: flex;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
-    padding: 12px 16px;
+    padding: 16px;
     gap: 16px;
     width: 100%;
-    height: 240px; /* Kunci tinggi biar seragam */
+    height: 250px; /* Kunci tinggi */
     box-sizing: border-box;
-    scroll-behavior: smooth;
 }
 .widget-container::-webkit-scrollbar { display: none; }
 
 .widget-slide {
-    flex: 0 0 100%; /* Tiap slide selebar layar */
+    flex: 0 0 100%;
     scroll-snap-align: center;
     display: flex;
     flex-direction: column;
     height: 100%;
     box-sizing: border-box;
+    /* Hapus border/card bawaan di slide */
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
-/* Bento Grid Layout */
+/* Bento Grid */
 .bento-grid {
     display: grid;
     grid-template-columns: 1fr 2fr;
@@ -382,28 +385,50 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
     justify-content: center;
 }
 
-/* Box 1 (Avatar) & Box 2 (Jam) */
+/* Kotak Avatar (Kiri) */
 .avatar-box {
     align-items: center;
     background: linear-gradient(135deg, #2b2b36 0%, #1e1e26 100%);
     border-left: 4px solid var(--accent-flame);
 }
 .profile-avatar-large {
-    width: 64px !important; height: 64px !important;
+    width: 64px !important; 
+    height: 64px !important;
     border-radius: 50% !important;
     background: var(--accent-flame) !important;
     color: #fff !important;
-    display: flex !important; align-items: center !important; justify-content: center !important;
-    font-size: 24px !important; font-weight: 900 !important;
+    display: flex !important; 
+    align-items: center !important; 
+    justify-content: center !important;
+    font-size: 24px !important; 
+    font-weight: 900 !important;
     box-shadow: 0 0 20px rgba(255, 123, 0, 0.4) !important;
 }
-.greeting-box { align-items: flex-start; }
-.slide-greeting { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 600; }
-.slide-time { font-size: 32px; font-weight: 900; color: var(--accent-flame); line-height: 1; margin-bottom: 4px; }
-.slide-date { font-size: 12px; color: var(--text-muted); }
 
-/* Slide 2 & 3 Full Width */
+/* Kotak Jam (Kanan) */
+.greeting-box { 
+    align-items: flex-start; 
+}
+.slide-greeting { 
+    font-size: 13px; 
+    color: var(--text-secondary); 
+    margin-bottom: 4px; 
+    font-weight: 600; 
+}
+.slide-time { 
+    font-size: 32px; 
+    font-weight: 900; 
+    color: var(--accent-flame); 
+    line-height: 1; 
+    margin-bottom: 4px; 
+}
+.slide-date { 
+    font-size: 12px; 
+    color: var(--text-muted); 
+}
+
+/* Kotak 2 & 3 (Full Width) */
 .summary-box, .schedule-box {
     grid-column: span 2;
-    overflow-y: auto; /* Biar bisa di-scroll kalau isinya banyak */
+    overflow-y: auto;
 }
