@@ -2652,9 +2652,20 @@ ${getWelcomeText(currentBot)}
     }
 
     container.innerHTML = "";
+    let lastDate = "";
 
     history.forEach((msg, idx) => {
         const isUser = msg.role === "user";
+        
+        // --- LOGIC STICKY DATE ---
+        const msgDate = new Date(msg.timestamp || Date.now()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        if (msgDate !== lastDate) {
+            const dateDiv = document.createElement("div");
+            dateDiv.className = "chat-date-divider";
+            dateDiv.innerHTML = `<span>${msgDate}</span>`;
+            container.appendChild(dateDiv);
+            lastDate = msgDate;
+        }
 
         const wrapper = document.createElement("div");
         wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
@@ -2700,6 +2711,13 @@ ${getWelcomeText(currentBot)}
         wrapper.appendChild(bubbleContent);
         container.appendChild(wrapper);
     });
+    
+    // Reset tombol scroll
+    const btn = document.getElementById("scrollBottomBtn");
+    if (btn) btn.classList.remove("show");
+    
+    // Auto scroll ke bawah pas buka chat
+    scrollToBottom(true);
 }
 
 function formatSuccessMessage(text) {
@@ -3122,11 +3140,28 @@ function hideLoadingBubble() {
     loadingEl = null;
 }
 
-function scrollToBottom() {
+function scrollToBottom(force = false) {
     const container = document.getElementById("chatMessages");
     if (!container) return;
+    
+    // Kalau force (habis kirim pesan), langsung ke bawah
+    if (force) {
+        setTimeout(() => {
+            container.scrollTop = container.scrollHeight;
+            const btn = document.getElementById("scrollBottomBtn");
+            if (btn) btn.classList.remove("show");
+        }, 50);
+        return;
+    }
+
+    // Deteksi kalau user scroll ke atas
     setTimeout(() => {
-        container.scrollTop = container.scrollHeight;
+        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+        const btn = document.getElementById("scrollBottomBtn");
+        if (btn) {
+            if (isNearBottom) btn.classList.remove("show");
+            else btn.classList.add("show");
+        }
     }, 50);
 }
 
