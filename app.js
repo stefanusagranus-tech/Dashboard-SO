@@ -4538,6 +4538,26 @@ function selectChatMode(mode) {
         showToastMini("Fitur Room Chat segera hadir!", "error");
     }
 }
+// =========================================================
+// DETEKSI SWIPE UNTUK UPDATE DOTS
+// =========================================================
+document.addEventListener('DOMContentLoaded', () => {
+    const carousel = document.getElementById('homeCarousel');
+    if (!carousel) return;
+
+    carousel.addEventListener('scroll', () => {
+        // Hitung lebar 1 slide + gap (16px)
+        const slideWidth = carousel.clientWidth + 16; 
+        
+        // Cari slide index yang lagi aktif berdasarkan posisi scroll
+        const activeIndex = Math.round(carousel.scrollLeft / slideWidth);
+        
+        // Update class active di dots
+        document.querySelectorAll('.carousel-dots .dot').forEach((dot, i) => {
+            dot.classList.toggle('active', i === activeIndex);
+        });
+    });
+});
 
 // =========================================================
 // BOOT
