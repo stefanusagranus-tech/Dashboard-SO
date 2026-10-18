@@ -661,15 +661,17 @@ function goToHomeScreen() {
     loadHomeSchedule();
     startDashboardAutoRefresh();
     
+    // --- LOGIC SET AVATAR ---
     const _user = getUser();
     if (_user) {
+        // Ambil 2 huruf pertama dari nama, kalau kosong pakai username
         const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
         
-        // Update avatar di HEADER (kanan atas)
+        // 1. Set Avatar di Header Kanan Atas
         const elAvatarHeader = document.getElementById("homeAvatar");
         if (elAvatarHeader) elAvatarHeader.textContent = inisial;
         
-        // Update avatar di SLIDE 1 (kiri)
+        // 2. Set Avatar di Slide 1 (Kiri)
         const elAvatarSlide = document.getElementById("slideHomeAvatar");
         if (elAvatarSlide) elAvatarSlide.textContent = inisial;
     }

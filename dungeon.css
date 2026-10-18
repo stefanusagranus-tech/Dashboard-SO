@@ -339,54 +339,80 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
 /* =========================================================
    LAYOUT SLIDE 1: AVATAR MENTOK KIRI, TEKS RAPAT
    ========================================================= */
+/* =========================================================
+   FIX TOTAL LAYOUT SLIDE 1 (PROFIL & JAM)
+   ========================================================= */
+
+/* Container Utama Slide 1 */
+.widget-slide.active {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    padding: 16px !important;
+    /* Kunci tinggi cuma buat slide 1 biar gak melompong */
+    height: auto !important; 
+    min-height: 180px;
+}
+
+/* Baris Atas (Avatar + Teks) */
 .slide-profile-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start; /* Mentok ke kiri */
-    gap: 12px; /* Jarak antara Avatar dan Teks */
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
     width: 100%;
+    margin-bottom: 12px;
 }
 
+/* Avatar Bulat */
 .profile-avatar-large {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    background: var(--accent-flame);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    font-weight: 900;
-    box-shadow: 0 0 20px rgba(255, 123, 0, 0.5);
-    flex-shrink: 0;
-    /* Hapus margin auto biar mentok kiri */
-    margin: 0; 
+    width: 64px !important;
+    height: 64px !important;
+    border-radius: 50% !important;
+    background: var(--accent-flame) !important;
+    color: #fff !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 24px !important;
+    font-weight: 900 !important;
+    box-shadow: 0 0 15px rgba(255, 123, 0, 0.4) !important;
+    flex-shrink: 0 !important;
 }
 
+/* Kolom Teks (Kanan Avatar) */
 .slide-greeting-col {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    text-align: left; /* Teks rata kiri */
-    flex: 1; /* Ambil sisa ruang */
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    text-align: left !important;
 }
 
 .slide-greeting {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
+    font-size: 13px !important;
+    color: var(--text-secondary) !important;
+    margin: 0 0 2px 0 !important;
+    line-height: 1.2;
 }
 
 .slide-time {
-    font-size: 32px;
-    font-weight: 900;
-    color: var(--accent-flame);
-    line-height: 1;
+    font-size: 28px !important;
+    font-weight: 900 !important;
+    color: var(--accent-flame) !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    text-shadow: 0 0 10px rgba(255, 123, 0, 0.3);
 }
 
 .slide-date {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 2px;
+    font-size: 12px !important;
+    color: var(--text-muted) !important;
+    margin: 4px 0 0 0 !important;
+}
+
+/* Running Text di Bawah */
+.widget-slide.active .running-text {
+    margin-top: auto !important; /* Dorong ke bawah */
+    width: 100%;
 }
