@@ -734,10 +734,27 @@ function goToSettingsScreen() {
 
     showScreen("settingsScreen");
 }
-// --- PROFIL (Placeholder) ---
+
+// --- PROFIL ASLI (Ganti Placeholder) ---
 function goToProfileScreen() {
-    showToastMini("Fitur Edit Profil segera hadir!", "success");
-    // Nanti bisa diarahkan ke halaman profil baru
+    const _user = getUser();
+    if (!_user) return;
+    
+    // Isi form dengan data sekarang
+    document.getElementById("editNamaLengkap").value = _user.nama_lengkap || "";
+    
+    // Set avatar preview
+    const preview = document.getElementById("editAvatarPreview");
+    if (_user.avatar_url) {
+        preview.style.backgroundImage = `url(${_user.avatar_url})`;
+        preview.textContent = "";
+    } else {
+        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+        preview.textContent = inisial;
+        preview.style.backgroundImage = "none";
+    }
+    
+    showScreen("profileScreen");
 }
 
 // --- MODAL TEMA ---
