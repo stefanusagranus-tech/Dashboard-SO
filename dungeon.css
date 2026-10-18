@@ -1,0 +1,88 @@
+/* =========================================================
+   DUNGEON OVERRIDE v1.0
+   Menimpa style lama tanpa menghapus struktur asli.
+   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;600;800&display=swap');
+
+:root {
+    --font-title: 'Cinzel', serif;
+    --font-body: 'Inter', sans-serif;
+    --bg-dark: #121216;
+    --bg-card-dark: #1e1e26;
+    --border-stone: #3a3a45;
+    --accent-flame: #ff7b00;
+    --text-bone: #e0d8c8;
+}
+
+/* Base Override */
+body, .screen {
+    background: radial-gradient(circle at top, #2a2a35 0%, #121216 100%) !important;
+    color: var(--text-bone) !important;
+    font-family: var(--font-body) !important;
+}
+
+h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
+    font-family: var(--font-title) !important;
+    letter-spacing: 1px !important;
+}
+
+/* Card & Kotak (Batu) */
+.mini-dashboard, .rak-card, .spd-item, .top-item-card, .status-big-card, .settings-group, .date-group, .home-card, .modal-content {
+    background: var(--bg-card-dark) !important;
+    border: 1px solid var(--border-stone) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.8) !important;
+    color: var(--text-bone) !important;
+}
+
+/* Tombol (Batu Timbul) */
+.home-card, .settings-btn, .login-btn-submit, .pin-key, .filter-tab, .spd-period-tab, .top-subtab, .rak-detail-tab, .confirm-modal-btn {
+    background: linear-gradient(135deg, #2b2b36 0%, #1e1e26 100%) !important;
+    border: 2px solid var(--border-stone) !important;
+    color: var(--text-bone) !important;
+    border-radius: 8px !important;
+    box-shadow: inset 0px 2px 0px rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.6) !important;
+    transition: all 0.1s;
+}
+
+.home-card:active, .settings-btn:active, .pin-key:active {
+    transform: translateY(2px) !important;
+    box-shadow: inset 0px 2px 4px rgba(0,0,0,0.5) !important;
+    border-color: var(--accent-flame) !important;
+}
+
+/* Aksen Nyala Api */
+.stat-value, .spd-summary-total, .top-summary-total, .login-title, .theme-toggle, .back-btn, .screen-header-action {
+    color: var(--accent-flame) !important;
+    text-shadow: 0 0 10px rgba(255, 123, 0, 0.5) !important;
+}
+
+/* Header & Nav Bawah */
+.home-header, .screen-header, .chat-header {
+    background: #1a1a22 !important;
+    border-bottom: 1px solid var(--border-stone) !important;
+}
+
+.bottom-nav {
+    background: #1a1a22 !important;
+    border-top: 2px solid var(--border-stone) !important;
+}
+.nav-item.active { color: var(--accent-flame) !important; }
+
+/* Input & Chat */
+.login-input, .chat-input, .filter-select, .date-input, .personil-input {
+    background: #121216 !important;
+    border: 1px solid var(--border-stone) !important;
+    color: var(--text-bone) !important;
+    border-radius: 8px !important;
+}
+
+.bubble-user { background: var(--accent-flame) !important; color: #fff !important; border-radius: 12px 12px 0 12px !important; }
+.bubble-ai { background: #24242e !important; color: var(--text-bone) !important; border: 1px solid var(--border-stone) !important; border-radius: 12px 12px 12px 0 !important; }
+
+/* Status Warna */
+.status-bar.status-bahaya { border-left: 4px solid #e63946 !important; background: rgba(230, 57, 70, 0.1) !important; }
+.status-bar.status-aman { border-left: 4px solid #00ffcc !important; background: rgba(0, 255, 204, 0.1) !important; }
+
+/* Sembunyiin elemen lama yang ganggu (opsional) */
+.mini-dashboard::before { display: none !important; }
