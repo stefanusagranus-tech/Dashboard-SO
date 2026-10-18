@@ -328,3 +328,10 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
 }
 .mode-card-icon { font-size: 32px; margin-bottom: 8px; }
 .mode-card-title { font-weight: 800; font-size: 14px; color: var(--text-bone); }
+
+/* Paksa Modal Chat ke Tengah */
+#chatModeModal.modal-overlay {
+    align-items: center !important; 
+    justify-content: center !important;
+    padding: 20px;
+}
