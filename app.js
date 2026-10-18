@@ -678,7 +678,7 @@ function goToHomeScreen() {
             if (elSlide) { elSlide.style.backgroundImage = "none"; elSlide.textContent = inisial; }
         }
     }
-
+}
 // ---FUNGSI JADWAL DI HOME ---
 async function loadHomeSchedule() {
     const container = document.getElementById("homeScheduleList");
