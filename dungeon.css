@@ -86,3 +86,39 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
 
 /* Sembunyiin elemen lama yang ganggu (opsional) */
 .mini-dashboard::before { display: none !important; }
+
+/* =========================================================
+   FIX CHAT & KONTEN BIAR NGGAK KETUTUP BOTTOM NAV
+   ========================================================= */
+
+/* Kasih jarak di bawah biar konten bisa di-scroll sampai habis */
+.home-content, 
+.chat-messages, 
+.master-shift-content, 
+.settings-content, 
+.rak-list-content, 
+.spd-list-content, 
+.top-minus-content, 
+.status-content, 
+.rak-detail-content {
+    padding-bottom: 80px !important; 
+}
+
+/* Khusus Chat, tarik area input ke atas Bottom Nav */
+.chat-input-area {
+    position: absolute;
+    bottom: 65px; /* Tinggi Bottom Nav */
+    left: 0;
+    right: 0;
+    background: #1a1a22; /* Warna background input */
+    border-top: 1px solid var(--border-stone);
+    padding: 10px;
+    display: flex;
+    gap: 8px;
+    z-index: 80;
+}
+
+/* Bikin area chat punya ruang kosong di bawah biar pesan terakhir nggak ketutup */
+.chat-messages {
+    padding-bottom: 150px !important; 
+}
