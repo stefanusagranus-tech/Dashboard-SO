@@ -4457,15 +4457,22 @@ async function submitAddUser() {
 }
 // --- CAROUSEL LOGIC ---
 let currentSlide = 0;
+// --- CAROUSEL LOGIC (SWIPE JS) ---
+let currentSlide = 0;
+const totalSlides = 3;
+
 function goToSlide(index) {
-    const container = document.querySelector('.home-carousel-container');
-    if (!container) return;
-    const slides = container.querySelectorAll('.home-slide');
-    if (slides[index]) {
-        slides[index].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-        updateDots(index);
-        currentSlide = index;
-    }
+    if (index < 0) index = 0;
+    if (index >= totalSlides) index = totalSlides - 1;
+    
+    currentSlide = index;
+    const slides = document.querySelectorAll('.home-slide');
+    
+    slides.forEach((s, i) => {
+        s.classList.toggle('active', i === index);
+    });
+    
+    updateDots(index);
 }
 
 function updateDots(index) {
@@ -4474,28 +4481,50 @@ function updateDots(index) {
     });
 }
 
-// Deteksi swipe manual
+// Deteksi Swipe Manual di HP
 document.addEventListener('DOMContentLoaded', () => {
-    const container = document.querySelector('.home-carousel-container');
-    if (container) {
-        container.addEventListener('scroll', () => {
-            const slideWidth = container.clientWidth;
-            const scrollPos = container.scrollLeft;
-            const newIndex = Math.round(scrollPos / slideWidth);
-            if (newIndex !== currentSlide) {
-                currentSlide = newIndex;
-                updateDots(currentSlide);
-            }
-        });
+    const carousel = document.getElementById('homeCarousel');
+    if (!carousel) return;
+    
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    carousel.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+    
+    carousel.addEventListener('touchend', e => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleSwipe();
+    }, { passive: true });
+    
+    function handleSwipe() {
+        const threshold = 50; // Jarak minimal geser
+        if (touchEndX < touchStartX - threshold) {
+            // Geser kiri -> Next Slide
+            goToSlide(currentSlide + 1);
+        }
+        if (touchEndX > touchStartX + threshold) {
+            // Geser kanan -> Prev Slide
+            goToSlide(currentSlide - 1);
+        }
     }
 });
 
 // --- MODAL PILIHAN CHAT ---
 function openChatSelectionModal() {
-    const pilihan = prompt("Pilih Mode Chat:\n1. Chat dengan Bot AI (Yui/Hana/Rei/Kurumi)\n2. Room Chat Bersama (Coming Soon)\n\nKetik 1 atau 2:");
-    if (pilihan === "1") {
-        goToChatScreen(); // Fungsi lama lu
-    } else if (pilihan === "2") {
+    document.getElementById("chatModeModal").classList.add("active");
+}
+
+function closeChatModeModal() {
+    document.getElementById("chatModeModal").classList.remove("active");
+}
+
+function selectChatMode(mode) {
+    closeChatModeModal();
+    if (mode === 'bot') {
+        goToChatScreen();
+    } else {
         showToastMini("Fitur Room Chat segera hadir!", "error");
     }
 }

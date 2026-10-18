@@ -128,6 +128,8 @@
 <!-- HOME SCREEN -->
 <!-- ========================================================= -->
 <div id="homeScreen" class="screen">
+    
+    <!-- HEADER HOME -->
     <div class="home-header">
         <div class="home-header-title">
             <span class="home-logo">🎃</span>
@@ -144,8 +146,8 @@
         </div>
     </div>
 
-    <!-- CAROUSEL HOME -->
-    <div class="home-carousel-container">
+    <!-- CAROUSEL -->
+    <div class="home-carousel-container" id="homeCarousel">
         
         <!-- SLIDE 1: PROFIL & JAM -->
         <div class="home-slide active">
@@ -155,16 +157,14 @@
                 <div class="slide-time" id="clockTime">--:--</div>
                 <div class="slide-date" id="clockDate">Memuat...</div>
             </div>
-            
-            <!-- Running Text di Slide 1 -->
-            <div class="running-text" id="runningTextContainer" style="margin-top: 20px;">
+            <div class="running-text" id="runningTextContainer" style="margin-top: 15px;">
                 <div class="running-inner" id="runningText">🎃 Memuat info...</div>
             </div>
         </div>
 
         <!-- SLIDE 2: RINGKASAN -->
         <div class="home-slide">
-            <div class="mini-dashboard" style="margin: 0;">
+            <div class="mini-dashboard" style="margin: 0; border: none; background: transparent; padding: 0;">
                 <div class="mini-title">📊 RINGKASAN HARI INI</div>
                 <div class="mini-stats">
                     <div class="stat stat-clickable" onclick="goToRakListScreen()">
@@ -198,7 +198,7 @@
 
         <!-- SLIDE 3: JADWAL HARI INI -->
         <div class="home-slide">
-            <div class="mini-dashboard" style="margin: 0;">
+            <div class="mini-dashboard" style="margin: 0; border: none; background: transparent; padding: 0;">
                 <div class="mini-title">🌸 JADWAL HARI INI</div>
                 <div id="homeScheduleList">
                     <div class="loading-state"><div class="spinner"></div><p>Memuat jadwal...</p></div>
@@ -206,7 +206,7 @@
             </div>
         </div>
 
-    </div>
+    </div> <!-- TUTUP CAROUSEL -->
 
     <!-- DOTS INDIKATOR -->
     <div class="carousel-dots">
@@ -255,8 +255,8 @@
             </button>
         </div>
     </div>
-</div>
 
+</div> <!-- TUTUP HOME SCREEN -->
 <!-- ========================================================= -->
 <!-- LOADING OVERLAY — Fetch data setelah login -->
 <!-- ========================================================= -->
@@ -1124,6 +1124,29 @@
     <button class="nav-item" id="navChat" onclick="goToChatScreen()" style="flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: #a39e93; font-family: inherit; cursor: pointer;"><span style="font-size: 22px;">💬</span><span style="font-size: 10px; font-weight: 600; margin-top: 2px;">Chat</span></button>
     <button class="nav-item" id="navShift" onclick="goToMasterShiftScreen()" style="flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: #a39e93; font-family: inherit; cursor: pointer;"><span style="font-size: 22px;">🌸</span><span style="font-size: 10px; font-weight: 600; margin-top: 2px;">Shift</span></button>
     <button class="nav-item" id="navSettings" onclick="goToSettingsScreen()" style="flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: none; color: #a39e93; font-family: inherit; cursor: pointer;"><span style="font-size: 22px;">⚙️</span><span style="font-size: 10px; font-weight: 600; margin-top: 2px;">Settings</span></button>
+</div>
+<!-- MODAL PILIHAN CHAT -->
+<div id="chatModeModal" class="modal-overlay">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">Pilih Mode Chat</div>
+            <button class="modal-close" onclick="closeChatModeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="mode-grid">
+                <div class="mode-card" onclick="selectChatMode('bot')">
+                    <div class="mode-card-icon">🤖</div>
+                    <div class="mode-card-title">Chat Bot AI</div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Yui, Hana, Rei, Kurumi</div>
+                </div>
+                <div class="mode-card" onclick="selectChatMode('room')">
+                    <div class="mode-card-icon">👥</div>
+                    <div class="mode-card-title">Room Bersama</div>
+                    <div style="font-size:11px; color:var(--danger); margin-top:4px;">Coming Soon</div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 <script src="app.js"></script>
 
