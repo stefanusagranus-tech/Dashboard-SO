@@ -460,3 +460,61 @@ async def admin_delete_user_endpoint(
         "success": True,
         "message": f"User {_target.get('username')} dinonaktifkan",
     }
+
+from fastapi import File, UploadFile
+import base64
+
+class UpdateProfileRequest(BaseModel):
+    nama_lengkap: str
+
+@router.put("/me/update")
+@limiter.limit("20/minute")
+async def update_profile_endpoint(
+    request: Request,
+    req: UpdateProfileRequest,
+    authorization: str = Header(None),
+):
+    _user, _ = _get_current_user(authorization)
+    
+    from services.supabase_client import get_supabase
+    _sb = get_supabase()
+    
+    try:
+        _sb.table("users").update({"nama_lengkap": req.nama_lengkap}).eq("id", _user["id"]).execute()
+        return {"success": True, "message": "Nama berhasil diupdate"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@router.post("/me/upload-avatar")
+@limiter.limit("10/minute")
+async def upload_avatar_endpoint(
+    request: Request,
+    file: UploadFile = File(...),
+    authorization: str = Header(None),
+):
+    _user, _ = _get_current_user(authorization)
+    
+    from services.supabase_client import get_supabase
+    _sb = get_supabase()
+    
+    try:
+        _content = await file.read()
+        _file_ext = file.filename.split(".")[-1]
+        _file_path = f"user_{_user['id']}_{int(datetime.now().timestamp())}.{_file_ext}"
+        
+        # Upload ke Supabase Storage
+        _sb.storage.from_("avatars").upload(
+            path=_file_path,
+            file=_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Ambil URL Public
+        _public_url = _sb.storage.from_("avatars").get_public_url(_file_path)
+        
+        # Update DB
+        _sb.table("users").update({"avatar_url": _public_url}).eq("id", _user["id"]).execute()
+        
+        return {"success": True, "avatar_url": _public_url}
+    except Exception as e:
+        raise HTTPException(500, str(e))

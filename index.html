@@ -1075,6 +1075,39 @@
 
 </div>
 <!-- ========================================================= -->
+<!-- PROFILE SCREEN -->
+<!-- ========================================================= -->
+<div id="profileScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToSettingsScreen()">←</button>
+        <div class="screen-title">Edit Profil</div>
+        <div style="width: 40px;"></div>
+    </div>
+    
+    <div class="settings-content" style="padding: 20px;">
+        
+        <!-- Avatar Upload -->
+        <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 24px;">
+            <div id="editAvatarPreview" class="profile-avatar-large" onclick="document.getElementById('avatarFileInput').click()" style="cursor: pointer; width: 100px !important; height: 100px !important; font-size: 36px !important; background-size: cover; background-position: center;">?</div>
+            <input type="file" id="avatarFileInput" accept="image/*" style="display: none;" onchange="uploadAvatar(this)">
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Tap foto untuk ganti</p>
+        </div>
+        
+        <!-- Nama Lengkap -->
+        <div class="login-input-group">
+            <label class="login-input-label">Nama Lengkap</label>
+            <input type="text" id="editNamaLengkap" class="login-input" placeholder="Masukkan nama...">
+        </div>
+        
+        <!-- Tombol Simpan -->
+        <button id="btnSaveProfile" class="login-btn-submit" onclick="submitUpdateProfile()" style="margin-top: 16px;">
+            Simpan Perubahan
+        </button>
+        
+    </div>
+</div>
+
+<!-- ========================================================= -->
 <!-- USER MANAGEMENT SCREEN (ADMIN ONLY) -->
 <!-- ========================================================= -->
 <div id="userManagementScreen" class="screen">
