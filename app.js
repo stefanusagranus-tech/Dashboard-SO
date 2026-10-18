@@ -4455,8 +4455,6 @@ async function submitAddUser() {
         btn.innerHTML = '✅ Simpan';
     }
 }
-// --- CAROUSEL LOGIC ---
-let currentSlide = 0;
 // --- CAROUSEL LOGIC (SWIPE JS) ---
 let currentSlide = 0;
 const totalSlides = 3;
