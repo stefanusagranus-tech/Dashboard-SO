@@ -661,20 +661,21 @@ function goToHomeScreen() {
     loadHomeSchedule();
     startDashboardAutoRefresh();
     
-    // Set Avatar di HEADER
     const _user = getUser();
     if (_user) {
         const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+        
+        // Update avatar di HEADER (kanan atas)
         const elAvatarHeader = document.getElementById("homeAvatar");
         if (elAvatarHeader) elAvatarHeader.textContent = inisial;
         
-        // Set Avatar di SLIDE 1 (kiri)
+        // Update avatar di SLIDE 1 (kiri)
         const elAvatarSlide = document.getElementById("slideHomeAvatar");
         if (elAvatarSlide) elAvatarSlide.textContent = inisial;
     }
 }
 
-// --- FUNGSI JADWAL DI HOME ---
+// ---FUNGSI JADWAL DI HOME ---
 async function loadHomeSchedule() {
     const container = document.getElementById("homeScheduleList");
     if (!container) return;

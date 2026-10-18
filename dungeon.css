@@ -337,13 +337,14 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
 }
 
 /* =========================================================
-   LAYOUT SLIDE 1: PROFIL & SAPAAN (KIRI-KANAN)
+   LAYOUT SLIDE 1: AVATAR MENTOK KIRI, TEKS RAPAT
    ========================================================= */
 .slide-profile-row {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 10px;
+    justify-content: flex-start; /* Mentok ke kiri */
+    gap: 12px; /* Jarak antara Avatar dan Teks */
+    width: 100%;
 }
 
 .profile-avatar-large {
@@ -359,12 +360,16 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
     font-weight: 900;
     box-shadow: 0 0 20px rgba(255, 123, 0, 0.5);
     flex-shrink: 0;
+    /* Hapus margin auto biar mentok kiri */
+    margin: 0; 
 }
 
 .slide-greeting-col {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    text-align: left; /* Teks rata kiri */
+    flex: 1; /* Ambil sisa ruang */
 }
 
 .slide-greeting {
