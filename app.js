@@ -1379,25 +1379,20 @@ async function checkNewBroadcast() {
 }
 
 // Tandai broadcast udah dibaca (pas buka halaman Broadcast)
-function markBroadcastAsRead() {
+async function markBroadcastAsRead() {
     try {
         const _user = getUser();
         const _key = _user ? `so_last_broadcast_${_user.username}` : "so_last_broadcast_guest";
-        
-        // Ambil ID broadcast terbaru dari UI
-        const firstBroadcastCard = document.querySelector("#broadcastList .settings-card");
-        if (firstBroadcastCard) {
-            // Kita gak nyimpen ID di card, jadi pakai cara lain: panggil API sekali lagi
-            apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success && data.data && data.data.length > 0) {
-                        localStorage.setItem(_key, String(data.data[0].id));
-                    }
-                });
+
+        // Fetch data dengan await
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
+        const data = await resp.json();
+
+        if (data.success && data.data && data.data.length > 0) {
+            localStorage.setItem(_key, String(data.data[0].id));
         }
-        
-        // Sembunyiin badge
+
+        // Sembunyiin badge (dengan null check)
         const badge = document.getElementById("notifBadge");
         if (badge) badge.style.display = "none";
     } catch (e) {
