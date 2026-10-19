@@ -978,13 +978,20 @@ async function loadRoomMessages() {
         const isFirstLoad = container.innerHTML.includes("loading-state") || container.innerHTML.trim() === "";
         
         const newHtml = data.data.map(m => {
+            const isBot = m.user_id === null; // ✅ Cek apakah Bot
             const isMe = m.user_id === _user?.id;
-            const nama = m.users?.nama_lengkap || m.users?.username || "User";
-            const avatarUrl = m.users?.avatar_url; // ✅ AMBIL FOTO
+            const nama = isBot ? "🤖 Bot AI" : (m.users?.nama_lengkap || m.users?.username || "User");
+            const avatarUrl = m.users?.avatar_url;
             
-            // ✅ LOGIKA FOTO: Kalau ada foto, pake background-image. Kalau gak ada, pake inisial.
+            // ✅ Logika Avatar & Style
+            let wrapperClass = isMe ? "user" : "ai";
             let avatarHtml = "";
-            if (avatarUrl) {
+            
+            if (isBot) {
+                // Style khusus Bot
+                wrapperClass = "ai";
+                avatarHtml = `<div class="chat-avatar" style="background: linear-gradient(135deg, #a259ff, #ff6b1a); font-size: 18px;">🤖</div>`;
+            } else if (avatarUrl) {
                 avatarHtml = `<div class="chat-avatar ${isMe ? "avatar-user" : ""}" style="background-image: url('${avatarUrl}'); background-size: cover; background-position: center; background-color: transparent;"></div>`;
             } else {
                 const inisial = nama.substring(0, 2).toUpperCase();
@@ -992,11 +999,11 @@ async function loadRoomMessages() {
             }
 
             return `
-                <div class="chat-message-wrapper ${isMe ? "user" : "ai"}" style="margin-bottom: 8px;">
+                <div class="chat-message-wrapper ${wrapperClass}" style="margin-bottom: 8px;">
                     ${avatarHtml}
-                    <div class="bubble-content ${isMe ? "user" : "ai"}">
-                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">${escapeHtml(nama)}</div>
-                        <div class="bubble bubble-${isMe ? "user" : "ai"}">${escapeHtml(m.pesan)}</div>
+                    <div class="bubble-content ${wrapperClass}">
+                        <div style="font-size: 10px; color: ${isBot ? '#a259ff' : 'var(--text-muted)'}; margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">${escapeHtml(nama)}</div>
+                        <div class="bubble bubble-${wrapperClass}" style="${isBot ? 'border: 1px solid #a259ff; background: rgba(162,89,255,0.1);' : ''}">${escapeHtml(m.pesan)}</div>
                         <div class="bubble-time">${formatTime(m.created_at)}</div>
                     </div>
                 </div>
