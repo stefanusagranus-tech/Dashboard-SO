@@ -661,24 +661,25 @@ function goToHomeScreen() {
     loadHomeSchedule();
     startDashboardAutoRefresh();
     
-    // --- SET AVATAR ---
-    const _user = getUser();
-    if (_user) {
-        const elHeader = document.getElementById("homeAvatar");
-        const elSlide = document.getElementById("slideHomeAvatar");
-        
-        if (_user.avatar_url) {
-            // Kalau ada foto
-            if (elHeader) { elHeader.style.backgroundImage = `url(${_user.avatar_url})`; elHeader.textContent = ""; }
-            if (elSlide) { elSlide.style.backgroundImage = `url(${_user.avatar_url})`; elSlide.textContent = ""; }
-        } else {
-            // Kalau nggak ada foto, pakai inisial
-            const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
-            if (elHeader) { elHeader.style.backgroundImage = "none"; elHeader.textContent = inisial; }
-            if (elSlide) { elSlide.style.backgroundImage = "none"; elSlide.textContent = inisial; }
+    // Tarik data terbaru dulu, baru tampilkan avatar
+    refreshUserData().then(() => {
+        const _user = getUser();
+        if (_user) {
+            const elHeader = document.getElementById("homeAvatar");
+            const elSlide = document.getElementById("slideHomeAvatar");
+            
+            if (_user.avatar_url) {
+                if (elHeader) { elHeader.style.backgroundImage = `url(${_user.avatar_url})`; elHeader.textContent = ""; }
+                if (elSlide) { elSlide.style.backgroundImage = `url(${_user.avatar_url})`; elSlide.textContent = ""; }
+            } else {
+                const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+                if (elHeader) { elHeader.style.backgroundImage = "none"; elHeader.textContent = inisial; }
+                if (elSlide) { elSlide.style.backgroundImage = "none"; elSlide.textContent = inisial; }
+            }
         }
-    }
+    });
 }
+
 // ---FUNGSI JADWAL DI HOME ---
 async function loadHomeSchedule() {
     const container = document.getElementById("homeScheduleList");
@@ -4579,11 +4580,35 @@ document.addEventListener('DOMContentLoaded', () => {
 // =========================================================
 // EDIT PROFIL & UPLOAD AVATAR
 // =========================================================
-function goToProfileScreen() {
-    const _user = getUser();
+// =========================================================
+// EDIT PROFIL & UPLOAD AVATAR (FIXED REFRESH)
+// =========================================================
+
+// 1. Fungsi pembantu buat tarik data user terbaru dari database
+async function refreshUserData() {
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/me`, { method: "GET" });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.success && data.user) {
+                setAuth(getToken(), data.user); // Update localStorage
+            }
+        }
+    } catch (e) {
+        console.warn("Gagal refresh user data", e);
+    }
+}
+
+// 2. Halaman Profil
+async function goToProfileScreen() {
+    let _user = getUser();
     if (!_user) return;
     
-    // Isi form dengan data sekarang
+    // Tarik data terbaru dulu sebelum tampil
+    await refreshUserData();
+    _user = getUser(); // Ambil ulang data yang udah fresh
+    
+    // Isi form
     document.getElementById("editNamaLengkap").value = _user.nama_lengkap || "";
     
     // Set avatar preview
@@ -4600,6 +4625,7 @@ function goToProfileScreen() {
     showScreen("profileScreen");
 }
 
+// 3. Simpan Nama
 async function submitUpdateProfile() {
     const btn = document.getElementById("btnSaveProfile");
     const namaBaru = document.getElementById("editNamaLengkap").value.trim();
@@ -4622,10 +4648,8 @@ async function submitUpdateProfile() {
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || "Gagal");
         
-        // Update localStorage
-        const _user = getUser();
-        _user.nama_lengkap = namaBaru;
-        setAuth(getToken(), _user);
+        // Refresh data & update localStorage
+        await refreshUserData();
         
         showToastMini("✅ Nama berhasil diupdate", "success");
         goToSettingsScreen(); // Balik ke setting
@@ -4637,6 +4661,7 @@ async function submitUpdateProfile() {
     }
 }
 
+// 4. Upload Avatar
 async function uploadAvatar(input) {
     const file = input.files[0];
     if (!file) return;
@@ -4655,14 +4680,14 @@ async function uploadAvatar(input) {
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || "Gagal upload");
         
-        // Update localStorage
-        const _user = getUser();
-        _user.avatar_url = data.avatar_url;
-        setAuth(getToken(), _user);
+        // Refresh data & update localStorage
+        await refreshUserData();
+        
+        const _user = getUser(); // Ambil data fresh
         
         // Update preview
         const preview = document.getElementById("editAvatarPreview");
-        preview.style.backgroundImage = `url(${data.avatar_url})`;
+        preview.style.backgroundImage = `url(${_user.avatar_url})`;
         preview.textContent = "";
         
         showToastMini("✅ Foto berhasil diupdate", "success");
