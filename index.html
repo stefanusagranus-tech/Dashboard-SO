@@ -298,6 +298,7 @@
     <div class="chat-header">
         <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
         <div class="chat-header-bot">
+            <button class="theme-toggle" onclick="openEditBotModal()" title="Edit Bot">⚙️</button>
             <span id="chatBotEmoji">📦</span>
             <span id="chatBotName">Yui</span>
         </div>
@@ -1121,6 +1122,10 @@
         
     </div>
 </div>
+<div style="display: flex; gap: 8px; margin-top: 12px;">
+    <button class="settings-btn" onclick="changePin()" style="flex: 1;">🔑 Ganti PIN</button>
+    <button class="settings-btn" onclick="changePassword()" style="flex: 1;">🔒 Ganti Password</button>
+</div>
 
 <!-- ========================================================= -->
 <!-- USER MANAGEMENT SCREEN (ADMIN ONLY) -->
@@ -1202,6 +1207,34 @@
 <!-- MODAL PREVIEW FOTO -->
 <div id="imagePreviewModal" class="modal-overlay" onclick="closeImagePreview()" style="z-index: 9999; background: rgba(0,0,0,0.9);">
     <img id="imagePreviewImg" src="" style="max-width: 95%; max-height: 90vh; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.8); object-fit: contain;">
+</div>
+<!-- MODAL EDIT BOT -->
+<div id="editBotModal" class="modal-overlay" onclick="closeEditBotModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">🤖 Edit Persona Bot</div>
+            <button class="modal-close" onclick="closeEditBotModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="login-input-group">
+                <label class="login-input-label">Nama Bot</label>
+                <input type="text" id="editBotName" class="login-input" placeholder="Contoh: Yui">
+            </div>
+            <div class="login-input-group">
+                <label class="login-input-label">Emoji Avatar</label>
+                <input type="text" id="editBotEmoji" class="login-input" placeholder="Contoh: 📦" style="font-size: 24px;">
+            </div>
+            <div class="login-input-group">
+                <label class="login-input-label">System Persona (Prompt)</label>
+                <textarea id="editBotPersona" class="login-input" rows="4" placeholder="Kamu adalah asisten..."></textarea>
+            </div>
+            <p id="editBotError" class="login-error"></p>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; padding: 16px; border-top: 1px solid var(--border-color);">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeEditBotModal()" style="flex: 1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" onclick="saveBotSettings()" style="flex: 1;">✅ Simpan</button>
+        </div>
+    </div>
 </div>
 
 <script src="app.js"></script>
