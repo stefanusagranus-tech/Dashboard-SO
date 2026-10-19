@@ -829,5 +829,178 @@ async function submitAddUser() {
     finally { btn.disabled = false; btn.innerHTML = '✅ Simpan'; }
 }
 
+// =========================================================
+// TAMBALAN FUNGSI YANG HILANG (FIX CRASH)
+// =========================================================
+
+// 1. Fungsi Status Rak
+async function loadRakList() {
+    const container = document.getElementById("rakList");
+    if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data rak...</p></div>`;
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bulan_ini" }) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal load data rak");
+        
+        rakListData = data.list_rak || [];
+        if (document.getElementById("rakSummaryTotal")) document.getElementById("rakSummaryTotal").textContent = data.total_rak;
+        if (document.getElementById("rakSummarySudah")) document.getElementById("rakSummarySudah").textContent = data.sudah_so;
+        if (document.getElementById("rakSummaryBelum")) document.getElementById("rakSummaryBelum").textContent = data.belum_so;
+        renderRakList();
+    } catch (err) { 
+        container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; 
+    }
+}
+
+// 2. Fungsi Render Status Rak
+function renderRakList() {
+    const container = document.getElementById("rakList");
+    if (!container) return;
+    let filtered = rakListData || [];
+    if (rakFilterCurrent === "sudah") filtered = filtered.filter(r => r.status === "SUDAH");
+    else if (rakFilterCurrent === "belum") filtered = filtered.filter(r => r.status === "BELUM");
+    if (rakSearchQuery) filtered = filtered.filter(r => (r.rak_id || "").toLowerCase().includes(rakSearchQuery) || (r.pic || "").toLowerCase().includes(rakSearchQuery));
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">🔍</span><p>Tidak ada rak yang cocok</p></div>`;
+        return;
+    }
+    container.innerHTML = filtered.map(rak => {
+        if (rak.status === "SUDAH") {
+            const nominalText = formatRupiahFull(rak.nominal);
+            const nominalClass = rak.nominal < 0 ? "rak-nominal-minus" : "rak-nominal-plus";
+            const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
+            return `<div class="rak-card rak-card-sudah"><div class="rak-card-header"><span class="rak-card-badge rak-badge-sudah">✅</span><span class="rak-card-id">${escapeHtml(rak.rak_id)}</span><span class="rak-card-status">Sudah SO</span></div><div class="rak-card-body"><div class="rak-card-row"><span class="rak-card-label">📅 Tanggal</span><span class="rak-card-value">${tglShort}</span></div><div class="rak-card-row"><span class="rak-card-label">💰 Nominal</span><span class="rak-card-value ${nominalClass}">${nominalText}</span></div><div class="rak-card-row"><span class="rak-card-label">👤 PIC</span><span class="rak-card-value">${escapeHtml(rak.pic || "-")}</span></div></div></div>`;
+        } else {
+            return `<div class="rak-card rak-card-belum"><div class="rak-card-header"><span class="rak-card-badge rak-badge-belum">❌</span><span class="rak-card-id">${escapeHtml(rak.rak_id)}</span><span class="rak-card-status">Belum SO</span></div></div>`;
+        }
+    }).join("");
+}
+
+// 3. Fungsi SPD List
+async function loadSpdList() {
+    const container = document.getElementById("spdList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data SPD...</p></div>`;
+    try {
+        const today = new Date();
+        let start = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        if (spdPeriodCurrent === "custom") {
+            const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd");
+            if (s && s.value) start = new Date(s.value);
+            if (e && e.value) end = new Date(e.value);
+        }
+        const body = { mode: spdPeriodCurrent };
+        if (spdPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/spd-list`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal load SPD");
+        
+        spdListData = data.list_spd || [];
+        if (document.getElementById("spdSummaryTotal")) document.getElementById("spdSummaryTotal").textContent = formatRupiahFull(data.total_spd || 0);
+        if (document.getElementById("spdSummaryMeta")) document.getElementById("spdSummaryMeta").textContent = `📅 ${data.periode || "—"}`;
+        if (document.getElementById("spdSummaryHari")) document.getElementById("spdSummaryHari").textContent = data.total_hari || 0;
+        if (document.getElementById("spdSummaryAvg")) document.getElementById("spdSummaryAvg").textContent = formatRupiahFull(data.avg_spd || 0);
+        
+        renderSpdList();
+    } catch (err) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; }
+}
+
+// 4. Fungsi Render SPD List
+function renderSpdList() {
+    const container = document.getElementById("spdList"); if (!container) return;
+    if (!spdListData || spdListData.length === 0) {
+        container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data SPD di periode ini</p></div>`;
+        return;
+    }
+    container.innerHTML = spdListData.map(item => {
+        const spdText = formatRupiahFull(item.spd);
+        const deltaNominal = item.delta_nominal || 0, deltaPersen = item.delta_persen || 0, trend = item.trend || "flat";
+        let deltaHtml = trend === "flat" ? `<span class="spd-delta spd-delta-flat">— Flat</span>` : `<span class="spd-delta spd-delta-${trend}">${trend === "up" ? "↑" : "↓"} ${deltaNominal >= 0 ? "+" : ""}${formatRupiahFull(deltaNominal)} (${deltaNominal >= 0 ? "+" : ""}${deltaPersen.toFixed(2)}%)</span>`;
+        return `<div class="spd-item"><div class="spd-item-header"><div class="spd-item-tgl">📅 ${formatTanggalLong(item.tanggal)}</div><div class="spd-item-spd">${spdText}</div></div><div class="spd-item-delta-row">${deltaHtml}</div></div>`;
+    }).join("");
+}
+
+// 5. Fungsi Top Minus
+async function loadTopMinus() {
+    const container = document.getElementById("topList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data...</p></div>`;
+    try {
+        const today = new Date();
+        let start = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        const body = { mode: topPeriodCurrent };
+        if (topPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        
+        let url = topTabCurrent === "rak" ? `${CONFIG.BACKEND_URL}/api/yui/top-rak` : `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
+        if (topTabCurrent === "rak") body.limit = 500; else { body.limit = null; body.search = topSearchQuery || ""; body.order_by = topSortValue; body.sign = topSignCurrent; }
+        
+        const resp = await apiFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        
+        topData = topTabCurrent === "rak" ? (data.list_rak || []) : (data.items || []);
+        if (document.getElementById("topSummaryTotal")) document.getElementById("topSummaryTotal").textContent = formatRupiahFull(data.total_nominal || 0);
+        if (document.getElementById("topSummaryMeta")) document.getElementById("topSummaryMeta").textContent = `${topTabCurrent === "rak" ? data.total_rak : data.total_items} item • ${data.periode}`;
+        
+        if (topData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; return; }
+        container.innerHTML = topData.map((item, idx) => `<div class="top-item-card"><div class="top-item-header"><span class="top-item-rank">#${idx + 1}</span><span class="top-item-title">${escapeHtml(item.rak_id || item.plu)}</span><span class="top-item-nominal ${item.nominal_adjust < 0 ? "top-nominal-minus" : "top-nominal-plus"}">${formatRupiahFull(item.nominal_adjust)}</span></div></div>`).join("");
+    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+}
+
+// 6. Fungsi Status Analisis
+async function loadStatusAnalysis() {
+    try {
+        const today = new Date();
+        let start = statusPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = statusPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        const body = { mode: statusPeriodCurrent };
+        if (statusPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        
+        if (document.getElementById("statusBigEmoji")) document.getElementById("statusBigEmoji").textContent = data.status_emoji || "⏳";
+        if (document.getElementById("statusBigLabel")) document.getElementById("statusBigLabel").textContent = data.status_label || "—";
+        if (document.getElementById("statusBigPersen")) document.getElementById("statusBigPersen").textContent = `${(data.persen || 0).toFixed(3)}%`;
+        if (document.getElementById("statusBigMeta")) document.getElementById("statusBigMeta").textContent = data.periode || "—";
+        if (document.getElementById("metricNSB")) document.getElementById("metricNSB").textContent = formatRupiahFull(data.net_sales || 0);
+        if (document.getElementById("metricAdjust")) document.getElementById("metricAdjust").textContent = formatRupiahFull(data.total_adjust || 0);
+        if (document.getElementById("metricBTSB")) document.getElementById("metricBTSB").textContent = formatRupiahFull(data.btsb_rupiah || 0);
+        if (document.getElementById("metricNSBPersonil")) document.getElementById("metricNSBPersonil").textContent = formatRupiahFull(data.nsb_personil || 0);
+        if (document.getElementById("statusRekomendasi")) document.getElementById("statusRekomendasi").textContent = data.rekomendasi || "Tidak ada rekomendasi.";
+    } catch (err) { console.error("Error Status:", err); }
+}
+
+// 7. Fungsi Master Shift
+async function loadMasterShift() {
+    const container = document.getElementById("shiftList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat jadwal shift...</p></div>`;
+    try {
+        const today = new Date();
+        let start = shiftPeriod === "hari_ini" ? today : new Date(today.getFullYear(), today.getMonth(), 1);
+        let end = shiftPeriod === "hari_ini" ? today : new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        if (shiftPeriod === "minggu") { const day = today.getDay(); start = new Date(today); start.setDate(today.getDate() + (day === 0 ? -6 : 1 - day)); end = new Date(start); end.setDate(start.getDate() + 6); }
+        
+        const startStr = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, '0') + "-" + String(start.getDate()).padStart(2, '0');
+        const endStr = end.getFullYear() + "-" + String(end.getMonth() + 1).padStart(2, '0') + "-" + String(end.getDate()).padStart(2, '0');
+        const body = { tgl_start: startStr, tgl_end: endStr };
+        
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        
+        masterShiftData = data.data || [];
+        if (masterShiftData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><p>Belum ada data shift</p></div>`; return; }
+        
+        const grouped = {}; masterShiftData.forEach(r => { if (!grouped[r.tanggal]) grouped[r.tanggal] = []; grouped[r.tanggal].push(r); });
+        container.innerHTML = Object.keys(grouped).sort().map(tgl => `<div class="date-group"><div class="date-group-header"><span class="date-group-date">📅 ${formatTanggalLong(tgl)}</span><span class="date-group-count">${grouped[tgl].length} orang</span></div>${grouped[tgl].map(r => `<div class="shift-row"><span class="shift-emoji">${r.shift_emoji || "❓"}</span><span class="shift-name">${r.nama}</span><span class="shift-badge ${getBadgeClass(r.kode_shift)}">${r.shift_nama || r.kode_shift}</span></div>`).join("")}</div>`).join("");
+    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+}
+
+function getBadgeClass(kode) { return kode === "P7" ? "shift-badge-p7" : kode === "S15" ? "shift-badge-s15" : kode === "M22" ? "shift-badge-m22" : kode === "CUTI" ? "shift-badge-cuti" : "shift-badge-o"; }
+
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
