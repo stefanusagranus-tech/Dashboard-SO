@@ -171,7 +171,7 @@ function showScreen(screenId) {
         if (activeId) { const el = document.getElementById(activeId); if (el) { el.classList.add("active"); el.style.color = "#ff7b00"; } }
     }
 }
-function goToHomeScreen() { closeSidebar(); showScreen("homeScreen"); startLiveClock(); loadHomeDataLazy(); startDashboardAutoRefresh(); }
+function goToHomeScreen() { closeSidebar(); showScreen("homeScreen"); startLiveClock(); loadHomeDataLazy(); startDashboardAutoRefresh(); checkNewBroadcast();}
 function goToChatScreen() { stopDashboardAutoRefresh(); showScreen("chatScreen"); if (!currentBot || !BOTS[currentBot]) currentBot = "yui"; switchBot(currentBot); }
 async function goToSettingsScreen() { closeSidebar(); await refreshUserData(); updateSettingsUserInfo(); updateAvatarUI(); showScreen("settingsScreen"); }
 function goToMasterShiftScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("masterShiftScreen"); loadShiftDataLazy(); }
@@ -909,12 +909,12 @@ function goToBroadcastScreen() {
     closeSidebar();
     showScreen("broadcastScreen");
     
-    // ✅ Tampilkan tombol + cuma buat admin
     const _user = getUser();
     const btnAdd = document.getElementById("btnAddBroadcast");
     if (btnAdd) btnAdd.style.display = (_user?.role === "admin") ? "flex" : "none";
     
     loadBroadcastList();
+    markBroadcastAsRead(); // ✅ TAMBAHIN INI
 }
 
 async function loadBroadcastList() {
@@ -1344,6 +1344,65 @@ function insertMention(username, atPos) {
     document.getElementById("mentionList").style.display = "none";
     mentionActive = false;
     input.focus();
+}
+// =========================================================
+// FASE 3: NOTIFIKASI (Badge Lonceng)
+// =========================================================
+
+// Cek broadcast baru sejak terakhir user buka
+async function checkNewBroadcast() {
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
+        const data = await resp.json();
+        if (!data.success || !data.data || data.data.length === 0) return;
+        
+        // Ambil ID broadcast terbaru (paling atas, karena udah di-sort desc)
+        const latestBroadcast = data.data[0];
+        const latestId = latestBroadcast.id;
+        
+        // Ambil ID terakhir yang udah dibaca dari localStorage
+        const _user = getUser();
+        const _key = _user ? `so_last_broadcast_${_user.username}` : "so_last_broadcast_guest";
+        const lastReadId = localStorage.getItem(_key);
+        
+        // Kalau ada broadcast baru, munculin badge
+        const badge = document.getElementById("notifBadge");
+        if (badge && (!lastReadId || parseInt(lastReadId) < latestId)) {
+            badge.style.display = "block";
+            badge.textContent = "1"; // Atau hitung jumlah broadcast baru
+        } else if (badge) {
+            badge.style.display = "none";
+        }
+    } catch (e) {
+        console.warn("[Notif] Gagal cek broadcast:", e);
+    }
+}
+
+// Tandai broadcast udah dibaca (pas buka halaman Broadcast)
+function markBroadcastAsRead() {
+    try {
+        const _user = getUser();
+        const _key = _user ? `so_last_broadcast_${_user.username}` : "so_last_broadcast_guest";
+        
+        // Ambil ID broadcast terbaru dari UI
+        const firstBroadcastCard = document.querySelector("#broadcastList .settings-card");
+        if (firstBroadcastCard) {
+            // Kita gak nyimpen ID di card, jadi pakai cara lain: panggil API sekali lagi
+            apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.data && data.data.length > 0) {
+                        localStorage.setItem(_key, String(data.data[0].id));
+                    }
+                });
+        }
+        
+        // Sembunyiin badge
+        const badge = document.getElementById("notifBadge");
+        if (badge) badge.style.display = "none";
+    } catch (e) {
+        console.warn("[Notif] Gagal mark read:", e);
+    }
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
