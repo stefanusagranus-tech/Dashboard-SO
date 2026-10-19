@@ -18,7 +18,8 @@ async def list_rooms(user: dict = Depends(require_token)):
 @router.get("/messages/{room_id}")
 async def get_messages(room_id: int, user: dict = Depends(require_token)):
     _sb = get_supabase()
-    _res = _sb.table("messages").select("*, users(nama_lengkap, username)").eq("room_id", room_id).order("created_at").execute()
+    # ✅ TAMBAHIN avatar_url DI DALAM SELECT users(...)
+    _res = _sb.table("messages").select("*, users(nama_lengkap, username, avatar_url)").eq("room_id", room_id).order("created_at").execute()
     return {"success": True, "data": _res.data or []}
 
 @router.post("/send")

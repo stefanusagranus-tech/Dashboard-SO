@@ -13,10 +13,10 @@ const CONFIG = {
 };
 
 const DEFAULT_BOTS = {
-    yui:    { emoji: "📦", name: "Yui",    role: "Data Entry",   endpoint: "/yui/chat", persona: "Kamu adalah Yui, asisten data entry yang ceria dan teliti." },
-    hana:   { emoji: "🌸", name: "Hana",   role: "Master Shift", endpoint: "/hana/chat", persona: "Kamu adalah Hana, asisten master shift yang ramah dan penuh perhatian." },
-    rei:    { emoji: "📊", name: "Rei",    role: "Analisis",     endpoint: "/rei/chat", persona: "Kamu adalah Rei, asisten analisis data yang tajam dan berwibawa." },
-    kurumi: { emoji: "🎀", name: "Kurumi", role: "Chief",        endpoint: "/kurumi/chat", persona: "Kamu adalah Kurumi, Chief of Staff yang profesional dan tegas." },
+    yui:    { emoji: "📦", name: "Yui",    role: "Data Entry",   endpoint: "/yui/chat", persona: "Kamu adalah Yui, asisten data entry yang ceria dan teliti.", foto: "https://api.dicebear.com/7.x/bottts/svg?seed=Yui" },
+    hana:   { emoji: "🌸", name: "Hana",   role: "Master Shift", endpoint: "/hana/chat", persona: "Kamu adalah Hana, asisten master shift yang ramah dan penuh perhatian.", foto: "https://api.dicebear.com/7.x/bottts/svg?seed=Hana" },
+    rei:    { emoji: "📊", name: "Rei",    role: "Analisis",     endpoint: "/rei/chat", persona: "Kamu adalah Rei, asisten analisis data yang tajam dan berwibawa.", foto: "https://api.dicebear.com/7.x/bottts/svg?seed=Rei" },
+    kurumi: { emoji: "🎀", name: "Kurumi", role: "Chief",        endpoint: "/kurumi/chat", persona: "Kamu adalah Kurumi, Chief of Staff yang profesional dan tegas.", foto: "https://api.dicebear.com/7.x/bottts/svg?seed=Kurumi" },
 };
 
 let BOTS = JSON.parse(localStorage.getItem("so_bots_custom")) || JSON.parse(JSON.stringify(DEFAULT_BOTS));
@@ -238,7 +238,23 @@ function loadChatHistories() { try { chatHistories = JSON.parse(localStorage.get
 function saveChatHistories() { try { localStorage.setItem("so_chat_histories", JSON.stringify(chatHistories)); } catch (e) {} }
 function switchBot(botId) {
     if (!BOTS[botId]) return; currentBot = botId;
-    if (document.getElementById("chatBotEmoji")) document.getElementById("chatBotEmoji").textContent = BOTS[botId].emoji;
+    
+    // ✅ FIX FOTO BOT DI HEADER
+    const emojiEl = document.getElementById("chatBotEmoji");
+    if (emojiEl) {
+        const bot = BOTS[botId];
+        if (bot.foto) {
+            emojiEl.style.backgroundImage = `url('${bot.foto}')`;
+            emojiEl.style.backgroundSize = "cover";
+            emojiEl.style.borderRadius = "50%";
+            emojiEl.style.width = "32px";
+            emojiEl.style.height = "32px";
+            emojiEl.textContent = "";
+        } else {
+            emojiEl.textContent = bot.emoji;
+        }
+    }
+    
     if (document.getElementById("chatBotName")) document.getElementById("chatBotName").textContent = BOTS[botId].name;
     document.querySelectorAll(".bot-item").forEach(item => item.classList.toggle("active", item.getAttribute("data-bot") === botId));
     renderChatHistory(); closeSidebar();
@@ -916,28 +932,55 @@ async function openRoomChat(roomId, roomName) {
 
 async function loadRoomMessages() {
     if (!currentRoomId) return;
-    const container = document.getElementById("roomMessages"); if (!container) return;
+    const container = document.getElementById("roomMessages"); 
+    if (!container) return;
+    
     try {
         const resp = await apiFetch(`${CONFIG.BACKEND_URL}/room/messages/${currentRoomId}`, { method: "GET" });
         const data = await resp.json();
         if (!data.success) throw new Error("Gagal load pesan");
         
         const _user = getUser();
-        container.innerHTML = data.data.map(m => {
+        const isFirstLoad = container.innerHTML.includes("loading-state") || container.innerHTML.trim() === "";
+        
+        const newHtml = data.data.map(m => {
             const isMe = m.user_id === _user?.id;
             const nama = m.users?.nama_lengkap || m.users?.username || "User";
+            const avatarUrl = m.users?.avatar_url; // ✅ AMBIL FOTO
+            
+            // ✅ LOGIKA FOTO: Kalau ada foto, pake background-image. Kalau gak ada, pake inisial.
+            let avatarHtml = "";
+            if (avatarUrl) {
+                avatarHtml = `<div class="chat-avatar ${isMe ? "avatar-user" : ""}" style="background-image: url('${avatarUrl}'); background-size: cover; background-position: center; background-color: transparent;"></div>`;
+            } else {
+                const inisial = nama.substring(0, 2).toUpperCase();
+                avatarHtml = `<div class="chat-avatar ${isMe ? "avatar-user" : ""}">${inisial}</div>`;
+            }
+
             return `
                 <div class="chat-message-wrapper ${isMe ? "user" : "ai"}" style="margin-bottom: 8px;">
-                    <div class="chat-avatar ${isMe ? "avatar-user" : ""}">${isMe ? "👤" : "👥"}</div>
+                    ${avatarHtml}
                     <div class="bubble-content ${isMe ? "user" : "ai"}">
-                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">${nama}</div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">${escapeHtml(nama)}</div>
                         <div class="bubble bubble-${isMe ? "user" : "ai"}">${escapeHtml(m.pesan)}</div>
                         <div class="bubble-time">${formatTime(m.created_at)}</div>
                     </div>
                 </div>
             `;
         }).join("");
-        container.scrollTop = container.scrollHeight;
+
+        if (isFirstLoad) {
+            container.innerHTML = newHtml;
+            container.scrollTop = container.scrollHeight;
+        } else {
+            const currentMessageCount = container.querySelectorAll(".chat-message-wrapper").length;
+            if (data.data.length > currentMessageCount) {
+                const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                container.innerHTML = newHtml;
+                if (wasNearBottom) container.scrollTop = container.scrollHeight;
+            }
+        }
+        
     } catch (err) {
         console.error("Gagal load pesan:", err);
     }
