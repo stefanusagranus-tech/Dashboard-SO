@@ -1222,6 +1222,7 @@ async function submitCreateBroadcast() {
         btn.disabled = false; btn.innerHTML = '✅ Kirim';
     }
 }
+
 // =========================================================
 // FASE B: MENTION SYSTEM (@)
 // =========================================================
@@ -1354,6 +1355,6 @@ function insertMention(username, atPos) {
     mentionActive = false;
     input.focus();
 }
-}
+
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
