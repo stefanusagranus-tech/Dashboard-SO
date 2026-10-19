@@ -665,17 +665,19 @@ function goToHomeScreen() {
     refreshUserData().then(() => {
         const _user = getUser();
         if (_user) {
-            const elHeader = document.getElementById("homeAvatar");
-            const elSlide = document.getElementById("slideHomeAvatar");
+            const elSlide = document.getElementById("homeAvatarPreview"); // Ganti ID di sini
             
             if (_user.avatar_url) {
-                const freshUrl = `${_user.avatar_url}?t=${Date.now()}`;
-                if (elHeader) { elHeader.style.backgroundImage = `url(${freshUrl})`; elHeader.textContent = ""; }
-                if (elSlide) { elSlide.style.backgroundImage = `url(${freshUrl})`; elSlide.textContent = ""; }
+                if (elSlide) { 
+                    elSlide.style.backgroundImage = `url(${_user.avatar_url})`; 
+                    elSlide.textContent = ""; 
+                }
             } else {
                 const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
-                if (elHeader) { elHeader.style.backgroundImage = "none"; elHeader.textContent = inisial; }
-                if (elSlide) { elSlide.style.backgroundImage = "none"; elSlide.textContent = inisial; }
+                if (elSlide) { 
+                    elSlide.style.backgroundImage = "none"; 
+                    elSlide.textContent = inisial; 
+                }
             }
         }
     });
@@ -747,28 +749,6 @@ async function goToSettingsScreen() {
     }
 
     showScreen("settingsScreen");
-}
-
-// --- PROFIL ASLI (Ganti Placeholder) ---
-function goToProfileScreen() {
-    const _user = getUser();
-    if (!_user) return;
-    
-    // Isi form dengan data sekarang
-    document.getElementById("editNamaLengkap").value = _user.nama_lengkap || "";
-    
-    // Cari di dalam fungsi goToProfileScreen
-    const preview = document.getElementById("editAvatarPreview");
-    if (_user.avatar_url) {
-        preview.style.backgroundImage = `url(${_user.avatar_url})`;
-        preview.textContent = ""; // <--- PASTIKAN BARIS INI ADA
-    } else {
-        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
-        preview.textContent = inisial;
-        preview.style.backgroundImage = "none";
-    }
-    
-    showScreen("profileScreen");
 }
 
 // --- MODAL TEMA ---
@@ -4523,36 +4503,6 @@ function updateDots(index) {
         dot.classList.toggle('active', i === index);
     });
 }
-
-// Deteksi Swipe Manual di HP
-document.addEventListener('DOMContentLoaded', () => {
-    const carousel = document.getElementById('homeCarousel');
-    if (!carousel) return;
-    
-    let touchStartX = 0;
-    let touchEndX = 0;
-    
-    carousel.addEventListener('touchstart', e => {
-        touchStartX = e.changedTouches[0].screenX;
-    }, { passive: true });
-    
-    carousel.addEventListener('touchend', e => {
-        touchEndX = e.changedTouches[0].screenX;
-        handleSwipe();
-    }, { passive: true });
-    
-    function handleSwipe() {
-        const threshold = 50; // Jarak minimal geser
-        if (touchEndX < touchStartX - threshold) {
-            // Geser kiri -> Next Slide
-            goToSlide(currentSlide + 1);
-        }
-        if (touchEndX > touchStartX + threshold) {
-            // Geser kanan -> Prev Slide
-            goToSlide(currentSlide - 1);
-        }
-    }
-});
 
 // --- MODAL PILIHAN CHAT ---
 function openChatSelectionModal() {
