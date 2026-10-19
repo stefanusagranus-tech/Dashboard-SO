@@ -24,16 +24,15 @@ app = FastAPI(
 # =========================================================
 # MIDDLEWARE (URUTAN PENTING!)
 # =========================================================
-# 1. CORS — Hanya izinkan domain frontend lu
-_allowed = os.getenv("ALLOWED_ORIGINS", "https://stefanusagranus-tech.github.io").split(",")
+# 1. CORS — Biarin pake "*" karena Proxy yang jaga
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False, # WAJIB False kalau origins "*"
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
-
 # 2. Auth Middleware
 app.add_middleware(AuthMiddleware)
 
@@ -82,6 +81,21 @@ async def global_exception_handler(request, exc):
     return JSONResponse(
         status_code=500,
         content={"error": "Terjadi kesalahan internal. Hubungi admin."},
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    print(f"[ERROR] {type(exc).__name__}: {exc}")
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Terjadi kesalahan internal."},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
     )
 
 if __name__ == "__main__":
