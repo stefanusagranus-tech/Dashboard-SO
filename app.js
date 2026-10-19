@@ -1011,12 +1011,21 @@ let currentRoomId = null;
 let roomRefreshInterval = null;
 
 async function openRoomChat(roomId, roomName) {
+    if (roomRefreshInterval) { clearInterval(roomRefreshInterval); roomRefreshInterval = null; }
+    
     currentRoomId = roomId;
     document.getElementById("roomChatTitle").textContent = `# ${roomName}`;
+    
+    const container = document.getElementById("roomMessages");
+    if (container) container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat...</p></div>`;
+    
     showScreen("roomChatScreen");
+    
+    // ✅ PANGGIL INI
+    initMentionSystem(); 
+    
     await loadRoomMessages();
     
-    if (roomRefreshInterval) clearInterval(roomRefreshInterval);
     roomRefreshInterval = setInterval(loadRoomMessages, 5000);
 }
 
@@ -1213,127 +1222,6 @@ async function submitCreateBroadcast() {
         btn.disabled = false; btn.innerHTML = '✅ Kirim';
     }
     
-    function initMentionSystem() {
-    const input = document.getElementById("roomInput");
-    const list = document.getElementById("mentionList");
-    if (!input || !list) return;
-
-    // Ambil data user buat mention
-    fetchMentionUsers();
-
-    input.addEventListener("input", () => {
-        const val = input.value;
-        const cursorPos = input.selectionStart;
-        const textBeforeCursor = val.substring(0, cursorPos);
-        const lastAtPos = textBeforeCursor.lastIndexOf("@");
-
-        if (lastAtPos !== -1 && (lastAtPos === 0 || textBeforeCursor[lastAtPos - 1] === " ")) {
-            const query = textBeforeCursor.substring(lastAtPos + 1).toLowerCase();
-            if (!query.includes(" ")) {
-                showMentionList(query, lastAtPos);
-                return;
-            }
-        }
-        list.style.display = "none";
-        mentionActive = false;
-    });
-
-    // Handle pilihan pake keyboard (opsional)
-    input.addEventListener("keydown", (e) => {
-        if (!mentionActive) return;
-        const items = list.querySelectorAll(".mention-item");
-        if (items.length === 0) return;
-        
-        // Cari item yang aktif
-        let active = Array.from(items).find(i => i.classList.contains("active"));
-        let idx = active ? Array.from(items).indexOf(active) : -1;
-
-        if (e.key === "ArrowDown") {
-            e.preventDefault();
-            if (active) active.classList.remove("active");
-            idx = (idx + 1) % items.length;
-            items[idx].classList.add("active");
-            items[idx].scrollIntoView({ block: "nearest" });
-        } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            if (active) active.classList.remove("active");
-            idx = (idx - 1 + items.length) % items.length;
-            items[idx].classList.add("active");
-            items[idx].scrollIntoView({ block: "nearest" });
-        } else if (e.key === "Enter" && active) {
-            e.preventDefault();
-            active.click();
-        } else if (e.key === "Escape") {
-            list.style.display = "none";
-            mentionActive = false;
-        }
-    });
-}
-
-async function fetchMentionUsers() {
-    try {
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/auth/users`, { method: "GET" });
-        const data = await resp.json();
-        if (data.success) {
-            mentionUsers = data.users.map(u => ({
-                type: 'user',
-                id: u.id,
-                name: u.nama_lengkap || u.username,
-                username: u.username,
-                emoji: '👤'
-            }));
-        }
-    } catch (e) { console.log("Gagal load users buat mention", e); }
-    
-    // Tambahin Bot
-    const bots = Object.keys(BOTS).map(k => ({
-        type: 'bot',
-        id: k,
-        name: BOTS[k].name,
-        username: k,
-        emoji: BOTS[k].emoji
-    }));
-    
-    mentionUsers = [...bots, ...mentionUsers];
-}
-
-function showMentionList(query, atPos) {
-    const list = document.getElementById("mentionList");
-    const filtered = mentionUsers.filter(u => 
-        u.name.toLowerCase().includes(query) || 
-        u.username.toLowerCase().includes(query)
-    );
-
-    if (filtered.length === 0) {
-        list.style.display = "none";
-        mentionActive = false;
-        return;
-    }
-
-    mentionActive = true;
-    list.style.display = "block";
-    list.innerHTML = filtered.map((u, i) => `
-        <div class="mention-item ${i === 0 ? 'active' : ''}" onclick="insertMention('${u.username}', ${atPos})" style="padding: 10px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid var(--border-stone);">
-            <span style="font-size: 18px;">${u.emoji}</span>
-            <div>
-                <div style="font-size: 14px; font-weight: 700; color: var(--text-bone);">${escapeHtml(u.name)}</div>
-                <div style="font-size: 11px; color: var(--text-muted);">@${escapeHtml(u.username)}</div>
-            </div>
-        </div>
-    `).join("");
-}
-
-function insertMention(username, atPos) {
-    const input = document.getElementById("roomInput");
-    const val = input.value;
-    const before = val.substring(0, atPos);
-    const after = val.substring(input.selectionStart);
-    
-    input.value = `${before}@${username} ${after}`;
-    document.getElementById("mentionList").style.display = "none";
-    mentionActive = false;
-    input.focus();
-}
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
