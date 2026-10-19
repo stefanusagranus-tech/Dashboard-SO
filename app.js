@@ -34,6 +34,8 @@ let statusPeriodCurrent = "bulan_ini", currentConfirmData = null;
 let _personilCache = null, _personilCacheTime = 0;
 window._pendingUploadSo = null; window._pendingSpd = null;
 const IDLE_TIMEOUT = 5 * 60 * 1000;
+let mentionActive = false;
+let mentionUsers = [];
 
 // URL BACKEND ASLI (khusus login)
 const RAW_BACKEND_URL = "https://dashboard-so.fastapicloud.dev";
@@ -250,7 +252,27 @@ function startRunningText(text) { const container = document.getElementById("run
 function showToastMini(message, type = "success") { document.querySelector(".toast-mini")?.remove(); const toast = document.createElement("div"); toast.className = `toast-mini ${type}`; toast.textContent = message; document.body.appendChild(toast); setTimeout(() => toast.classList.add("show"), 100); setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 400); }, 3000); }
 function formatTime(timestamp) { if (!timestamp) return ""; const d = new Date(timestamp); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
 function getSessionDate() { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; }
-function formatMessage(text) { if (!text) return ""; let html = escapeHtml(text); html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); html = html.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<i>$1</i>"); html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>'); html = html.replace(/^[\-\*]\s+(.+)$/gm, "• $1"); html = html.replace(/^(\d+)\.\s+(.+)$/gm, "$1. $2"); return html; }
+function formatMessage(text) {
+    if (!text) return "";
+    let html = escapeHtml(text);
+    // Ganti **bold** jadi <b>
+    html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    // Ganti *italic* jadi <i>
+    html = html.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<i>$1</i>");
+    // Ganti `code` jadi <code>
+    html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>');
+    // Ganti list jadi bullet
+    html = html.replace(/^[\-\*]\s+(.+)$/gm, "• $1");
+    // Ganti newline jadi <br>
+    html = html.replace(/\n/g, "<br>");
+    
+    // ✅ TAMBAHIN: Rapihin format SO yang berantakan
+    html = html.replace(/List SO:/g, "<br><b>List SO:</b><br>");
+    html = html.replace(/\s-\s(SO-\d+)/g, "<br>• $1");
+    html = html.replace(/Breakdown per kategori:/g, "<br><br><b>Breakdown per kategori:</b><br>");
+    
+    return html;
+}
 function cleanHtmlEntities(str) { if (!str) return ""; return str.replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&nbsp;/g, " ").replace(/&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">"); }
 function escapeHtml(text) { const div = document.createElement("div"); div.textContent = text; return div.innerHTML; }
 function getWelcomeText(botId) { const b = BOTS[botId]; return b ? `Aku ${b.name}, ${b.role}. Siap bantu!` : ""; }
@@ -1190,6 +1212,128 @@ async function submitCreateBroadcast() {
     } finally {
         btn.disabled = false; btn.innerHTML = '✅ Kirim';
     }
+    
+    function initMentionSystem() {
+    const input = document.getElementById("roomInput");
+    const list = document.getElementById("mentionList");
+    if (!input || !list) return;
+
+    // Ambil data user buat mention
+    fetchMentionUsers();
+
+    input.addEventListener("input", () => {
+        const val = input.value;
+        const cursorPos = input.selectionStart;
+        const textBeforeCursor = val.substring(0, cursorPos);
+        const lastAtPos = textBeforeCursor.lastIndexOf("@");
+
+        if (lastAtPos !== -1 && (lastAtPos === 0 || textBeforeCursor[lastAtPos - 1] === " ")) {
+            const query = textBeforeCursor.substring(lastAtPos + 1).toLowerCase();
+            if (!query.includes(" ")) {
+                showMentionList(query, lastAtPos);
+                return;
+            }
+        }
+        list.style.display = "none";
+        mentionActive = false;
+    });
+
+    // Handle pilihan pake keyboard (opsional)
+    input.addEventListener("keydown", (e) => {
+        if (!mentionActive) return;
+        const items = list.querySelectorAll(".mention-item");
+        if (items.length === 0) return;
+        
+        // Cari item yang aktif
+        let active = Array.from(items).find(i => i.classList.contains("active"));
+        let idx = active ? Array.from(items).indexOf(active) : -1;
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            if (active) active.classList.remove("active");
+            idx = (idx + 1) % items.length;
+            items[idx].classList.add("active");
+            items[idx].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            if (active) active.classList.remove("active");
+            idx = (idx - 1 + items.length) % items.length;
+            items[idx].classList.add("active");
+            items[idx].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "Enter" && active) {
+            e.preventDefault();
+            active.click();
+        } else if (e.key === "Escape") {
+            list.style.display = "none";
+            mentionActive = false;
+        }
+    });
+}
+
+async function fetchMentionUsers() {
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/auth/users`, { method: "GET" });
+        const data = await resp.json();
+        if (data.success) {
+            mentionUsers = data.users.map(u => ({
+                type: 'user',
+                id: u.id,
+                name: u.nama_lengkap || u.username,
+                username: u.username,
+                emoji: '👤'
+            }));
+        }
+    } catch (e) { console.log("Gagal load users buat mention", e); }
+    
+    // Tambahin Bot
+    const bots = Object.keys(BOTS).map(k => ({
+        type: 'bot',
+        id: k,
+        name: BOTS[k].name,
+        username: k,
+        emoji: BOTS[k].emoji
+    }));
+    
+    mentionUsers = [...bots, ...mentionUsers];
+}
+
+function showMentionList(query, atPos) {
+    const list = document.getElementById("mentionList");
+    const filtered = mentionUsers.filter(u => 
+        u.name.toLowerCase().includes(query) || 
+        u.username.toLowerCase().includes(query)
+    );
+
+    if (filtered.length === 0) {
+        list.style.display = "none";
+        mentionActive = false;
+        return;
+    }
+
+    mentionActive = true;
+    list.style.display = "block";
+    list.innerHTML = filtered.map((u, i) => `
+        <div class="mention-item ${i === 0 ? 'active' : ''}" onclick="insertMention('${u.username}', ${atPos})" style="padding: 10px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid var(--border-stone);">
+            <span style="font-size: 18px;">${u.emoji}</span>
+            <div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--text-bone);">${escapeHtml(u.name)}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">@${escapeHtml(u.username)}</div>
+            </div>
+        </div>
+    `).join("");
+}
+
+function insertMention(username, atPos) {
+    const input = document.getElementById("roomInput");
+    const val = input.value;
+    const before = val.substring(0, atPos);
+    const after = val.substring(input.selectionStart);
+    
+    input.value = `${before}@${username} ${after}`;
+    document.getElementById("mentionList").style.display = "none";
+    mentionActive = false;
+    input.focus();
+}
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
