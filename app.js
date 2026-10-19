@@ -1225,8 +1225,6 @@ async function submitCreateBroadcast() {
 // =========================================================
 // FASE B: MENTION SYSTEM (@) — DI LUAR FUNGSI LAIN
 // =========================================================
-let mentionActive = false;
-let mentionUsers = [];
 
 function initMentionSystem() {
     const input = document.getElementById("roomInput");
