@@ -1407,6 +1407,40 @@
         <button class="chat-send" onclick="sendRoomMessage()">➤</button>
     </div>
 </div>
+<!-- ========================================================= -->
+<!-- MODAL — BUAT BROADCAST (ADMIN ONLY) -->
+<!-- ========================================================= -->
+<div id="createBroadcastModal" class="modal-overlay" onclick="closeCreateBroadcastModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">📢 Buat Broadcast Baru</div>
+            <button class="modal-close" onclick="closeCreateBroadcastModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="login-input-group">
+                <label class="login-input-label">Judul</label>
+                <input type="text" id="broadcastJudul" class="login-input" placeholder="Contoh: Update Sistem" autocomplete="off">
+            </div>
+            <div class="login-input-group">
+                <label class="login-input-label">Pesan</label>
+                <textarea id="broadcastPesan" class="login-input" rows="4" placeholder="Isi pesan broadcast..."></textarea>
+            </div>
+            <div class="login-input-group">
+                <label class="login-input-label">Tipe</label>
+                <select id="broadcastTipe" class="filter-select" style="width: 100%;">
+                    <option value="info">📢 Info</option>
+                    <option value="update">🚀 Update</option>
+                    <option value="warning">⚠️ Warning</option>
+                </select>
+            </div>
+            <p id="createBroadcastError" class="login-error" style="text-align: center;"></p>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; padding: 16px; border-top: 1px solid var(--border-color);">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeCreateBroadcastModal()" style="flex: 1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" id="btnSaveBroadcast" onclick="submitCreateBroadcast()" style="flex: 1;">✅ Kirim</button>
+        </div>
+    </div>
+</div>
 
 <script src="app.js"></script>
 
