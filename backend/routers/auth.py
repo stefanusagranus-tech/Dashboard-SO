@@ -274,7 +274,25 @@ async def logout_endpoint(request: Request, authorization: str = Header(None)):
 @limiter.limit("60/minute")
 async def me_endpoint(request: Request, authorization: str = Header(None)):
     _user, _ = _get_current_user(authorization)
-    return {"success": True, "user": _user}
+    
+    # Ambil data terbaru dari DB (biar avatar_url ke-refresh)
+    from services.auth import get_user_by_id
+    _fresh_user = get_user_by_id(_user["id"])
+    
+    if not _fresh_user:
+        raise HTTPException(404, "User nggak ditemukan")
+        
+    return {
+        "success": True, 
+        "user": {
+            "id": _fresh_user.get("id"),
+            "username": _fresh_user.get("username"),
+            "nama_lengkap": _fresh_user.get("nama_lengkap"),
+            "role": _fresh_user.get("role"),
+            "avatar_url": _fresh_user.get("avatar_url"), # <--- INI WAJIB ADA
+            "aktif": _fresh_user.get("aktif", True),
+        }
+    }
 
 
 # =========================================================
