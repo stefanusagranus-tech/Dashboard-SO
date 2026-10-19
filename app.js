@@ -1222,9 +1222,8 @@ async function submitCreateBroadcast() {
         btn.disabled = false; btn.innerHTML = '✅ Kirim';
     }
 }
-
 // =========================================================
-// FASE B: MENTION SYSTEM (@)
+// FASE B: MENTION SYSTEM (@) — DI LUAR FUNGSI LAIN
 // =========================================================
 let mentionActive = false;
 let mentionUsers = [];
@@ -1232,15 +1231,10 @@ let mentionUsers = [];
 function initMentionSystem() {
     const input = document.getElementById("roomInput");
     const list = document.getElementById("mentionList");
-    if (!input || !list) {
-        console.warn("[Mention] Input / List gak ketemu!");
-        return;
-    }
+    if (!input || !list) return;
 
-    // Ambil data user buat mention
     fetchMentionUsers();
 
-    // Deteksi pas ngetik @
     input.addEventListener("input", () => {
         const val = input.value;
         const cursorPos = input.selectionStart;
@@ -1258,7 +1252,6 @@ function initMentionSystem() {
         mentionActive = false;
     });
 
-    // Handle keyboard arrow up/down
     input.addEventListener("keydown", (e) => {
         if (!mentionActive) return;
         const items = list.querySelectorAll(".mention-item");
@@ -1304,7 +1297,6 @@ async function fetchMentionUsers() {
         }
     } catch (e) { console.log("Gagal load users buat mention", e); }
     
-    // Tambahin Bot
     const bots = Object.keys(BOTS).map(k => ({
         type: 'bot',
         id: k,
@@ -1355,6 +1347,5 @@ function insertMention(username, atPos) {
     mentionActive = false;
     input.focus();
 }
-
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
