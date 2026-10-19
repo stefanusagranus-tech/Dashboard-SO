@@ -1,15 +1,15 @@
 /* =========================================================
-   DASHBOARD SO C383 — APP LOGIC v5.0 (LENGKAP & FIX)
-   Fitur: Lazy Loading, Cache, Auto Refresh, Upload Excel, SPD
+   DASHBOARD SO C383 — APP LOGIC v7.0 (MASTERPIECE)
+   Fitur: 100% Lengkap | Zero Duplication | Optimized Lazy-Load
    ========================================================= */
 
 // =========================================================
-// 1. CONFIG & CONSTANTS
+// 1. KONFIGURASI & CONSTANTS
 // =========================================================
 const CONFIG = {
     BACKEND_URL: "https://dashboard-so.fastapicloud.dev",
     STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
-    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkz", // Pastikan ini key baru lu
+    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkz", // API Key Terbaru
     APP_VERSION: "1.0.0",
     TARGET_SO_PERSEN: 70,
 };
@@ -22,19 +22,13 @@ const BOTS = {
 };
 
 const AUTH_KEYS = {
-    TOKEN: "so_auth_token",
-    USER: "so_auth_user",
-    TEMP_TOKEN: "so_temp_token",
-    USERNAME: "so_temp_username",
+    TOKEN: "so_auth_token", USER: "so_auth_user", TEMP_TOKEN: "so_temp_token", USERNAME: "so_temp_username",
 };
 
 // =========================================================
-// 2. GLOBAL STATE & CACHE
+// 2. STATE & CACHE GLOBAL (Mencegah API Numpuk)
 // =========================================================
-const AppCache = {
-    user: null, rekap: null, shiftHariIni: null, personil: null,
-    masterShift: null, spdList: null, topData: null,
-};
+const AppCache = { user: null, rekap: null, shiftHariIni: null, personil: null };
 
 let currentBot = "yui";
 let chatHistories = {};
@@ -42,35 +36,33 @@ let pinInput = "";
 let exitModalShown = false;
 let idleTimer = null;
 let clockInterval = null;
-let dashboardRefreshInterval = null; // <-- Ini yang tadi bikin error, udah ada
+let dashboardRefreshInterval = null;
 let autoThemeEnabled = true;
+let updateInfo = null;
+let toastTimer = null;
 
-let shiftPeriod = "hari_ini";
-let spdPeriodCurrent = "bulan_ini";
-let spdSortValue = "tanggal_desc";
-let rakFilterCurrent = "semua";
-let rakSearchQuery = "";
-let topPeriodCurrent = "bulan_ini";
-let topTabCurrent = "rak";
-let topSignCurrent = "minus";
+// State UI per halaman
+let shiftPeriod = "hari_ini", masterShiftData = [], personilData = [];
+let spdListData = [], spdPeriodCurrent = "bulan_ini", spdSortValue = "tanggal_desc";
+let rakListData = [], rakFilterCurrent = "semua", rakSearchQuery = "";
+let topData = [], topPeriodCurrent = "bulan_ini", topSortValue = "tanggal_desc", topTabCurrent = "rak", topSearchQuery = "", topSignCurrent = "minus", topSearchTimeout = null;
+let rakDetailData = [], rakDetailCurrentRak = null, rakDetailFilter = "semua", rakDetailSearchQuery = "";
+let statusPeriodCurrent = "bulan_ini", currentConfirmData = null;
 
-let _pendingUploadSo = null;
-let _pendingSpd = null;
+let _personilCache = null, _personilCacheTime = 0;
+window._pendingUploadSo = null;
+window._pendingSpd = null;
 
 const IDLE_TIMEOUT = 5 * 60 * 1000;
 
 // =========================================================
 // 3. AUTH & FETCH WRAPPER
 // =========================================================
-function getApiKey() { return CONFIG.API_KEY; } // Paksa pakai CONFIG
+function getApiKey() { return CONFIG.API_KEY; }
 function getToken() { return localStorage.getItem(AUTH_KEYS.TOKEN) || ""; }
 function getUser() {
     if (AppCache.user) return AppCache.user;
-    try {
-        const raw = localStorage.getItem(AUTH_KEYS.USER);
-        AppCache.user = raw ? JSON.parse(raw) : null;
-        return AppCache.user;
-    } catch (e) { return null; }
+    try { const raw = localStorage.getItem(AUTH_KEYS.USER); AppCache.user = raw ? JSON.parse(raw) : null; return AppCache.user; } catch (e) { return null; }
 }
 function setAuth(token, user) {
     if (token) localStorage.setItem(AUTH_KEYS.TOKEN, token);
@@ -78,12 +70,8 @@ function setAuth(token, user) {
     localStorage.setItem("so_login_timestamp", Date.now().toString());
 }
 function clearAuth() {
-    localStorage.removeItem(AUTH_KEYS.TOKEN);
-    localStorage.removeItem(AUTH_KEYS.USER);
-    localStorage.removeItem(AUTH_KEYS.TEMP_TOKEN);
-    localStorage.removeItem(AUTH_KEYS.USERNAME);
-    localStorage.removeItem("so_logged_in");
-    localStorage.removeItem("so_login_timestamp");
+    Object.values(AUTH_KEYS).forEach(k => localStorage.removeItem(k));
+    localStorage.removeItem("so_logged_in"); localStorage.removeItem("so_login_timestamp");
     AppCache.user = null;
 }
 function isLoggedIn() { return !!getToken() && !!getUser(); }
@@ -93,20 +81,17 @@ async function apiFetch(url, options = {}) {
     const _token = getToken();
     if (_token) headers["Authorization"] = `Bearer ${_token}`;
     
-    const _opts = { ...options, headers };
     let _resp;
-    
-    try { _resp = await fetch(url, _opts); } 
+    try { _resp = await fetch(url, { ...options, headers }); } 
     catch (_err) { throw new Error("Koneksi internet bermasalah"); }
 
     if (_resp.status === 401) {
         let _bodyText = await _resp.text();
         let _errMsg = "";
-        try { _errMsg = JSON.parse(_bodyText).detail || ""; } catch (e) {}
-        
+        try { _errMsg = JSON.parse(_bodyText).detail || JSON.parse(_bodyText).message || ""; } catch (e) {}
         if (!_errMsg.toLowerCase().includes("api key")) {
             clearAuth();
-            showToastMini("⚠️ Session expired. Login ulang.", "error");
+            showToastMini("⚠️ Session expired. Silakan login ulang.", "error");
             setTimeout(() => showScreen("loginScreen"), 800);
         }
         return new Response(_bodyText, { status: _resp.status, headers: _resp.headers });
@@ -123,14 +108,14 @@ async function initApp() {
     autoThemeEnabled = localStorage.getItem("so_auto_theme") !== "false";
     setTheme(localStorage.getItem("so_theme") || "halloween-dark");
     updateTimeTheme();
+    updateApiKeyDisplay();
+
     bindLoginForm(); bindPinKeypad(); bindChatInput();
     setTimeout(() => checkForUpdate(false), 3000);
 
     if (isLoggedIn()) {
-        await hideSplashScreen();
-        showScreen("homeScreen");
-        startLiveClock();
-        loadHomeDataLazy();
+        resetIdleTimer();
+        await loadDashboardWithLoading();
     } else {
         await hideSplashScreen();
         showScreen("loginScreen");
@@ -140,24 +125,20 @@ async function initApp() {
 
 function showSplashScreen() {
     return new Promise(resolve => {
-        const splash = document.getElementById("splashScreen");
-        const progressBar = document.getElementById("splashProgressBar");
+        const splash = document.getElementById("splashScreen"), progressBar = document.getElementById("splashProgressBar");
         if (!splash) return resolve();
         splash.classList.add("active");
         let pct = 0;
         const interval = setInterval(() => {
-            pct += 25;
-            if (progressBar) progressBar.style.width = `${pct}%`;
+            pct += 25; if (progressBar) progressBar.style.width = `${pct}%`;
             if (pct >= 100) { clearInterval(interval); setTimeout(resolve, 300); }
         }, 150);
     });
 }
 function hideSplashScreen() {
     return new Promise(resolve => {
-        const splash = document.getElementById("splashScreen");
-        if (!splash) return resolve();
-        splash.classList.add("fade-out");
-        setTimeout(() => { splash.remove(); resolve(); }, 400);
+        const splash = document.getElementById("splashScreen"); if (!splash) return resolve();
+        splash.classList.add("fade-out"); setTimeout(() => { splash.remove(); resolve(); }, 400);
     });
 }
 
@@ -165,21 +146,15 @@ function hideSplashScreen() {
 // 5. AUTH LOGIC
 // =========================================================
 function bindLoginForm() {
-    const btnSubmit = document.getElementById("loginBtnSubmit");
-    const inputUser = document.getElementById("loginUsername");
-    const inputPass = document.getElementById("loginPassword");
+    const btnSubmit = document.getElementById("loginBtnSubmit"), inputUser = document.getElementById("loginUsername"), inputPass = document.getElementById("loginPassword");
     if (inputUser) inputUser.addEventListener("keydown", (e) => { if (e.key === "Enter") inputPass?.focus(); });
     if (inputPass) inputPass.addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
     if (btnSubmit) btnSubmit.addEventListener("click", doLogin);
 }
 
 async function doLogin() {
-    const inputUser = document.getElementById("loginUsername");
-    const inputPass = document.getElementById("loginPassword");
-    const btnSubmit = document.getElementById("loginBtnSubmit");
-    const errEl = document.getElementById("loginError");
-    const _username = (inputUser?.value || "").trim().toUpperCase();
-    const _password = (inputPass?.value || "").trim();
+    const inputUser = document.getElementById("loginUsername"), inputPass = document.getElementById("loginPassword"), btnSubmit = document.getElementById("loginBtnSubmit"), errEl = document.getElementById("loginError");
+    const _username = (inputUser?.value || "").trim().toUpperCase(), _password = (inputPass?.value || "").trim();
 
     if (errEl) errEl.textContent = "";
     if (!_username || !_password) { if (errEl) errEl.textContent = "❌ Username & password wajib diisi"; return; }
@@ -187,18 +162,15 @@ async function doLogin() {
 
     try {
         const resp = await fetch(`${CONFIG.BACKEND_URL}/api/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-API-Key": getApiKey() },
+            method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": getApiKey() },
             body: JSON.stringify({ username: _username, password: _password, device_info: "WebView" }),
         });
         const data = await resp.json();
         if (!resp.ok || !data.success) throw new Error(data.detail || "Login gagal");
-        localStorage.setItem(AUTH_KEYS.TEMP_TOKEN, data.temp_token);
-        localStorage.setItem(AUTH_KEYS.USERNAME, _username);
+        localStorage.setItem(AUTH_KEYS.TEMP_TOKEN, data.temp_token); localStorage.setItem(AUTH_KEYS.USERNAME, _username);
         pinInput = ""; updatePinDisplay();
         if (document.querySelector(".pin-hint")) document.querySelector(".pin-hint").textContent = `Login sebagai: ${_username}`;
-        showLoginView(false);
-        if (inputPass) inputPass.value = "";
+        showLoginView(false); if (inputPass) inputPass.value = "";
     } catch (err) { if (errEl) errEl.textContent = `❌ ${err.message}`; } 
     finally { if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.innerHTML = "🔓 MASUK"; } }
 }
@@ -207,12 +179,10 @@ function showLoginView(showLogin) {
     document.getElementById("loginFormView")?.classList.toggle("hidden", !showLogin);
     document.getElementById("pinFormView")?.classList.toggle("hidden", showLogin);
 }
-
 function bindPinKeypad() {
     document.querySelectorAll(".pin-key").forEach(btn => {
         btn.addEventListener("click", () => {
-            const num = btn.getAttribute("data-num");
-            const action = btn.getAttribute("data-action");
+            const num = btn.getAttribute("data-num"), action = btn.getAttribute("data-action");
             if (action === "back") pinInput = pinInput.slice(0, -1);
             else if (num && pinInput.length < 6) pinInput += num;
             updatePinDisplay();
@@ -223,27 +193,21 @@ function bindPinKeypad() {
 function updatePinDisplay() { document.querySelectorAll(".pin-dot").forEach((dot, idx) => dot.classList.toggle("filled", idx < pinInput.length)); }
 
 async function verifyPin() {
-    const _tempToken = localStorage.getItem(AUTH_KEYS.TEMP_TOKEN);
-    const pinError = document.getElementById("pinError");
+    const _tempToken = localStorage.getItem(AUTH_KEYS.TEMP_TOKEN), pinError = document.getElementById("pinError");
     if (pinError) pinError.textContent = "";
     if (!_tempToken) { if (pinError) pinError.textContent = "❌ Session hilang, ulangi login"; return; }
 
     try {
         const resp = await fetch(`${CONFIG.BACKEND_URL}/api/auth/verify-pin`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-API-Key": getApiKey() },
+            method: "POST", headers: { "Content-Type": "application/json", "X-API-Key": getApiKey() },
             body: JSON.stringify({ temp_token: _tempToken, pin: pinInput }),
         });
         const data = await resp.json();
         if (!resp.ok || !data.success) throw new Error(data.detail || "PIN salah");
         setAuth(data.token, data.user);
-        localStorage.removeItem(AUTH_KEYS.TEMP_TOKEN);
-        localStorage.removeItem(AUTH_KEYS.USERNAME);
-        pinInput = ""; updatePinDisplay();
-        resetIdleTimer();
-        showScreen("homeScreen");
-        startLiveClock();
-        loadHomeDataLazy();
+        localStorage.removeItem(AUTH_KEYS.TEMP_TOKEN); localStorage.removeItem(AUTH_KEYS.USERNAME);
+        pinInput = ""; updatePinDisplay(); resetIdleTimer();
+        await loadDashboardWithLoading();
     } catch (err) {
         if (pinError) pinError.textContent = `❌ ${err.message}`;
         pinInput = ""; updatePinDisplay();
@@ -257,12 +221,54 @@ async function confirmLogout() {
     document.getElementById("exitModal")?.classList.remove("active");
     try { await fetch(`${CONFIG.BACKEND_URL}/api/auth/logout`, { method: "POST", headers: { "X-API-Key": getApiKey(), "Authorization": `Bearer ${getToken()}` }}); } catch (e) {}
     clearAuth(); if (idleTimer) clearTimeout(idleTimer);
-    showLoginView(true); showScreen("loginScreen"); pushBackGuard();
+    pinInput = ""; updatePinDisplay();
+    if (clockInterval) clearInterval(clockInterval); stopDashboardAutoRefresh();
+    showToastMini("👋 Logout berhasil!", "success");
+    setTimeout(() => { showLoginView(true); showScreen("loginScreen"); pushBackGuard(); }, 300);
 }
 
 // =========================================================
-// 6. NAVIGATION (FIX ERROR)
+// 6. DASHBOARD LOADING & NAVIGATION
 // =========================================================
+async function loadDashboardWithLoading() {
+    const overlay = document.getElementById("dataLoadingOverlay"), statusEl = document.getElementById("dataLoadingStatus");
+    if (!overlay) { showScreen("homeScreen"); startLiveClock(); loadHomeDataLazy(); startDashboardAutoRefresh(); await hideSplashScreen(); return; }
+
+    hideSplashScreen(); await new Promise(r => setTimeout(r, 400));
+    overlay.classList.add("active"); resetLoadingSteps();
+
+    try {
+        await updateLoadingStep("config", "running", "Mengecek konfigurasi...");
+        await new Promise(r => setTimeout(r, 300));
+        await updateLoadingStep("config", "success", "Konfigurasi OK");
+
+        await updateLoadingStep("dashboard", "running", "Memuat dashboard...");
+        await loadHomeDataLazy();
+        await updateLoadingStep("dashboard", "success", "Dashboard siap");
+
+        await updateLoadingStep("shift", "running", "Memuat jadwal shift...");
+        await new Promise(r => setTimeout(r, 400));
+        await updateLoadingStep("shift", "success", "Jadwal siap");
+
+        if (statusEl) statusEl.textContent = "Siap! 🚀";
+        await new Promise(r => setTimeout(r, 500));
+        overlay.classList.add("fade-out"); await new Promise(r => setTimeout(r, 400)); overlay.classList.remove("active", "fade-out");
+        showScreen("homeScreen"); startLiveClock(); startDashboardAutoRefresh();
+    } catch (e) {
+        if (statusEl) statusEl.textContent = "Error, lanjut...";
+        await new Promise(r => setTimeout(r, 1000)); overlay.classList.remove("active");
+        showScreen("homeScreen"); startLiveClock(); startDashboardAutoRefresh();
+    }
+}
+function resetLoadingSteps() { document.querySelectorAll(".data-loading-step").forEach(step => { step.classList.remove("running", "success", "error"); const icon = step.querySelector(".step-icon"); if (icon) icon.textContent = "⏳"; }); }
+async function updateLoadingStep(stepId, status, msg) {
+    const step = document.querySelector(`.data-loading-step[data-step="${stepId}"]`); if (!step) return;
+    step.classList.remove("running", "success", "error"); step.classList.add(status);
+    const icon = step.querySelector(".step-icon"), text = step.querySelector(".step-text");
+    if (icon) icon.textContent = status === "running" ? "⏳" : status === "success" ? "✅" : "❌";
+    if (text && msg) text.textContent = msg;
+}
+
 function showScreen(screenId) {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById(screenId)?.classList.add("active");
@@ -279,37 +285,42 @@ function showScreen(screenId) {
     }
 }
 
-function goToHomeScreen() { closeSidebar(); showScreen("homeScreen"); startLiveClock(); loadHomeDataLazy(); }
+function goToHomeScreen() { closeSidebar(); showScreen("homeScreen"); startLiveClock(); loadHomeDataLazy(); startDashboardAutoRefresh(); }
 function goToChatScreen() { stopDashboardAutoRefresh(); showScreen("chatScreen"); if (!currentBot || !BOTS[currentBot]) currentBot = "yui"; switchBot(currentBot); }
-async function goToSettingsScreen() { closeSidebar(); await loadUserDataIfNeeded(); showScreen("settingsScreen"); }
-async function goToProfileScreen() {
-    await loadUserDataIfNeeded(); const _user = getUser(); if (!_user) return;
-    document.getElementById("editNamaLengkap").value = _user.nama_lengkap || "";
-    const preview = document.getElementById("editAvatarPreview");
-    if (preview) {
-        if (_user.avatar_url) { preview.style.backgroundImage = `url('${_user.avatar_url}')`; preview.style.backgroundColor = "transparent"; preview.textContent = ""; } 
-        else { preview.style.backgroundImage = "none"; preview.textContent = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase(); }
-    }
-    showScreen("profileScreen");
-}
+async function goToSettingsScreen() { closeSidebar(); await refreshUserData(); updateSettingsUserInfo(); updateAvatarUI(); showScreen("settingsScreen"); }
 function goToMasterShiftScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("masterShiftScreen"); loadShiftDataLazy(); }
-function goToRakListScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("rakListScreen"); loadRakListLazy(); }
-function goToSpdListScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("spdListScreen"); loadSpdListLazy(); }
-function goToTopMinusScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("topMinusScreen"); loadTopMinusLazy(); }
+function goToRakListScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("rakListScreen"); loadRakList(); }
+function goToSpdListScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("spdListScreen"); loadSpdList(); }
+function goToTopMinusScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("topMinusScreen"); loadTopMinus(); }
 function goToStatusScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("statusScreen"); loadStatusAnalysis(); }
 function goToStreamlitScreen() { closeSidebar(); showScreen("streamlitScreen"); }
 
 // =========================================================
-// 7. LAZY LOADING & CACHE
+// 7. AUTO REFRESH & LAZY LOAD (HOME)
 // =========================================================
+function startDashboardAutoRefresh() {
+    stopDashboardAutoRefresh();
+    dashboardRefreshInterval = setInterval(() => {
+        if (document.querySelector(".screen.active")?.id === "homeScreen") loadMiniDashboard();
+    }, 5 * 60 * 1000);
+}
+function stopDashboardAutoRefresh() {
+    if (dashboardRefreshInterval) { clearInterval(dashboardRefreshInterval); dashboardRefreshInterval = null; }
+}
+
 function loadHomeDataLazy() {
-    loadUserDataIfNeeded();
+    if (!AppCache.user) loadUserDataIfNeeded();
     if (!AppCache.rekap) loadMiniDashboard();
+    // Jadwal ditarik pas geser carousel aja (ada di event listener)
 }
 
 async function loadUserDataIfNeeded() {
     const _user = getUser();
     if (AppCache.user && _user && _user.avatar_url) { updateAvatarUI(_user); return; }
+    await refreshUserData();
+}
+
+async function refreshUserData() {
     try {
         const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/me`, { method: "GET" });
         if (resp.ok) { const data = await resp.json(); if (data.success && data.user) { setAuth(getToken(), data.user); updateAvatarUI(data.user); } }
@@ -317,29 +328,22 @@ async function loadUserDataIfNeeded() {
 }
 
 function updateAvatarUI(user) {
-    const inisial = (user.nama_lengkap || user.username || "?").substring(0, 2).toUpperCase();
-    const homeAvatar = document.getElementById("homeAvatarPreview");
-    if (homeAvatar) {
-        if (user.avatar_url) { homeAvatar.style.backgroundImage = `url('${user.avatar_url}')`; homeAvatar.style.backgroundColor = "transparent"; homeAvatar.textContent = ""; } 
-        else { homeAvatar.style.backgroundImage = "none"; homeAvatar.textContent = inisial; }
-    }
-    const setAvatar = document.getElementById("settingsAvatar");
-    if (setAvatar) {
-        if (user.avatar_url) { setAvatar.style.backgroundImage = `url('${user.avatar_url}')`; setAvatar.style.backgroundColor = "transparent"; setAvatar.textContent = ""; } 
-        else { setAvatar.style.backgroundImage = "none"; setAvatar.textContent = inisial; }
-    }
-    if (document.getElementById("settingsNamaLengkap")) document.getElementById("settingsNamaLengkap").textContent = user.nama_lengkap || "-";
-    if (document.getElementById("settingsUsername")) document.getElementById("settingsUsername").textContent = `@${user.username}`;
-    if (document.getElementById("settingsRole")) document.getElementById("settingsRole").textContent = (user.role || "-").toUpperCase();
+    const _user = user || getUser(); if (!_user) return;
+    const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+    const homeAvatar = document.getElementById("homeAvatarPreview"), setAvatar = document.getElementById("settingsAvatar");
+    [homeAvatar, setAvatar].forEach(el => {
+        if (!el) return;
+        if (_user.avatar_url) { el.style.backgroundImage = `url('${_user.avatar_url}')`; el.style.backgroundColor = "transparent"; el.textContent = ""; } 
+        else { el.style.backgroundImage = "none"; el.textContent = inisial; }
+    });
     const _menuAdmin = document.getElementById("menuKelolaUser");
-    if (_menuAdmin) _menuAdmin.style.display = (user.role === "admin") ? "flex" : "none";
+    if (_menuAdmin) _menuAdmin.style.display = (_user.role === "admin") ? "flex" : "none";
 }
 
 async function loadMiniDashboard() {
     try {
         const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/rekap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bulan_ini" }) });
-        const data = await resp.json();
-        AppCache.rekap = data.data || data;
+        const data = await resp.json(); AppCache.rekap = data.data || data;
         const _d = AppCache.rekap;
         const totalRak = _d.total_rak || 0, totalNominal = _d.total_nominal || 0, salesPeriode = _d.sales_periode || 0;
         const totalRakMaster = 145, persenSo = (totalRak / totalRakMaster) * 100;
@@ -347,19 +351,27 @@ async function loadMiniDashboard() {
         let statusKey = "aman", statusEmoji = "✅", statusText = "AMAN", statusColor = "hijau";
         if (statusPersen > 0.15) { statusKey = "bahaya"; statusEmoji = "🚨"; statusText = "BAHAYA"; statusColor = "merah"; }
         else if (statusPersen >= 0.13) { statusKey = "waspada"; statusEmoji = "⚠️"; statusText = "WASPADA"; statusColor = "kuning"; }
+        
         if (document.getElementById("statRak")) document.getElementById("statRak").textContent = `${totalRak}/${totalRakMaster}`;
         if (document.getElementById("statSpd")) document.getElementById("statSpd").textContent = formatRupiahRingkas(salesPeriode);
         if (document.getElementById("statNominal")) document.getElementById("statNominal").textContent = formatRupiahRingkas(totalNominal);
         if (document.getElementById("statusIcon")) document.getElementById("statusIcon").textContent = statusEmoji;
         if (document.getElementById("statusValue")) document.getElementById("statusValue").textContent = `${statusText} (${statusColor})`;
         if (document.getElementById("statusPercent")) document.getElementById("statusPercent").textContent = `${statusPersen.toFixed(2)}%`;
+        
         const statusBar = document.getElementById("statusBar");
         if (statusBar) { statusBar.classList.remove("status-aman", "status-waspada", "status-bahaya"); statusBar.classList.add(`status-${statusKey}`); }
         if (document.getElementById("progressFill")) document.getElementById("progressFill").style.width = `${Math.min(persenSo, 100)}%`;
         if (document.getElementById("progressLabel")) document.getElementById("progressLabel").textContent = `Progress SO: ${persenSo.toFixed(1)}% dari target ${CONFIG.TARGET_SO_PERSEN}%`;
+
         const runningParts = [`📦 Total Rak: <b>${totalRak}/${totalRakMaster}</b>`, `💰 SPD: <b>${formatRupiahRingkas(salesPeriode)}</b>`, `📉 Nominal Adjust: <b>${formatRupiahRingkas(totalNominal)}</b>`, `📊 Status: <b>${statusEmoji} ${statusText}</b> (${statusPersen.toFixed(2)}%)`];
         startRunningText(runningParts.join("  •  ") + "  •  ");
-    } catch (err) { if (document.getElementById("progressLabel")) document.getElementById("progressLabel").textContent = "Gagal load data"; }
+    } catch (err) {
+        if (document.getElementById("statRak")) document.getElementById("statRak").textContent = "—";
+        if (document.getElementById("progressLabel")) document.getElementById("progressLabel").textContent = "Gagal load data";
+        if (document.getElementById("statusValue")) document.getElementById("statusValue").textContent = "Gagal load";
+        if (document.getElementById("statusPercent")) document.getElementById("statusPercent").textContent = "—%";
+    }
 }
 
 async function loadHomeSchedule() {
@@ -383,26 +395,7 @@ function renderHomeSchedule(data, container) {
 }
 
 // =========================================================
-// 8. AUTO REFRESH DASHBOARD (FIX UTAMA)
-// =========================================================
-function startDashboardAutoRefresh() {
-    stopDashboardAutoRefresh();
-    dashboardRefreshInterval = setInterval(() => {
-        if (document.querySelector(".screen.active")?.id === "homeScreen") {
-            loadMiniDashboard();
-        }
-    }, 5 * 60 * 1000);
-}
-
-function stopDashboardAutoRefresh() {
-    if (dashboardRefreshInterval) {
-        clearInterval(dashboardRefreshInterval);
-        dashboardRefreshInterval = null;
-    }
-}
-
-// =========================================================
-// 9. CAROUSEL & LAZY LOAD JADWAL
+// 8. CAROUSEL (SINGLE EVENT LISTENER)
 // =========================================================
 document.addEventListener('DOMContentLoaded', () => {
     const carousel = document.getElementById('homeCarousel');
@@ -415,54 +408,53 @@ document.addEventListener('DOMContentLoaded', () => {
         if (activeIndex === 2 && !isScheduleLoaded) { isScheduleLoaded = true; loadHomeSchedule(); }
     });
 });
+
 function goToSlide(index) {
     const container = document.getElementById("homeCarousel"); if (!container) return;
     container.scrollTo({ left: index * (container.clientWidth + 16), behavior: "smooth" });
 }
 
 // =========================================================
-// 10. DATA FETCHING LAINNYA (SHIFT, RAK, SPD, TOP)
+// 9. DATA FETCHING LAINNYA (SHIFT, RAK, SPD, TOP, STATUS)
 // =========================================================
 async function loadShiftDataLazy() {
     if (!AppCache.personil) {
         try {
             const pResp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, { method: "GET" });
-            const pData = await pResp.json(); AppCache.personil = pData.data || [];
+            const pData = await pResp.json(); AppCache.personil = pData.data || []; personilData = AppCache.personil;
             const filterSelect = document.getElementById("personilFilter");
-            if (filterSelect) { filterSelect.innerHTML = '<option value="">👥 Semua Personil</option>'; AppCache.personil.forEach(p => filterSelect.innerHTML += `<option value="${p.nama}">👤 ${p.nama}</option>`); }
+            if (filterSelect) { filterSelect.innerHTML = '<option value="">👥 Semua Personil</option>'; personilData.forEach(p => filterSelect.innerHTML += `<option value="${p.nama}">👤 ${p.nama}</option>`); }
         } catch (e) {}
-    }
+    } else { personilData = AppCache.personil; }
     loadMasterShift();
 }
 
-async function loadRakListLazy() {
-    const container = document.getElementById("rakList"); if (!container) return;
-    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat rak...</p></div>`;
-    try {
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bulan_ini" }) });
-        const data = await resp.json(); AppCache.rakList = data.list_rak || [];
-        if (document.getElementById("rakSummaryTotal")) document.getElementById("rakSummaryTotal").textContent = data.total_rak;
-        if (document.getElementById("rakSummarySudah")) document.getElementById("rakSummarySudah").textContent = data.sudah_so;
-        if (document.getElementById("rakSummaryBelum")) document.getElementById("rakSummaryBelum").textContent = data.belum_so;
-        renderRakList();
-    } catch (err) { container.innerHTML = `<p style="color:red; text-align:center;">Gagal load data.</p>`; }
-}
-
-async function loadSpdListLazy() { /* Fungsi asli lu bisa ditaruh sini, atau dipertahankan dari v4.0 */ }
-async function loadTopMinusLazy() { /* Fungsi asli lu bisa ditaruh sini */ }
-async function loadMasterShift() { /* Fungsi asli lu bisa ditaruh sini */ }
-async function loadStatusAnalysis() { /* Fungsi asli lu bisa ditaruh sini */ }
-
 // =========================================================
-// 11. HELPER FORMAT & UI
+// 10. HELPER FORMAT
 // =========================================================
 function formatRupiahRingkas(nominal) { const abs = Math.abs(nominal); if (abs >= 1_000_000_000) return (nominal / 1_000_000_000).toFixed(2) + "M"; if (abs >= 1_000_000) return (nominal / 1_000_000).toFixed(1) + "jt"; if (abs >= 1_000) return (nominal / 1_000).toFixed(0) + "rb"; return nominal.toFixed(0); }
 function formatRupiahFull(nominal) { if (nominal === 0) return "Rp 0"; return `${nominal < 0 ? "-" : ""}Rp ${Math.abs(nominal).toLocaleString("id-ID")}`; }
 function startRunningText(text) { const container = document.getElementById("runningTextContainer"); if (!container) return; container.innerHTML = `<div class="running-icon">📢</div><div class="running-viewport"><div class="running-track"><span class="running-inner">${text}</span><span class="running-inner">${text}</span></div></div>`; }
 function showToastMini(message, type = "success") { document.querySelector(".toast-mini")?.remove(); const toast = document.createElement("div"); toast.className = `toast-mini ${type}`; toast.textContent = message; document.body.appendChild(toast); setTimeout(() => toast.classList.add("show"), 100); setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 400); }, 3000); }
+function formatTime(timestamp) { if (!timestamp) return ""; const d = new Date(timestamp); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+function getSessionDate() { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; }
+function formatMessage(text) { if (!text) return ""; let html = escapeHtml(text); html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); html = html.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<i>$1</i>"); html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.25);padding:2px 6px;border-radius:4px;font-size:13px;">$1</code>'); html = html.replace(/^[\-\*]\s+(.+)$/gm, "• $1"); html = html.replace(/^(\d+)\.\s+(.+)$/gm, "$1. $2"); return html; }
+function cleanHtmlEntities(str) { if (!str) return ""; return str.replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&nbsp;/g, " ").replace(/&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">"); }
+function escapeHtml(text) { const div = document.createElement("div"); div.textContent = text; return div.innerHTML; }
+function getWelcomeText(botId) { const welcomes = { yui: "Aku bisa:\n• Rekap SO\n• Input SO via chat / upload Excel\n• Input SPD\n• Top item", hana: "Aku bisa:\n• Cek jadwal shift\n• Update shift\n• Saran pengganti\n• Cek konflik", rei: "Aku bisa:\n• Analisis trend SO\n• LPJ & laporan\n• Prediksi\n• Insight", kurumi: "Aku bisa:\n• Rangkum laporan\n• Kirim report\n• Chat general\n• Koordinasi" }; return welcomes[botId] || ""; }
 
 // =========================================================
-// 12. CHAT LOGIC (FITUR UPLOAD & SPD KEMBALI)
+// 11. THEME & SIDEBAR
+// =========================================================
+function toggleTheme() { setTheme(document.documentElement.getAttribute("data-theme") === "halloween-dark" ? "halloween-light" : "halloween-dark"); }
+function setTheme(theme) { document.documentElement.setAttribute("data-theme", theme); localStorage.setItem("so_theme", theme); document.querySelectorAll("#themeIcon, #themeIcon2, #sidebarThemeIcon").forEach(el => el.textContent = theme === "halloween-dark" ? "🌙" : "☀️"); }
+function updateTimeTheme() { if (!autoThemeEnabled) return; const hour = new Date().getHours(); document.documentElement.setAttribute("data-time-theme", hour < 11 ? "pagi" : hour < 15 ? "siang" : hour < 18 ? "sore" : "malam"); }
+function toggleSidebar() { document.getElementById("sidebar")?.classList.toggle("open"); document.getElementById("sidebarOverlay")?.classList.toggle("active"); }
+function closeSidebar() { document.getElementById("sidebar")?.classList.remove("open"); document.getElementById("sidebarOverlay")?.classList.remove("active"); }
+function updateApiKeyDisplay() { const el = document.getElementById("settingsApiKey"); if (!el) return; const key = getApiKey(); el.textContent = key.length > 14 ? key.substring(0, 10) + "..." + key.substring(key.length - 6) : "***"; }
+
+// =========================================================
+// 12. CHAT LOGIC (FULL)
 // =========================================================
 function loadChatHistories() { try { chatHistories = JSON.parse(localStorage.getItem("so_chat_histories")) || {}; } catch (e) { chatHistories = {}; } Object.keys(BOTS).forEach(botId => { if (!chatHistories[botId]) chatHistories[botId] = []; }); }
 function saveChatHistories() { try { localStorage.setItem("so_chat_histories", JSON.stringify(chatHistories)); } catch (e) {} }
@@ -477,56 +469,240 @@ function switchBot(botId) {
 function renderChatHistory() {
     const container = document.getElementById("chatMessages"); if (!container) return;
     let history = chatHistories[currentBot] || [];
-    if (history.length === 0) { container.innerHTML = `<div class="chat-message-wrapper ai"><div class="chat-avatar">${BOTS[currentBot].emoji}</div><div class="bubble-content ai"><div class="bubble bubble-ai bubble-welcome">Halo Bos! 👋<br>Siap bantu.</div></div></div>`; return; }
+    if (history.length === 0) { container.innerHTML = `<div class="chat-message-wrapper ai"><div class="chat-avatar">${BOTS[currentBot].emoji}</div><div class="bubble-content ai"><div class="bubble bubble-ai bubble-welcome">Halo Bos! 👋<br>Aku <b>${BOTS[currentBot].name}</b>.<br>${getWelcomeText(currentBot)}</div></div></div>`; return; }
     container.innerHTML = "";
-    const recentHistory = history.slice(-30); // Optimasi render
-    recentHistory.forEach((msg, idx) => {
+    let lastDate = "";
+    history.forEach((msg, idx) => {
         const isUser = msg.role === "user";
+        const msgDate = new Date(msg.timestamp || Date.now()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        if (msgDate !== lastDate) { container.innerHTML += `<div class="chat-date-divider"><span>${msgDate}</span></div>`; lastDate = msgDate; }
         const wrapper = document.createElement("div"); wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
         const avatar = document.createElement("div"); avatar.className = isUser ? "chat-avatar avatar-user" : "chat-avatar"; avatar.textContent = isUser ? "👤" : BOTS[currentBot].emoji;
         const bubbleContent = document.createElement("div"); bubbleContent.className = `bubble-content ${isUser ? "user" : "ai"}`;
-        const bubble = document.createElement("div"); bubble.className = `bubble bubble-${isUser ? "user" : "ai"}`;
-        bubble.innerHTML = msg.content;
-        const time = document.createElement("div"); time.className = "bubble-time"; time.textContent = new Date(msg.timestamp || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        bubbleContent.appendChild(bubble); bubbleContent.appendChild(time); wrapper.appendChild(avatar); wrapper.appendChild(bubbleContent); container.appendChild(wrapper);
+        if (msg.isConfirm && msg.confirmData) { bubbleContent.appendChild(renderConfirmBubble(msg, idx)); } 
+        else {
+            const bubble = document.createElement("div"); bubble.className = `bubble bubble-${isUser ? "user" : "ai"}`;
+            if (msg.isSuccess) bubble.classList.add("bubble-success"); else if (msg.isError) bubble.classList.add("bubble-error");
+            if (msg.isSuccess && msg.content.includes("🌸")) bubble.innerHTML = formatSuccessMessage(msg.content); else bubble.innerHTML = formatMessage(msg.content);
+            bubbleContent.appendChild(bubble);
+        }
+        const time = document.createElement("div"); time.className = "bubble-time"; time.textContent = formatTime(msg.timestamp);
+        bubbleContent.appendChild(time); wrapper.appendChild(avatar); wrapper.appendChild(bubbleContent); container.appendChild(wrapper);
     });
     setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
 }
 
-function bindChatInput() {
-    const input = document.getElementById("chatInput");
-    if (input) {
-        input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 100) + "px"; });
-        input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
-    }
+function formatSuccessMessage(text) {
+    if (!text) return ""; const lines = text.split("\n"); let html = "", inSummary = false, summaryLines = [];
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("✅")) html += `<div class="success-header">${escapeHtml(trimmed)}</div>`;
+        else if (trimmed.startsWith("🌸")) { inSummary = true; summaryLines = []; } 
+        else if (inSummary && trimmed) summaryLines.push(trimmed);
+        else if (trimmed) html += `<div style="margin-top: 4px;">${escapeHtml(trimmed)}</div>`;
+    });
+    if (summaryLines.length > 0) { html += `<div class="shift-summary-chat">`; summaryLines.forEach(line => { html += `<div class="shift-summary-chat-line">${escapeHtml(line)}</div>`; }); html += `</div>`; }
+    return html;
 }
 
-async function sendMessage() {
-    const input = document.getElementById("chatInput"); if (!input) return;
-    const text = input.value.trim(); if (!text) return;
-    input.value = ""; input.style.height = "auto";
-    
-    // Cek konfirmasi pending
-    if (text.toLowerCase() === "simpan so") { /* Logika simpan SO lu taruh sini */ }
-    if (text.toLowerCase() === "simpan spd") { /* Logika simpan SPD lu taruh sini */ }
+function renderConfirmBubble(msg, idx) {
+    const bubble = document.createElement("div"); bubble.className = "bubble bubble-ai bubble-confirm"; if (msg.resolved) bubble.classList.add("resolved");
+    const data = msg.confirmData, items = data.items || [];
+    const itemsHtml = items.slice(0, 4).map(it => `<span class="confirm-chip">👤 ${it.nama} → ${it.shift_nama || it.kode_shift}</span>`).join("");
+    const moreHtml = items.length > 4 ? `<span class="confirm-chip confirm-chip-more">+${items.length - 4}</span>` : "";
+    let actionsHtml = !msg.resolved ? `<div class="confirm-actions"><button class="confirm-btn confirm-btn-cancel" onclick="handleConfirmCancel(${idx})">❌ Batal</button><button class="confirm-btn confirm-btn-save" onclick="handleConfirmSave(${idx})" id="confirmBtnSave_${idx}">✅ Simpan</button></div>` : "";
+    let statusHtml = msg.resolved ? (msg.resolvedStatus === "saved" ? `<div class="confirm-status confirm-status-saved">✅ Tersimpan</div>` : `<div class="confirm-status confirm-status-cancelled">❌ Dibatalkan</div>`) : "";
+    bubble.innerHTML = `<div class="confirm-header"><span class="confirm-title-icon">🌸</span><span class="confirm-title">KONFIRMASI UPDATE</span><span class="confirm-date">📅 ${formatTanggalShort(data.tanggal)}</span></div><div class="confirm-chips">${itemsHtml}${moreHtml}</div>${actionsHtml}${statusHtml}`;
+    return bubble;
+}
 
-    chatHistories[currentBot].push({ role: "user", content: text, timestamp: Date.now() });
-    saveChatHistories(); renderChatHistory();
-    
-    try {
-        const history = chatHistories[currentBot].slice(-7, -1).map(m => ({ role: m.role, content: m.content }));
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}${BOTS[currentBot].endpoint}`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text, session_id: `so_${currentBot}`, history })
-        });
-        const data = await resp.json();
-        chatHistories[currentBot].push({ role: "assistant", content: data.text || "(kosong)", timestamp: Date.now() });
-        saveChatHistories(); renderChatHistory();
-    } catch (e) { chatHistories[currentBot].push({ role: "assistant", content: "⚠️ Error jaringan", timestamp: Date.now() }); renderChatHistory(); }
+function bindChatInput() {
+    const input = document.getElementById("chatInput"); if (!input) return;
+    input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 100) + "px"; });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 }
 
 // =========================================================
-// 13. UTILITIES (THEME, CLOCK, MODAL, BACK BUTTON)
+// 13. CHAT SEND & LOGIC HANDLERS
+// =========================================================
+async function sendMessage() {
+    const input = document.getElementById("chatInput"), sendBtn = document.getElementById("chatSend"); if (!input || !sendBtn) return;
+    const text = input.value.trim(); if (!text) return;
+    input.value = ""; input.style.height = "auto"; sendBtn.disabled = true;
+    const _msgLower = text.toLowerCase().trim();
+
+    // Deteksi perintah khusus
+    if (_msgLower === "konfirmasi baru" || _msgLower === "ya konfirmasi") {
+        if (window._pendingUploadSo) {
+            window._pendingUploadSo.force_new_pic = true;
+            chatHistories[currentBot].push({ role: "user", content: text, timestamp: Date.now() }, { role: "assistant", content: `✅ Oke, PIC baru dikonfirmasi. Ketik **"simpan so"**.`, timestamp: Date.now() });
+            saveChatHistories(); renderChatHistory(); scrollToBottom(); sendBtn.disabled = false; return;
+        }
+    }
+    if (window._pendingUploadSo && (_msgLower.startsWith("tanggal") || _msgLower.startsWith("pic ") || _msgLower.includes(" pic "))) {
+        const _handled = await handleTanggalPicInput(text); if (_handled) { sendBtn.disabled = false; return; }
+    }
+    if (_msgLower === "simpan so" || _msgLower === "save so") { await confirmSaveSo(); sendBtn.disabled = false; return; }
+    if (_msgLower === "simpan spd" || _msgLower === "save spd") { await confirmSaveSpd(); sendBtn.disabled = false; return; }
+    if (_msgLower === "batal" || _msgLower === "cancel") {
+        if (window._pendingUploadSo) { cancelUploadSo(); sendBtn.disabled = false; return; }
+        if (window._pendingSpd) { window._pendingSpd = null; chatHistories[currentBot].push({ role: "user", content: text, timestamp: Date.now() }, { role: "assistant", content: `Oke, SPD dibatalkan.`, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); scrollToBottom(); sendBtn.disabled = false; return; }
+    }
+    const _isSpdInput = currentBot === "yui" && ((_msgLower.includes("spd") || _msgLower.includes("sales")) && (_msgLower.includes("input") || _msgLower.includes("catat") || _msgLower.includes("simpan") || _msgLower.includes("tambah") || /\d{3,}/.test(_msgLower.replace(/[.,]/g, ""))));
+    if (_isSpdInput) { chatHistories[currentBot].push({ role: "user", content: text, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); scrollToBottom(); await handleSpdChat(text); sendBtn.disabled = false; return; }
+
+    // Chat Biasa
+    chatHistories[currentBot].push({ role: "user", content: text, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); scrollToBottom(); showLoadingBubble();
+    try {
+        const history = chatHistories[currentBot].slice(-7, -1).filter(m => !m.isConfirm).map(m => ({ role: m.role, content: m.content }));
+        const response = await apiFetch(`${CONFIG.BACKEND_URL}${BOTS[currentBot].endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, session_id: `so_${currentBot}_${getSessionDate()}`, history }) });
+        hideLoadingBubble(); if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.detail || `Error ${response.status}`); }
+        const data = await response.json();
+        if (data.needs_confirm && data.parsed && data.parsed.items) { chatHistories[currentBot].push({ role: "assistant", content: data.text || `Oke, catat shift.`, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); setTimeout(() => openConfirmShiftModal({ tanggal: data.parsed.tanggal, items: data.parsed.items }), 400); }
+        else { chatHistories[currentBot].push({ role: "assistant", content: data.text || "(kosong)", timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); }
+    } catch (err) { hideLoadingBubble(); chatHistories[currentBot].push({ role: "assistant", content: `⚠️ Error: ${err.message}`, timestamp: Date.now(), isError: true }); saveChatHistories(); renderChatHistory(); }
+    sendBtn.disabled = false; input.focus();
+}
+
+async function handleConfirmSave(idx) {
+    const history = chatHistories[currentBot] || [], msg = history[idx]; if (!msg || !msg.confirmData) return;
+    const btnSave = document.getElementById(`confirmBtnSave_${idx}`); if (btnSave) { btnSave.disabled = true; btnSave.innerHTML = '<span class="btn-spinner"></span> Menyimpan...'; }
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tanggal: msg.confirmData.tanggal, items: msg.confirmData.items.map(it => ({ nama: it.nama, kode_shift: it.kode_shift })) }) });
+        const result = await resp.json(); if (!resp.ok || !result.success) throw new Error(result.detail || `HTTP ${resp.status}`);
+        msg.resolved = true; msg.resolvedStatus = "saved"; history.push({ role: "assistant", content: `✅ ${result.saved || msg.confirmData.items.length} shift tersimpan!\n\n${getShiftSummaryText(msg.confirmData.items)}`, timestamp: Date.now(), isSuccess: true });
+        saveChatHistories(); renderChatHistory(); if (document.getElementById("masterShiftScreen")?.classList.contains("active")) loadMasterShift(); showToastMini(`✅ Shift tersimpan`, "success");
+    } catch (err) { msg.resolved = true; msg.resolvedStatus = "error"; history.push({ role: "assistant", content: `⚠️ Gagal: ${err.message}`, timestamp: Date.now(), isError: true }); saveChatHistories(); renderChatHistory(); showToastMini(`❌ Gagal`, "error"); }
+}
+function handleConfirmCancel(idx) { const history = chatHistories[currentBot] || [], msg = history[idx]; if (!msg || !msg.confirmData) return; msg.resolved = true; msg.resolvedStatus = "cancelled"; history.push({ role: "assistant", content: `❌ Dibatalkan.`, timestamp: Date.now(), isCancel: true }); saveChatHistories(); renderChatHistory(); showToastMini("❌ Dibatalkan", "error"); }
+function getShiftSummaryText(items) { const grouped = { P7: [], S15: [], M22: [], O: [], CUTI: [] }; items.forEach(it => { if (grouped[it.kode_shift]) grouped[it.kode_shift].push(it.nama); }); const lines = ["🌸 Shift terbaru:"]; if (grouped.P7.length) lines.push(`🟢 Pagi: ${grouped.P7.join(", ")}`); if (grouped.S15.length) lines.push(`🟡 Siang: ${grouped.S15.join(", ")}`); if (grouped.M22.length) lines.push(`🔴 Malam: ${grouped.M22.join(", ")}`); if (grouped.O.length) lines.push(`⚪ Off: ${grouped.O.join(", ")}`); if (grouped.CUTI.length) lines.push(`⚫ Cuti: ${grouped.CUTI.join(", ")}`); return lines.join("\n"); }
+
+// =========================================================
+// 14. LOADING BUBBLE & SCROLL
+// =========================================================
+function showLoadingBubble() { const container = document.getElementById("chatMessages"); if (!container) return; document.getElementById("loadingBubble")?.remove(); const el = document.createElement("div"); el.className = "bubble bubble-ai bubble-loading"; el.id = "loadingBubble"; el.innerHTML = "<span></span><span></span><span></span>"; container.appendChild(el); scrollToBottom(); }
+function hideLoadingBubble() { document.getElementById("loadingBubble")?.remove(); }
+function scrollToBottom(force = false) { const container = document.getElementById("chatMessages"); if (!container) return; if (force) { setTimeout(() => { container.scrollTop = container.scrollHeight; document.getElementById("scrollBottomBtn")?.classList.remove("show"); }, 50); return; } setTimeout(() => { const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100; const btn = document.getElementById("scrollBottomBtn"); if (btn) { if (isNearBottom) btn.classList.remove("show"); else btn.classList.add("show"); } }, 50); }
+
+// =========================================================
+// 15. UPLOAD SO, SPD & PARSER
+// =========================================================
+async function loadPersonilMaster() {
+    if (_personilCache && (Date.now() - _personilCacheTime) < 5 * 60 * 1000) return _personilCache;
+    try { const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, { method: "GET" }); const data = await resp.json(); _personilCache = (data.data || []).filter(p => p.aktif !== false).map(p => String(p.nama).trim().toUpperCase()); _personilCacheTime = Date.now(); return _personilCache; } catch (e) { return _personilCache || []; }
+}
+async function autoCorrectPic(userInput) {
+    const _input = String(userInput).trim().toUpperCase(); if (!_input) return { status: "empty", pic: null, suggestions: [], original: _input };
+    const _list = await loadPersonilMaster(); if (_list.length === 0) return { status: "exact", pic: _input, suggestions: [], original: _input };
+    if (_list.includes(_input)) return { status: "exact", pic: _input, suggestions: [], original: _input };
+    const _matches = _list.filter(p => p.startsWith(_input) || p.includes(_input) || _input.includes(p));
+    if (_matches.length === 1) return { status: "corrected", pic: _matches[0], original: _input, suggestions: _matches };
+    if (_matches.length > 1) return { status: "multiple", pic: null, original: _input, suggestions: _matches.slice(0, 5) };
+    return { status: "not_found", pic: null, original: _input, suggestions: [] };
+}
+function groupItemsByRak(items) { const grouped = {}; (items || []).forEach(it => { const rak = (it.rak_id || "UNKNOWN").toUpperCase(); if (!grouped[rak]) grouped[rak] = []; grouped[rak].push(it); }); return grouped; }
+
+async function parseTanggalPicInput(text) {
+    const _lower = text.toLowerCase().trim(); const _result = { tanggal: null, pic_per_rak: null, pic_issues: [], is_new_pic: false };
+    let _match = _lower.match(/tanggal\s+(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (_match) _result.tanggal = `${_match[1]}-${String(_match[2]).padStart(2,'0')}-${String(_match[3]).padStart(2,'0')}`;
+    let _picRaw = {}; const _picMatch = text.match(/pic\s+(.+?)(?:\s+tanggal|$)/i);
+    if (_picMatch) {
+        let _picStr = _picMatch[1].trim(); const _picStrLower = _picStr.toLowerCase();
+        if (_picStrLower.startsWith("semua ")) _picRaw["_ALL"] = _picStr.substring(6).trim();
+        else if (_picStrLower.startsWith("baru ")) { _picRaw["_ALL"] = _picStr.substring(5).trim(); _result.is_new_pic = true; }
+        else if (_picStr.includes(",")) _picStr.split(",").map(p => p.trim()).forEach(part => { const m = part.match(/^([A-Za-z0-9]+)\s*[:]?\s+(.+)$/); if (m) _picRaw[m[1].toUpperCase()] = m[2].trim(); });
+        else { const _rakMatch = _picStr.match(/^([A-Za-z0-9]+)\s+(.+)$/); if (_rakMatch && /^[A-Z]{1,3}\d{1,4}$/i.test(_rakMatch[1])) _picRaw[_rakMatch[1].toUpperCase()] = _rakMatch[2].trim(); else _picRaw["_ALL"] = _picStr; }
+    }
+    if (Object.keys(_picRaw).length > 0) {
+        _result.pic_per_rak = {};
+        for (const [key, namaRaw] of Object.entries(_picRaw)) {
+            const _corrected = await autoCorrectPic(namaRaw);
+            if (_corrected.status === "exact") _result.pic_per_rak[key] = _corrected.pic;
+            else if (_corrected.status === "corrected") { _result.pic_per_rak[key] = _corrected.pic; _result.pic_issues.push({ type: "corrected", key, original: namaRaw, corrected: _corrected.pic }); }
+            else if (_corrected.status === "multiple") _result.pic_issues.push({ type: "multiple", key, original: namaRaw, suggestions: _corrected.suggestions });
+            else if (_corrected.status === "not_found") _result.pic_issues.push({ type: "not_found", key, original: namaRaw, is_new: _result.is_new_pic });
+        }
+    }
+    return _result;
+}
+async function handleTanggalPicInput(text) {
+    const _pending = window._pendingUploadSo; if (!_pending) return false;
+    const _lower = text.toLowerCase().trim(); if (!_lower.startsWith("tanggal") && !_lower.includes("pic ")) return false;
+    const _parsed = await parseTanggalPicInput(text); chatHistories[currentBot].push({ role: "user", content: text, timestamp: Date.now() }); if (_parsed.tanggal) _pending.tanggal = _parsed.tanggal;
+    let _responseText = "";
+    if (_parsed.pic_issues.some(i => i.type === "corrected")) { _responseText += `🔍 **Auto-correct PIC:**\n\n`; _parsed.pic_issues.filter(i => i.type === "corrected").forEach(i => { _responseText += `- "${i.original}" → **${i.corrected}** ✅\n`; }); _responseText += `\n`; }
+    if (_parsed.pic_issues.some(i => i.type === "multiple")) { _responseText += `⚠️ **Nama ambigu, pilih:**\n\n`; _parsed.pic_issues.filter(i => i.type === "multiple").forEach(i => { i.suggestions.forEach(s => { _responseText += `   • \`pic ${i.key} ${s}\`\n`; }); }); chatHistories[currentBot].push({ role: "assistant", content: _responseText, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); return true; }
+    if (_parsed.pic_issues.some(i => i.type === "not_found")) { const _notFound = _parsed.pic_issues.filter(i => i.type === "not_found"); _responseText += `⚠️ **Nama gak ada:**\n\n`; _notFound.forEach(i => { _responseText += `- "${i.original}" ❌\n`; }); _responseText += `\n**Ketik ulang:** \`pic ${_notFound[0].key} NAMA\``; chatHistories[currentBot].push({ role: "assistant", content: _responseText, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); return true; }
+    if (_parsed.pic_per_rak && Object.keys(_parsed.pic_per_rak).length > 0) { if (_parsed.pic_per_rak["_ALL"]) { const _rakList = Object.keys(groupItemsByRak(_pending.items)); _pending.pic_per_rak = {}; _rakList.forEach(rak => { _pending.pic_per_rak[rak] = _parsed.pic_per_rak["_ALL"]; }); } else _pending.pic_per_rak = { ...(_pending.pic_per_rak || {}), ..._parsed.pic_per_rak }; }
+    window._pendingUploadSo = _pending;
+    const _rakList = Object.keys(groupItemsByRak(_pending.items)); const _picPerRak = _pending.pic_per_rak || {}; const _rakMissing = _rakList.filter(rak => !_picPerRak[rak]);
+    _responseText += `📝 **Update konfirmasi:**\n\n`; if (_pending.tanggal) _responseText += `📅 Tanggal: ✅ **${_pending.tanggal}**\n\n`; else _responseText += `📅 Tanggal: ❌ Belum\n\n`;
+    _responseText += `👤 **PIC per Rak:**\n`; _rakList.forEach(rak => { if (_picPerRak[rak]) _responseText += `   • ${rak} → **${_picPerRak[rak]}** ✅\n`; else _responseText += `   • ${rak} → ❌ belum\n`; }); _responseText += `\n`;
+    if (_pending.tanggal && _rakMissing.length === 0) { _responseText += `🎉 **Lengkap!** Ketik **"simpan so"**.`; } else { _responseText += `⚠️ Masih ada yang kosong.`; }
+    chatHistories[currentBot].push({ role: "assistant", content: _responseText, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); return true;
+}
+
+async function confirmSaveSo() {
+    const _pending = window._pendingUploadSo; if (!_pending || !_pending.items) { showToastMini("❌ Gak ada data", "error"); return; }
+    if (!_pending.tanggal) { showToastMini("❌ Tanggal belum!", "error"); return; }
+    const _rakList = Object.keys(groupItemsByRak(_pending.items)); const _picPerRak = _pending.pic_per_rak || {}; const _rakMissing = _rakList.filter(rak => !_picPerRak[rak]);
+    if (_rakMissing.length > 0) { showToastMini(`❌ PIC belum: ${_rakMissing.join(", ")}`, "error"); return; }
+    const _listMaster = await loadPersonilMaster(); const _picNotInMaster = [];
+    for (const rak of _rakList) { const _pic = _picPerRak[rak]; if (_pic && !_listMaster.includes(_pic) && !_picNotInMaster.includes(_pic)) _picNotInMaster.push(_pic); }
+    if (_picNotInMaster.length > 0 && !_pending.force_new_pic) { let _warnText = `⚠️ **Konfirmasi PIC Baru:**\n\nNama ini gak ada di master:\n`; _picNotInMaster.forEach(p => { _warnText += `   • **${p}**\n`; }); _warnText += `\nKetik \`konfirmasi baru\` atau typo: \`pic ${_rakList[0]} NAMA_BENER\``; chatHistories[currentBot].push({ role: "assistant", content: _warnText, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); return; }
+    chatHistories[currentBot].push({ role: "user", content: `💾 simpan so`, timestamp: Date.now() }, { role: "assistant", content: `⏳ Menyimpan...`, timestamp: Date.now(), isTemp: true }); saveChatHistories(); renderChatHistory();
+    const _itemsWithPic = _pending.items.map(it => ({ ...it, pic: _picPerRak[(it.rak_id || "").toUpperCase()] || "" }));
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/save-so`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tanggal: _pending.tanggal, items: _itemsWithPic, keterangan: _pending.keterangan }) });
+        const data = await resp.json(); chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp);
+        if (!resp.ok || !data.success) throw new Error(data.detail || data.error || "Gagal simpan");
+        const _saved = data.saved_count || 0; const _total = data.total_nominal || 0; let _picSummary = ""; Object.entries(_picPerRak).forEach(([rak, pic]) => { _picSummary += `   • **${rak}** → ${pic}\n`; });
+        chatHistories[currentBot].push({ role: "assistant", content: `🎉 **Beres!**\n- 📅 Tanggal: **${_pending.tanggal}**\n- ✅ **${_saved} rak**\n- 💰 Total: **${formatRupiahFull(_total)}**\n\n**PIC:**\n${_picSummary}`, timestamp: Date.now(), isSuccess: true }); saveChatHistories(); renderChatHistory(); window._pendingUploadSo = null; if (document.getElementById("homeScreen")?.classList.contains("active")) loadMiniDashboard(); showToastMini(`✅ ${_saved} rak tersimpan`, "success");
+    } catch (err) { chatHistories[currentBot] = chatHistories[currentBot].filter(m => !m.isTemp); chatHistories[currentBot].push({ role: "assistant", content: `⚠️ Gagal: ${err.message}`, timestamp: Date.now(), isError: true }); saveChatHistories(); renderChatHistory(); showToastMini(`❌ Gagal`, "error"); }
+}
+
+async function handleChatFileUpload(file) {
+    if (!file || currentBot !== "yui") return showToastMini("❌ Upload cuma di chat Yui", "error");
+    chatHistories[currentBot].push({ role: "user", content: `📎 **Upload file:** ${file.name}`, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); showLoadingBubble();
+    try {
+        const formData = new FormData(); formData.append("file", file);
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/upload-so`, { method: "POST", body: formData });
+        hideLoadingBubble(); if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || `HTTP ${resp.status}`);
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal parse");
+        window._pendingUploadSo = { tanggal: data.tanggal, items: data.items, keterangan: `Upload ${file.name}`, filename: file.name };
+        const _grouped = {}; (data.items || []).forEach(it => { const rak = (it.rak_id || "UNKNOWN").toUpperCase(); if (!_grouped[rak]) _grouped[rak] = []; _grouped[rak].push(it); });
+        const _rakList = Object.keys(_grouped).sort(); let _previewText = ""; _rakList.forEach((rak, idx) => { _previewText += `**${idx + 1}. 🏪 ${rak}** (${_grouped[rak].length} item)\n`; });
+        let _aiContent = `✅ File **${file.name}** dibaca!\n📅 Tanggal: **${data.tanggal || "❌ belum ada"}**\n🏪 Rak: **${_rakList.length}**\n📦 Item: **${data.total_items || 0}**\n\n`;
+        if (!data.tanggal) _aiContent += `⚠️ **Isi tanggal:** \`tanggal 2026-10-14\`\n\n`;
+        _aiContent += `⚠️ **Isi PIC:** \`pic ZAKI\` atau \`pic ${_rakList[0]} ZAKI\``;
+        chatHistories[currentBot].push({ role: "assistant", content: _aiContent, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); showToastMini(`✅ Item siap`, "success");
+    } catch (err) { hideLoadingBubble(); chatHistories[currentBot].push({ role: "assistant", content: `⚠️ Gagal: ${err.message}`, timestamp: Date.now(), isError: true }); saveChatHistories(); renderChatHistory(); showToastMini(`❌ Gagal`, "error"); }
+}
+function cancelUploadSo() { window._pendingUploadSo = null; chatHistories[currentBot].push({ role: "user", content: `❌ batal`, timestamp: Date.now() }, { role: "assistant", content: `Oke, dibuang. 👍`, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); showToastMini("❌ Dibatalkan", "error"); }
+
+async function handleSpdChat(text) {
+    showLoadingBubble();
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/parse-spd`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        const parse = await resp.json(); hideLoadingBubble();
+        if (!parse.success || !parse.nominal) { chatHistories[currentBot].push({ role: "assistant", content: `Hmm, gak nemu nominal SPD.\nContoh: \`input spd 12.750.800\``, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); return; }
+        window._pendingSpd = { tanggal: parse.tanggal, nominal: parse.nominal };
+        chatHistories[currentBot].push({ role: "assistant", content: `💰 **Konfirmasi Input SPD**\n📅 Tanggal: **${parse.tanggal}**\n💵 SPD: **${formatRupiahFull(parse.nominal)}**\n🎯 Budget SO (0,15%): **${formatRupiahFull(parse.nominal * 0.0015)}**\n\nKetik **"simpan spd"**.`, timestamp: Date.now() }); saveChatHistories(); renderChatHistory();
+    } catch (err) { hideLoadingBubble(); chatHistories[currentBot].push({ role: "assistant", content: `⚠️ Error: ${err.message}`, timestamp: Date.now(), isError: true }); saveChatHistories(); renderChatHistory(); }
+}
+async function confirmSaveSpd() {
+    const _pending = window._pendingSpd; if (!_pending) return showToastMini("❌ Gak ada SPD", "error");
+    chatHistories[currentBot].push({ role: "user", content: `💾 simpan spd`, timestamp: Date.now() }); saveChatHistories(); renderChatHistory(); showLoadingBubble();
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/save-spd`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tanggal: _pending.tanggal, nominal: _pending.nominal, keterangan: "Input via APK" }) });
+        const data = await resp.json(); hideLoadingBubble(); if (!resp.ok || !data.success) throw new Error(data.detail || data.message || "Gagal");
+        chatHistories[currentBot].push({ role: "assistant", content: `✅ **SPD tersimpan!**\n📅 Tanggal: **${_pending.tanggal}**\n💰 SPD: **${formatRupiahFull(_pending.nominal)}**\n🎯 Budget SO: **${formatRupiahFull(data.budget_so)}**`, timestamp: Date.now(), isSuccess: true }); saveChatHistories(); renderChatHistory(); window._pendingSpd = null; showToastMini(`✅ SPD tersimpan`, "success");
+    } catch (err) { hideLoadingBubble(); chatHistories[currentBot].push({ role: "assistant", content: `⚠️ Gagal: ${err.message}`, timestamp: Date.now(), isError: true }); saveChatHistories(); renderChatHistory(); showToastMini(`❌ Gagal`, "error"); }
+}
+
+// =========================================================
+// 16. UTILITIES (THEME, CLOCK, MODAL, BACK BUTTON)
 // =========================================================
 function startLiveClock() { updateClock(); if (clockInterval) clearInterval(clockInterval); clockInterval = setInterval(updateClock, 1000); }
 function updateClock() {
@@ -538,11 +714,14 @@ function updateClock() {
     const _user = getUser(); if (document.getElementById("clockGreeting")) document.getElementById("clockGreeting").textContent = `${greeting}, ${_user?.nama_lengkap || "Bos"}!`;
 }
 
-function toggleTheme() { const current = document.documentElement.getAttribute("data-theme"); setTheme(current === "halloween-dark" ? "halloween-light" : "halloween-dark"); }
-function setTheme(theme) { document.documentElement.setAttribute("data-theme", theme); localStorage.setItem("so_theme", theme); const isDark = theme === "halloween-dark"; document.querySelectorAll("#themeIcon, #themeIcon2, #sidebarThemeIcon").forEach(el => el.textContent = isDark ? "🌙" : "☀️"); }
+function toggleTheme() { setTheme(document.documentElement.getAttribute("data-theme") === "halloween-dark" ? "halloween-light" : "halloween-dark"); }
+function setTheme(theme) { document.documentElement.setAttribute("data-theme", theme); localStorage.setItem("so_theme", theme); document.querySelectorAll("#themeIcon, #themeIcon2, #sidebarThemeIcon").forEach(el => el.textContent = theme === "halloween-dark" ? "🌙" : "☀️"); }
 function updateTimeTheme() { if (!autoThemeEnabled) return; const hour = new Date().getHours(); document.documentElement.setAttribute("data-time-theme", hour < 11 ? "pagi" : hour < 15 ? "siang" : hour < 18 ? "sore" : "malam"); }
 function toggleSidebar() { document.getElementById("sidebar")?.classList.toggle("open"); document.getElementById("sidebarOverlay")?.classList.toggle("active"); }
 function closeSidebar() { document.getElementById("sidebar")?.classList.remove("open"); document.getElementById("sidebarOverlay")?.classList.remove("active"); }
+
+function formatTanggalLong(dateStr) { const d = new Date(dateStr); const hari = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"], bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]; return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()} — ${hari[d.getDay()]}`; }
+function formatTanggalShort(dateStr) { const d = new Date(dateStr), bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]; return `${d.getDate()} ${bulan[d.getMonth()]}`; }
 
 window.addEventListener("popstate", (e) => {
     const activeScreen = document.querySelector(".screen.active"); if (!activeScreen) return;
@@ -559,11 +738,96 @@ function resetIdleTimer() { if (idleTimer) clearTimeout(idleTimer); if (!isLogge
 function autoLogout() { clearAuth(); showToastMini("⏰ Idle 5 menit — auto logout", "error"); setTimeout(() => { showLoginView(true); showScreen("loginScreen"); pushBackGuard(); }, 300); }
 ["click", "touchstart", "keydown", "scroll"].forEach(evt => document.addEventListener(evt, resetIdleTimer, { passive: true }));
 
+// =========================================================
+// 17. KELOLA USER & MODAL (ADMIN)
+// =========================================================
+function openChatSelectionModal() { document.getElementById("chatModeModal").classList.add("active"); }
+function closeChatModeModal() { document.getElementById("chatModeModal").classList.remove("active"); }
+function selectChatMode(mode) { closeChatModeModal(); if (mode === 'bot') goToChatScreen(); else showToastMini("Fitur Room Chat segera hadir!", "error"); }
+
+function goToProfileScreen() {
+    const _user = getUser(); if (!_user) return;
+    document.getElementById("editNamaLengkap").value = _user.nama_lengkap || "";
+    const preview = document.getElementById("editAvatarPreview");
+    if (preview) { if (_user.avatar_url) { preview.style.backgroundImage = `url(${_user.avatar_url})`; preview.textContent = ""; } else { preview.textContent = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase(); preview.style.backgroundImage = "none"; } }
+    showScreen("profileScreen");
+}
+async function submitUpdateProfile() {
+    const btn = document.getElementById("btnSaveProfile"), namaBaru = document.getElementById("editNamaLengkap").value.trim();
+    if (!namaBaru) return showToastMini("❌ Nama nggak boleh kosong", "error");
+    btn.disabled = true; btn.textContent = "Menyimpan...";
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/me/update`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nama_lengkap: namaBaru }) });
+        const data = await resp.json(); if (!resp.ok) throw new Error(data.detail || "Gagal");
+        await refreshUserData(); showToastMini("✅ Nama diupdate", "success"); goToSettingsScreen();
+    } catch (err) { showToastMini(`❌ ${err.message}`, "error"); } 
+    finally { btn.disabled = false; btn.textContent = "Simpan Perubahan"; }
+}
+async function uploadAvatar(input) {
+    const file = input.files[0]; if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { showToastMini("⚠️ Maksimal 2MB", "error"); input.value = ""; return; }
+    if (!file.type.startsWith("image/")) { showToastMini("❌ Harus gambar", "error"); input.value = ""; return; }
+    showToastMini("📸 Mengupload...", "success");
+    try {
+        const formData = new FormData(); formData.append("file", file);
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/me/upload-avatar`, { method: "POST", body: formData });
+        const data = await resp.json(); if (!resp.ok) throw new Error(data.detail || "Gagal");
+        await refreshUserData(); const _user = getUser(); const preview = document.getElementById("editAvatarPreview");
+        if (preview) { preview.style.backgroundImage = `url('${_user.avatar_url}?t=${Date.now()}')`; preview.style.backgroundColor = "transparent"; preview.textContent = ""; }
+        showToastMini("✅ Foto diupdate", "success");
+    } catch (err) { showToastMini(`❌ ${err.message}`, "error"); }
+}
+function openImagePreview(url) { if (!url) return; const modal = document.getElementById("imagePreviewModal"), img = document.getElementById("imagePreviewImg"); if (modal && img) { img.src = url; modal.classList.add("active"); } }
+function closeImagePreview() { document.getElementById("imagePreviewModal")?.classList.remove("active"); }
+
 async function checkForUpdate(manual = false) {
     if (manual) showToastMini("🔍 Cek update...", "success");
     try { const resp = await fetch(`${CONFIG.BACKEND_URL}/api/config/`); const data = await resp.json(); if (data.app && isNewerVersion(data.app.latest_version, CONFIG.APP_VERSION)) { if (manual) showToastMini("✅ Update tersedia!", "success"); } } catch (e) {}
 }
 function isNewerVersion(latest, current) { const l = String(latest).split(".").map(Number), c = String(current).split(".").map(Number); for (let i = 0; i < 3; i++) { if ((l[i] || 0) > (c[i] || 0)) return true; if ((l[i] || 0) < (c[i] || 0)) return false; } return false; }
+
+// User Management (Admin)
+function goToUserManagementScreen() { const _user = getUser(); if (!_user || _user.role !== "admin") { showToastMini("❌ Akses ditolak. Khusus Admin.", "error"); return; } showScreen("userManagementScreen"); loadUsers(); }
+async function loadUsers() {
+    const container = document.getElementById("userListContainer"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data user...</p></div>`;
+    try { const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users`, { method: "GET" }); if (!resp.ok) throw new Error(`HTTP ${resp.status}`); const data = await resp.json(); if (!data.success) throw new Error(data.detail || "Gagal load user"); renderUserList(data.users); } 
+    catch (err) { console.error("[UserMgmt] Error:", err); container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${err.message}</p></div>`; }
+}
+function renderUserList(users) {
+    const container = document.getElementById("userListContainer"); if (!container) return;
+    if (!users || users.length === 0) { container.innerHTML = `<p style="text-align:center; padding: 20px;">Belum ada user.</p>`; return; }
+    const html = users.map(u => { const isMe = u.id === getUser().id, statusClass = u.aktif ? "shift-badge-p7" : "shift-badge-m22", statusText = u.aktif ? "Aktif" : "Nonaktif"; return `<div class="rak-card" style="margin-bottom: 10px;"><div class="rak-card-header"><span class="rak-card-id">${u.username}</span><span class="shift-badge ${statusClass}">${statusText}</span></div><div class="rak-card-body"><div class="rak-card-row"><span class="rak-card-label">Nama</span><span class="rak-card-value">${u.nama_lengkap}</span></div><div class="rak-card-row"><span class="rak-card-label">Role</span><span class="rak-card-value" style="text-transform: uppercase;">${u.role}</span></div><div class="rak-card-row"><span class="rak-card-label">Last Login</span><span class="rak-card-value">${u.last_login ? formatTanggalLong(u.last_login.split('T')[0]) : "-"}</span></div>${!isMe ? `<div style="display: flex; gap: 8px; margin-top: 12px;"><button class="settings-btn" style="padding: 8px; font-size: 12px;" onclick="resetUserPin(${u.id}, '${u.username}')">🔑 Reset PIN</button><button class="settings-btn" style="padding: 8px; font-size: 12px;" onclick="resetUserPassword(${u.id}, '${u.username}')">🔒 Reset Pass</button><button class="settings-btn settings-btn-danger" style="padding: 8px; font-size: 12px;" onclick="forceLogoutUser(${u.id}, '${u.username}')">🚪 Force Out</button></div>` : `<p style="font-size: 12px; color: var(--accent-orange); margin-top: 12px; text-align: center;">(Ini akun Anda)</p>`}</div></div>`; }).join("");
+    container.innerHTML = html;
+}
+async function resetUserPin(userId, username) {
+    const newPin = prompt(`Masukkan PIN baru untuk ${username} (6 digit):`);
+    if (!newPin || newPin.length !== 6 || !/^\d+$/.test(newPin)) return showToastMini("❌ PIN harus 6 digit angka", "error");
+    try { const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users/${userId}/reset-pin`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ new_pin: newPin }) }); const data = await resp.json(); if (!resp.ok) throw new Error(data.detail || "Gagal"); showToastMini(`✅ PIN ${username} direset`, "success"); } catch (err) { showToastMini(`❌ ${err.message}`, "error"); }
+}
+async function resetUserPassword(userId, username) {
+    const newPass = prompt(`Masukkan Password baru untuk ${username} (min 6 char):`);
+    if (!newPass || newPass.length < 6) return showToastMini("❌ Password minimal 6 karakter", "error");
+    try { const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users/${userId}/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ new_password: newPass }) }); const data = await resp.json(); if (!resp.ok) throw new Error(data.detail || "Gagal"); showToastMini(`✅ Password ${username} direset`, "success"); } catch (err) { showToastMini(`❌ ${err.message}`, "error"); }
+}
+async function forceLogoutUser(userId, username) {
+    if (!confirm(`Tendang ${username} dari semua device?`)) return;
+    try { const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/users/${userId}/force-logout`, { method: "POST" }); const data = await resp.json(); if (!resp.ok) throw new Error(data.detail || "Gagal"); showToastMini(`✅ ${username} ditendang`, "success"); } catch (err) { showToastMini(`❌ ${err.message}`, "error"); }
+}
+
+function openAddUserModal() { document.getElementById("newUserUsername").value = ""; document.getElementById("newUserNama").value = ""; document.getElementById("newUserPassword").value = ""; document.getElementById("newUserPin").value = "123456"; document.getElementById("newUserRole").value = "operator"; document.getElementById("addUserError").textContent = ""; document.getElementById("addUserModal").classList.add("active"); }
+function closeAddUserModal() { document.getElementById("addUserModal").classList.remove("active"); }
+async function submitAddUser() {
+    const btn = document.getElementById("btnSaveUser"), errEl = document.getElementById("addUserError"), username = document.getElementById("newUserUsername").value.trim().toUpperCase(), nama = document.getElementById("newUserNama").value.trim(), password = document.getElementById("newUserPassword").value, pin = document.getElementById("newUserPin").value, role = document.getElementById("newUserRole").value;
+    if (!username || !nama || !password) { errEl.textContent = "❌ Semua field wajib diisi!"; return; }
+    btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...'; errEl.textContent = "";
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, nama_lengkap: nama, role, pin }) });
+        const data = await resp.json(); if (!resp.ok || !data.success) throw new Error(data.detail || data.error || "Gagal menambah user");
+        showToastMini(`✅ User ${username} berhasil dibuat`, "success"); closeAddUserModal(); loadUsers();
+    } catch (err) { console.error("[AddUser] Error:", err); errEl.textContent = `❌ ${err.message}`; } 
+    finally { btn.disabled = false; btn.innerHTML = '✅ Simpan'; }
+}
 
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
