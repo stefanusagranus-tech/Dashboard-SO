@@ -1002,6 +1002,133 @@ async function loadMasterShift() {
 
 function getBadgeClass(kode) { return kode === "P7" ? "shift-badge-p7" : kode === "S15" ? "shift-badge-s15" : kode === "M22" ? "shift-badge-m22" : kode === "CUTI" ? "shift-badge-cuti" : "shift-badge-o"; }
 
+// =========================================================
+// TAMBALAN FUNGSI DARI HTML LAMA
+// =========================================================
+
+// 1. Fungsi Set Periode Shift (Biar tombol filter bisa diklik)
+function setShiftPeriod(period) {
+    shiftPeriod = period;
+    document.querySelectorAll(".filter-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
+    });
+    const customRow = document.getElementById("customDateRow");
+    if (customRow) {
+        if (period === "custom") customRow.classList.remove("hidden");
+        else customRow.classList.add("hidden");
+    }
+    loadMasterShift(); // Panggil ulang data shift
+}
+
+// 2. Fungsi Buka Streamlit di Browser
+function openStreamlitInBrowser() {
+    try {
+        window.open(CONFIG.STREAMLIT_URL, "_blank");
+    } catch (e) {
+        window.location.href = CONFIG.STREAMLIT_URL;
+    }
+}
+
+// 3. Fungsi Notifikasi (Placeholder sementara, biar gak error)
+function goToNotificationsScreen() {
+    showToastMini("🔔 Fitur Notifikasi segera hadir!", "success");
+}
+
+// 4. Tambahan buat jaga-jaga (Buka Modal Tema & Sistem)
+function openThemeModal() {
+    const isDark = document.documentElement.getAttribute("data-theme") === "halloween-dark";
+    const pesan = isDark ? "Mode sekarang: DARK. Ganti ke LIGHT?" : "Mode sekarang: LIGHT. Ganti ke DARK?";
+    if (confirm(pesan)) {
+        toggleTheme();
+        showToastMini("✅ Tema berhasil diubah", "success");
+    }
+}
+
+function openSystemModal() {
+    const aksi = prompt("Menu Sistem:\n1. Cek Update\n2. Ganti API Key\n3. Reset Semua Chat\n\nKetik angka (1/2/3):");
+    if (aksi === "1") checkForUpdate(true);
+    else if (aksi === "2") changeApiKey();
+    else if (aksi === "3") resetAllChat();
+}
+
+function resetAllChat() {
+    if (!confirm("Hapus SEMUA chat dengan 4 bot?")) return;
+    Object.keys(BOTS).forEach(botId => { chatHistories[botId] = []; });
+    saveChatHistories();
+    showToastMini("✅ Semua chat dihapus", "success");
+}
+
+function changeApiKey() {
+    const current = getApiKey();
+    const newKey = prompt("Masukkan API Key baru:", current);
+    if (!newKey || newKey.trim() === "") return;
+    localStorage.setItem("so_api_key", newKey.trim());
+    showToastMini("✅ API Key diupdate", "success");
+}
+
+// =========================================================
+// TAMBALAN FUNGSI DARI HTML LAMA
+// =========================================================
+
+// 1. Fungsi Set Periode Shift (Biar tombol filter bisa diklik)
+function setShiftPeriod(period) {
+    shiftPeriod = period;
+    document.querySelectorAll(".filter-tab").forEach(tab => {
+        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
+    });
+    const customRow = document.getElementById("customDateRow");
+    if (customRow) {
+        if (period === "custom") customRow.classList.remove("hidden");
+        else customRow.classList.add("hidden");
+    }
+    loadMasterShift(); // Panggil ulang data shift
+}
+
+// 2. Fungsi Buka Streamlit di Browser
+function openStreamlitInBrowser() {
+    try {
+        window.open(CONFIG.STREAMLIT_URL, "_blank");
+    } catch (e) {
+        window.location.href = CONFIG.STREAMLIT_URL;
+    }
+}
+
+// 3. Fungsi Notifikasi (Placeholder sementara, biar gak error)
+function goToNotificationsScreen() {
+    showToastMini("🔔 Fitur Notifikasi segera hadir!", "success");
+}
+
+// 4. Tambahan buat jaga-jaga (Buka Modal Tema & Sistem)
+function openThemeModal() {
+    const isDark = document.documentElement.getAttribute("data-theme") === "halloween-dark";
+    const pesan = isDark ? "Mode sekarang: DARK. Ganti ke LIGHT?" : "Mode sekarang: LIGHT. Ganti ke DARK?";
+    if (confirm(pesan)) {
+        toggleTheme();
+        showToastMini("✅ Tema berhasil diubah", "success");
+    }
+}
+
+function openSystemModal() {
+    const aksi = prompt("Menu Sistem:\n1. Cek Update\n2. Ganti API Key\n3. Reset Semua Chat\n\nKetik angka (1/2/3):");
+    if (aksi === "1") checkForUpdate(true);
+    else if (aksi === "2") changeApiKey();
+    else if (aksi === "3") resetAllChat();
+}
+
+function resetAllChat() {
+    if (!confirm("Hapus SEMUA chat dengan 4 bot?")) return;
+    Object.keys(BOTS).forEach(botId => { chatHistories[botId] = []; });
+    saveChatHistories();
+    showToastMini("✅ Semua chat dihapus", "success");
+}
+
+function changeApiKey() {
+    const current = getApiKey();
+    const newKey = prompt("Masukkan API Key baru:", current);
+    if (!newKey || newKey.trim() === "") return;
+    localStorage.setItem("so_api_key", newKey.trim());
+    showToastMini("✅ API Key diupdate", "success");
+}
 
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
