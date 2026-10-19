@@ -1194,6 +1194,93 @@ async function deletePersonilExecute(nama) {
         showToastMini(data.message || `✅ ${nama} dihapus`, "success"); _personilCache = null; await loadPersonilList();
     } catch (err) { showToastMini(`❌ Gagal: ${err.message}`, "error"); }
 }
+// =========================================================
+// TAMBALAN: MODAL KONFIRMASI SHIFT HANA (YANG KETINGGALAN)
+// =========================================================
+function openConfirmShiftModal(data) {
+    const modal = document.getElementById("confirmShiftModal");
+    if (!modal) return;
+    currentConfirmData = data;
+
+    const tglEl = document.getElementById("confirmModalDate");
+    if (tglEl) tglEl.textContent = formatTanggalLong(data.tanggal);
+
+    const countEl = document.getElementById("confirmModalCount");
+    if (countEl) countEl.textContent = `${data.items.length} orang`;
+
+    // Render list item
+    const container = document.getElementById("confirmModalList");
+    if (container) {
+        container.innerHTML = data.items.map(it => {
+            const kode = it.kode_shift || "O";
+            const shiftClass = getShiftModalClass(kode);
+            return `
+                <div class="confirm-modal-item ${shiftClass}">
+                    <span class="confirm-modal-item-icon">👤</span>
+                    <span class="confirm-modal-item-name">${it.nama}</span>
+                    <span class="confirm-modal-item-arrow">→</span>
+                    <span class="confirm-modal-item-shift">${it.shift_nama || kode}</span>
+                </div>
+            `;
+        }).join("");
+    }
+
+    const saveBtn = document.getElementById("confirmModalSaveBtn");
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = "✅ Konfirmasi"; }
+
+    modal.classList.add("active");
+}
+
+function closeConfirmShiftModal() {
+    document.getElementById("confirmShiftModal")?.classList.remove("active");
+    currentConfirmData = null;
+}
+
+function getShiftModalClass(kode) {
+    switch (kode) {
+        case "P7":   return "shift-p7";
+        case "S15":  return "shift-s15";
+        case "M22":  return "shift-m22";
+        case "O":    return "shift-o";
+        case "CUTI": return "shift-cuti";
+        default:     return "shift-o";
+    }
+}
+
+async function executeConfirmShift() {
+    if (!currentConfirmData) return showToastMini("❌ Tidak ada data", "error");
+    const saveBtn = document.getElementById("confirmModalSaveBtn");
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...'; }
+    
+    const data = currentConfirmData;
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/save-batch`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tanggal: data.tanggal, items: data.items.map(it => ({ nama: it.nama, kode_shift: it.kode_shift })) }),
+        });
+        const result = await resp.json();
+        if (!resp.ok || !result.success) throw new Error(result.detail || `HTTP ${resp.status}`);
+
+        const savedCount = result.saved || data.items.length;
+        closeConfirmShiftModal();
+
+        chatHistories[currentBot].push({ 
+            role: "assistant", 
+            content: `✅ ${savedCount} shift tersimpan!\n\n${getShiftSummaryText(data.items)}`, 
+            timestamp: Date.now(), 
+            isSuccess: true 
+        });
+        saveChatHistories(); renderChatHistory(); scrollToBottom();
+        
+        if (document.getElementById("masterShiftScreen")?.classList.contains("active")) loadMasterShift();
+        showToastMini(`✅ ${savedCount} shift tersimpan`, "success");
+    } catch (err) {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = "✅ Konfirmasi"; }
+        chatHistories[currentBot].push({ role: "assistant", content: `⚠️ Gagal: ${err.message}`, timestamp: Date.now(), isError: true });
+        saveChatHistories(); renderChatHistory(); scrollToBottom();
+        showToastMini(`❌ Gagal: ${err.message}`, "error");
+    }
+}
 
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
