@@ -668,19 +668,14 @@ function goToHomeScreen() {
             const elHeader = document.getElementById("homeAvatar");
             const elSlide = document.getElementById("slideHomeAvatar");
             
-            // Cari di dalam fungsi goToHomeScreen
             if (_user.avatar_url) {
-                if (elHeader) { elHeader.style.backgroundImage = `url(${_user.avatar_url})`; elHeader.textContent = ""; } // <--- Tambahin .textContent = ""
-                if (elSlide) { elSlide.style.backgroundImage = `url(${_user.avatar_url})`; elSlide.textContent = ""; }
+                const freshUrl = `${_user.avatar_url}?t=${Date.now()}`;
+                if (elHeader) { elHeader.style.backgroundImage = `url(${freshUrl})`; elHeader.textContent = ""; }
+                if (elSlide) { elSlide.style.backgroundImage = `url(${freshUrl})`; elSlide.textContent = ""; }
             } else {
                 const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
                 if (elHeader) { elHeader.style.backgroundImage = "none"; elHeader.textContent = inisial; }
                 if (elSlide) { elSlide.style.backgroundImage = "none"; elSlide.textContent = inisial; }
-                if (_user.avatar_url) {
-                    const freshUrl = `${_user.avatar_url}?t=${Date.now()}`;
-                    if (elHeader) { elHeader.style.backgroundImage = `url(${freshUrl})`; elHeader.textContent = ""; }
-                    if (elSlide) { elSlide.style.backgroundImage = `url(${freshUrl})`; elSlide.textContent = ""; }
-                }
             }
         }
     });
@@ -4735,6 +4730,7 @@ function closeImagePreview() {
     const modal = document.getElementById("imagePreviewModal");
     if (modal) modal.classList.remove("active");
 }
+
 // =========================================================
 // BOOT
 // =========================================================
