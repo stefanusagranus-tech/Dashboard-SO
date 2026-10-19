@@ -896,27 +896,61 @@ function goToBroadcastScreen() {
 }
 
 async function loadBroadcastList() {
-    const container = document.getElementById("broadcastList"); if (!container) return;
-    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat...</p></div>`;
+    const container = document.getElementById("broadcastList"); 
+    if (!container) return;
+    
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat broadcast...</p></div>`;
+    
     try {
         const resp = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
-        const data = await resp.json();
-        if (!data.success) throw new Error("Gagal load broadcast");
         
-        if (data.data.length === 0) {
-            container.innerHTML = `<div class="shift-summary-empty"><p>Belum ada broadcast.</p></div>`;
+        // Debugging: Liat response mentah
+        console.log("[Broadcast] HTTP Status:", resp.status);
+        
+        const data = await resp.json();
+        console.log("[Broadcast] Response:", data);
+        
+        if (!data.success) throw new Error(data.detail || "Gagal load broadcast");
+        
+        // Kalau sukses tapi array kosong
+        if (!data.data || data.data.length === 0) {
+            container.innerHTML = `
+                <div class="shift-summary-empty">
+                    <span class="empty-icon">📢</span>
+                    <p>Belum ada broadcast.</p>
+                </div>
+            `;
             return;
         }
         
-        container.innerHTML = data.data.map(b => `
-            <div class="settings-card" style="padding: 16px; margin-bottom: 12px;">
-                <div style="font-size: 16px; font-weight: 800; color: var(--accent-flame); margin-bottom: 4px;">${escapeHtml(b.judul)}</div>
-                <div style="font-size: 13px; color: var(--text-bone); line-height: 1.5;">${escapeHtml(b.pesan)}</div>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">${formatTanggalLong(b.created_at.split('T')[0])}</div>
-            </div>
-        `).join("");
+        // Render data
+        container.innerHTML = data.data.map(b => {
+            let icon = "📢", color = "var(--accent-flame)";
+            if (b.tipe === "update") { icon = "🚀"; color = "#06d6a0"; }
+            else if (b.tipe === "warning") { icon = "⚠️"; color = "#ee5253"; }
+            
+            return `
+                <div class="settings-card" style="padding: 16px; margin-bottom: 12px; border-left: 4px solid ${color};">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 20px;">${icon}</span>
+                        <div style="font-size: 16px; font-weight: 800; color: ${color};">${escapeHtml(b.judul)}</div>
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-bone); line-height: 1.6;">${escapeHtml(b.pesan)}</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 12px; text-align: right;">
+                        ${formatTanggalLong(b.created_at.split('T')[0])} • ${formatTime(b.created_at)}
+                    </div>
+                </div>
+            `;
+        }).join("");
+        
     } catch (err) {
-        container.innerHTML = `<p style="color:red;">Gagal: ${err.message}</p>`;
+        console.error("[Broadcast] Error:", err);
+        container.innerHTML = `
+            <div class="shift-summary-empty">
+                <span class="empty-icon">⚠️</span>
+                <p>Gagal load broadcast: ${escapeHtml(err.message)}</p>
+            </div>
+        `;
     }
 }
 
