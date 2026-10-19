@@ -1,6 +1,6 @@
 /* =========================================================
-   DASHBOARD SO C383 — APP LOGIC v8.0 (THE ULTIMATE EDITION)
-   Fitur: 100% Lengkap | Zero Duplication | No Missing Functions
+   DASHBOARD SO C383 — APP LOGIC v9.0 (ABSOLUTE FINAL)
+   Fitur: 100% Lengkap | Fixed All ReferenceErrors | Nama Item
    ========================================================= */
 
 // =========================================================
@@ -9,7 +9,7 @@
 const CONFIG = {
     BACKEND_URL: "https://dashboard-so.fastapicloud.dev",
     STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
-    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkz", // API Key Terbaru
+    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkz", 
     APP_VERSION: "1.0.0",
     TARGET_SO_PERSEN: 70,
 };
@@ -339,6 +339,13 @@ function updateAvatarUI(user) {
     if (_menuAdmin) _menuAdmin.style.display = (_user.role === "admin") ? "flex" : "none";
 }
 
+function updateSettingsUserInfo() {
+    const _user = getUser();
+    if (document.getElementById("settingsNamaLengkap")) document.getElementById("settingsNamaLengkap").textContent = _user ? (_user.nama_lengkap || "-") : "-";
+    if (document.getElementById("settingsUsername")) document.getElementById("settingsUsername").textContent = _user ? `@${_user.username}` : "-";
+    if (document.getElementById("settingsRole")) document.getElementById("settingsRole").textContent = _user ? (_user.role || "-").toUpperCase() : "-";
+}
+
 async function loadMiniDashboard() {
     try {
         const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/rekap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bulan_ini" }) });
@@ -394,7 +401,7 @@ function renderHomeSchedule(data, container) {
 }
 
 // =========================================================
-// 8. CAROUSEL (SINGLE EVENT LISTENER)
+// 8. CAROUSEL
 // =========================================================
 document.addEventListener('DOMContentLoaded', () => {
     const carousel = document.getElementById('homeCarousel');
@@ -414,7 +421,7 @@ function goToSlide(index) {
 }
 
 // =========================================================
-// 9. DATA FETCHING LAINNYA (SHIFT, RAK, SPD, TOP)
+// 9. DATA FETCHING LAINNYA
 // =========================================================
 async function loadShiftDataLazy() {
     if (!AppCache.personil) {
@@ -701,7 +708,7 @@ async function confirmSaveSpd() {
 }
 
 // =========================================================
-// 16. TAMPILAN HALAMAN & FILTER (YANG HILANG SEBELUMNYA)
+// 16. TAMPILAN HALAMAN & FILTER
 // =========================================================
 function setShiftPeriod(period) {
     shiftPeriod = period;
@@ -801,7 +808,7 @@ function setStatusPeriod(period) {
 }
 
 // =========================================================
-// 17. LOAD DATA (RAK, SPD, TOP, STATUS)
+// 17. LOAD DATA (RAK, SPD, TOP, STATUS, DETAIL)
 // =========================================================
 async function loadRakList() {
     const container = document.getElementById("rakList");
@@ -887,10 +894,25 @@ async function loadTopMinus() {
         if (document.getElementById("topSummaryTotal")) document.getElementById("topSummaryTotal").textContent = formatRupiahFull(data.total_nominal || 0);
         if (document.getElementById("topSummaryMeta")) document.getElementById("topSummaryMeta").textContent = `${topTabCurrent === "rak" ? data.total_rak : data.total_items} item • ${data.periode}`;
         if (topData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; return; }
+        
+        // 🔥 PERBAIKAN: Tampilkan Nama Produk, bukan PLU
         container.innerHTML = topData.map((item, idx) => {
-            const isRak = topTabCurrent === "rak", title = isRak ? item.rak_id : item.plu, nominal = item.nominal_adjust || 0, nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+            const isRak = topTabCurrent === "rak";
+            const title = isRak ? item.rak_id : (item.nama_produk || item.nama || item.plu || "-");
+            const subTitle = isRak ? "" : `<div class="top-item-meta"><span>🏪 ${item.rak_id || "-"}</span><span>🔢 ${item.plu || "-"}</span></div>`;
+            const nominal = item.nominal_adjust || 0;
+            const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
             const clickAction = isRak ? `onclick="openRakDetail('${escapeHtml(item.rak_id)}')" style="cursor:pointer;"` : "";
-            return `<div class="top-item-card" ${clickAction}><div class="top-item-header"><span class="top-item-rank">#${idx + 1}</span><span class="top-item-title">${escapeHtml(title)}</span><span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span></div>${isRak ? `<div class="top-item-hint">Tap untuk detail item →</div>` : `<div class="top-item-meta"><span>🏪 ${item.rak_id}</span></div>`}</div>`;
+            
+            return `<div class="top-item-card" ${clickAction}>
+                <div class="top-item-header">
+                    <span class="top-item-rank">#${idx + 1}</span>
+                    <span class="top-item-title">${escapeHtml(title)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span>
+                </div>
+                ${subTitle}
+                ${isRak ? `<div class="top-item-hint">Tap untuk detail item →</div>` : ""}
+            </div>`;
         }).join("");
     } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
 }
@@ -917,7 +939,7 @@ async function loadStatusAnalysis() {
 }
 
 // =========================================================
-// 18. RAK DETAIL & MASTER SHIFT
+// 18. RAK DETAIL (FIXED FILTER & SEARCH)
 // =========================================================
 async function openRakDetail(rakId) {
     if (!rakId) return;
@@ -943,14 +965,40 @@ async function openRakDetail(rakId) {
         if (document.getElementById("rakDetailStatPlus")) document.getElementById("rakDetailStatPlus").textContent = formatRupiahFull(data.total_plus || 0);
         if (document.getElementById("rakDetailStatNet")) document.getElementById("rakDetailStatNet").textContent = formatRupiahFull(data.total_nominal || 0);
         
-        if (rakDetailData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><p>Belum ada item di rak ini.</p></div>`; return; }
-        container.innerHTML = rakDetailData.map((item, idx) => {
-            const nominal = item.nominal_adjust || 0;
-            const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
-            return `<div class="rak-detail-item"><div class="rak-detail-item-header"><span class="rak-detail-item-rank">${idx + 1}</span><span class="rak-detail-item-plu">${item.plu}</span><span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span></div><div class="rak-detail-item-name">${item.nama_produk || "-"}</div></div>`;
-        }).join("");
+        renderRakDetailList();
     } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
 }
+
+function renderRakDetailList() {
+    const container = document.getElementById("rakDetailList"); if (!container) return;
+    let filtered = [...(rakDetailData || [])];
+    if (rakDetailFilter === "minus") filtered = filtered.filter(it => (it.nominal_adjust || 0) < 0);
+    else if (rakDetailFilter === "plus") filtered = filtered.filter(it => (it.nominal_adjust || 0) > 0);
+    
+    if (rakDetailSearchQuery) {
+        filtered = filtered.filter(it => (it.plu || "").toLowerCase().includes(rakDetailSearchQuery) || (it.nama_produk || "").toLowerCase().includes(rakDetailSearchQuery));
+    }
+    
+    if (filtered.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><p>Tidak ada item.</p></div>`; return; }
+    container.innerHTML = filtered.map((item, idx) => {
+        const nominal = item.nominal_adjust || 0;
+        const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+        return `<div class="rak-detail-item"><div class="rak-detail-item-header"><span class="rak-detail-item-rank">${idx + 1}</span><span class="rak-detail-item-plu">${item.plu}</span><span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span></div><div class="rak-detail-item-name">${item.nama_produk || "-"}</div></div>`;
+    }).join("");
+}
+
+function setRakDetailFilter(filter) {
+    rakDetailFilter = filter;
+    document.querySelectorAll(".rak-detail-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-filter") === filter));
+    renderRakDetailList();
+}
+function filterRakDetail() {
+    const input = document.getElementById("rakDetailSearchInput"), clearBtn = document.getElementById("rakDetailSearchClear"); if (!input) return;
+    rakDetailSearchQuery = input.value.trim().toLowerCase();
+    if (clearBtn) { if (rakDetailSearchQuery) clearBtn.classList.remove("hidden"); else clearBtn.classList.add("hidden"); }
+    renderRakDetailList();
+}
+function clearRakDetailSearch() { const input = document.getElementById("rakDetailSearchInput"); if (input) input.value = ""; rakDetailSearchQuery = ""; const clearBtn = document.getElementById("rakDetailSearchClear"); if (clearBtn) clearBtn.classList.add("hidden"); renderRakDetailList(); }
 
 async function loadMasterShift() {
     const container = document.getElementById("shiftList"); if (!container) return;
