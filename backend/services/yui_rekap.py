@@ -258,6 +258,75 @@ def get_items_by_rak_extended(rak_id, mode="bulan_ini", tgl_start=None, tgl_end=
         return {"success": True, "rak_id": rak_id.upper(), "periode": f"{_start_str} s/d {_end_str}", "tgl_so": _items[0]["so_date"] if _items else None, "pic": _items[0]["pic"] if _items else "-", "total_minus": _minus, "total_plus": _plus, "total_nominal": _minus + _plus, "total_item": len(_items), "items": _items}
     except Exception as e: return {"success": False, "error": str(e)[:200], "items": []}
 
+# =========================================================
+# GET TOP ITEMS (Legacy — dipake sama router Yui)
+# =========================================================
+def get_top_items(
+    tgl_start=None, tgl_end=None, mode="bulan_ini",
+    limit=10, order="desc", only_minus=True,
+    pic_filter=None, rak_filter=None,
+):
+    try:
+        _sb = _get_supabase_safe()
+        if _sb is None:
+            return {"success": False, "error": "Supabase gak konek", "items": []}
+
+        if mode == "custom" and tgl_start and tgl_end:
+            _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
+            _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
+        else:
+            _start, _end = get_periode_range(mode)
+            _start_str = _start.isoformat()[:10]
+            _end_str = _end.isoformat()[:10]
+
+        _q = (
+            _sb.table("so_hasil")
+            .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
+            .gte("so_date", _start_str)
+            .lte("so_date", _end_str)
+        )
+
+        # Filter minus/plus
+        if only_minus:
+            _q = _q.lt("nominal_adjust", 0)
+        else:
+            _q = _q.gt("nominal_adjust", 0)
+
+        if pic_filter:
+            _q = _q.eq("pic", pic_filter.upper())
+        if rak_filter:
+            _q = _q.eq("rak_id", rak_filter.upper())
+
+        _q = _q.limit(2000)
+        _items = _q.execute().data or []
+
+        for _it in _items:
+            _it["qty_var"] = int(_it.get("qty_var") or 0)
+            _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
+
+        # Sort
+        if order == "desc":
+            _items.sort(key=lambda x: x["nominal_adjust"])
+        else:
+            _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
+
+        _items = _items[:limit]
+
+        return {
+            "success": True,
+            "periode": f"{_start_str} s/d {_end_str}",
+            "tgl_start": _start_str,
+            "tgl_end": _end_str,
+            "items": _items,
+            "total_item": len(_items),
+            "total_nominal": sum(_it["nominal_adjust"] for _it in _items),
+        }
+    except Exception as e:
+        print(f"[GET_TOP_ITEMS ERROR] {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"success": False, "error": str(e)[:200], "items": []}
+    
 def get_top_items_extended(mode="bulan_ini", tgl_start=None, tgl_end=None, limit=None, search="", order_by="nominal_desc", sign="minus"):
     try:
         _sb = _get_supabase_safe()
