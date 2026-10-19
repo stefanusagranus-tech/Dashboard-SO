@@ -545,6 +545,158 @@ async function submitChangeUsername() {
     } catch (err) { showToastMini(`❌ ${err.message}`, "error"); } 
     finally { btn.disabled = false; btn.innerHTML = '✅ Simpan Username'; }
 }
+// =========================================================
+// TAMBALAN v11.2: FIX FILTER SPD, SORT TOP, & INFO TOP RAK
+// =========================================================
+
+// --- 1. FIX FILTER & SORT SPD ---
+function setSpdPeriod(period) {
+    spdPeriodCurrent = period;
+    document.querySelectorAll("#spdListScreen .spd-period-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("spdCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd"), today = new Date();
+            if (s && !s.value) s.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+            if (e && !e.value) e.value = today.toISOString().slice(0, 10);
+        } else customRow.classList.add("hidden");
+    }
+    loadSpdList(); // Ini yang tadi ilang/eror
+}
+
+function setSpdSort(sortValue) {
+    spdSortValue = sortValue;
+    document.querySelectorAll("#spdListScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
+    loadSpdList(); // Ini juga
+}
+
+// --- 2. FIX LOAD SPD (Biar gak error pas render) ---
+async function loadSpdList() {
+    const container = document.getElementById("spdList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data SPD...</p></div>`;
+    try {
+        const today = new Date();
+        let start = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        if (spdPeriodCurrent === "custom") { const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd"); if (s && s.value) start = new Date(s.value); if (e && e.value) end = new Date(e.value); }
+        const body = { mode: spdPeriodCurrent };
+        if (spdPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/yui/spd-list`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal load SPD");
+        
+        spdListData = data.list_spd || [];
+        
+        // ✅ FIX: Sort data sebelum render
+        spdListData = sortSpdData(spdListData, spdSortValue);
+        
+        if (document.getElementById("spdSummaryTotal")) document.getElementById("spdSummaryTotal").textContent = formatRupiahFull(data.total_spd || 0);
+        if (document.getElementById("spdSummaryMeta")) document.getElementById("spdSummaryMeta").textContent = `📅 ${data.periode || "—"}`;
+        if (document.getElementById("spdSummaryHari")) document.getElementById("spdSummaryHari").textContent = data.total_hari || 0;
+        if (document.getElementById("spdSummaryAvg")) document.getElementById("spdSummaryAvg").textContent = formatRupiahFull(data.avg_spd || 0);
+        
+        renderSpdList();
+    } catch (err) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; }
+}
+
+// --- 3. FIX SORTING SPD ---
+function sortSpdData(data, sortBy) {
+    const arr = [...data];
+    if (sortBy === "tanggal_asc") {
+        arr.sort((a, b) => (a.tanggal || "").localeCompare(b.tanggal || ""));
+    } else if (sortBy === "tanggal_desc") {
+        arr.sort((a, b) => (b.tanggal || "").localeCompare(a.tanggal || ""));
+    } else if (sortBy === "spd_desc") {
+        arr.sort((a, b) => (b.spd || 0) - (a.spd || 0));
+    } else if (sortBy === "spd_asc") {
+        arr.sort((a, b) => (a.spd || 0) - (b.spd || 0));
+    }
+    return arr;
+}
+
+// --- 4. FIX TOP RAK: Tampilin Tanggal SO & PIC ---
+async function loadTopMinus() {
+    const container = document.getElementById("topList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data...</p></div>`;
+    try {
+        const today = new Date();
+        let start = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        const body = { mode: topPeriodCurrent };
+        if (topPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        
+        let url = topTabCurrent === "rak" ? `${CONFIG.BACKEND_URL}/yui/top-rak` : `${CONFIG.BACKEND_URL}/yui/top-items-extended`;
+        if (topTabCurrent === "rak") body.limit = 500; else { body.limit = null; body.search = topSearchQuery || ""; body.order_by = topSortValue; body.sign = topSignCurrent; }
+        
+        const resp = await apiFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        
+        topData = topTabCurrent === "rak" ? (data.list_rak || []) : (data.items || []);
+        if (document.getElementById("topSummaryTotal")) document.getElementById("topSummaryTotal").textContent = formatRupiahFull(data.total_nominal || 0);
+        if (document.getElementById("topSummaryMeta")) document.getElementById("topSummaryMeta").textContent = `${topTabCurrent === "rak" ? data.total_rak : data.total_items} item • ${data.periode}`;
+        
+        if (topData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; return; }
+        
+        // Render List (Versi Baru dengan Tanggal & PIC)
+        container.innerHTML = topData.map((item, idx) => {
+            const isRak = topTabCurrent === "rak";
+            const title = isRak ? item.rak_id : cleanHtmlEntities(item.nama_produk || item.nama || item.plu || "-");
+            const nominal = item.nominal_adjust || 0;
+            const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+            const clickAction = isRak ? `onclick="openRakDetail('${escapeHtml(item.rak_id)}')" style="cursor:pointer;"` : "";
+            
+            // Data tambahan buat Top Rak
+            let metaHtml = "";
+            if (isRak) {
+                const tglShort = item.tgl_so ? formatTanggalShort(item.tgl_so) : "-";
+                const pic = item.pic || "-";
+                metaHtml = `<div class="top-item-meta" style="margin-top: 8px; display: flex; gap: 12px; font-size: 11px; color: var(--text-muted);">
+                    <span>📅 ${tglShort}</span>
+                    <span>👤 ${escapeHtml(pic)}</span>
+                </div>`;
+            } else {
+                metaHtml = `<div class="top-item-meta" style="margin-top: 8px; display: flex; gap: 12px; font-size: 11px; color: var(--text-muted);">
+                    <span>🏪 ${escapeHtml(item.rak_id || "-")}</span>
+                    <span>🔢 ${escapeHtml(item.plu || "-")}</span>
+                </div>`;
+            }
+            
+            return `<div class="top-item-card" ${clickAction}>
+                <div class="top-item-header">
+                    <span class="top-item-rank">#${idx + 1}</span>
+                    <span class="top-item-title">${escapeHtml(title)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span>
+                </div>
+                ${metaHtml}
+                ${isRak ? `<div class="top-item-hint" style="font-size: 10px; color: var(--accent-flame); margin-top: 6px; font-style: italic;">Tap untuk detail item →</div>` : ""}
+            </div>`;
+        }).join("");
+    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+}
+
+// --- 5. FIX FILTER & SORT TOP (Biar Gak Eror) ---
+function setTopPeriod(period) {
+    topPeriodCurrent = period;
+    document.querySelectorAll("#topMinusScreen .spd-period-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("topCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("topCustomStart"), e = document.getElementById("topCustomEnd"), today = new Date();
+            if (s && !s.value) s.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+            if (e && !e.value) e.value = today.toISOString().slice(0, 10);
+        } else customRow.classList.add("hidden");
+    }
+    loadTopMinus();
+}
+
+function setTopSort(sortValue) {
+    topSortValue = sortValue;
+    document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
+    loadTopMinus();
+}
 
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
