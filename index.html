@@ -157,9 +157,12 @@
                 
                 <!-- Kotak Avatar -->
                 <div style="background: var(--bg-card-dark); border: 1px solid var(--border-stone); border-left: 4px solid var(--accent-flame); border-radius: 16px; display: flex; align-items: center; justify-content: center;">
-                    <div class="profile-avatar-large" id="slideHomeAvatar" style="width: 64px; height: 64px; border-radius: 50%; background: var(--accent-flame); color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; box-shadow: 0 0 20px rgba(255,123,0,0.4);">?</div>
-                </div>
-                
+                    <div id="editAvatarPreview" class="profile-avatar-large" onclick="openImagePreview(getUser()?.avatar_url)" style="cursor: pointer; width: 100px !important; height: 100px !important; font-size: 36px !important; background-size: cover; background-position: center;">?</div>
+
+                    <!-- Tambahin tombol upload terpisah di bawahnya -->
+                    <button class="settings-btn" onclick="document.getElementById('avatarFileInput').click()" style="margin-top: 10px; padding: 8px 16px; font-size: 12px;">📸 Ganti Foto</button>
+                    <input type="file" id="avatarFileInput" accept="image/*" style="display: none;" onchange="uploadAvatar(this)">
+                                    
                 <!-- Kotak Jam -->
                 <div style="background: var(--bg-card-dark); border: 1px solid var(--border-stone); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start;">
                     <div class="slide-greeting" id="clockGreeting" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 600;">Selamat Datang!</div>
@@ -1020,7 +1023,14 @@
 <!-- ========================================================= -->
 <!-- SETTINGS SCREEN -->
 <!-- ========================================================= -->
-<div class="settings-content" style="padding: 16px; overflow-y: auto; height: 100%;">
+<div id="settingsScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">Pengaturan</div>
+        <div style="width: 40px;"></div>
+    </div>
+
+    <div class="settings-content" style="padding: 16px; overflow-y: auto; height: 100%;">
     
     <!-- 1. KARTU PROFIL -->
     <div class="settings-card profile-card" onclick="goToProfileScreen()">
