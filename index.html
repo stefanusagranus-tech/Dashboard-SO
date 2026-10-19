@@ -1129,10 +1129,6 @@
         
     </div>
 </div>
-<div style="display: flex; gap: 8px; margin-top: 12px;">
-    <button class="settings-btn" onclick="changePin()" style="flex: 1;">🔑 Ganti PIN</button>
-    <button class="settings-btn" onclick="changePassword()" style="flex: 1;">🔒 Ganti Password</button>
-</div>
 
 <!-- ========================================================= -->
 <!-- USER MANAGEMENT SCREEN (ADMIN ONLY) -->
@@ -1358,10 +1354,17 @@
 <!-- ========================================================= -->
 <!-- HALAMAN BROADCAST -->
 <!-- ========================================================= -->
-<div class="screen-header">
-    <button class="back-btn" onclick="goToHomeScreen()">←</button>
-    <div class="screen-title">📢 Broadcast Info</div>
-    <button class="screen-header-action" onclick="openCreateBroadcastModal()" id="btnAddBroadcast" style="display: none;">➕</button>
+<div id="broadcastScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">📢 Broadcast Info</div>
+        <button class="screen-header-action" onclick="openCreateBroadcastModal()" id="btnAddBroadcast" style="display: none;">➕</button>
+    </div>
+    <div class="settings-content" style="padding: 16px; overflow-y: auto;">
+        <div id="broadcastList">
+            <div class="loading-state"><div class="spinner"></div><p>Memuat broadcast...</p></div>
+        </div>
+    </div>
 </div>
 
 <!-- ========================================================= -->
