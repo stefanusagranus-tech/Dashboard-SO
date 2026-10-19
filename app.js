@@ -1221,7 +1221,21 @@ async function submitCreateBroadcast() {
     } finally {
         btn.disabled = false; btn.innerHTML = '✅ Kirim';
     }
+async function openRoomChat(roomId, roomName) {
+    if (roomRefreshInterval) { clearInterval(roomRefreshInterval); roomRefreshInterval = null; }
     
+    currentRoomId = roomId;
+    document.getElementById("roomChatTitle").textContent = `# ${roomName}`;
+    
+    const container = document.getElementById("roomMessages");
+    if (container) container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat...</p></div>`;
+    
+    showScreen("roomChatScreen");
+    initMentionSystem(); // ✅ PASTIIN INI ADA
+    await loadRoomMessages();
+    
+    roomRefreshInterval = setInterval(loadRoomMessages, 5000);
+}
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
