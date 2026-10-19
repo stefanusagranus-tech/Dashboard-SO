@@ -1221,20 +1221,138 @@ async function submitCreateBroadcast() {
     } finally {
         btn.disabled = false; btn.innerHTML = '✅ Kirim';
     }
-async function openRoomChat(roomId, roomName) {
-    if (roomRefreshInterval) { clearInterval(roomRefreshInterval); roomRefreshInterval = null; }
+
+// =========================================================
+// FASE B: MENTION SYSTEM (@)
+// =========================================================
+let mentionActive = false;
+let mentionUsers = [];
+
+function initMentionSystem() {
+    const input = document.getElementById("roomInput");
+    const list = document.getElementById("mentionList");
+    if (!input || !list) {
+        console.warn("[Mention] Input / List gak ketemu!");
+        return;
+    }
+
+    // Ambil data user buat mention
+    fetchMentionUsers();
+
+    // Deteksi pas ngetik @
+    input.addEventListener("input", () => {
+        const val = input.value;
+        const cursorPos = input.selectionStart;
+        const textBeforeCursor = val.substring(0, cursorPos);
+        const lastAtPos = textBeforeCursor.lastIndexOf("@");
+
+        if (lastAtPos !== -1 && (lastAtPos === 0 || textBeforeCursor[lastAtPos - 1] === " ")) {
+            const query = textBeforeCursor.substring(lastAtPos + 1).toLowerCase();
+            if (!query.includes(" ")) {
+                showMentionList(query, lastAtPos);
+                return;
+            }
+        }
+        list.style.display = "none";
+        mentionActive = false;
+    });
+
+    // Handle keyboard arrow up/down
+    input.addEventListener("keydown", (e) => {
+        if (!mentionActive) return;
+        const items = list.querySelectorAll(".mention-item");
+        if (items.length === 0) return;
+        
+        let active = Array.from(items).find(i => i.classList.contains("active"));
+        let idx = active ? Array.from(items).indexOf(active) : -1;
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            if (active) active.classList.remove("active");
+            idx = (idx + 1) % items.length;
+            items[idx].classList.add("active");
+            items[idx].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            if (active) active.classList.remove("active");
+            idx = (idx - 1 + items.length) % items.length;
+            items[idx].classList.add("active");
+            items[idx].scrollIntoView({ block: "nearest" });
+        } else if (e.key === "Enter" && active) {
+            e.preventDefault();
+            active.click();
+        } else if (e.key === "Escape") {
+            list.style.display = "none";
+            mentionActive = false;
+        }
+    });
+}
+
+async function fetchMentionUsers() {
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/auth/users`, { method: "GET" });
+        const data = await resp.json();
+        if (data.success) {
+            mentionUsers = data.users.map(u => ({
+                type: 'user',
+                id: u.id,
+                name: u.nama_lengkap || u.username,
+                username: u.username,
+                emoji: '👤'
+            }));
+        }
+    } catch (e) { console.log("Gagal load users buat mention", e); }
     
-    currentRoomId = roomId;
-    document.getElementById("roomChatTitle").textContent = `# ${roomName}`;
+    // Tambahin Bot
+    const bots = Object.keys(BOTS).map(k => ({
+        type: 'bot',
+        id: k,
+        name: BOTS[k].name,
+        username: k,
+        emoji: BOTS[k].emoji
+    }));
     
-    const container = document.getElementById("roomMessages");
-    if (container) container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat...</p></div>`;
+    mentionUsers = [...bots, ...mentionUsers];
+}
+
+function showMentionList(query, atPos) {
+    const list = document.getElementById("mentionList");
+    if (!list) return;
+
+    const filtered = mentionUsers.filter(u => 
+        u.name.toLowerCase().includes(query) || 
+        u.username.toLowerCase().includes(query)
+    );
+
+    if (filtered.length === 0) {
+        list.style.display = "none";
+        mentionActive = false;
+        return;
+    }
+
+    mentionActive = true;
+    list.style.display = "block";
+    list.innerHTML = filtered.map((u, i) => `
+        <div class="mention-item ${i === 0 ? 'active' : ''}" onclick="insertMention('${u.username}', ${atPos})" style="padding: 10px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; border-bottom: 1px solid var(--border-stone); background: ${i === 0 ? 'rgba(255,123,0,0.1)' : 'transparent'};">
+            <span style="font-size: 18px;">${u.emoji}</span>
+            <div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--text-bone);">${escapeHtml(u.name)}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">@${escapeHtml(u.username)}</div>
+            </div>
+        </div>
+    `).join("");
+}
+
+function insertMention(username, atPos) {
+    const input = document.getElementById("roomInput");
+    const val = input.value;
+    const before = val.substring(0, atPos);
+    const after = val.substring(input.selectionStart);
     
-    showScreen("roomChatScreen");
-    initMentionSystem(); // ✅ PASTIIN INI ADA
-    await loadRoomMessages();
-    
-    roomRefreshInterval = setInterval(loadRoomMessages, 5000);
+    input.value = `${before}@${username} ${after}`;
+    document.getElementById("mentionList").style.display = "none";
+    mentionActive = false;
+    input.focus();
 }
 }
 // Boot
