@@ -714,14 +714,13 @@ function setTopPeriod(period) {
             if (e && !e.value) e.value = today.toISOString().slice(0, 10);
         } else customRow.classList.add("hidden");
     }
-    loadTopMinus(); // Reload data
+    loadTopMinus(); // ✅ PASTIIN INI ADA
 }
 
 function setTopSort(sortValue) {
     topSortValue = sortValue;
     document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
-    // ✅ FIX: Reload data dari server
-    loadTopMinus(); 
+    loadTopMinus(); // ✅ PASTIIN INI ADA
 }
 
 function setTopTab(tab) {
@@ -731,15 +730,14 @@ function setTopTab(tab) {
     if (searchWrapper) { if (tab === "item") searchWrapper.classList.remove("hidden"); else searchWrapper.classList.add("hidden"); }
     if (filterSign) { if (tab === "item") filterSign.classList.remove("hidden"); else filterSign.classList.add("hidden"); }
     topSearchQuery = ""; const searchInput = document.getElementById("topSearchInput"); if (searchInput) searchInput.value = "";
-    loadTopMinus();
+    loadTopMinus(); // ✅ PASTIIN INI ADA
 }
 
 function setTopSign(sign) {
     topSignCurrent = sign;
     document.querySelectorAll(".top-filter-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sign") === sign));
-    loadTopMinus();
+    loadTopMinus(); // ✅ PASTIIN INI ADA
 }
-
 
 // --- 2. FIX: Chat History Hilang Pas Ganti Bot ---
 function renderChatHistory() {
