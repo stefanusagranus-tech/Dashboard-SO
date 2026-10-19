@@ -49,13 +49,41 @@ async function apiFetch(url, options = {}) {
     const headers = { ...(options.headers || {}) };
     const _token = getToken();
     if (_token) headers["Authorization"] = `Bearer ${_token}`;
+    
     let _resp;
     try { _resp = await fetch(url, { ...options, headers }); } 
     catch (_err) { throw new Error("Koneksi internet bermasalah"); }
+    
+    // ✅ FIX 401: Auto logout kalau token expired
     if (_resp.status === 401) {
-        let _bodyText = await _resp.text(); let _errMsg = "";
-        try { _errMsg = JSON.parse(_bodyText).detail || JSON.parse(_bodyText).message || ""; } catch (e) {}
-        if (!_errMsg.toLowerCase().includes("api key")) { clearAuth(); showToastMini("⚠️ Session expired. Login ulang.", "error"); setTimeout(() => showScreen("loginScreen"), 800); }
+        let _bodyText = await _resp.text(); 
+        let _errMsg = "";
+        try { 
+            const _json = JSON.parse(_bodyText);
+            _errMsg = _json.detail || _json.message || ""; 
+        } catch (e) {}
+        
+        // Kalau BUKAN API key issue, berarti token expired. Auto logout!
+        if (!_errMsg.toLowerCase().includes("api key")) {
+            console.warn("[Auth] 401 — Token expired, auto logout.");
+            
+            // 1. Stop semua interval biar gak spam request
+            if (roomRefreshInterval) clearInterval(roomRefreshInterval);
+            if (dashboardRefreshInterval) clearInterval(dashboardRefreshInterval);
+            if (clockInterval) clearInterval(clockInterval);
+            
+            // 2. Hapus token
+            clearAuth();
+            
+            // 3. Tampilkan pesan & lempar ke login
+            showToastMini("⚠️ Sesi berakhir. Silakan login ulang.", "error");
+            setTimeout(() => { 
+                showLoginView(true); 
+                showScreen("loginScreen"); 
+                pushBackGuard(); 
+            }, 500);
+        }
+        
         return new Response(_bodyText, { status: _resp.status, headers: _resp.headers });
     }
     return _resp;
