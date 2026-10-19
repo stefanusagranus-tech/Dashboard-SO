@@ -9,12 +9,18 @@
 const CONFIG = {
     BACKEND_URL: "https://dashboard-so.fastapicloud.dev",
     STREAMLIT_URL: "https://dashboard-so-uxrzpnjkudht2nvy8bwfnh.streamlit.app/",
+<<<<<<< HEAD
+    API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkz",
+    APP_VERSION: "1.01",
+    TARGET_SO_PERSEN: 80
+=======
     
     // GANTI BARIS INI:
     API_KEY: "so_c383_GOfNKuPRfhhdXnGTYGBYnr5zV5kzFRkz", 
     
     APP_VERSION: "1.0.0",
     TARGET_SO_PERSEN: 70,
+>>>>>>> 1a576169b3aab4dff07be1d786a1de4a703a21a7
 };
 
 const BOTS = {
@@ -883,5 +889,28 @@ function isNewerVersion(latest, current) {
     return false;
 }
 
+<<<<<<< HEAD
+// =========================================================
+// FIX CRASH: FUNGSI AUTO REFRESH YANG KETINGGALAN
+// =========================================================
+function startDashboardAutoRefresh() {
+    stopDashboardAutoRefresh();
+    dashboardRefreshInterval = setInterval(() => {
+        if (document.querySelector(".screen.active")?.id === "homeScreen") {
+            loadMiniDashboard();
+        }
+    }, 5 * 60 * 1000);
+}
+
+function stopDashboardAutoRefresh() {
+    if (dashboardRefreshInterval) {
+        clearInterval(dashboardRefreshInterval);
+        dashboardRefreshInterval = null;
+    }
+}
+
 // Boot
+=======
+// Boot
+>>>>>>> 1a576169b3aab4dff07be1d786a1de4a703a21a7
 document.addEventListener("DOMContentLoaded", initApp);
