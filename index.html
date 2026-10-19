@@ -1115,10 +1115,17 @@
             <input type="text" id="editNamaLengkap" class="login-input" placeholder="Masukkan nama...">
         </div>
         
-        <!-- Tombol Simpan -->
+        <!-- Tombol Simpan Perubahan (yang lama) -->
         <button id="btnSaveProfile" class="login-btn-submit" onclick="submitUpdateProfile()" style="margin-top: 16px;">
             Simpan Perubahan
         </button>
+
+        <!-- TAMBAHAN: 3 Tombol Ganti Akun -->
+        <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+            <button class="settings-btn" onclick="openChangeUsernameModal()" style="flex: 1; min-width: 100px;">👤 Ganti Username</button>
+            <button class="settings-btn" onclick="openChangePinModal()" style="flex: 1; min-width: 100px;">🔢 Ganti PIN</button>
+            <button class="settings-btn" onclick="openChangePasswordModal()" style="flex: 1; min-width: 100px;">🔒 Ganti Password</button>
+        </div>
         
     </div>
 </div>
@@ -1233,6 +1240,118 @@
         <div class="modal-footer" style="display: flex; gap: 10px; padding: 16px; border-top: 1px solid var(--border-color);">
             <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeEditBotModal()" style="flex: 1;">❌ Batal</button>
             <button class="confirm-modal-btn confirm-modal-btn-save" onclick="saveBotSettings()" style="flex: 1;">✅ Simpan</button>
+        </div>
+    </div>
+</div>
+<!-- MODAL TEMA -->
+<div id="themeModal" class="modal-overlay" onclick="closeThemeModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">🎨 Tampilan & Tema</div>
+            <button class="modal-close" onclick="closeThemeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="settings-group">
+                <div class="settings-group-title">Pilih Tema</div>
+                <div class="settings-theme-row">
+                    <button class="theme-option" data-theme="halloween-dark" onclick="setTheme('halloween-dark'); showToastMini('✅ Tema Dark','success');">🌙 Dark</button>
+                    <button class="theme-option" data-theme="halloween-light" onclick="setTheme('halloween-light'); showToastMini('✅ Tema Light','success');">☀️ Light</button>
+                </div>
+            </div>
+            <div class="settings-group">
+                <div class="settings-group-title">Auto Tema by Jam</div>
+                <button class="settings-btn" onclick="toggleAutoTheme(); closeThemeModal();">Aktifkan / Nonaktifkan Auto Tema</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SISTEM -->
+<div id="systemModal" class="modal-overlay" onclick="closeSystemModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">⚙️ Sistem & Info</div>
+            <button class="modal-close" onclick="closeSystemModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <button class="settings-btn" onclick="checkForUpdate(true)">🔍 Cek Update Aplikasi</button>
+            <button class="settings-btn" style="margin-top:8px;" onclick="openChangeApiKeyModal()">🔑 Ganti API Key (Opsional)</button>
+            <button class="settings-btn settings-btn-danger" style="margin-top:8px;" onclick="resetAllChat(); closeSystemModal();">🗑️ Reset Semua Chat</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL GANTI API KEY -->
+<div id="changeApiKeyModal" class="modal-overlay" onclick="closeChangeApiKeyModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">🔑 Ganti API Key</div>
+            <button class="modal-close" onclick="closeChangeApiKeyModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:12px; margin-bottom:8px; color:var(--text-muted);">API Key disembunyikan di backend. Hanya isi jika lu tau fungsinya.</p>
+            <input type="text" id="newApiKeyInput" class="login-input" placeholder="Masukkan API Key baru...">
+        </div>
+        <div class="modal-footer" style="display:flex; gap:10px; padding:16px;">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeChangeApiKeyModal()" style="flex:1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" onclick="submitChangeApiKey()" style="flex:1;">✅ Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL GANTI PIN -->
+<div id="changePinModal" class="modal-overlay" onclick="closeChangePinModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">🔢 Ganti PIN</div>
+            <button class="modal-close" onclick="closeChangePinModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="login-input-group"><label class="login-input-label">PIN Lama</label><input type="password" id="pinLama" class="login-input" maxlength="6"></div>
+            <div class="login-input-group"><label class="login-input-label">PIN Baru (6 digit)</label><input type="password" id="pinBaru" class="login-input" maxlength="6"></div>
+            <div class="login-input-group"><label class="login-input-label">Konfirmasi PIN Baru</label><input type="password" id="pinKonfirmasi" class="login-input" maxlength="6"></div>
+        </div>
+        <div class="modal-footer" style="display:flex; gap:10px; padding:16px;">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeChangePinModal()" style="flex:1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" id="btnSavePin" onclick="submitChangePin()" style="flex:1;">✅ Simpan PIN</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL GANTI PASSWORD -->
+<div id="changePasswordModal" class="modal-overlay" onclick="closeChangePasswordModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">🔒 Ganti Password</div>
+            <button class="modal-close" onclick="closeChangePasswordModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="login-input-group"><label class="login-input-label">Password Lama</label><input type="password" id="passLama" class="login-input"></div>
+            <div class="login-input-group"><label class="login-input-label">Password Baru (min 6)</label><input type="password" id="passBaru" class="login-input"></div>
+            <div class="login-input-group"><label class="login-input-label">Konfirmasi Password Baru</label><input type="password" id="passKonfirmasi" class="login-input"></div>
+        </div>
+        <div class="modal-footer" style="display:flex; gap:10px; padding:16px;">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeChangePasswordModal()" style="flex:1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" id="btnSavePassword" onclick="submitChangePassword()" style="flex:1;">✅ Simpan Password</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL GANTI USERNAME -->
+<div id="changeUsernameModal" class="modal-overlay" onclick="closeChangeUsernameModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">👤 Ganti Username</div>
+            <button class="modal-close" onclick="closeChangeUsernameModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="login-input-group"><label class="login-input-label">Username Lama</label><input type="text" id="usernameLama" class="login-input" disabled></div>
+            <div class="login-input-group"><label class="login-input-label">Username Baru</label><input type="text" id="usernameBaru" class="login-input" placeholder="Contoh: LGMAS"></div>
+            <div class="login-input-group"><label class="login-input-label">Password Konfirmasi</label><input type="password" id="passwordKonfirmasiUser" class="login-input" placeholder="Masukkan password lu"></div>
+        </div>
+        <div class="modal-footer" style="display:flex; gap:10px; padding:16px;">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeChangeUsernameModal()" style="flex:1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" id="btnSaveUsername" onclick="submitChangeUsername()" style="flex:1;">✅ Simpan Username</button>
         </div>
     </div>
 </div>
