@@ -1,5 +1,5 @@
 """
-Proxy Router — Menyembunyikan API Key dari Frontend (FIXED CORS)
+Proxy Router — Versi Final (FIX CORS + 401)
 """
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, Response
@@ -12,33 +12,43 @@ INTERNAL_BACKEND_URL = os.getenv("INTERNAL_BACKEND_URL", "https://dashboard-so.f
 INTERNAL_API_KEY = os.getenv("SO_API_KEY")
 ALLOWED_PREFIXES = ("yui/", "hana/", "rei/", "kurumi/", "config/", "auth/me", "auth/logout")
 
+# Header CORS yang WAJIB ada di semua balasan
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Credentials": "true",
+}
+
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def proxy_request(path: str, request: Request):
-    # 1. Handle Preflight OPTIONS (Browser nanya dulu sebelum nembak)
+    # 1. Handle Preflight (Browser nanya dulu)
     if request.method == "OPTIONS":
-        return JSONResponse(
-            status_code=200,
-            content={},
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-                "Access-Control-Allow-Headers": "*",
-            }
-        )
+        return Response(status_code=200, headers=CORS_HEADERS)
 
     # 2. Validasi Path
     if not any(path.startswith(p) for p in ALLOWED_PREFIXES):
-        raise HTTPException(status_code=403, detail=f"Path /{path} tidak diizinkan lewat proxy")
+        return JSONResponse(
+            status_code=403,
+            content={"error": f"Path /{path} tidak diizinkan"},
+            headers=CORS_HEADERS
+        )
 
-    # 3. Susun URL Tujuan
+    # 3. Cek API Key Internal
+    if not INTERNAL_API_KEY:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "API Key internal kosong di server"},
+            headers=CORS_HEADERS
+        )
+
+    # 4. Susun URL & Headers
     url = f"{INTERNAL_BACKEND_URL}/api/{path}"
-    
-    # 4. Ambil Header & Body
     body = await request.body()
     auth_header = request.headers.get("Authorization")
     
     headers = {
-        "X-API-Key": INTERNAL_API_KEY or "",
+        "X-API-Key": INTERNAL_API_KEY,
         "Content-Type": request.headers.get("content-type", "application/json"),
     }
     if auth_header:
@@ -56,19 +66,15 @@ async def proxy_request(path: str, request: Request):
                 follow_redirects=True
             )
             
-            # 6. ✅ FIX CORS: Tambahin header CORS manual ke response
+            # 6. Balikin Response + Pastiin Header CORS Ada
             return Response(
                 content=response.content,
                 status_code=response.status_code,
                 media_type=response.headers.get("content-type", "application/json"),
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                    "Access-Control-Allow-Headers": "*",
-                }
+                headers=CORS_HEADERS
             )
         except httpx.TimeoutException:
-            raise HTTPException(status_code=504, detail="Backend timeout")
+            return JSONResponse(status_code=504, content={"error": "Backend timeout"}, headers=CORS_HEADERS)
         except Exception as e:
             print(f"[PROXY ERROR] {type(e).__name__}: {e}")
-            raise HTTPException(status_code=502, detail="Gagal konek ke backend")
+            return JSONResponse(status_code=502, content={"error": "Gagal konek ke backend"}, headers=CORS_HEADERS)
