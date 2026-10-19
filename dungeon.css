@@ -395,7 +395,7 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
     width: 64px !important; 
     height: 64px !important;
     border-radius: 50% !important;
-    background: var(--accent-flame) !important;
+    background-color: var(--accent-flame) !important; /* Ganti jadi background-color */
     color: #fff !important;
     display: flex !important; 
     align-items: center !important; 
