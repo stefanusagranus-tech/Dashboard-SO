@@ -1002,5 +1002,6 @@ async function loadMasterShift() {
 
 function getBadgeClass(kode) { return kode === "P7" ? "shift-badge-p7" : kode === "S15" ? "shift-badge-s15" : kode === "M22" ? "shift-badge-m22" : kode === "CUTI" ? "shift-badge-cuti" : "shift-badge-o"; }
 
+
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
