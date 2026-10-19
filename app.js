@@ -834,5 +834,191 @@ function toggleAutoTheme() {
     const el = document.getElementById("autoThemeValue");
     if (el) el.textContent = autoThemeEnabled ? "Aktif" : "Nonaktif";
 }
+// =========================================================
+// PHASE 3: BROADCAST & ROOM CHAT
+// =========================================================
+
+// --- 1. BROADCAST ---
+function goToBroadcastScreen() {
+    closeSidebar();
+    showScreen("broadcastScreen");
+    loadBroadcastList();
+}
+
+async function loadBroadcastList() {
+    const container = document.getElementById("broadcastList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat...</p></div>`;
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
+        const data = await resp.json();
+        if (!data.success) throw new Error("Gagal load broadcast");
+        
+        if (data.data.length === 0) {
+            container.innerHTML = `<div class="shift-summary-empty"><p>Belum ada broadcast.</p></div>`;
+            return;
+        }
+        
+        container.innerHTML = data.data.map(b => `
+            <div class="settings-card" style="padding: 16px; margin-bottom: 12px;">
+                <div style="font-size: 16px; font-weight: 800; color: var(--accent-flame); margin-bottom: 4px;">${escapeHtml(b.judul)}</div>
+                <div style="font-size: 13px; color: var(--text-bone); line-height: 1.5;">${escapeHtml(b.pesan)}</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">${formatTanggalLong(b.created_at.split('T')[0])}</div>
+            </div>
+        `).join("");
+    } catch (err) {
+        container.innerHTML = `<p style="color:red;">Gagal: ${err.message}</p>`;
+    }
+}
+
+// --- 2. ROOM CHAT ---
+function goToRoomListScreen() {
+    closeSidebar();
+    showScreen("roomListScreen");
+    loadRoomList();
+}
+
+async function loadRoomList() {
+    const container = document.getElementById("roomList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat room...</p></div>`;
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/room/list`, { method: "GET" });
+        const data = await resp.json();
+        if (!data.success) throw new Error("Gagal load room");
+        
+        container.innerHTML = data.data.map(r => `
+            <div class="settings-card" onclick="openRoomChat(${r.id}, '${escapeHtml(r.nama_room)}')" style="padding: 16px; margin-bottom: 12px; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 24px;">👥</div>
+                    <div>
+                        <div style="font-size: 16px; font-weight: 800; color: var(--text-bone);"># ${escapeHtml(r.nama_room)}</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">${escapeHtml(r.deskripsi || "")}</div>
+                    </div>
+                </div>
+            </div>
+        `).join("");
+    } catch (err) {
+        container.innerHTML = `<p style="color:red;">Gagal: ${err.message}</p>`;
+    }
+}
+
+let currentRoomId = null;
+let roomRefreshInterval = null;
+
+async function openRoomChat(roomId, roomName) {
+    currentRoomId = roomId;
+    document.getElementById("roomChatTitle").textContent = `# ${roomName}`;
+    showScreen("roomChatScreen");
+    await loadRoomMessages();
+    
+    if (roomRefreshInterval) clearInterval(roomRefreshInterval);
+    roomRefreshInterval = setInterval(loadRoomMessages, 5000);
+}
+
+async function loadRoomMessages() {
+    if (!currentRoomId) return;
+    const container = document.getElementById("roomMessages"); if (!container) return;
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/room/messages/${currentRoomId}`, { method: "GET" });
+        const data = await resp.json();
+        if (!data.success) throw new Error("Gagal load pesan");
+        
+        const _user = getUser();
+        container.innerHTML = data.data.map(m => {
+            const isMe = m.user_id === _user?.id;
+            const nama = m.users?.nama_lengkap || m.users?.username || "User";
+            return `
+                <div class="chat-message-wrapper ${isMe ? "user" : "ai"}" style="margin-bottom: 8px;">
+                    <div class="chat-avatar ${isMe ? "avatar-user" : ""}">${isMe ? "👤" : "👥"}</div>
+                    <div class="bubble-content ${isMe ? "user" : "ai"}">
+                        <div style="font-size: 10px; color: var(--text-muted); margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">${nama}</div>
+                        <div class="bubble bubble-${isMe ? "user" : "ai"}">${escapeHtml(m.pesan)}</div>
+                        <div class="bubble-time">${formatTime(m.created_at)}</div>
+                    </div>
+                </div>
+            `;
+        }).join("");
+        container.scrollTop = container.scrollHeight;
+    } catch (err) {
+        console.error("Gagal load pesan:", err);
+    }
+}
+
+async function sendRoomMessage() {
+    const input = document.getElementById("roomInput");
+    if (!input || !currentRoomId) return;
+    const text = input.value.trim();
+    if (!text) return;
+    
+    input.value = "";
+    try {
+        await apiFetch(`${CONFIG.BACKEND_URL}/room/send`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ room_id: currentRoomId, pesan: text })
+        });
+        await loadRoomMessages();
+    } catch (err) {
+        showToastMini("❌ Gagal kirim pesan", "error");
+    }
+}
+
+// --- 3. UPDATE MODAL CHAT SELECTION ---
+function openChatSelectionModal() {
+    document.getElementById("chatModeModal").classList.add("active");
+}
+function closeChatModeModal() {
+    document.getElementById("chatModeModal").classList.remove("active");
+}
+function selectChatMode(mode) {
+    closeChatModeModal();
+    if (mode === 'bot') goToChatScreen();
+    else if (mode === 'room') goToRoomListScreen();
+}
+
+// --- 4. UPDATE FOTO BOT DI CHAT ---
+// Cari fungsi renderChatHistory, ganti bagian avatar jadi ini:
+function renderChatHistory() {
+    const container = document.getElementById("chatMessages"); if (!container) return; let history = chatHistories[currentBot] || [];
+    if (history.length === 0) { 
+        container.innerHTML = `<div class="chat-message-wrapper ai"><div class="chat-avatar">${BOTS[currentBot].emoji}</div><div class="bubble-content ai"><div class="bubble bubble-ai bubble-welcome">Halo Bos! 👋<br>Aku <b>${BOTS[currentBot].name}</b>.<br>${getWelcomeText(currentBot)}</div></div></div>`; 
+        return; 
+    }
+    container.innerHTML = ""; let lastDate = "";
+    const _user = getUser(); const userAvatar = _user?.avatar_url ? `background-image: url('${_user.avatar_url}'); background-size: cover; background-position: center; background-color: transparent;` : "";
+    history.forEach((msg, idx) => {
+        const isUser = msg.role === "user";
+        const msgDate = new Date(msg.timestamp || Date.now()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        if (msgDate !== lastDate) { container.innerHTML += `<div class="chat-date-divider"><span>${msgDate}</span></div>`; lastDate = msgDate; }
+        const wrapper = document.createElement("div"); wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
+        const avatar = document.createElement("div"); avatar.className = isUser ? "chat-avatar avatar-user" : "chat-avatar";
+        
+        // ✅ FOTO BOT
+        if (isUser) { 
+            if (_user?.avatar_url) { avatar.style = userAvatar; avatar.textContent = ""; } else avatar.textContent = "👤"; 
+        } else { 
+            const bot = BOTS[currentBot];
+            if (bot.foto) {
+                avatar.style.backgroundImage = `url('${bot.foto}')`;
+                avatar.style.backgroundSize = "cover";
+                avatar.style.backgroundPosition = "center";
+                avatar.style.backgroundColor = "transparent";
+                avatar.textContent = "";
+            } else {
+                avatar.textContent = bot.emoji; 
+            }
+        }
+        
+        const bubbleContent = document.createElement("div"); bubbleContent.className = `bubble-content ${isUser ? "user" : "ai"}`;
+        if (msg.isConfirm && msg.confirmData) { bubbleContent.appendChild(renderConfirmBubble(msg, idx)); } else {
+            const bubble = document.createElement("div"); bubble.className = `bubble bubble-${isUser ? "user" : "ai"}`;
+            if (msg.isSuccess) bubble.classList.add("bubble-success"); else if (msg.isError) bubble.classList.add("bubble-error");
+            if (msg.isSuccess && msg.content.includes("🌸")) bubble.innerHTML = formatSuccessMessage(msg.content); else bubble.innerHTML = formatMessage(msg.content);
+            bubbleContent.appendChild(bubble);
+        }
+        const time = document.createElement("div"); time.className = "bubble-time"; time.textContent = formatTime(msg.timestamp);
+        bubbleContent.appendChild(time); wrapper.appendChild(avatar); wrapper.appendChild(bubbleContent); container.appendChild(wrapper);
+    });
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);

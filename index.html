@@ -226,15 +226,15 @@
     <div class="home-content" style="padding-top: 0; padding-bottom: 100px;">
         <div class="home-cards">
             <button class="home-card" onclick="openChatSelectionModal()">
-                <div class="home-card-icon">📦</div>
-                <div class="home-card-info">
-                    <div class="home-card-title">Chat & Room</div>
-                    <div class="home-card-subtitle">Bot AI atau Room Bersama</div>
-                </div>
-                <div class="home-card-arrow">→</div>
-            </button>
+            <div class="home-card-icon">📦</div>
+            <div class="home-card-info">
+                <div class="home-card-title">Chat & Room</div>
+                <div class="home-card-subtitle">Bot AI atau Room Bersama</div>
+            </div>
+            <div class="home-card-arrow">→</div>
+        </button>
 
-            <button class="home-card" onclick="goToNotificationsScreen()">
+            <button class="home-card" onclick="goToBroadcastScreen()">
                 <div class="home-card-icon">📢</div>
                 <div class="home-card-info">
                     <div class="home-card-title">Broadcast Info</div>
@@ -1355,7 +1355,53 @@
         </div>
     </div>
 </div>
+<!-- ========================================================= -->
+<!-- HALAMAN BROADCAST -->
+<!-- ========================================================= -->
+<div id="broadcastScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">📢 Broadcast Info</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+    <div class="settings-content" style="padding: 16px; overflow-y: auto;">
+        <div id="broadcastList">
+            <div class="loading-state"><div class="spinner"></div><p>Memuat broadcast...</p></div>
+        </div>
+    </div>
+</div>
 
+<!-- ========================================================= -->
+<!-- HALAMAN ROOM LIST -->
+<!-- ========================================================= -->
+<div id="roomListScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToHomeScreen()">←</button>
+        <div class="screen-title">👥 Room Chat</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+    <div class="settings-content" style="padding: 16px; overflow-y: auto;">
+        <div id="roomList">
+            <div class="loading-state"><div class="spinner"></div><p>Memuat room...</p></div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- HALAMAN CHAT ROOM -->
+<!-- ========================================================= -->
+<div id="roomChatScreen" class="screen">
+    <div class="screen-header">
+        <button class="back-btn" onclick="goToRoomListScreen()">←</button>
+        <div class="screen-title" id="roomChatTitle">Room Chat</div>
+        <div class="screen-header-spacer"></div>
+    </div>
+    <div class="chat-messages" id="roomMessages" style="padding: 16px;"></div>
+    <div class="chat-input-area">
+        <textarea id="roomInput" class="chat-input" rows="1" placeholder="Ketik pesan..." onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendRoomMessage();}"></textarea>
+        <button class="chat-send" onclick="sendRoomMessage()">➤</button>
+    </div>
+</div>
 <script src="app.js"></script>
 
 </body>
