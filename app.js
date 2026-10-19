@@ -4630,15 +4630,23 @@ async function uploadAvatar(input) {
     const file = input.files[0];
     if (!file) return;
     
-    // 🔍 DEBUG 1: Cek ukuran file (dalam KB)
+    // 🔍 DEBUG 1: Cek ukuran file
     const fileSizeKB = (file.size / 1024).toFixed(2);
     console.log(`[Upload Avatar] Ukuran file: ${fileSizeKB} KB | Tipe: ${file.type}`);
     
-    // Peringatan kalau file kegedean (misal di atas 2MB)
+    // 1. BATAS MAKSIMAL FILE (2MB)
     if (file.size > 2 * 1024 * 1024) {
         console.warn("[Upload Avatar] ⚠️ File terlalu besar! (> 2MB)");
         showToastMini("⚠️ Foto terlalu besar, maksimal 2MB", "error");
+        input.value = ""; // Reset input biar bisa pilih file lain
         return; // Batalkan upload
+    }
+    
+    // 2. FILTER TIPE FILE (Cuma boleh gambar)
+    if (!file.type.startsWith("image/")) {
+        showToastMini("❌ Format harus berupa gambar (JPG, PNG)", "error");
+        input.value = "";
+        return;
     }
     
     showToastMini("📸 Mengupload foto...", "success");
@@ -4667,7 +4675,7 @@ async function uploadAvatar(input) {
         
         const _user = getUser(); // Ambil data fresh
         
-        // 🔍 DEBUG 4: Cek URL avatar yang tersimpan di localStorage
+        // 🔍 DEBUG 4: Cek URL avatar
         console.log("[Upload Avatar] URL Avatar di localStorage:", _user.avatar_url);
         
         if (!_user.avatar_url) {
@@ -4680,6 +4688,7 @@ async function uploadAvatar(input) {
             // Kasih timestamp biar gak kena cache browser
             const freshUrl = `${_user.avatar_url}?t=${Date.now()}`;
             preview.style.backgroundImage = `url('${freshUrl}')`;
+            preview.style.backgroundColor = "transparent"; // Tambahan biar warna oranye ilang
             preview.textContent = "";
             
             // 🔍 DEBUG 5: Cek style yang diterapkan
@@ -4688,14 +4697,12 @@ async function uploadAvatar(input) {
         
         showToastMini("✅ Foto berhasil diupdate", "success");
         
-        // Opsional: Kalau lu mau langsung balik ke halaman settings
-        // setTimeout(() => goToSettingsScreen(), 1000);
-        
     } catch (err) {
         console.error("[Upload Avatar] ❌ ERROR:", err);
         showToastMini(`❌ ${err.message}`, "error");
     }
 }
+
 
 // =========================================================
 // FITUR PREVIEW FOTO AVATAR

@@ -449,11 +449,66 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
     overflow: hidden;
 }
 
-/* Khusus Preview di Edit Profil (biar lebih besar) */
+/* =========================================================
+   RAPIHIN HALAMAN EDIT PROFIL
+   ========================================================= */
+/* Tarik konten ke atas biar gak terlalu banyak ruang kosong */
+#profileScreen .settings-content {
+    padding-top: 10px !important; 
+}
+
+/* Bikin jarak bawah avatar gak terlalu jauh */
+#profileScreen div[style*="margin-bottom: 24px"] {
+    margin-bottom: 10px !important;
+    margin-top: 10px !important;
+}
+
+/* Ukuran fotonya (cukup pake ini aja, yang 120px dihapus) */
 #editAvatarPreview {
-    width: 120px !important;
-    height: 120px !important;
-    font-size: 36px !important;
+    width: 90px !important;
+    height: 90px !important;
+    font-size: 28px !important;
     border: 2px solid var(--border-stone);
     box-shadow: 0 0 15px rgba(255, 123, 0, 0.3);
+}
+
+/* Teks "Tap foto untuk ganti" dijadiin lebih dekat */
+#profileScreen p[style*="margin-top: 8px"] {
+    margin-top: 6px !important;
+    font-size: 11px !important;
+}
+
+/* =========================================================
+   FIX MODAL PREVIEW FOTO (ZOOM AVATAR)
+   ========================================================= */
+#imagePreviewModal {
+    display: none; 
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.9) !important; 
+    z-index: 99999 !important; 
+    justify-content: center !important;
+    align-items: center !important;
+    backdrop-filter: blur(5px);
+}
+
+#imagePreviewModal.active {
+    display: flex !important; 
+}
+
+#imagePreviewImg {
+    max-width: 90vw !important; 
+    max-height: 80vh !important; 
+    object-fit: contain !important; 
+    border-radius: 12px;
+    box-shadow: 0 0 30px rgba(0,0,0,0.8), 0 0 10px rgba(255, 123, 0, 0.2);
+    animation: zoomInPreview 0.3s ease-out;
+}
+
+@keyframes zoomInPreview {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
 }
