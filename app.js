@@ -1281,6 +1281,47 @@ async function executeConfirmShift() {
         showToastMini(`❌ Gagal: ${err.message}`, "error");
     }
 }
+// =========================================================
+// TAMBALAN: MODAL TEMA & SISTEM
+// =========================================================
+function openThemeModal() {
+    const isDark = document.documentElement.getAttribute("data-theme") === "halloween-dark";
+    const pesan = isDark ? "Mode sekarang: DARK. Ganti ke LIGHT?" : "Mode sekarang: LIGHT. Ganti ke DARK?";
+    if (confirm(pesan)) {
+        toggleTheme();
+        showToastMini("✅ Tema berhasil diubah", "success");
+    }
+}
+
+function openSystemModal() {
+    const aksi = prompt(
+        "Menu Sistem:\n" +
+        "1. Cek Update\n" +
+        "2. Ganti API Key\n" +
+        "3. Reset Semua Chat\n\n" +
+        "Ketik angka (1/2/3):"
+    );
+    
+    if (aksi === "1") checkForUpdate(true);
+    else if (aksi === "2") changeApiKey();
+    else if (aksi === "3") resetAllChat();
+}
+
+function changeApiKey() {
+    const current = getApiKey();
+    const newKey = prompt("Masukkan API Key baru:", current);
+    if (!newKey || newKey.trim() === "") return;
+    localStorage.setItem("so_api_key", newKey.trim());
+    showToastMini("✅ API Key diupdate (Refresh untuk efek)", "success");
+}
+
+function resetAllChat() {
+    if (!confirm("Hapus SEMUA chat dengan 4 bot?")) return;
+    Object.keys(BOTS).forEach(botId => { chatHistories[botId] = []; });
+    saveChatHistories();
+    showToastMini("✅ Semua chat dihapus", "success");
+    if (document.querySelector(".screen.active")?.id === "chatScreen") renderChatHistory();
+}
 
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
