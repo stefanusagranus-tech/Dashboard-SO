@@ -1,5 +1,5 @@
 """
-Dashboard SO C383 — FastAPI Backend (HARDENED v2)
+Dashboard SO C383 — FastAPI Backend (FINAL FIX)
 """
 import os
 from fastapi import FastAPI
@@ -13,30 +13,24 @@ from routers import kurumi, hana, yui, rei, config, auth, proxy
 from middleware.auth import AuthMiddleware
 from middleware.rate_limit import setup_rate_limit
 
-app = FastAPI(
-    title="Dashboard SO C383 API",
-    description="Backend API untuk 4 AI assistant Toko C383",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
+app = FastAPI(title="Dashboard SO C383 API", version="1.0.0", docs_url="/docs")
 
 # =========================================================
-# MIDDLEWARE (URUTAN PENTING!)
+# MIDDLEWARE — URUTAN PALING PENTING!
 # =========================================================
-# 1. CORS — Biarin pake "*" karena Proxy yang jaga
+# 1. CORS harus di paling atas kode (dieksekusi paling akhir)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False, # WAJIB False kalau origins "*"
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
-# 2. Auth Middleware
+
+# 2. Auth middleware
 app.add_middleware(AuthMiddleware)
 
-# 3. Rate Limiting
+# 3. Rate limit
 setup_rate_limit(app)
 
 # =========================================================
@@ -51,38 +45,19 @@ app.include_router(config.router)
 app.include_router(proxy.router, prefix="/api/proxy")
 
 # =========================================================
-# HEALTH & INFO
+# HEALTH
 # =========================================================
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "Dashboard SO C383 API", "version": "1.0.0"}
+    return {"status": "ok", "version": "1.0.0"}
 
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
 
-@app.get("/api/bots")
-async def list_bots():
-    return {"bots": [
-        {"id": "kurumi", "name": "Kurumi", "role": "Chief of Staff", "endpoint": "/api/kurumi/chat"},
-        {"id": "hana", "name": "Hana", "role": "Master Shift", "endpoint": "/api/hana/chat"},
-        {"id": "yui", "name": "Yui", "role": "Data Entry", "endpoint": "/api/yui/chat"},
-        {"id": "rei", "name": "Rei", "role": "Analis SO", "endpoint": "/api/rei/chat"},
-    ]}
-
 # =========================================================
-# GLOBAL ERROR HANDLER (ANTI-BOCOR)
+# GLOBAL ERROR HANDLER (WAJIB ADA CORS)
 # =========================================================
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    print(f"[ERROR] {type(exc).__name__}: {exc}")
-    import traceback
-    traceback.print_exc()
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Terjadi kesalahan internal. Hubungi admin."},
-    )
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     print(f"[ERROR] {type(exc).__name__}: {exc}")
@@ -97,8 +72,3 @@ async def global_exception_handler(request, exc):
             "Access-Control-Allow-Headers": "*",
         }
     )
-
-if __name__ == "__main__":
-    import uvicorn
-    _port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=_port, reload=True)
