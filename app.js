@@ -4630,6 +4630,17 @@ async function uploadAvatar(input) {
     const file = input.files[0];
     if (!file) return;
     
+    // 🔍 DEBUG 1: Cek ukuran file (dalam KB)
+    const fileSizeKB = (file.size / 1024).toFixed(2);
+    console.log(`[Upload Avatar] Ukuran file: ${fileSizeKB} KB | Tipe: ${file.type}`);
+    
+    // Peringatan kalau file kegedean (misal di atas 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        console.warn("[Upload Avatar] ⚠️ File terlalu besar! (> 2MB)");
+        showToastMini("⚠️ Foto terlalu besar, maksimal 2MB", "error");
+        return; // Batalkan upload
+    }
+    
     showToastMini("📸 Mengupload foto...", "success");
     
     try {
@@ -4641,7 +4652,14 @@ async function uploadAvatar(input) {
             body: formData
         });
         
+        // 🔍 DEBUG 2: Cek HTTP Status
+        console.log(`[Upload Avatar] HTTP Status: ${resp.status}`);
+        
         const data = await resp.json();
+        
+        // 🔍 DEBUG 3: Cek response asli dari backend
+        console.log("[Upload Avatar] Response Backend:", data);
+        
         if (!resp.ok) throw new Error(data.detail || "Gagal upload");
         
         // Refresh data & update localStorage
@@ -4649,16 +4667,36 @@ async function uploadAvatar(input) {
         
         const _user = getUser(); // Ambil data fresh
         
+        // 🔍 DEBUG 4: Cek URL avatar yang tersimpan di localStorage
+        console.log("[Upload Avatar] URL Avatar di localStorage:", _user.avatar_url);
+        
+        if (!_user.avatar_url) {
+            throw new Error("Backend tidak mengembalikan URL avatar");
+        }
+        
         // Update preview
         const preview = document.getElementById("editAvatarPreview");
-        preview.style.backgroundImage = `url(${_user.avatar_url})`;
-        preview.textContent = "";
+        if (preview) {
+            // Kasih timestamp biar gak kena cache browser
+            const freshUrl = `${_user.avatar_url}?t=${Date.now()}`;
+            preview.style.backgroundImage = `url('${freshUrl}')`;
+            preview.textContent = "";
+            
+            // 🔍 DEBUG 5: Cek style yang diterapkan
+            console.log("[Upload Avatar] Menerapkan CSS background-image:", preview.style.backgroundImage);
+        }
         
         showToastMini("✅ Foto berhasil diupdate", "success");
+        
+        // Opsional: Kalau lu mau langsung balik ke halaman settings
+        // setTimeout(() => goToSettingsScreen(), 1000);
+        
     } catch (err) {
+        console.error("[Upload Avatar] ❌ ERROR:", err);
         showToastMini(`❌ ${err.message}`, "error");
     }
 }
+
 // =========================================================
 // FITUR PREVIEW FOTO AVATAR
 // =========================================================
