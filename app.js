@@ -675,6 +675,11 @@ function goToHomeScreen() {
                 const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
                 if (elHeader) { elHeader.style.backgroundImage = "none"; elHeader.textContent = inisial; }
                 if (elSlide) { elSlide.style.backgroundImage = "none"; elSlide.textContent = inisial; }
+                if (_user.avatar_url) {
+                    const freshUrl = `${_user.avatar_url}?t=${Date.now()}`;
+                    if (elHeader) { elHeader.style.backgroundImage = `url(${freshUrl})`; elHeader.textContent = ""; }
+                    if (elSlide) { elSlide.style.backgroundImage = `url(${freshUrl})`; elSlide.textContent = ""; }
+                }
             }
         }
     });
@@ -715,8 +720,12 @@ function goToChatScreen() {
     switchBot(currentBot);
 }
 
-function goToSettingsScreen() {
+async function goToSettingsScreen() {
     closeSidebar();
+    
+    // 🔥 TAMBAHKAN INI: Tarik data terbaru dari backend
+    await refreshUserData();
+    
     updateSettingsUserInfo();
     
     // Logic Avatar
@@ -724,17 +733,26 @@ function goToSettingsScreen() {
     if (_user) {
         const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
         const elAvatar = document.getElementById("settingsAvatar");
-        if (elAvatar) elAvatar.textContent = inisial;
+        if (elAvatar) {
+            if (_user.avatar_url) {
+                elAvatar.style.backgroundImage = `url(${_user.avatar_url})`;
+                elAvatar.textContent = "";
+            } else {
+                elAvatar.textContent = inisial;
+                elAvatar.style.backgroundImage = "none";
+            }
+        }
     }
-
+    
     // Tampilkan menu kelola user cuma buat admin
     const _menuAdmin = document.getElementById("menuKelolaUser");
     if (_menuAdmin) {
         _menuAdmin.style.display = (_user && _user.role === "admin") ? "flex" : "none";
     }
-
+    
     showScreen("settingsScreen");
 }
+
 // --- PROFIL ASLI (Ganti Placeholder) ---
 function goToProfileScreen() {
     const _user = getUser();
