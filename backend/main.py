@@ -39,23 +39,22 @@ app = FastAPI(
 # =========================================================
 # MIDDLEWARE
 # =========================================================
-_allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
-
-# 1. CORS dulu
+# 1. CORS HARUS PALING BAWAH (Paling Akhir Dipasang = Paling Awal Dieksekusi)
+# Ini biar semua response, termasuk error 401/500, tetep dapet header CORS.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",          # ← REGEX allow semua origin
-    allow_credentials=True,
+    allow_origins=["*"],          # Pake ini aja buat development
+    allow_credentials=False,      # HARUS False kalau pake allow_origins=["*"]
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
 
-# 2. Auth middleware setelah CORS
+# 2. Auth middleware
 app.add_middleware(AuthMiddleware)
 
 # 3. Rate limiting
-setup_rate_limit(app)                     # ← BARU
+setup_rate_limit(app)                   # ← BARU
 
 
 # =========================================================
