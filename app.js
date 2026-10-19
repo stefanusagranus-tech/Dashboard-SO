@@ -719,7 +719,7 @@ function goToChatScreen() {
 async function goToSettingsScreen() {
     closeSidebar();
     
-    // 🔥 TAMBAHKAN INI: Tarik data terbaru dari backend
+    // Tarik data terbaru dari backend
     await refreshUserData();
     
     updateSettingsUserInfo();
@@ -727,28 +727,25 @@ async function goToSettingsScreen() {
     // Logic Avatar
     const _user = getUser();
     if (_user) {
-        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
-        // Cari di dalam fungsi goToSettingsScreen (bagian Logic Avatar)
-            if (_user) {
-                const elAvatar = document.getElementById("settingsAvatar");
-                if (elAvatar) {
-                    if (_user.avatar_url) {
-                        elAvatar.style.backgroundImage = `url(${_user.avatar_url})`;
-                        elAvatar.textContent = ""; // <--- PASTIKAN BARIS INI ADA
-                    } else {
-                        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
-                        elAvatar.textContent = inisial;
-                        elAvatar.style.backgroundImage = "none";
-                    }
-                }
+        const elAvatar = document.getElementById("settingsAvatar");
+        if (elAvatar) {
+            if (_user.avatar_url) {
+                elAvatar.style.backgroundImage = `url(${_user.avatar_url})`;
+                elAvatar.textContent = "";
+            } else {
+                const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+                elAvatar.textContent = inisial;
+                elAvatar.style.backgroundImage = "none";
             }
-    
+        }
+    }
+
     // Tampilkan menu kelola user cuma buat admin
     const _menuAdmin = document.getElementById("menuKelolaUser");
     if (_menuAdmin) {
         _menuAdmin.style.display = (_user && _user.role === "admin") ? "flex" : "none";
     }
-    
+
     showScreen("settingsScreen");
 }
 
