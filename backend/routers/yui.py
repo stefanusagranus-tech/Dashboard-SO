@@ -1,25 +1,19 @@
 """
-Router Yui — Data Entry (AI-2)
-================================
-Endpoint untuk bot Yui.
+Router Yui — Data Entry (AI-2) v6.0
+=====================================
 Fokus: chat, rekap, list item, top items, save SPD/SO, upload file.
-
-Rewrite v5 — WebView Compatible:
-- Endpoint GET + POST untuk data fetch
-- Proteksi token via require_token / require_operator
+FIX: order_by untuk Top Rak, CORS-safe, error handling aman.
 """
 
 from fastapi import APIRouter, HTTPException, Request, File, UploadFile, Depends
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 import re
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 from middleware.rate_limit import limiter
 from middleware.role import require_token, require_operator
-
-
 
 try:
     from services.ai_so_input import (
@@ -32,6 +26,12 @@ try:
         rekap_so,
         get_top_items,
         get_items_by_rak,
+        get_rak_status,
+        get_spd_list,
+        get_top_rak,
+        get_top_items_extended,
+        get_status_analysis,
+        get_items_by_rak_extended,
     )
     from services.input_handler import save_input_harian
     from services.spd_calculator import save_spd_harian
@@ -54,9 +54,9 @@ class ChatMessage(BaseModel):
     content: str
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., description="Pesan user")
-    session_id: str = Field(..., description="ID session")
-    history: list[ChatMessage] = Field(default_factory=list)
+    message: str
+    session_id: str
+    history: List[ChatMessage] = Field(default_factory=list)
 
 class ChatResponse(BaseModel):
     text: str
@@ -67,18 +67,18 @@ class ChatResponse(BaseModel):
 
 class ParseRequest(BaseModel):
     text: str
-    rak_list: list[str] = Field(default_factory=list)
+    rak_list: List[str] = Field(default_factory=list)
 
 class RekapRequest(BaseModel):
-    mode: str = Field("bulan_ini")
+    mode: str = "bulan_ini"
     tgl_start: Optional[str] = None
     tgl_end: Optional[str] = None
 
 class TopItemsRequest(BaseModel):
-    mode: str = Field("bulan_ini")
+    mode: str = "bulan_ini"
     limit: int = Field(10, ge=1, le=100)
-    only_minus: bool = Field(True)
-    order: str = Field("desc")
+    only_minus: bool = True
+    order: str = "desc"
 
 class SaveSpdRequest(BaseModel):
     tanggal: str
@@ -97,7 +97,7 @@ class SaveSoItem(BaseModel):
 
 class SaveSoRequest(BaseModel):
     tanggal: str
-    items: list[SaveSoItem]
+    items: List[SaveSoItem]
     keterangan: Optional[str] = ""
     pic_default: Optional[str] = ""
 
@@ -119,6 +119,7 @@ class TopRakRequest(BaseModel):
     tgl_start: Optional[str] = None
     tgl_end: Optional[str] = None
     limit: int = Field(500, ge=1, le=1000)
+    order_by: str = "nominal_desc"  # ✅ FIX: Tambah order_by
 
 class ItemsByRakRequest(BaseModel):
     mode: str = "bulan_ini"
@@ -141,7 +142,54 @@ class StatusAnalysisRequest(BaseModel):
 
 
 # =========================================================
-# HEALTH — PUBLIC
+# HELPER FUNCTIONS
+# =========================================================
+_BULAN_MAP = {"januari": 1, "jan": 1, "februari": 2, "feb": 2, "maret": 3, "mar": 3, "april": 4, "apr": 4, "mei": 5, "juni": 6, "jun": 6, "juli": 7, "jul": 7, "agustus": 8, "agu": 8, "ags": 8, "september": 9, "sep": 9, "oktober": 10, "okt": 10, "november": 11, "nov": 11, "desember": 12, "des": 12}
+
+def _extract_nominal(text):
+    _lower = text.lower()
+    _cleaned = re.sub(r'\d{1,2}\s+(januari|jan|februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|ags|september|sep|oktober|okt|november|nov|desember|des)\s*(\d{4})?', ' ', _lower)
+    _cleaned = re.sub(r'\d{4}-\d{1,2}-\d{1,2}', ' ', _cleaned)
+    _cleaned = re.sub(r'\d{1,2}-\d{1,2}-\d{4}', ' ', _cleaned)
+    _cleaned = re.sub(r'\d{1,2}/\d{1,2}/\d{4}', ' ', _cleaned)
+    _matches = re.findall(r'(\d[\d.,]*)\s*(jt|juta|rb|ribu|k)?', _cleaned)
+    if not _matches: return 0
+    _best_nominal = 0
+    for _raw, _suffix in _matches:
+        _raw_clean = _raw.replace(".", "").replace(",", "")
+        try:
+            _nominal = int(_raw_clean)
+            if _suffix in ("jt", "juta"): _nominal *= 1_000_000
+            elif _suffix in ("rb", "ribu", "k"): _nominal *= 1_000
+            if _nominal < 100 or (2020 <= _nominal <= 2099): continue
+            if _nominal > _best_nominal: _best_nominal = _nominal
+        except Exception: continue
+    return _best_nominal
+
+def _extract_tanggal(text):
+    _lower = text.lower()
+    _now = datetime.now(ZoneInfo("Asia/Jakarta"))
+    _match = re.search(r'(\d{1,2})\s+(januari|jan|februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|ags|september|sep|oktober|okt|november|nov|desember|des)\s*(\d{4})?', _lower)
+    if _match:
+        try: return date(int(_match.group(3)) if _match.group(3) else _now.year, _BULAN_MAP.get(_match.group(2), 1), int(_match.group(1))).isoformat()
+        except Exception: pass
+    _match = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', text)
+    if _match:
+        try: return f"{_match.group(1)}-{int(_match.group(2)):02d}-{int(_match.group(3)):02d}"
+        except Exception: pass
+    _match = re.search(r'(\d{1,2})-(\d{1,2})-(\d{4})', text)
+    if _match:
+        try: return f"{_match.group(3)}-{int(_match.group(2)):02d}-{int(_match.group(1)):02d}"
+        except Exception: pass
+    _match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', text)
+    if _match:
+        try: return f"{_match.group(3)}-{int(_match.group(2)):02d}-{int(_match.group(1)):02d}"
+        except Exception: pass
+    return None
+
+
+# =========================================================
+# HEALTH
 # =========================================================
 @router.get("/health")
 async def yui_health():
@@ -149,7 +197,7 @@ async def yui_health():
 
 
 # =========================================================
-# CHAT (POST)
+# CHAT
 # =========================================================
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
@@ -195,7 +243,7 @@ async def yui_chat_endpoint(request: Request, req: ChatRequest, user: dict = Dep
 
 
 # =========================================================
-# PARSE (POST)
+# PARSE
 # =========================================================
 @router.post("/parse")
 @limiter.limit("30/minute")
@@ -208,51 +256,8 @@ async def yui_parse_endpoint(request: Request, req: ParseRequest, user: dict = D
 
 
 # =========================================================
-# PARSE SPD (POST)
+# PARSE SPD
 # =========================================================
-_BULAN_MAP = {"januari": 1, "jan": 1, "februari": 2, "feb": 2, "maret": 3, "mar": 3, "april": 4, "apr": 4, "mei": 5, "juni": 6, "jun": 6, "juli": 7, "jul": 7, "agustus": 8, "agu": 8, "ags": 8, "september": 9, "sep": 9, "oktober": 10, "okt": 10, "november": 11, "nov": 11, "desember": 12, "des": 12}
-
-def _extract_nominal(text):
-    _lower = text.lower()
-    _cleaned = re.sub(r'\d{1,2}\s+(januari|jan|februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|ags|september|sep|oktober|okt|november|nov|desember|des)\s*(\d{4})?', ' ', _lower)
-    _cleaned = re.sub(r'\d{4}-\d{1,2}-\d{1,2}', ' ', _cleaned)
-    _cleaned = re.sub(r'\d{1,2}-\d{1,2}-\d{4}', ' ', _cleaned)
-    _cleaned = re.sub(r'\d{1,2}/\d{1,2}/\d{4}', ' ', _cleaned)
-    _matches = re.findall(r'(\d[\d.,]*)\s*(jt|juta|rb|ribu|k)?', _cleaned)
-    if not _matches: return 0
-    _best_nominal = 0
-    for _raw, _suffix in _matches:
-        _raw_clean = _raw.replace(".", "").replace(",", "")
-        try:
-            _nominal = int(_raw_clean)
-            if _suffix in ("jt", "juta"): _nominal *= 1_000_000
-            elif _suffix in ("rb", "ribu", "k"): _nominal *= 1_000
-            if _nominal < 100 or (2020 <= _nominal <= 2099): continue
-            if _nominal > _best_nominal: _best_nominal = _nominal
-        except Exception: continue
-    return _best_nominal
-
-def _extract_tanggal(text):
-    _lower = text.lower()
-    _now = datetime.now(ZoneInfo("Asia/Jakarta"))
-    _match = re.search(r'(\d{1,2})\s+(januari|jan|februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|ags|september|sep|oktober|okt|november|nov|desember|des)\s*(\d{4})?', _lower)
-    if _match:
-        try: return date(int(_match.group(3)) if _match.group(3) else _now.year, _BULAN_MAP.get(_match.group(2), 1), int(_match.group(1))).isoformat()
-        except Exception: pass
-    _match = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', text)
-    if _match:
-        try: return f"{_match.group(1)}-{int(_match.group(2)):02d}-{int(_match.group(3)):02d}"
-        except Exception: pass
-    _match = re.search(r'(\d{1,2})-(\d{1,2})-(\d{4})', text)
-    if _match:
-        try: return f"{_match.group(3)}-{int(_match.group(2)):02d}-{int(_match.group(1)):02d}"
-        except Exception: pass
-    _match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', text)
-    if _match:
-        try: return f"{_match.group(3)}-{int(_match.group(2)):02d}-{int(_match.group(1)):02d}"
-        except Exception: pass
-    return None
-
 @router.post("/parse-spd")
 @limiter.limit("30/minute")
 async def yui_parse_spd_endpoint(request: Request, req: ParseSpdRequest, user: dict = Depends(require_token)):
@@ -266,7 +271,7 @@ async def yui_parse_spd_endpoint(request: Request, req: ParseSpdRequest, user: d
 
 
 # =========================================================
-# SAVE SPD & SAVE SO (POST)
+# SAVE SPD & SAVE SO
 # =========================================================
 @router.post("/save-spd")
 @limiter.limit("20/minute")
@@ -306,7 +311,7 @@ async def yui_save_so_endpoint(request: Request, req: SaveSoRequest, user: dict 
 
 
 # =========================================================
-# UPLOAD SO (POST)
+# UPLOAD SO
 # =========================================================
 @router.post("/upload-so")
 @limiter.limit("10/minute")
@@ -339,7 +344,7 @@ async def yui_upload_so_endpoint(request: Request, file: UploadFile = File(...),
 
 
 # =========================================================
-# DATA FETCH (GET & POST) — Buat WebView & Streamlit
+# DATA FETCH — GET & POST
 # =========================================================
 @router.api_route("/rekap", methods=["GET", "POST"])
 @limiter.limit("30/minute")
@@ -361,9 +366,9 @@ async def yui_rekap_endpoint(request: Request, user: dict = Depends(require_toke
 async def yui_rak_status_endpoint(request: Request, user: dict = Depends(require_token), mode: str = "bulan_ini", tgl_start: Optional[str] = None, tgl_end: Optional[str] = None, req: Optional[RakStatusRequest] = None):
     if not _YUI_OK: raise HTTPException(503, f"Yui error: {_import_error}")
     try:
-        from services.yui_rekap import get_rak_status
         _mode = req.mode if req else mode
-        _st, _en = (datetime.strptime(req.tgl_start if req else tgl_start, "%Y-%m-%d").date() if (req.tgl_start if req else tgl_start) else None), (datetime.strptime(req.tgl_end if req else tgl_end, "%Y-%m-%d").date() if (req.tgl_end if req else tgl_end) else None)
+        _st = (datetime.strptime(req.tgl_start if req else tgl_start, "%Y-%m-%d").date() if (req.tgl_start if req else tgl_start) else None)
+        _en = (datetime.strptime(req.tgl_end if req else tgl_end, "%Y-%m-%d").date() if (req.tgl_end if req else tgl_end) else None)
         _hasil = get_rak_status(mode=_mode, tgl_start=_st, tgl_end=_en)
         if not _hasil.get("success"): raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
@@ -375,9 +380,9 @@ async def yui_rak_status_endpoint(request: Request, user: dict = Depends(require
 async def yui_spd_list_endpoint(request: Request, user: dict = Depends(require_token), mode: str = "bulan_ini", tgl_start: Optional[str] = None, tgl_end: Optional[str] = None, req: Optional[SpdListRequest] = None):
     if not _YUI_OK: raise HTTPException(503, f"Yui error: {_import_error}")
     try:
-        from services.yui_rekap import get_spd_list
         _mode = req.mode if req else mode
-        _st, _en = (datetime.strptime(req.tgl_start if req else tgl_start, "%Y-%m-%d").date() if (req.tgl_start if req else tgl_start) else None), (datetime.strptime(req.tgl_end if req else tgl_end, "%Y-%m-%d").date() if (req.tgl_end if req else tgl_end) else None)
+        _st = (datetime.strptime(req.tgl_start if req else tgl_start, "%Y-%m-%d").date() if (req.tgl_start if req else tgl_start) else None)
+        _en = (datetime.strptime(req.tgl_end if req else tgl_end, "%Y-%m-%d").date() if (req.tgl_end if req else tgl_end) else None)
         _hasil = get_spd_list(mode=_mode, tgl_start=_st, tgl_end=_en)
         if not _hasil.get("success"): raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
@@ -386,14 +391,24 @@ async def yui_spd_list_endpoint(request: Request, user: dict = Depends(require_t
 
 @router.api_route("/top-rak", methods=["GET", "POST"])
 @limiter.limit("30/minute")
-async def yui_top_rak_endpoint(request: Request, user: dict = Depends(require_token), mode: str = "bulan_ini", tgl_start: Optional[str] = None, tgl_end: Optional[str] = None, limit: int = 500, req: Optional[TopRakRequest] = None):
+async def yui_top_rak_endpoint(
+    request: Request,
+    user: dict = Depends(require_token),
+    mode: str = "bulan_ini",
+    tgl_start: Optional[str] = None,
+    tgl_end: Optional[str] = None,
+    limit: int = 500,
+    order_by: str = "nominal_desc",
+    req: Optional[TopRakRequest] = None,
+):
     if not _YUI_OK: raise HTTPException(503, f"Yui error: {_import_error}")
     try:
-        from services.yui_rekap import get_top_rak
         _mode = req.mode if req else mode
-        _st, _en = (datetime.strptime(req.tgl_start if req else tgl_start, "%Y-%m-%d").date() if (req.tgl_start if req else tgl_start) else None), (datetime.strptime(req.tgl_end if req else tgl_end, "%Y-%m-%d").date() if (req.tgl_end if req else tgl_end) else None)
+        _st = (datetime.strptime(req.tgl_start if req else tgl_start, "%Y-%m-%d").date() if (req.tgl_start if req else tgl_start) else None)
+        _en = (datetime.strptime(req.tgl_end if req else tgl_end, "%Y-%m-%d").date() if (req.tgl_end if req else tgl_end) else None)
         _limit = req.limit if req else limit
-        _hasil = get_top_rak(mode=_mode, tgl_start=_st, tgl_end=_en, limit=_limit)
+        _order_by = req.order_by if req else order_by
+        _hasil = get_top_rak(mode=_mode, tgl_start=_st, tgl_end=_en, limit=_limit, order_by=_order_by)
         if not _hasil.get("success"): raise HTTPException(500, _hasil.get("error", "Gagal"))
         return _hasil
     except HTTPException: raise
@@ -404,7 +419,6 @@ async def yui_top_rak_endpoint(request: Request, user: dict = Depends(require_to
 async def yui_top_items_extended_endpoint(request: Request, user: dict = Depends(require_token), mode: str = "bulan_ini", limit: Optional[int] = None, search: str = "", order_by: str = "nominal_desc", sign: str = "minus", req: Optional[TopItemsExtendedRequest] = None):
     if not _YUI_OK: raise HTTPException(503, f"Yui error: {_import_error}")
     try:
-        from services.yui_rekap import get_top_items_extended
         _mode = req.mode if req else mode
         _limit = req.limit if req else limit
         _search = req.search if req else search
@@ -421,7 +435,6 @@ async def yui_top_items_extended_endpoint(request: Request, user: dict = Depends
 async def yui_status_analysis_endpoint(request: Request, user: dict = Depends(require_token), mode: str = "bulan_ini", req: Optional[StatusAnalysisRequest] = None):
     if not _YUI_OK: raise HTTPException(503, f"Yui error: {_import_error}")
     try:
-        from services.yui_rekap import get_status_analysis
         _mode = req.mode if req else mode
         _hasil = get_status_analysis(mode=_mode)
         if not _hasil.get("success"): raise HTTPException(500, _hasil.get("error", "Gagal"))
@@ -434,7 +447,6 @@ async def yui_status_analysis_endpoint(request: Request, user: dict = Depends(re
 async def yui_items_by_rak_endpoint(request: Request, rak_id: str, user: dict = Depends(require_token), mode: str = "bulan_ini", req: Optional[ItemsByRakRequest] = None):
     if not _YUI_OK: raise HTTPException(503, f"Yui error: {_import_error}")
     try:
-        from services.yui_rekap import get_items_by_rak_extended
         _mode = req.mode if req else mode
         _hasil = get_items_by_rak_extended(rak_id=rak_id, mode=_mode)
         if not _hasil.get("success"): raise HTTPException(500, _hasil.get("error", "Gagal"))

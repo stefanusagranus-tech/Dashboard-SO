@@ -333,72 +333,102 @@ def cek_rak_belum_so(tanggal=None):
 # =========================================================
 # TOP ITEMS
 # =========================================================
-def get_top_items(
-    tgl_start=None, tgl_end=None, mode="bulan_ini",
-    limit=10, order="desc", only_minus=True,
-    pic_filter=None, rak_filter=None,
-):
+def get_top_rak(mode="bulan_ini", tgl_start=None, tgl_end=None, limit=500, order_by="nominal_desc"):
+    """Ranking rak by nominal_adjust atau tanggal_so."""
     try:
         _sb = _get_supabase_safe()
         if _sb is None:
-            return {"success": False, "error": "Supabase gak konek", "items": []}
+            return {"success": False, "error": "Supabase gak konek"}
 
         if mode == "custom" and tgl_start and tgl_end:
-            _start, _end = tgl_start, tgl_end
+            _start_str = tgl_start.isoformat() if isinstance(tgl_start, (date, datetime)) else str(tgl_start)[:10]
+            _end_str = tgl_end.isoformat() if isinstance(tgl_end, (date, datetime)) else str(tgl_end)[:10]
         else:
             _start, _end = get_periode_range(mode)
+            _start_str = _start.isoformat()[:10]
+            _end_str = _end.isoformat()[:10]
 
-        _start_str = _start.isoformat()[:10] if isinstance(_start, (date, datetime)) else str(_start)[:10]
-        _end_str = _end.isoformat()[:10] if isinstance(_end, (date, datetime)) else str(_end)[:10]
-
-        _q = (
-            _sb.table("so_hasil")
-            .select("plu, nama_produk, rak_id, qty_var, nominal_adjust, pic, so_date")
+        _res = (
+            _sb.table("so_rak_harian")
+            .select("rak_id, so_date, nominal_adjust, pic")
             .gte("so_date", _start_str)
             .lte("so_date", _end_str)
+            .execute()
         )
+        _rows = _res.data if _res.data else []
 
-        # === FILTER MINUS / PLUS (by nominal, bukan qty) ===
-        if only_minus:
-            _q = _q.lt("nominal_adjust", 0)     # minus doang
-        else:
-            _q = _q.gt("nominal_adjust", 0)     # plus doang
+        _rak_map = {}
+        for r in _rows:
+            _rid = r.get("rak_id")
+            if not _rid:
+                continue
+            _nom = float(r.get("nominal_adjust") or 0)
+            if _rid not in _rak_map:
+                _rak_map[_rid] = {
+                    "rak_id": _rid,
+                    "nominal_adjust": _nom,
+                    "tgl_so": r.get("so_date"),
+                    "pic": r.get("pic") or "-",
+                    "total_item": 0,
+                }
+            else:
+                _rak_map[_rid]["nominal_adjust"] += _nom
+                if r.get("so_date") and (not _rak_map[_rid]["tgl_so"] or r["so_date"] > _rak_map[_rid]["tgl_so"]):
+                    _rak_map[_rid]["tgl_so"] = r["so_date"]
 
-        if pic_filter:
-            _q = _q.eq("pic", pic_filter.upper())
-        if rak_filter:
-            _q = _q.eq("rak_id", rak_filter.upper())
+        # ✅ HITUNG total_item dari so_hasil
+        if _rak_map:
+            _rak_ids = list(_rak_map.keys())
+            try:
+                _res_items = (
+                    _sb.table("so_hasil")
+                    .select("rak_id")
+                    .in_("rak_id", _rak_ids)
+                    .gte("so_date", _start_str)
+                    .lte("so_date", _end_str)
+                    .execute()
+                )
+                _item_rows = _res_items.data if _res_items.data else []
+                
+                from collections import Counter
+                _item_count = Counter(r["rak_id"] for r in _item_rows if r.get("rak_id"))
+                
+                for _rid in _rak_map:
+                    _rak_map[_rid]["total_item"] = _item_count.get(_rid, 0)
+                    
+                print(f"[TOP_RAK] Counted items for {len(_rak_ids)} rak, total {len(_item_rows)} items")
+            except Exception as _e:
+                print(f"[TOP_RAK] Gagal hitung total_item: {_e}")
 
-        _q = _q.limit(2000)
-        _res = _q.execute()
-        _items = _res.data if _res.data else []
+        _list_rak = list(_rak_map.values())
+        
+        # ✅ FIX: Sort berdasarkan order_by yang dikirim
+        if order_by == "tanggal_asc":
+            _list_rak.sort(key=lambda x: (x.get("tgl_so") or "", x["nominal_adjust"]))
+        elif order_by == "tanggal_desc":
+            _list_rak.sort(key=lambda x: (x.get("tgl_so") or "", x["nominal_adjust"]), reverse=True)
+        elif order_by == "nominal_asc":
+            _list_rak.sort(key=lambda x: x["nominal_adjust"])
+        else:  # nominal_desc (default)
+            _list_rak.sort(key=lambda x: x["nominal_adjust"])
+        
+        if limit:
+            _list_rak = _list_rak[:limit]
 
-        for _it in _items:
-            _it["qty_var"] = int(_it.get("qty_var") or 0)
-            _it["nominal_adjust"] = float(_it.get("nominal_adjust") or 0)
-
-        if only_minus:
-            _items.sort(key=lambda x: x["nominal_adjust"])
-        else:
-            _items.sort(key=lambda x: x["nominal_adjust"], reverse=True)
-
-        _items = _items[:limit]
+        _total_nominal = sum(x["nominal_adjust"] for x in _list_rak)
 
         return {
             "success": True,
             "periode": f"{_start_str} s/d {_end_str}",
-            "tgl_start": _start_str,
-            "tgl_end": _end_str,
-            "items": _items,
-            "total_item": len(_items),
-            "total_nominal": sum(_it["nominal_adjust"] for _it in _items),
+            "total_rak": len(_list_rak),
+            "total_nominal": _total_nominal,
+            "list_rak": _list_rak,
         }
     except Exception as e:
-        print(f"[GET_TOP_ITEMS ERROR] {e}")
+        print(f"[GET_TOP_RAK ERROR] {e}")
         import traceback
         print(traceback.format_exc())
-        return {"success": False, "error": str(e)[:200], "items": []}
-
+        return {"success": False, "error": str(e)[:200], "list_rak": []}
 
 # =========================================================
 # GET ITEMS BY RAK
