@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
+from routers import proxy
 
 # Load env
 load_dotenv()
@@ -66,6 +67,7 @@ app.include_router(hana.router)
 app.include_router(yui.router)
 app.include_router(rei.router)
 app.include_router(config.router)
+app.include_router(proxy.router, prefix="/api/proxy")
 
 # =========================================================
 # HEALTH & INFO
