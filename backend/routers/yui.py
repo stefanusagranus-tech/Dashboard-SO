@@ -25,7 +25,7 @@ try:
     from services.yui_rekap import (
         rekap_so,
         get_top_items,           # ← Baru gue tambahin
-        get_items_by_rak,        # ← PASTIIN ADA
+        #get_items_by_rak,        # ← PASTIIN ADA
         get_rak_status,          # ← PASTIIN ADA
         get_spd_list,            # ← PASTIIN ADA
         get_top_rak,             # ← PASTIIN ADA
