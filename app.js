@@ -668,8 +668,9 @@ function goToHomeScreen() {
             const elHeader = document.getElementById("homeAvatar");
             const elSlide = document.getElementById("slideHomeAvatar");
             
+            // Cari di dalam fungsi goToHomeScreen
             if (_user.avatar_url) {
-                if (elHeader) { elHeader.style.backgroundImage = `url(${_user.avatar_url})`; elHeader.textContent = ""; }
+                if (elHeader) { elHeader.style.backgroundImage = `url(${_user.avatar_url})`; elHeader.textContent = ""; } // <--- Tambahin .textContent = ""
                 if (elSlide) { elSlide.style.backgroundImage = `url(${_user.avatar_url})`; elSlide.textContent = ""; }
             } else {
                 const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
@@ -732,17 +733,20 @@ async function goToSettingsScreen() {
     const _user = getUser();
     if (_user) {
         const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
-        const elAvatar = document.getElementById("settingsAvatar");
-        if (elAvatar) {
-            if (_user.avatar_url) {
-                elAvatar.style.backgroundImage = `url(${_user.avatar_url})`;
-                elAvatar.textContent = "";
-            } else {
-                elAvatar.textContent = inisial;
-                elAvatar.style.backgroundImage = "none";
+        // Cari di dalam fungsi goToSettingsScreen (bagian Logic Avatar)
+            if (_user) {
+                const elAvatar = document.getElementById("settingsAvatar");
+                if (elAvatar) {
+                    if (_user.avatar_url) {
+                        elAvatar.style.backgroundImage = `url(${_user.avatar_url})`;
+                        elAvatar.textContent = ""; // <--- PASTIKAN BARIS INI ADA
+                    } else {
+                        const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
+                        elAvatar.textContent = inisial;
+                        elAvatar.style.backgroundImage = "none";
+                    }
+                }
             }
-        }
-    }
     
     // Tampilkan menu kelola user cuma buat admin
     const _menuAdmin = document.getElementById("menuKelolaUser");
@@ -761,11 +765,11 @@ function goToProfileScreen() {
     // Isi form dengan data sekarang
     document.getElementById("editNamaLengkap").value = _user.nama_lengkap || "";
     
-    // Set avatar preview
+    // Cari di dalam fungsi goToProfileScreen
     const preview = document.getElementById("editAvatarPreview");
     if (_user.avatar_url) {
         preview.style.backgroundImage = `url(${_user.avatar_url})`;
-        preview.textContent = "";
+        preview.textContent = ""; // <--- PASTIKAN BARIS INI ADA
     } else {
         const inisial = (_user.nama_lengkap || _user.username || "?").substring(0, 2).toUpperCase();
         preview.textContent = inisial;
@@ -4713,7 +4717,24 @@ async function uploadAvatar(input) {
         showToastMini(`❌ ${err.message}`, "error");
     }
 }
+// =========================================================
+// FITUR PREVIEW FOTO AVATAR
+// =========================================================
+function openImagePreview(url) {
+    if (!url) return; // Kalau gak ada foto, gak usah ngapa-ngapain
+    const modal = document.getElementById("imagePreviewModal");
+    const img = document.getElementById("imagePreviewImg");
+    
+    if (modal && img) {
+        img.src = url;
+        modal.classList.add("active");
+    }
+}
 
+function closeImagePreview() {
+    const modal = document.getElementById("imagePreviewModal");
+    if (modal) modal.classList.remove("active");
+}
 // =========================================================
 // BOOT
 // =========================================================

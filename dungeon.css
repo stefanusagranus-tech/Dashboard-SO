@@ -432,3 +432,28 @@ h1, h2, h3, .screen-title, .login-title, .modal-title, .clock-time {
     grid-column: span 2;
     overflow-y: auto;
 }
+/* =========================================================
+   FIX AVATAR (Gambar Proporsional & Gak Kepotong)
+   ========================================================= */
+
+/* Untuk semua avatar (Header, Slide, Settings, Edit) */
+.profile-avatar-large, 
+.header-avatar, 
+.profile-avatar {
+    background-size: cover !important; /* Gambar penuhi bulatan */
+    background-position: center !important; /* Posisi tengah */
+    background-repeat: no-repeat !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+/* Khusus Preview di Edit Profil (biar lebih besar) */
+#editAvatarPreview {
+    width: 120px !important;
+    height: 120px !important;
+    font-size: 36px !important;
+    border: 2px solid var(--border-stone);
+    box-shadow: 0 0 15px rgba(255, 123, 0, 0.3);
+}
