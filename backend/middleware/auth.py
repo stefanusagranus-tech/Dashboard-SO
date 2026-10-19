@@ -16,7 +16,7 @@ PUBLIC_PATHS = {
     "/api/bots", "/api/config", "/api/config/",
     # AUTH
     "/api/auth/setup", "/api/auth/login", "/api/auth/verify-pin",
-    "/api/auth/forgot-pin", "/api/auth/logout",
+    "/api/auth/forgot-pin", "/api/auth/logout","/api/auth/register"
     # HEALTH SETIAP BOT
     "/api/yui/health", "/api/hana/health", "/api/rei/health", "/api/kurumi/health",
 }
