@@ -1,6 +1,6 @@
 /* =========================================================
-   DASHBOARD SO C383 — APP LOGIC v7.0 (MASTERPIECE)
-   Fitur: 100% Lengkap | Zero Duplication | Optimized Lazy-Load
+   DASHBOARD SO C383 — APP LOGIC v8.0 (THE ULTIMATE EDITION)
+   Fitur: 100% Lengkap | Zero Duplication | No Missing Functions
    ========================================================= */
 
 // =========================================================
@@ -26,7 +26,7 @@ const AUTH_KEYS = {
 };
 
 // =========================================================
-// 2. STATE & CACHE GLOBAL (Mencegah API Numpuk)
+// 2. STATE & CACHE GLOBAL
 // =========================================================
 const AppCache = { user: null, rekap: null, shiftHariIni: null, personil: null };
 
@@ -143,7 +143,7 @@ function hideSplashScreen() {
 }
 
 // =========================================================
-// 5. AUTH LOGIC
+// 5. AUTH LOGIC (Login, PIN, Logout)
 // =========================================================
 function bindLoginForm() {
     const btnSubmit = document.getElementById("loginBtnSubmit"), inputUser = document.getElementById("loginUsername"), inputPass = document.getElementById("loginPassword");
@@ -311,7 +311,6 @@ function stopDashboardAutoRefresh() {
 function loadHomeDataLazy() {
     if (!AppCache.user) loadUserDataIfNeeded();
     if (!AppCache.rekap) loadMiniDashboard();
-    // Jadwal ditarik pas geser carousel aja (ada di event listener)
 }
 
 async function loadUserDataIfNeeded() {
@@ -415,7 +414,7 @@ function goToSlide(index) {
 }
 
 // =========================================================
-// 9. DATA FETCHING LAINNYA (SHIFT, RAK, SPD, TOP, STATUS)
+// 9. DATA FETCHING LAINNYA (SHIFT, RAK, SPD, TOP)
 // =========================================================
 async function loadShiftDataLazy() {
     if (!AppCache.personil) {
@@ -702,7 +701,283 @@ async function confirmSaveSpd() {
 }
 
 // =========================================================
-// 16. UTILITIES (THEME, CLOCK, MODAL, BACK BUTTON)
+// 16. TAMPILAN HALAMAN & FILTER (YANG HILANG SEBELUMNYA)
+// =========================================================
+function setShiftPeriod(period) {
+    shiftPeriod = period;
+    document.querySelectorAll(".filter-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("customDateRow");
+    if (customRow) { if (period === "custom") customRow.classList.remove("hidden"); else customRow.classList.add("hidden"); }
+    loadMasterShift();
+}
+
+function setRakFilter(filter) {
+    rakFilterCurrent = filter;
+    document.querySelectorAll(".rak-filter-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-filter") === filter));
+    renderRakList();
+}
+function filterRakList() {
+    const input = document.getElementById("rakSearchInput"), clearBtn = document.getElementById("rakSearchClear"); if (!input) return;
+    rakSearchQuery = input.value.trim().toLowerCase();
+    if (clearBtn) { if (rakSearchQuery) clearBtn.classList.remove("hidden"); else clearBtn.classList.add("hidden"); }
+    renderRakList();
+}
+function clearRakSearch() { const input = document.getElementById("rakSearchInput"); if (input) input.value = ""; rakSearchQuery = ""; const clearBtn = document.getElementById("rakSearchClear"); if (clearBtn) clearBtn.classList.add("hidden"); renderRakList(); }
+
+function setSpdPeriod(period) {
+    spdPeriodCurrent = period;
+    document.querySelectorAll("#spdListScreen .spd-period-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("spdCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd"), today = new Date();
+            if (s && !s.value) s.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+            if (e && !e.value) e.value = today.toISOString().slice(0, 10);
+        } else customRow.classList.add("hidden");
+    }
+    loadSpdList();
+}
+function setSpdSort(sortValue) {
+    spdSortValue = sortValue;
+    document.querySelectorAll("#spdListScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
+    loadSpdList();
+}
+
+function setTopPeriod(period) {
+    topPeriodCurrent = period;
+    document.querySelectorAll("#topMinusScreen .spd-period-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("topCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("topCustomStart"), e = document.getElementById("topCustomEnd"), today = new Date();
+            if (s && !s.value) s.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+            if (e && !e.value) e.value = today.toISOString().slice(0, 10);
+        } else customRow.classList.add("hidden");
+    }
+    loadTopMinus();
+}
+function setTopTab(tab) {
+    topTabCurrent = tab;
+    document.querySelectorAll(".top-subtab").forEach(t => t.classList.toggle("active", t.getAttribute("data-tab") === tab));
+    const searchWrapper = document.getElementById("topSearchWrapper"), filterSign = document.getElementById("topFilterSign");
+    if (searchWrapper) { if (tab === "item") searchWrapper.classList.remove("hidden"); else searchWrapper.classList.add("hidden"); }
+    if (filterSign) { if (tab === "item") filterSign.classList.remove("hidden"); else filterSign.classList.add("hidden"); }
+    topSearchQuery = ""; const searchInput = document.getElementById("topSearchInput"); if (searchInput) searchInput.value = "";
+    loadTopMinus();
+}
+function setTopSign(sign) {
+    topSignCurrent = sign;
+    document.querySelectorAll(".top-filter-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sign") === sign));
+    loadTopMinus();
+}
+function setTopSort(sortValue) {
+    topSortValue = sortValue;
+    document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
+    loadTopMinus();
+}
+function searchTopItems() {
+    const input = document.getElementById("topSearchInput"), clearBtn = document.getElementById("topSearchClear"); if (!input) return;
+    topSearchQuery = input.value.trim();
+    if (clearBtn) { if (topSearchQuery) clearBtn.classList.remove("hidden"); else clearBtn.classList.add("hidden"); }
+    clearTimeout(topSearchTimeout); topSearchTimeout = setTimeout(() => { loadTopMinus(); }, 500);
+}
+function clearTopSearch() { const input = document.getElementById("topSearchInput"); if (input) input.value = ""; topSearchQuery = ""; const clearBtn = document.getElementById("topSearchClear"); if (clearBtn) clearBtn.classList.add("hidden"); loadTopMinus(); }
+
+function setStatusPeriod(period) {
+    statusPeriodCurrent = period;
+    document.querySelectorAll("#statusScreen .spd-period-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("statusCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("statusCustomStart"), e = document.getElementById("statusCustomEnd"), today = new Date();
+            if (s && !s.value) s.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+            if (e && !e.value) e.value = today.toISOString().slice(0, 10);
+        } else customRow.classList.add("hidden");
+    }
+    loadStatusAnalysis();
+}
+
+// =========================================================
+// 17. LOAD DATA (RAK, SPD, TOP, STATUS)
+// =========================================================
+async function loadRakList() {
+    const container = document.getElementById("rakList");
+    if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data rak...</p></div>`;
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bulan_ini" }) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || "Gagal load data rak");
+        rakListData = data.list_rak || [];
+        if (document.getElementById("rakSummaryTotal")) document.getElementById("rakSummaryTotal").textContent = data.total_rak;
+        if (document.getElementById("rakSummarySudah")) document.getElementById("rakSummarySudah").textContent = data.sudah_so;
+        if (document.getElementById("rakSummaryBelum")) document.getElementById("rakSummaryBelum").textContent = data.belum_so;
+        renderRakList();
+    } catch (err) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; }
+}
+function renderRakList() {
+    const container = document.getElementById("rakList"); if (!container) return;
+    let filtered = rakListData || [];
+    if (rakFilterCurrent === "sudah") filtered = filtered.filter(r => r.status === "SUDAH");
+    else if (rakFilterCurrent === "belum") filtered = filtered.filter(r => r.status === "BELUM");
+    if (rakSearchQuery) filtered = filtered.filter(r => (r.rak_id || "").toLowerCase().includes(rakSearchQuery) || (r.pic || "").toLowerCase().includes(rakSearchQuery));
+    if (filtered.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">🔍</span><p>Tidak ada rak yang cocok</p></div>`; return; }
+    container.innerHTML = filtered.map(rak => {
+        if (rak.status === "SUDAH") {
+            const nominalText = formatRupiahFull(rak.nominal);
+            const nominalClass = rak.nominal < 0 ? "rak-nominal-minus" : "rak-nominal-plus";
+            const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
+            return `<div class="rak-card rak-card-sudah"><div class="rak-card-header"><span class="rak-card-badge rak-badge-sudah">✅</span><span class="rak-card-id">${escapeHtml(rak.rak_id)}</span><span class="rak-card-status">Sudah SO</span></div><div class="rak-card-body"><div class="rak-card-row"><span class="rak-card-label">📅 Tanggal</span><span class="rak-card-value">${tglShort}</span></div><div class="rak-card-row"><span class="rak-card-label">💰 Nominal</span><span class="rak-card-value ${nominalClass}">${nominalText}</span></div><div class="rak-card-row"><span class="rak-card-label">👤 PIC</span><span class="rak-card-value">${escapeHtml(rak.pic || "-")}</span></div></div></div>`;
+        } else {
+            return `<div class="rak-card rak-card-belum"><div class="rak-card-header"><span class="rak-card-badge rak-badge-belum">❌</span><span class="rak-card-id">${escapeHtml(rak.rak_id)}</span><span class="rak-card-status">Belum SO</span></div></div>`;
+        }
+    }).join("");
+}
+
+async function loadSpdList() {
+    const container = document.getElementById("spdList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data SPD...</p></div>`;
+    try {
+        const today = new Date();
+        let start = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        if (spdPeriodCurrent === "custom") { const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd"); if (s && s.value) start = new Date(s.value); if (e && e.value) end = new Date(e.value); }
+        const body = { mode: spdPeriodCurrent };
+        if (spdPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/spd-list`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal load SPD");
+        spdListData = data.list_spd || [];
+        if (document.getElementById("spdSummaryTotal")) document.getElementById("spdSummaryTotal").textContent = formatRupiahFull(data.total_spd || 0);
+        if (document.getElementById("spdSummaryMeta")) document.getElementById("spdSummaryMeta").textContent = `📅 ${data.periode || "—"}`;
+        if (document.getElementById("spdSummaryHari")) document.getElementById("spdSummaryHari").textContent = data.total_hari || 0;
+        if (document.getElementById("spdSummaryAvg")) document.getElementById("spdSummaryAvg").textContent = formatRupiahFull(data.avg_spd || 0);
+        renderSpdList();
+    } catch (err) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; }
+}
+function renderSpdList() {
+    const container = document.getElementById("spdList"); if (!container) return;
+    if (!spdListData || spdListData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data SPD di periode ini</p></div>`; return; }
+    container.innerHTML = spdListData.map(item => {
+        const spdText = formatRupiahFull(item.spd);
+        const deltaNominal = item.delta_nominal || 0, deltaPersen = item.delta_persen || 0, trend = item.trend || "flat";
+        let deltaHtml = trend === "flat" ? `<span class="spd-delta spd-delta-flat">— Flat</span>` : `<span class="spd-delta spd-delta-${trend}">${trend === "up" ? "↑" : "↓"} ${deltaNominal >= 0 ? "+" : ""}${formatRupiahFull(deltaNominal)} (${deltaNominal >= 0 ? "+" : ""}${deltaPersen.toFixed(2)}%)</span>`;
+        return `<div class="spd-item"><div class="spd-item-header"><div class="spd-item-tgl">📅 ${formatTanggalLong(item.tanggal)}</div><div class="spd-item-spd">${spdText}</div></div><div class="spd-item-delta-row">${deltaHtml}</div></div>`;
+    }).join("");
+}
+
+async function loadTopMinus() {
+    const container = document.getElementById("topList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data...</p></div>`;
+    try {
+        const today = new Date();
+        let start = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        const body = { mode: topPeriodCurrent };
+        if (topPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        let url = topTabCurrent === "rak" ? `${CONFIG.BACKEND_URL}/api/yui/top-rak` : `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
+        if (topTabCurrent === "rak") body.limit = 500; else { body.limit = null; body.search = topSearchQuery || ""; body.order_by = topSortValue; body.sign = topSignCurrent; }
+        const resp = await apiFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        topData = topTabCurrent === "rak" ? (data.list_rak || []) : (data.items || []);
+        if (document.getElementById("topSummaryTotal")) document.getElementById("topSummaryTotal").textContent = formatRupiahFull(data.total_nominal || 0);
+        if (document.getElementById("topSummaryMeta")) document.getElementById("topSummaryMeta").textContent = `${topTabCurrent === "rak" ? data.total_rak : data.total_items} item • ${data.periode}`;
+        if (topData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; return; }
+        container.innerHTML = topData.map((item, idx) => {
+            const isRak = topTabCurrent === "rak", title = isRak ? item.rak_id : item.plu, nominal = item.nominal_adjust || 0, nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+            const clickAction = isRak ? `onclick="openRakDetail('${escapeHtml(item.rak_id)}')" style="cursor:pointer;"` : "";
+            return `<div class="top-item-card" ${clickAction}><div class="top-item-header"><span class="top-item-rank">#${idx + 1}</span><span class="top-item-title">${escapeHtml(title)}</span><span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span></div>${isRak ? `<div class="top-item-hint">Tap untuk detail item →</div>` : `<div class="top-item-meta"><span>🏪 ${item.rak_id}</span></div>`}</div>`;
+        }).join("");
+    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+}
+
+async function loadStatusAnalysis() {
+    try {
+        const today = new Date();
+        let start = statusPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = statusPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        const body = { mode: statusPeriodCurrent };
+        if (statusPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        if (document.getElementById("statusBigEmoji")) document.getElementById("statusBigEmoji").textContent = data.status_emoji || "⏳";
+        if (document.getElementById("statusBigLabel")) document.getElementById("statusBigLabel").textContent = data.status_label || "—";
+        if (document.getElementById("statusBigPersen")) document.getElementById("statusBigPersen").textContent = `${(data.persen || 0).toFixed(3)}%`;
+        if (document.getElementById("statusBigMeta")) document.getElementById("statusBigMeta").textContent = data.periode || "—";
+        if (document.getElementById("metricNSB")) document.getElementById("metricNSB").textContent = formatRupiahFull(data.net_sales || 0);
+        if (document.getElementById("metricAdjust")) document.getElementById("metricAdjust").textContent = formatRupiahFull(data.total_adjust || 0);
+        if (document.getElementById("metricBTSB")) document.getElementById("metricBTSB").textContent = formatRupiahFull(data.btsb_rupiah || 0);
+        if (document.getElementById("metricNSBPersonil")) document.getElementById("metricNSBPersonil").textContent = formatRupiahFull(data.nsb_personil || 0);
+        if (document.getElementById("statusRekomendasi")) document.getElementById("statusRekomendasi").textContent = data.rekomendasi || "Tidak ada rekomendasi.";
+    } catch (err) { console.error("Error Status:", err); }
+}
+
+// =========================================================
+// 18. RAK DETAIL & MASTER SHIFT
+// =========================================================
+async function openRakDetail(rakId) {
+    if (!rakId) return;
+    rakDetailCurrentRak = rakId; rakDetailFilter = "semua"; rakDetailSearchQuery = ""; rakDetailData = [];
+    const titleEl = document.getElementById("rakDetailTitle"); if (titleEl) titleEl.textContent = `Detail ${rakId}`;
+    document.querySelectorAll(".rak-detail-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-filter") === "semua"));
+    const searchInput = document.getElementById("rakDetailSearchInput"); if (searchInput) searchInput.value = "";
+    const clearBtn = document.getElementById("rakDetailSearchClear"); if (clearBtn) clearBtn.classList.add("hidden");
+    showScreen("rakDetailScreen");
+    
+    const container = document.getElementById("rakDetailList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat item...</p></div>`;
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/items-by-rak/${encodeURIComponent(rakId)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bulan_ini" }) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal load data");
+        rakDetailData = data.items || [];
+        
+        if (document.getElementById("rakDetailInfoRak")) document.getElementById("rakDetailInfoRak").textContent = data.rak_id || "-";
+        if (document.getElementById("rakDetailInfoTgl")) document.getElementById("rakDetailInfoTgl").textContent = data.tgl_so ? formatTanggalLong(data.tgl_so) : "-";
+        if (document.getElementById("rakDetailInfoPic")) document.getElementById("rakDetailInfoPic").textContent = data.pic || "-";
+        if (document.getElementById("rakDetailStatMinus")) document.getElementById("rakDetailStatMinus").textContent = formatRupiahFull(data.total_minus || 0);
+        if (document.getElementById("rakDetailStatPlus")) document.getElementById("rakDetailStatPlus").textContent = formatRupiahFull(data.total_plus || 0);
+        if (document.getElementById("rakDetailStatNet")) document.getElementById("rakDetailStatNet").textContent = formatRupiahFull(data.total_nominal || 0);
+        
+        if (rakDetailData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><p>Belum ada item di rak ini.</p></div>`; return; }
+        container.innerHTML = rakDetailData.map((item, idx) => {
+            const nominal = item.nominal_adjust || 0;
+            const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+            return `<div class="rak-detail-item"><div class="rak-detail-item-header"><span class="rak-detail-item-rank">${idx + 1}</span><span class="rak-detail-item-plu">${item.plu}</span><span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span></div><div class="rak-detail-item-name">${item.nama_produk || "-"}</div></div>`;
+        }).join("");
+    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+}
+
+async function loadMasterShift() {
+    const container = document.getElementById("shiftList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat jadwal shift...</p></div>`;
+    try {
+        const today = new Date();
+        let start = shiftPeriod === "hari_ini" ? today : new Date(today.getFullYear(), today.getMonth(), 1);
+        let end = shiftPeriod === "hari_ini" ? today : new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        if (shiftPeriod === "minggu") { const day = today.getDay(); start = new Date(today); start.setDate(today.getDate() + (day === 0 ? -6 : 1 - day)); end = new Date(start); end.setDate(start.getDate() + 6); }
+        if (shiftPeriod === "custom") { const s = document.getElementById("customStart"), e = document.getElementById("customEnd"); if (s && s.value) start = new Date(s.value); if (e && e.value) end = new Date(e.value); }
+        const startStr = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, '0') + "-" + String(start.getDate()).padStart(2, '0');
+        const endStr = end.getFullYear() + "-" + String(end.getMonth() + 1).padStart(2, '0') + "-" + String(end.getDate()).padStart(2, '0');
+        const filterSelect = document.getElementById("personilFilter"), namaFilter = filterSelect ? filterSelect.value : "";
+        const body = { tgl_start: startStr, tgl_end: endStr };
+        if (namaFilter) body.nama_filter = namaFilter;
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        masterShiftData = data.data || [];
+        if (masterShiftData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><p>Belum ada data shift</p></div>`; return; }
+        const grouped = {}; masterShiftData.forEach(r => { if (!grouped[r.tanggal]) grouped[r.tanggal] = []; grouped[r.tanggal].push(r); });
+        container.innerHTML = Object.keys(grouped).sort().map(tgl => `<div class="date-group"><div class="date-group-header"><span class="date-group-date">📅 ${formatTanggalLong(tgl)}</span><span class="date-group-count">${grouped[tgl].length} orang</span></div>${grouped[tgl].map(r => `<div class="shift-row"><span class="shift-emoji">${r.shift_emoji || "❓"}</span><span class="shift-name">${r.nama}</span><span class="shift-badge ${getBadgeClass(r.kode_shift)}">${r.shift_nama || r.kode_shift}</span></div>`).join("")}</div>`).join("");
+    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+}
+function getBadgeClass(kode) { return kode === "P7" ? "shift-badge-p7" : kode === "S15" ? "shift-badge-s15" : kode === "M22" ? "shift-badge-m22" : kode === "CUTI" ? "shift-badge-cuti" : "shift-badge-o"; }
+
+// =========================================================
+// 19. UTILITIES (THEME, CLOCK, MODAL, BACK BUTTON)
 // =========================================================
 function startLiveClock() { updateClock(); if (clockInterval) clearInterval(clockInterval); clockInterval = setInterval(updateClock, 1000); }
 function updateClock() {
@@ -713,13 +988,10 @@ function updateClock() {
     const hour = now.getHours(); let greeting = hour < 11 ? "Selamat Pagi 🌅" : hour < 15 ? "Selamat Siang ☀️" : hour < 18 ? "Selamat Sore 🌆" : "Selamat Malam 🌙";
     const _user = getUser(); if (document.getElementById("clockGreeting")) document.getElementById("clockGreeting").textContent = `${greeting}, ${_user?.nama_lengkap || "Bos"}!`;
 }
-
-function toggleTheme() { setTheme(document.documentElement.getAttribute("data-theme") === "halloween-dark" ? "halloween-light" : "halloween-dark"); }
 function setTheme(theme) { document.documentElement.setAttribute("data-theme", theme); localStorage.setItem("so_theme", theme); document.querySelectorAll("#themeIcon, #themeIcon2, #sidebarThemeIcon").forEach(el => el.textContent = theme === "halloween-dark" ? "🌙" : "☀️"); }
 function updateTimeTheme() { if (!autoThemeEnabled) return; const hour = new Date().getHours(); document.documentElement.setAttribute("data-time-theme", hour < 11 ? "pagi" : hour < 15 ? "siang" : hour < 18 ? "sore" : "malam"); }
 function toggleSidebar() { document.getElementById("sidebar")?.classList.toggle("open"); document.getElementById("sidebarOverlay")?.classList.toggle("active"); }
 function closeSidebar() { document.getElementById("sidebar")?.classList.remove("open"); document.getElementById("sidebarOverlay")?.classList.remove("active"); }
-
 function formatTanggalLong(dateStr) { const d = new Date(dateStr); const hari = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"], bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]; return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()} — ${hari[d.getDay()]}`; }
 function formatTanggalShort(dateStr) { const d = new Date(dateStr), bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]; return `${d.getDate()} ${bulan[d.getMonth()]}`; }
 
@@ -739,7 +1011,7 @@ function autoLogout() { clearAuth(); showToastMini("⏰ Idle 5 menit — auto lo
 ["click", "touchstart", "keydown", "scroll"].forEach(evt => document.addEventListener(evt, resetIdleTimer, { passive: true }));
 
 // =========================================================
-// 17. KELOLA USER & MODAL (ADMIN)
+// 20. KELOLA USER & MODAL (ADMIN)
 // =========================================================
 function openChatSelectionModal() { document.getElementById("chatModeModal").classList.add("active"); }
 function closeChatModeModal() { document.getElementById("chatModeModal").classList.remove("active"); }
@@ -829,305 +1101,50 @@ async function submitAddUser() {
     finally { btn.disabled = false; btn.innerHTML = '✅ Simpan'; }
 }
 
-// =========================================================
-// TAMBALAN FUNGSI YANG HILANG (FIX CRASH)
-// =========================================================
+function goToNotificationsScreen() { showToastMini("🔔 Fitur Notifikasi segera hadir!", "success"); }
+function openPersonilModal() { document.getElementById("personilModal").classList.add("active"); loadPersonilList(); }
+function closePersonilModal(event) { if (event && event.target !== event.currentTarget) return; document.getElementById("personilModal").classList.remove("active"); }
+function openStreamlitInBrowser() { try { window.open(CONFIG.STREAMLIT_URL, "_blank"); } catch (e) { window.location.href = CONFIG.STREAMLIT_URL; } }
 
-// 1. Fungsi Status Rak
-async function loadRakList() {
-    const container = document.getElementById("rakList");
-    if (!container) return;
-    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data rak...</p></div>`;
+async function loadPersonilList() {
+    const filterSelect = document.getElementById("personilFilter"), personilList = document.getElementById("personilList");
     try {
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/rak-status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "bulan_ini" }) });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-        if (!data.success) throw new Error(data.error || "Gagal load data rak");
-        
-        rakListData = data.list_rak || [];
-        if (document.getElementById("rakSummaryTotal")) document.getElementById("rakSummaryTotal").textContent = data.total_rak;
-        if (document.getElementById("rakSummarySudah")) document.getElementById("rakSummarySudah").textContent = data.sudah_so;
-        if (document.getElementById("rakSummaryBelum")) document.getElementById("rakSummaryBelum").textContent = data.belum_so;
-        renderRakList();
-    } catch (err) { 
-        container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; 
-    }
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil`, { method: "GET" }); if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json(); personilData = data.data || [];
+        if (filterSelect) { const currentValue = filterSelect.value; filterSelect.innerHTML = '<option value="">👥 Semua Personil</option>'; personilData.forEach(p => { filterSelect.innerHTML += `<option value="${p.nama}">👤 ${p.nama}</option>`; }); filterSelect.value = currentValue; }
+        if (!personilList) return;
+        if (!personilData || personilData.length === 0) { personilList.innerHTML = `<div class="loading-state"><p>Belum ada personil</p></div>`; return; }
+        personilList.innerHTML = personilData.map(p => { const isActive = p.aktif !== false; return `<div class="personil-item ${isActive ? '' : 'inactive'}"><span class="personil-item-emoji">👤</span><span class="personil-item-name">${p.nama}</span><span class="personil-item-status ${isActive ? 'personil-status-active' : 'personil-status-inactive'}">${isActive ? 'Aktif' : 'Off'}</span>${isActive ? `<div class="personil-item-actions"><button class="personil-item-btn delete" onclick="deletePersonilConfirm('${p.nama}')">🗑️</button></div>` : ''}</div>`; }).join("");
+    } catch (err) { if (personilList) personilList.innerHTML = `<div class="loading-state"><p style="color: var(--danger);">⚠️ Gagal load personil: ${err.message}</p></div>`; }
 }
-
-// 2. Fungsi Render Status Rak
-function renderRakList() {
-    const container = document.getElementById("rakList");
-    if (!container) return;
-    let filtered = rakListData || [];
-    if (rakFilterCurrent === "sudah") filtered = filtered.filter(r => r.status === "SUDAH");
-    else if (rakFilterCurrent === "belum") filtered = filtered.filter(r => r.status === "BELUM");
-    if (rakSearchQuery) filtered = filtered.filter(r => (r.rak_id || "").toLowerCase().includes(rakSearchQuery) || (r.pic || "").toLowerCase().includes(rakSearchQuery));
-
-    if (filtered.length === 0) {
-        container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">🔍</span><p>Tidak ada rak yang cocok</p></div>`;
-        return;
-    }
-    container.innerHTML = filtered.map(rak => {
-        if (rak.status === "SUDAH") {
-            const nominalText = formatRupiahFull(rak.nominal);
-            const nominalClass = rak.nominal < 0 ? "rak-nominal-minus" : "rak-nominal-plus";
-            const tglShort = rak.tgl_so ? formatTanggalShort(rak.tgl_so) : "-";
-            return `<div class="rak-card rak-card-sudah"><div class="rak-card-header"><span class="rak-card-badge rak-badge-sudah">✅</span><span class="rak-card-id">${escapeHtml(rak.rak_id)}</span><span class="rak-card-status">Sudah SO</span></div><div class="rak-card-body"><div class="rak-card-row"><span class="rak-card-label">📅 Tanggal</span><span class="rak-card-value">${tglShort}</span></div><div class="rak-card-row"><span class="rak-card-label">💰 Nominal</span><span class="rak-card-value ${nominalClass}">${nominalText}</span></div><div class="rak-card-row"><span class="rak-card-label">👤 PIC</span><span class="rak-card-value">${escapeHtml(rak.pic || "-")}</span></div></div></div>`;
-        } else {
-            return `<div class="rak-card rak-card-belum"><div class="rak-card-header"><span class="rak-card-badge rak-badge-belum">❌</span><span class="rak-card-id">${escapeHtml(rak.rak_id)}</span><span class="rak-card-status">Belum SO</span></div></div>`;
-        }
-    }).join("");
-}
-
-// 3. Fungsi SPD List
-async function loadSpdList() {
-    const container = document.getElementById("spdList"); if (!container) return;
-    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data SPD...</p></div>`;
+async function addNewPersonil() {
+    const input = document.getElementById("newPersonilName"); if (!input) return;
+    const nama = input.value.trim().toUpperCase();
+    if (!nama || nama.length < 2) return showToastMini("❌ Nama minimal 2 karakter", "error");
     try {
-        const today = new Date();
-        let start = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        let end = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
-        if (spdPeriodCurrent === "custom") {
-            const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd");
-            if (s && s.value) start = new Date(s.value);
-            if (e && e.value) end = new Date(e.value);
-        }
-        const body = { mode: spdPeriodCurrent };
-        if (spdPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
-        
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/spd-list`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-        if (!data.success) throw new Error(data.error || "Gagal load SPD");
-        
-        spdListData = data.list_spd || [];
-        if (document.getElementById("spdSummaryTotal")) document.getElementById("spdSummaryTotal").textContent = formatRupiahFull(data.total_spd || 0);
-        if (document.getElementById("spdSummaryMeta")) document.getElementById("spdSummaryMeta").textContent = `📅 ${data.periode || "—"}`;
-        if (document.getElementById("spdSummaryHari")) document.getElementById("spdSummaryHari").textContent = data.total_hari || 0;
-        if (document.getElementById("spdSummaryAvg")) document.getElementById("spdSummaryAvg").textContent = formatRupiahFull(data.avg_spd || 0);
-        
-        renderSpdList();
-    } catch (err) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; }
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil/add`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nama: nama }) });
+        const data = await resp.json(); if (!resp.ok || !data.success) throw new Error(data.detail || `HTTP ${resp.status}`);
+        input.value = ""; showToastMini(`✅ ${nama} ditambahkan`, "success"); _personilCache = null; await loadPersonilList();
+    } catch (err) { showToastMini(`❌ Gagal: ${err.message}`, "error"); }
 }
-
-// 4. Fungsi Render SPD List
-function renderSpdList() {
-    const container = document.getElementById("spdList"); if (!container) return;
-    if (!spdListData || spdListData.length === 0) {
-        container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data SPD di periode ini</p></div>`;
-        return;
+function deletePersonilConfirm(nama) {
+    const html = `<div style="text-align: left;"><p style="font-size: 14px; margin-bottom: 12px;">Hapus personil <b style="color: var(--accent-orange);">${nama}</b>?</p><label style="display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; cursor: pointer; margin-bottom: 12px;"><input type="checkbox" id="forceDeleteCheck" style="width: 18px; height: 18px; accent-color: var(--danger);"><span style="font-size: 12px;">⚠️ <b>Force delete</b> — hapus history juga</span></label><div style="display: flex; gap: 8px;"><button class="confirm-btn confirm-btn-cancel" onclick="closeDeleteModal()">❌ Batal</button><button class="confirm-btn confirm-btn-save" style="background: linear-gradient(135deg, #ee5253, #c73133);" onclick="deletePersonilExecute('${nama}')">🗑️ Hapus</button></div></div>`;
+    let confirmModal = document.getElementById("deleteConfirmModal");
+    if (!confirmModal) {
+        confirmModal = document.createElement("div"); confirmModal.id = "deleteConfirmModal"; confirmModal.className = "modal-overlay active"; confirmModal.style.zIndex = "300";
+        confirmModal.innerHTML = `<div class="modal-content" onclick="event.stopPropagation()" style="max-width: 400px;"><div class="modal-header"><div class="modal-title">⚠️ Konfirmasi Hapus</div><button class="modal-close" onclick="closeDeleteModal()">✕</button></div><div class="modal-body" id="deleteConfirmBody"></div></div>`;
+        document.body.appendChild(confirmModal); confirmModal.onclick = (e) => { if (e.target === confirmModal) closeDeleteModal(); };
     }
-    container.innerHTML = spdListData.map(item => {
-        const spdText = formatRupiahFull(item.spd);
-        const deltaNominal = item.delta_nominal || 0, deltaPersen = item.delta_persen || 0, trend = item.trend || "flat";
-        let deltaHtml = trend === "flat" ? `<span class="spd-delta spd-delta-flat">— Flat</span>` : `<span class="spd-delta spd-delta-${trend}">${trend === "up" ? "↑" : "↓"} ${deltaNominal >= 0 ? "+" : ""}${formatRupiahFull(deltaNominal)} (${deltaNominal >= 0 ? "+" : ""}${deltaPersen.toFixed(2)}%)</span>`;
-        return `<div class="spd-item"><div class="spd-item-header"><div class="spd-item-tgl">📅 ${formatTanggalLong(item.tanggal)}</div><div class="spd-item-spd">${spdText}</div></div><div class="spd-item-delta-row">${deltaHtml}</div></div>`;
-    }).join("");
+    document.getElementById("deleteConfirmBody").innerHTML = html;
 }
-
-// 5. Fungsi Top Minus
-async function loadTopMinus() {
-    const container = document.getElementById("topList"); if (!container) return;
-    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data...</p></div>`;
+function closeDeleteModal() { const modal = document.getElementById("deleteConfirmModal"); if (modal) modal.remove(); }
+async function deletePersonilExecute(nama) {
+    const checkbox = document.getElementById("forceDeleteCheck"); const force = checkbox ? checkbox.checked : false; closeDeleteModal();
     try {
-        const today = new Date();
-        let start = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        let end = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
-        const body = { mode: topPeriodCurrent };
-        if (topPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
-        
-        let url = topTabCurrent === "rak" ? `${CONFIG.BACKEND_URL}/api/yui/top-rak` : `${CONFIG.BACKEND_URL}/api/yui/top-items-extended`;
-        if (topTabCurrent === "rak") body.limit = 500; else { body.limit = null; body.search = topSearchQuery || ""; body.order_by = topSortValue; body.sign = topSignCurrent; }
-        
-        const resp = await apiFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
-        
-        topData = topTabCurrent === "rak" ? (data.list_rak || []) : (data.items || []);
-        if (document.getElementById("topSummaryTotal")) document.getElementById("topSummaryTotal").textContent = formatRupiahFull(data.total_nominal || 0);
-        if (document.getElementById("topSummaryMeta")) document.getElementById("topSummaryMeta").textContent = `${topTabCurrent === "rak" ? data.total_rak : data.total_items} item • ${data.periode}`;
-        
-        if (topData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; return; }
-        container.innerHTML = topData.map((item, idx) => `<div class="top-item-card"><div class="top-item-header"><span class="top-item-rank">#${idx + 1}</span><span class="top-item-title">${escapeHtml(item.rak_id || item.plu)}</span><span class="top-item-nominal ${item.nominal_adjust < 0 ? "top-nominal-minus" : "top-nominal-plus"}">${formatRupiahFull(item.nominal_adjust)}</span></div></div>`).join("");
-    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
-}
-
-// 6. Fungsi Status Analisis
-async function loadStatusAnalysis() {
-    try {
-        const today = new Date();
-        let start = statusPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        let end = statusPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
-        const body = { mode: statusPeriodCurrent };
-        if (statusPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
-        
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/yui/status-analysis`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
-        
-        if (document.getElementById("statusBigEmoji")) document.getElementById("statusBigEmoji").textContent = data.status_emoji || "⏳";
-        if (document.getElementById("statusBigLabel")) document.getElementById("statusBigLabel").textContent = data.status_label || "—";
-        if (document.getElementById("statusBigPersen")) document.getElementById("statusBigPersen").textContent = `${(data.persen || 0).toFixed(3)}%`;
-        if (document.getElementById("statusBigMeta")) document.getElementById("statusBigMeta").textContent = data.periode || "—";
-        if (document.getElementById("metricNSB")) document.getElementById("metricNSB").textContent = formatRupiahFull(data.net_sales || 0);
-        if (document.getElementById("metricAdjust")) document.getElementById("metricAdjust").textContent = formatRupiahFull(data.total_adjust || 0);
-        if (document.getElementById("metricBTSB")) document.getElementById("metricBTSB").textContent = formatRupiahFull(data.btsb_rupiah || 0);
-        if (document.getElementById("metricNSBPersonil")) document.getElementById("metricNSBPersonil").textContent = formatRupiahFull(data.nsb_personil || 0);
-        if (document.getElementById("statusRekomendasi")) document.getElementById("statusRekomendasi").textContent = data.rekomendasi || "Tidak ada rekomendasi.";
-    } catch (err) { console.error("Error Status:", err); }
-}
-
-// 7. Fungsi Master Shift
-async function loadMasterShift() {
-    const container = document.getElementById("shiftList"); if (!container) return;
-    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat jadwal shift...</p></div>`;
-    try {
-        const today = new Date();
-        let start = shiftPeriod === "hari_ini" ? today : new Date(today.getFullYear(), today.getMonth(), 1);
-        let end = shiftPeriod === "hari_ini" ? today : new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        if (shiftPeriod === "minggu") { const day = today.getDay(); start = new Date(today); start.setDate(today.getDate() + (day === 0 ? -6 : 1 - day)); end = new Date(start); end.setDate(start.getDate() + 6); }
-        
-        const startStr = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, '0') + "-" + String(start.getDate()).padStart(2, '0');
-        const endStr = end.getFullYear() + "-" + String(end.getMonth() + 1).padStart(2, '0') + "-" + String(end.getDate()).padStart(2, '0');
-        const body = { tgl_start: startStr, tgl_end: endStr };
-        
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/master-shift`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
-        
-        masterShiftData = data.data || [];
-        if (masterShiftData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><p>Belum ada data shift</p></div>`; return; }
-        
-        const grouped = {}; masterShiftData.forEach(r => { if (!grouped[r.tanggal]) grouped[r.tanggal] = []; grouped[r.tanggal].push(r); });
-        container.innerHTML = Object.keys(grouped).sort().map(tgl => `<div class="date-group"><div class="date-group-header"><span class="date-group-date">📅 ${formatTanggalLong(tgl)}</span><span class="date-group-count">${grouped[tgl].length} orang</span></div>${grouped[tgl].map(r => `<div class="shift-row"><span class="shift-emoji">${r.shift_emoji || "❓"}</span><span class="shift-name">${r.nama}</span><span class="shift-badge ${getBadgeClass(r.kode_shift)}">${r.shift_nama || r.kode_shift}</span></div>`).join("")}</div>`).join("");
-    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
-}
-
-function getBadgeClass(kode) { return kode === "P7" ? "shift-badge-p7" : kode === "S15" ? "shift-badge-s15" : kode === "M22" ? "shift-badge-m22" : kode === "CUTI" ? "shift-badge-cuti" : "shift-badge-o"; }
-
-// =========================================================
-// TAMBALAN FUNGSI DARI HTML LAMA
-// =========================================================
-
-// 1. Fungsi Set Periode Shift (Biar tombol filter bisa diklik)
-function setShiftPeriod(period) {
-    shiftPeriod = period;
-    document.querySelectorAll(".filter-tab").forEach(tab => {
-        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
-    });
-    const customRow = document.getElementById("customDateRow");
-    if (customRow) {
-        if (period === "custom") customRow.classList.remove("hidden");
-        else customRow.classList.add("hidden");
-    }
-    loadMasterShift(); // Panggil ulang data shift
-}
-
-// 2. Fungsi Buka Streamlit di Browser
-function openStreamlitInBrowser() {
-    try {
-        window.open(CONFIG.STREAMLIT_URL, "_blank");
-    } catch (e) {
-        window.location.href = CONFIG.STREAMLIT_URL;
-    }
-}
-
-// 3. Fungsi Notifikasi (Placeholder sementara, biar gak error)
-function goToNotificationsScreen() {
-    showToastMini("🔔 Fitur Notifikasi segera hadir!", "success");
-}
-
-// 4. Tambahan buat jaga-jaga (Buka Modal Tema & Sistem)
-function openThemeModal() {
-    const isDark = document.documentElement.getAttribute("data-theme") === "halloween-dark";
-    const pesan = isDark ? "Mode sekarang: DARK. Ganti ke LIGHT?" : "Mode sekarang: LIGHT. Ganti ke DARK?";
-    if (confirm(pesan)) {
-        toggleTheme();
-        showToastMini("✅ Tema berhasil diubah", "success");
-    }
-}
-
-function openSystemModal() {
-    const aksi = prompt("Menu Sistem:\n1. Cek Update\n2. Ganti API Key\n3. Reset Semua Chat\n\nKetik angka (1/2/3):");
-    if (aksi === "1") checkForUpdate(true);
-    else if (aksi === "2") changeApiKey();
-    else if (aksi === "3") resetAllChat();
-}
-
-function resetAllChat() {
-    if (!confirm("Hapus SEMUA chat dengan 4 bot?")) return;
-    Object.keys(BOTS).forEach(botId => { chatHistories[botId] = []; });
-    saveChatHistories();
-    showToastMini("✅ Semua chat dihapus", "success");
-}
-
-function changeApiKey() {
-    const current = getApiKey();
-    const newKey = prompt("Masukkan API Key baru:", current);
-    if (!newKey || newKey.trim() === "") return;
-    localStorage.setItem("so_api_key", newKey.trim());
-    showToastMini("✅ API Key diupdate", "success");
-}
-
-// =========================================================
-// TAMBALAN FUNGSI DARI HTML LAMA
-// =========================================================
-
-// 1. Fungsi Set Periode Shift (Biar tombol filter bisa diklik)
-function setShiftPeriod(period) {
-    shiftPeriod = period;
-    document.querySelectorAll(".filter-tab").forEach(tab => {
-        tab.classList.toggle("active", tab.getAttribute("data-period") === period);
-    });
-    const customRow = document.getElementById("customDateRow");
-    if (customRow) {
-        if (period === "custom") customRow.classList.remove("hidden");
-        else customRow.classList.add("hidden");
-    }
-    loadMasterShift(); // Panggil ulang data shift
-}
-
-// 2. Fungsi Buka Streamlit di Browser
-function openStreamlitInBrowser() {
-    try {
-        window.open(CONFIG.STREAMLIT_URL, "_blank");
-    } catch (e) {
-        window.location.href = CONFIG.STREAMLIT_URL;
-    }
-}
-
-// 3. Fungsi Notifikasi (Placeholder sementara, biar gak error)
-function goToNotificationsScreen() {
-    showToastMini("🔔 Fitur Notifikasi segera hadir!", "success");
-}
-
-// 4. Tambahan buat jaga-jaga (Buka Modal Tema & Sistem)
-function openThemeModal() {
-    const isDark = document.documentElement.getAttribute("data-theme") === "halloween-dark";
-    const pesan = isDark ? "Mode sekarang: DARK. Ganti ke LIGHT?" : "Mode sekarang: LIGHT. Ganti ke DARK?";
-    if (confirm(pesan)) {
-        toggleTheme();
-        showToastMini("✅ Tema berhasil diubah", "success");
-    }
-}
-
-function openSystemModal() {
-    const aksi = prompt("Menu Sistem:\n1. Cek Update\n2. Ganti API Key\n3. Reset Semua Chat\n\nKetik angka (1/2/3):");
-    if (aksi === "1") checkForUpdate(true);
-    else if (aksi === "2") changeApiKey();
-    else if (aksi === "3") resetAllChat();
-}
-
-function resetAllChat() {
-    if (!confirm("Hapus SEMUA chat dengan 4 bot?")) return;
-    Object.keys(BOTS).forEach(botId => { chatHistories[botId] = []; });
-    saveChatHistories();
-    showToastMini("✅ Semua chat dihapus", "success");
-}
-
-function changeApiKey() {
-    const current = getApiKey();
-    const newKey = prompt("Masukkan API Key baru:", current);
-    if (!newKey || newKey.trim() === "") return;
-    localStorage.setItem("so_api_key", newKey.trim());
-    showToastMini("✅ API Key diupdate", "success");
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/api/hana/personil/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nama: nama, force: force }) });
+        const data = await resp.json(); if (!resp.ok || !data.success) throw new Error(data.detail || `HTTP ${resp.status}`);
+        showToastMini(data.message || `✅ ${nama} dihapus`, "success"); _personilCache = null; await loadPersonilList();
+    } catch (err) { showToastMini(`❌ Gagal: ${err.message}`, "error"); }
 }
 
 // Boot
