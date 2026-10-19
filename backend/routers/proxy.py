@@ -1,35 +1,46 @@
-# backend/routers/proxy.py
+"""
+Proxy Router — Menyembunyikan API Key dari Frontend
+=====================================================
+Frontend nembak ke /api/proxy/..., backend yang nerusin ke API asli
+dengan nempelin X-API-Key rahasia. Frontend gak pernah tau key-nya.
+"""
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import httpx
 import os
 
 router = APIRouter()
 
-# Ambil API Key dari .env (RAHASIA, gak dikirim ke frontend)
-BACKEND_URL = os.getenv("BACKEND_URL", "https://dashboard-so.fastapicloud.dev")
-INTERNAL_API_KEY = os.getenv("SO_API_KEY") # Ini key rahasia lu
+# URL Backend asli (internal)
+INTERNAL_BACKEND_URL = os.getenv("INTERNAL_BACKEND_URL", "https://dashboard-so.fastapicloud.dev")
+# API Key Rahasia (dari .env, TIDAK dikirim ke frontend)
+INTERNAL_API_KEY = os.getenv("SO_API_KEY")
+
+# Daftar endpoint yang BOLEH diakses lewat proxy (whitelist)
+ALLOWED_PREFIXES = ("yui/", "hana/", "rei/", "kurumi/", "config/", "auth/me", "auth/logout")
 
 @router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_request(path: str, request: Request):
-    """
-    Endpoint Proxy: Frontend nembak ke sini, Backend yang nerusin ke API asli.
-    """
-    url = f"{BACKEND_URL}/api/{path}"
+    # 1. VALIDASI PATH (Cegah SSRF / sembarang nembak)
+    if not any(path.startswith(p) for p in ALLOWED_PREFIXES):
+        raise HTTPException(status_code=403, detail=f"Path /{path} tidak diizinkan lewat proxy")
+
+    # 2. SUSUN URL TUJUAN
+    url = f"{INTERNAL_BACKEND_URL}/api/{path}"
     
-    # Ambil token user dari header (kalo ada)
+    # 3. AMBIL HEADER & BODY DARI FRONTEND
+    body = await request.body()
     auth_header = request.headers.get("Authorization")
     
-    # Ambil body (kalo POST)
-    body = await request.body()
+    # 4. SUSUN HEADER BARU (Inject API Key Rahasia)
     headers = {
-        "X-API-Key": INTERNAL_API_KEY, # Inject API Key rahasia di sini!
-        "Content-Type": "application/json",
+        "X-API-Key": INTERNAL_API_KEY or "",
+        "Content-Type": request.headers.get("content-type", "application/json"),
     }
     if auth_header:
         headers["Authorization"] = auth_header
-    
-    # Terusin request ke API asli
+
+    # 5. TERUSKAN REQUEST KE BACKEND ASLI
     async with httpx.AsyncClient() as client:
         try:
             response = await client.request(
@@ -37,11 +48,19 @@ async def proxy_request(path: str, request: Request):
                 url=url,
                 content=body,
                 headers=headers,
-                timeout=30.0
+                timeout=60.0,
+                follow_redirects=True
             )
-            return JSONResponse(
+            
+            # 6. KEMBALIKAN RESPONSE KE FRONTEND (tanpa bawa API Key)
+            return Response(
+                content=response.content,
                 status_code=response.status_code,
-                content=response.json()
+                media_type=response.headers.get("content-type", "application/json")
             )
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Backend timeout")
         except Exception as e:
-            return JSONResponse(status_code=500, content={"error": str(e)})
+            # Jangan bocorin error detail ke frontend
+            print(f"[PROXY ERROR] {type(e).__name__}: {e}")
+            raise HTTPException(status_code=502, detail="Gagal konek ke backend")

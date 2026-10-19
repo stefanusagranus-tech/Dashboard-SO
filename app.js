@@ -397,5 +397,109 @@ function openEditBotModal() { const modal = document.getElementById("editBotModa
 function closeEditBotModal() { document.getElementById("editBotModal")?.classList.remove("active"); }
 function saveBotSettings() { const name = document.getElementById("editBotName").value.trim(); const emoji = document.getElementById("editBotEmoji").value.trim(); const persona = document.getElementById("editBotPersona").value.trim(); if (!name || !emoji || !persona) return showToastMini("❌ Semua field wajib diisi", "error"); BOTS[currentBot].name = name; BOTS[currentBot].emoji = emoji; BOTS[currentBot].persona = persona; localStorage.setItem("so_bots_custom", JSON.stringify(BOTS)); showToastMini("✅ Bot berhasil diupdate", "success"); closeEditBotModal(); switchBot(currentBot); }
 
+// =========================================================
+// TAMBALAN v10.1: FIX ERROR & BUG
+// =========================================================
+
+// 1. FIX: Fungsi yang kehapus di v10.0
+function updateSettingsUserInfo() {
+    const _user = getUser();
+    if (document.getElementById("settingsNamaLengkap")) document.getElementById("settingsNamaLengkap").textContent = _user ? (_user.nama_lengkap || "-") : "-";
+    if (document.getElementById("settingsUsername")) document.getElementById("settingsUsername").textContent = _user ? `@${_user.username}` : "-";
+    if (document.getElementById("settingsRole")) document.getElementById("settingsRole").textContent = _user ? (_user.role || "-").toUpperCase() : "-";
+}
+
+// 2. FIX: Nama Item di Top Minus yang masih ada &#39;
+// Ganti fungsi loadTopMinus yang lama dengan ini:
+async function loadTopMinus() {
+    const container = document.getElementById("topList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data...</p></div>`;
+    try {
+        const today = new Date();
+        let start = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        const body = { mode: topPeriodCurrent };
+        if (topPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        let url = topTabCurrent === "rak" ? `${CONFIG.BACKEND_URL}/yui/top-rak` : `${CONFIG.BACKEND_URL}/yui/top-items-extended`;
+        if (topTabCurrent === "rak") body.limit = 500; else { body.limit = null; body.search = topSearchQuery || ""; body.order_by = topSortValue; body.sign = topSignCurrent; }
+        
+        // ✅ GANTI URL ke Proxy
+        const resp = await apiFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        topData = topTabCurrent === "rak" ? (data.list_rak || []) : (data.items || []);
+        
+        if (document.getElementById("topSummaryTotal")) document.getElementById("topSummaryTotal").textContent = formatRupiahFull(data.total_nominal || 0);
+        if (document.getElementById("topSummaryMeta")) document.getElementById("topSummaryMeta").textContent = `${topTabCurrent === "rak" ? data.total_rak : data.total_items} item • ${data.periode}`;
+        if (topData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; return; }
+        
+        container.innerHTML = topData.map((item, idx) => {
+            const isRak = topTabCurrent === "rak";
+            // ✅ FIX: Pake cleanHtmlEntities biar &amp;#39; jadi '
+            const title = isRak ? item.rak_id : cleanHtmlEntities(item.nama_produk || item.nama || item.plu || "-");
+            const subTitle = isRak ? "" : `<div class="top-item-meta"><span>🏪 ${item.rak_id || "-"}</span><span>🔢 ${item.plu || "-"}</span></div>`;
+            const nominal = item.nominal_adjust || 0;
+            const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
+            const clickAction = isRak ? `onclick="openRakDetail('${escapeHtml(item.rak_id)}')" style="cursor:pointer;"` : "";
+            
+            return `<div class="top-item-card" ${clickAction}>
+                <div class="top-item-header">
+                    <span class="top-item-rank">#${idx + 1}</span>
+                    <span class="top-item-title">${escapeHtml(title)}</span>
+                    <span class="top-item-nominal ${nominalClass}">${formatRupiahFull(nominal)}</span>
+                </div>
+                ${subTitle}
+                ${isRak ? `<div class="top-item-hint">Tap untuk detail item →</div>` : ""}
+            </div>`;
+        }).join("");
+    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+}
+
+// 3. FIX: Filter SPD & Sort (Ini fungsi yang diganti)
+function setSpdPeriod(period) {
+    spdPeriodCurrent = period;
+    document.querySelectorAll("#spdListScreen .spd-period-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("spdCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd"), today = new Date();
+            if (s && !s.value) s.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+            if (e && !e.value) e.value = today.toISOString().slice(0, 10);
+        } else customRow.classList.add("hidden");
+    }
+    loadSpdList();
+}
+
+function setSpdSort(sortValue) {
+    spdSortValue = sortValue;
+    document.querySelectorAll("#spdListScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
+    loadSpdList();
+}
+
+// 4. FIX: Panggilan API pake Proxy (Ganti URL di loadSpdList)
+async function loadSpdList() {
+    const container = document.getElementById("spdList"); if (!container) return;
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data SPD...</p></div>`;
+    try {
+        const today = new Date();
+        let start = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        let end = spdPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        if (spdPeriodCurrent === "custom") { const s = document.getElementById("spdCustomStart"), e = document.getElementById("spdCustomEnd"); if (s && s.value) start = new Date(s.value); if (e && e.value) end = new Date(e.value); }
+        const body = { mode: spdPeriodCurrent };
+        if (spdPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        
+        // ✅ GANTI URL ke Proxy
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/yui/spd-list`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal load SPD");
+        spdListData = data.list_spd || [];
+        if (document.getElementById("spdSummaryTotal")) document.getElementById("spdSummaryTotal").textContent = formatRupiahFull(data.total_spd || 0);
+        if (document.getElementById("spdSummaryMeta")) document.getElementById("spdSummaryMeta").textContent = `📅 ${data.periode || "—"}`;
+        if (document.getElementById("spdSummaryHari")) document.getElementById("spdSummaryHari").textContent = data.total_hari || 0;
+        if (document.getElementById("spdSummaryAvg")) document.getElementById("spdSummaryAvg").textContent = formatRupiahFull(data.avg_spd || 0);
+        renderSpdList();
+    } catch (err) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">⚠️</span><p>Gagal load data: ${escapeHtml(err.message)}</p></div>`; }
+}
+
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
