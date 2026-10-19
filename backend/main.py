@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from routers import kurumi, hana, yui, rei, config, auth, proxy
+from routers import kurumi, hana, yui, rei, config, auth, proxy, broadcast, room
 from middleware.auth import AuthMiddleware
 from middleware.rate_limit import setup_rate_limit
 
@@ -43,6 +43,8 @@ app.include_router(yui.router)
 app.include_router(rei.router)
 app.include_router(config.router)
 app.include_router(proxy.router, prefix="/api/proxy")
+app.include_router(broadcast.router)
+app.include_router(room.router)
 
 # =========================================================
 # HEALTH

@@ -32,6 +32,9 @@ ALLOWED_PREFIXES = (
     
     # Laporan
     "yui/rekap", "yui/rak-status", "yui/spd-list", "yui/status-analysis",
+
+    #chat
+    "broadcast/", "room/",
     
     # Shift
     "hana/master-shift", "hana/shift-hari-ini", "hana/save-batch"
