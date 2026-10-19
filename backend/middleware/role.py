@@ -58,6 +58,11 @@ def require_role(*allowed_roles: str):
 
     return _checker
 
+async def require_admin(user: dict = Depends(require_token)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Akses ditolak. Khusus Admin.")
+    return user
+
 require_admin = require_role("admin")
 require_operator = require_role("admin", "operator")
 require_viewer = require_role("admin", "operator", "viewer")

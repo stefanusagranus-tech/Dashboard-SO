@@ -288,27 +288,80 @@ async def yui_save_spd_endpoint(request: Request, req: SaveSpdRequest, user: dic
 @router.post("/save-so")
 @limiter.limit("10/minute")
 async def yui_save_so_endpoint(request: Request, req: SaveSoRequest, user: dict = Depends(require_operator)):
-    if not _YUI_OK: raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
+    if not _YUI_OK: 
+        raise HTTPException(status_code=503, detail=f"Yui error: {_import_error}")
     try:
         _tgl = datetime.strptime(req.tanggal, "%Y-%m-%d").date()
-        if not req.items: raise HTTPException(status_code=400, detail="Items kosong")
+        if not req.items: 
+            raise HTTPException(status_code=400, detail="Items kosong")
+        
         _items_by_rak = {}
         for _it in req.items:
             _rak = _it.rak_id.upper().strip()
-            if _rak: _items_by_rak.setdefault(_rak, []).append({"rak_id": _rak, "plu": _it.plu, "nama_produk": _it.nama_produk, "qty_sistem": _it.qty_sistem, "qty_fisik": _it.qty_fisik, "qty_var": _it.qty_var, "nominal_adjust": _it.nominal_adjust, "pic": (_it.pic or req.pic_default or "").upper()})
+            if _rak: 
+                _items_by_rak.setdefault(_rak, []).append({
+                    "rak_id": _rak, "plu": _it.plu, "nama_produk": _it.nama_produk,
+                    "qty_sistem": _it.qty_sistem, "qty_fisik": _it.qty_fisik,
+                    "qty_var": _it.qty_var, "nominal_adjust": _it.nominal_adjust,
+                    "pic": (_it.pic or req.pic_default or "").upper()
+                })
+        
         _saved_count, _error_count, _errors, _total_nominal, _total_items = 0, 0, [], 0, 0
+        
         for _rak_id, _rak_items in _items_by_rak.items():
             _pic = _rak_items[0].get("pic", "")
-            if not _pic: _error_count += 1; _errors.append(f"Rak {_rak_id}: PIC kosong"); continue
+            if not _pic: 
+                _error_count += 1
+                _errors.append(f"Rak {_rak_id}: PIC kosong")
+                continue
             try:
-                _ok, _msg, _detail = save_input_harian(tanggal=_tgl, spd=0, rak_items=_rak_items, keterangan=req.keterangan or "Input via APK", pic=_pic, update_status_rak=True)
-                if _ok: _saved_count += 1; _total_nominal += float(_detail.get("total_nominal", 0) or 0); _total_items += int(_detail.get("hasil_saved", 0) or 0)
-                else: _error_count += 1; _errors.append(f"Rak {_rak_id}: {_msg[:100]}")
-            except Exception as _e: _error_count += 1; _errors.append(f"Rak {_rak_id}: {str(_e)[:100]}")
-        return {"success": _saved_count > 0, "saved_count": _saved_count, "error_count": _error_count, "errors": _errors, "total_nominal": _total_nominal, "total_items": _total_items, "rak_saved": list(_items_by_rak.keys())}
-    except HTTPException: raise
-    except Exception as _e: raise HTTPException(status_code=500, detail=str(_e)[:200])
-
+                _ok, _msg, _detail = save_input_harian(
+                    tanggal=_tgl, spd=0, rak_items=_rak_items,
+                    keterangan=req.keterangan or "Input via APK",
+                    pic=_pic, update_status_rak=True
+                )
+                if _ok: 
+                    _saved_count += 1
+                    _total_nominal += float(_detail.get("total_nominal", 0) or 0)
+                    _total_items += int(_detail.get("hasil_saved", 0) or 0)
+                else: 
+                    _error_count += 1
+                    _errors.append(f"Rak {_rak_id}: {_msg[:100]}")
+            except Exception as _e: 
+                _error_count += 1
+                _errors.append(f"Rak {_rak_id}: {str(_e)[:100]}")
+        
+        # =========================================================
+        # ✅ TAMBAHAN: AUTO BROADCAST PAS SIMPAN SO SUKSES
+        # =========================================================
+        if _saved_count > 0:
+            try:
+                from services.supabase_client import get_supabase
+                _sb = get_supabase()
+                _nama_user = user.get("nama_lengkap") or user.get("username") or "User"
+                _sb.table("broadcast").insert({
+                    "judul": "📦 Input SO Baru",
+                    "pesan": f"{_nama_user} baru saja input SO untuk {_saved_count} rak (Total: Rp {_total_nominal:,.0f}).",
+                    "tipe": "update"
+                }).execute()
+                print(f"[AUTO_BROADCAST] Sukses kirim broadcast SO dari {_nama_user}")
+            except Exception as _e:
+                print(f"[AUTO_BROADCAST] Gagal kirim broadcast: {_e}")
+        # =========================================================
+        
+        return {
+            "success": _saved_count > 0,
+            "saved_count": _saved_count,
+            "error_count": _error_count,
+            "errors": _errors,
+            "total_nominal": _total_nominal,
+            "total_items": _total_items,
+            "rak_saved": list(_items_by_rak.keys())
+        }
+    except HTTPException: 
+        raise
+    except Exception as _e: 
+        raise HTTPException(status_code=500, detail=str(_e)[:200])
 
 # =========================================================
 # UPLOAD SO

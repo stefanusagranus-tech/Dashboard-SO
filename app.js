@@ -886,6 +886,12 @@ function toggleAutoTheme() {
 function goToBroadcastScreen() {
     closeSidebar();
     showScreen("broadcastScreen");
+    
+    // ✅ Tampilkan tombol + cuma buat admin
+    const _user = getUser();
+    const btnAdd = document.getElementById("btnAddBroadcast");
+    if (btnAdd) btnAdd.style.display = (_user?.role === "admin") ? "flex" : "none";
+    
     loadBroadcastList();
 }
 
@@ -1090,6 +1096,59 @@ function renderChatHistory() {
         bubbleContent.appendChild(time); wrapper.appendChild(avatar); wrapper.appendChild(bubbleContent); container.appendChild(wrapper);
     });
     setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
+// =========================================================
+// ADMIN: BUAT BROADCAST
+// =========================================================
+function openCreateBroadcastModal() {
+    const _user = getUser();
+    if (!_user || _user.role !== "admin") {
+        showToastMini("❌ Akses ditolak. Khusus Admin.", "error");
+        return;
+    }
+    document.getElementById("broadcastJudul").value = "";
+    document.getElementById("broadcastPesan").value = "";
+    document.getElementById("broadcastTipe").value = "info";
+    document.getElementById("createBroadcastError").textContent = "";
+    document.getElementById("createBroadcastModal").classList.add("active");
+}
+
+function closeCreateBroadcastModal() {
+    document.getElementById("createBroadcastModal").classList.remove("active");
+}
+
+async function submitCreateBroadcast() {
+    const btn = document.getElementById("btnSaveBroadcast");
+    const errEl = document.getElementById("createBroadcastError");
+    const judul = document.getElementById("broadcastJudul").value.trim();
+    const pesan = document.getElementById("broadcastPesan").value.trim();
+    const tipe = document.getElementById("broadcastTipe").value;
+
+    if (!judul || !pesan) {
+        errEl.textContent = "❌ Judul & pesan wajib diisi";
+        return;
+    }
+
+    btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span> Mengirim...';
+    errEl.textContent = "";
+
+    try {
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/create`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ judul, pesan, tipe })
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) throw new Error(data.detail || "Gagal buat broadcast");
+        
+        showToastMini("✅ Broadcast terkirim!", "success");
+        closeCreateBroadcastModal();
+        loadBroadcastList(); // Reload list
+    } catch (err) {
+        errEl.textContent = `❌ ${err.message}`;
+    } finally {
+        btn.disabled = false; btn.innerHTML = '✅ Kirim';
+    }
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);

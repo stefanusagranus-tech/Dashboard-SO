@@ -1358,17 +1358,10 @@
 <!-- ========================================================= -->
 <!-- HALAMAN BROADCAST -->
 <!-- ========================================================= -->
-<div id="broadcastScreen" class="screen">
-    <div class="screen-header">
-        <button class="back-btn" onclick="goToHomeScreen()">←</button>
-        <div class="screen-title">📢 Broadcast Info</div>
-        <div class="screen-header-spacer"></div>
-    </div>
-    <div class="settings-content" style="padding: 16px; overflow-y: auto;">
-        <div id="broadcastList">
-            <div class="loading-state"><div class="spinner"></div><p>Memuat broadcast...</p></div>
-        </div>
-    </div>
+<div class="screen-header">
+    <button class="back-btn" onclick="goToHomeScreen()">←</button>
+    <div class="screen-title">📢 Broadcast Info</div>
+    <button class="screen-header-action" onclick="openCreateBroadcastModal()" id="btnAddBroadcast" style="display: none;">➕</button>
 </div>
 
 <!-- ========================================================= -->
@@ -1400,6 +1393,38 @@
     <div class="chat-input-area">
         <textarea id="roomInput" class="chat-input" rows="1" placeholder="Ketik pesan..." onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendRoomMessage();}"></textarea>
         <button class="chat-send" onclick="sendRoomMessage()">➤</button>
+    </div>
+</div>
+<!-- MODAL BUAT BROADCAST (ADMIN) -->
+<div id="createBroadcastModal" class="modal-overlay" onclick="closeCreateBroadcastModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div class="modal-title">📢 Buat Broadcast Baru</div>
+            <button class="modal-close" onclick="closeCreateBroadcastModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="login-input-group">
+                <label class="login-input-label">Judul</label>
+                <input type="text" id="broadcastJudul" class="login-input" placeholder="Contoh: Info SO Hari Ini">
+            </div>
+            <div class="login-input-group">
+                <label class="login-input-label">Isi Pesan</label>
+                <textarea id="broadcastPesan" class="login-input" rows="4" placeholder="Tulis pengumuman..."></textarea>
+            </div>
+            <div class="login-input-group">
+                <label class="login-input-label">Tipe</label>
+                <select id="broadcastTipe" class="filter-select">
+                    <option value="info">📢 Info Biasa</option>
+                    <option value="update">🚀 Update Fitur</option>
+                    <option value="warning">⚠️ Peringatan</option>
+                </select>
+            </div>
+            <p id="createBroadcastError" class="login-error"></p>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; padding: 16px;">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeCreateBroadcastModal()" style="flex: 1;">❌ Batal</button>
+            <button class="confirm-modal-btn confirm-modal-btn-save" id="btnSaveBroadcast" onclick="submitCreateBroadcast()" style="flex: 1;">✅ Kirim</button>
+        </div>
     </div>
 </div>
 <script src="app.js"></script>
