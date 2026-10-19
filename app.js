@@ -616,30 +616,59 @@ function sortSpdData(data, sortBy) {
     return arr;
 }
 
-// --- 4. FIX TOP RAK: Tampilin Tanggal SO & PIC ---
+// =========================================================
+// FINAL FIX: TOP MINUS (Sort + Info Tanggal & PIC)
+// =========================================================
 async function loadTopMinus() {
-    const container = document.getElementById("topList"); if (!container) return;
+    const container = document.getElementById("topList"); 
+    if (!container) return;
     container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat data...</p></div>`;
+    
     try {
         const today = new Date();
         let start = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth(), 1) : new Date(today.getFullYear(), today.getMonth() - 1, 1);
         let end = topPeriodCurrent === "bulan_ini" ? new Date(today.getFullYear(), today.getMonth() + 1, 0) : new Date(today.getFullYear(), today.getMonth(), 0);
+        
         const body = { mode: topPeriodCurrent };
-        if (topPeriodCurrent === "custom") { body.tgl_start = start.toISOString().slice(0, 10); body.tgl_end = end.toISOString().slice(0, 10); }
+        if (topPeriodCurrent === "custom") { 
+            body.tgl_start = start.toISOString().slice(0, 10); 
+            body.tgl_end = end.toISOString().slice(0, 10); 
+        }
         
-        let url = topTabCurrent === "rak" ? `${CONFIG.BACKEND_URL}/yui/top-rak` : `${CONFIG.BACKEND_URL}/yui/top-items-extended`;
-        if (topTabCurrent === "rak") body.limit = 500; else { body.limit = null; body.search = topSearchQuery || ""; body.order_by = topSortValue; body.sign = topSignCurrent; }
+        // ✅ KUNCI UTAMA: Selalu kirim order_by ke backend
+        body.order_by = topSortValue;
+
+        let url = "";
+        if (topTabCurrent === "rak") {
+            url = `${CONFIG.BACKEND_URL}/yui/top-rak`;
+            body.limit = 500;
+        } else {
+            url = `${CONFIG.BACKEND_URL}/yui/top-items-extended`;
+            body.limit = null;
+            body.search = topSearchQuery || "";
+            body.sign = topSignCurrent;
+        }
         
+        // Debugging: Cek body yang dikirim
+        console.log("[TopMinus] Body dikirim:", body);
+
         const resp = await apiFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        const data = await resp.json(); if (!data.success) throw new Error(data.error || "Gagal");
+        const data = await resp.json(); 
+        
+        if (!data.success) throw new Error(data.error || "Gagal");
         
         topData = topTabCurrent === "rak" ? (data.list_rak || []) : (data.items || []);
+        
+        // Update Summary
         if (document.getElementById("topSummaryTotal")) document.getElementById("topSummaryTotal").textContent = formatRupiahFull(data.total_nominal || 0);
         if (document.getElementById("topSummaryMeta")) document.getElementById("topSummaryMeta").textContent = `${topTabCurrent === "rak" ? data.total_rak : data.total_items} item • ${data.periode}`;
         
-        if (topData.length === 0) { container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; return; }
+        if (topData.length === 0) { 
+            container.innerHTML = `<div class="shift-summary-empty"><span class="empty-icon">💰</span><p>Belum ada data.</p></div>`; 
+            return; 
+        }
         
-        // Render List (Versi Baru dengan Tanggal & PIC)
+        // Render List
         container.innerHTML = topData.map((item, idx) => {
             const isRak = topTabCurrent === "rak";
             const title = isRak ? item.rak_id : cleanHtmlEntities(item.nama_produk || item.nama || item.plu || "-");
@@ -647,7 +676,6 @@ async function loadTopMinus() {
             const nominalClass = nominal < 0 ? "top-nominal-minus" : "top-nominal-plus";
             const clickAction = isRak ? `onclick="openRakDetail('${escapeHtml(item.rak_id)}')" style="cursor:pointer;"` : "";
             
-            // Data tambahan buat Top Rak
             let metaHtml = "";
             if (isRak) {
                 const tglShort = item.tgl_so ? formatTanggalShort(item.tgl_so) : "-";
@@ -673,7 +701,11 @@ async function loadTopMinus() {
                 ${isRak ? `<div class="top-item-hint" style="font-size: 10px; color: var(--accent-flame); margin-top: 6px; font-style: italic;">Tap untuk detail item →</div>` : ""}
             </div>`;
         }).join("");
-    } catch (err) { container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; }
+        
+    } catch (err) { 
+        console.error("[TopMinus] Error:", err);
+        container.innerHTML = `<p style="color:red;text-align:center;">Gagal: ${err.message}</p>`; 
+    }
 }
 
 // --- 5. FIX FILTER & SORT TOP (Biar Gak Eror) ---
