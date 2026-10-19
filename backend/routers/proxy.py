@@ -10,7 +10,32 @@ router = APIRouter()
 
 INTERNAL_BACKEND_URL = os.getenv("INTERNAL_BACKEND_URL", "https://dashboard-so.fastapicloud.dev")
 INTERNAL_API_KEY = os.getenv("SO_API_KEY")
-ALLOWED_PREFIXES = ("yui/", "hana/", "rei/", "kurumi/", "config/", "auth/me", "auth/logout")
+ALLOWED_PREFIXES = (
+    # AI Bots
+    "yui/", "hana/", "rei/", "kurumi/",
+    
+    # Config & Auth
+    "config/", "auth/me", "auth/logout", 
+    "auth/change-pin", "auth/change-password", "auth/change-username",
+    
+    # Admin: Kelola User
+    "auth/users", "auth/register", 
+    
+    # Admin: Kelola Personil (Hana)
+    "hana/personil", "hana/personil/add", "hana/personil/delete",
+    
+    # Top & Detail
+    "yui/top-rak", "yui/top-items-extended", "yui/items-by-rak",
+    
+    # Transaksi
+    "yui/save-so", "yui/save-spd", "yui/upload-so", "yui/parse-spd",
+    
+    # Laporan
+    "yui/rekap", "yui/rak-status", "yui/spd-list", "yui/status-analysis",
+    
+    # Shift
+    "hana/master-shift", "hana/shift-hari-ini", "hana/save-batch"
+)
 
 # Header CORS yang WAJIB ada di semua balasan
 CORS_HEADERS = {

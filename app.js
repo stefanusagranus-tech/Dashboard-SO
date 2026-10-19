@@ -697,6 +697,112 @@ function setTopSort(sortValue) {
     document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
     loadTopMinus();
 }
+// =========================================================
+// TAMBALAN v11.3: FIX TOP FILTER, CHAT HISTORY, AUTO THEME
+// =========================================================
 
+// --- 1. FIX: Filter Top Rak & Top Item (Maksa Reload) ---
+function setTopPeriod(period) {
+    topPeriodCurrent = period;
+    document.querySelectorAll("#topMinusScreen .spd-period-tab").forEach(tab => tab.classList.toggle("active", tab.getAttribute("data-period") === period));
+    const customRow = document.getElementById("topCustomDateRow");
+    if (customRow) {
+        if (period === "custom") {
+            customRow.classList.remove("hidden");
+            const s = document.getElementById("topCustomStart"), e = document.getElementById("topCustomEnd"), today = new Date();
+            if (s && !s.value) s.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+            if (e && !e.value) e.value = today.toISOString().slice(0, 10);
+        } else customRow.classList.add("hidden");
+    }
+    loadTopMinus(); // Reload data
+}
+
+function setTopSort(sortValue) {
+    topSortValue = sortValue;
+    document.querySelectorAll("#topMinusScreen .spd-sort-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sort") === sortValue));
+    // ✅ FIX: Reload data dari server
+    loadTopMinus(); 
+}
+
+function setTopTab(tab) {
+    topTabCurrent = tab;
+    document.querySelectorAll(".top-subtab").forEach(t => t.classList.toggle("active", t.getAttribute("data-tab") === tab));
+    const searchWrapper = document.getElementById("topSearchWrapper"), filterSign = document.getElementById("topFilterSign");
+    if (searchWrapper) { if (tab === "item") searchWrapper.classList.remove("hidden"); else searchWrapper.classList.add("hidden"); }
+    if (filterSign) { if (tab === "item") filterSign.classList.remove("hidden"); else filterSign.classList.add("hidden"); }
+    topSearchQuery = ""; const searchInput = document.getElementById("topSearchInput"); if (searchInput) searchInput.value = "";
+    loadTopMinus();
+}
+
+function setTopSign(sign) {
+    topSignCurrent = sign;
+    document.querySelectorAll(".top-filter-btn").forEach(btn => btn.classList.toggle("active", btn.getAttribute("data-sign") === sign));
+    loadTopMinus();
+}
+
+
+// --- 2. FIX: Chat History Hilang Pas Ganti Bot ---
+function renderChatHistory() {
+    const container = document.getElementById("chatMessages"); if (!container) return; let history = chatHistories[currentBot] || [];
+    // Kalau gak ada history, tampilin welcome
+    if (history.length === 0) { 
+        container.innerHTML = `<div class="chat-message-wrapper ai"><div class="chat-avatar">${BOTS[currentBot].emoji}</div><div class="bubble-content ai"><div class="bubble bubble-ai bubble-welcome">Halo Bos! 👋<br>Aku <b>${BOTS[currentBot].name}</b>.<br>${getWelcomeText(currentBot)}</div></div></div>`; 
+        return; 
+    }
+    
+    container.innerHTML = ""; let lastDate = "";
+    const _user = getUser(); const userAvatar = _user?.avatar_url ? `background-image: url('${_user.avatar_url}'); background-size: cover; background-position: center; background-color: transparent;` : "";
+    
+    // Iterasi semua history
+    history.forEach((msg, idx) => {
+        const isUser = msg.role === "user";
+        const msgDate = new Date(msg.timestamp || Date.now()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        
+        // Divider tanggal
+        if (msgDate !== lastDate) { 
+            const dateDiv = document.createElement("div");
+            dateDiv.className = "chat-date-divider";
+            dateDiv.innerHTML = `<span>${msgDate}</span>`;
+            container.appendChild(dateDiv);
+            lastDate = msgDate; 
+        }
+        
+        const wrapper = document.createElement("div"); wrapper.className = `chat-message-wrapper ${isUser ? "user" : "ai"}`;
+        const avatar = document.createElement("div"); avatar.className = isUser ? "chat-avatar avatar-user" : "chat-avatar";
+        if (isUser) { if (_user?.avatar_url) { avatar.style = userAvatar; avatar.textContent = ""; } else avatar.textContent = "👤"; } 
+        else { avatar.textContent = BOTS[currentBot].emoji; }
+        
+        const bubbleContent = document.createElement("div"); bubbleContent.className = `bubble-content ${isUser ? "user" : "ai"}`;
+        
+        if (msg.isConfirm && msg.confirmData) { 
+            bubbleContent.appendChild(renderConfirmBubble(msg, idx)); 
+        } else {
+            const bubble = document.createElement("div"); bubble.className = `bubble bubble-${isUser ? "user" : "ai"}`;
+            if (msg.isSuccess) bubble.classList.add("bubble-success"); else if (msg.isError) bubble.classList.add("bubble-error");
+            if (msg.isSuccess && msg.content.includes("🌸")) bubble.innerHTML = formatSuccessMessage(msg.content); else bubble.innerHTML = formatMessage(msg.content);
+            bubbleContent.appendChild(bubble);
+        }
+        
+        const time = document.createElement("div"); time.className = "bubble-time"; time.textContent = formatTime(msg.timestamp);
+        bubbleContent.appendChild(time); wrapper.appendChild(avatar); wrapper.appendChild(bubbleContent); container.appendChild(wrapper);
+    });
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
+
+
+// --- 3. FIX: Auto Theme (toggleAutoTheme yang hilang) ---
+function toggleAutoTheme() {
+    autoThemeEnabled = !autoThemeEnabled;
+    localStorage.setItem("so_auto_theme", String(autoThemeEnabled));
+    if (autoThemeEnabled) {
+        updateTimeTheme();
+        showToastMini("✅ Auto Tema Jam Aktif", "success");
+    } else {
+        showToastMini("⚠️ Auto Tema Jam Dimatikan", "error");
+    }
+    // Update tampilan tombol jika ada
+    const el = document.getElementById("autoThemeValue");
+    if (el) el.textContent = autoThemeEnabled ? "Aktif" : "Nonaktif";
+}
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
