@@ -458,7 +458,10 @@ function openAddUserModal() { document.getElementById("newUserUsername").value =
 function closeAddUserModal() { document.getElementById("addUserModal").classList.remove("active"); }
 async function submitAddUser() { const btn = document.getElementById("btnSaveUser"), errEl = document.getElementById("addUserError"), username = document.getElementById("newUserUsername").value.trim().toUpperCase(), nama = document.getElementById("newUserNama").value.trim(), password = document.getElementById("newUserPassword").value, pin = document.getElementById("newUserPin").value, role = document.getElementById("newUserRole").value; if (!username || !nama || !password) { errEl.textContent = "❌ Semua field wajib diisi!"; return; } btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...'; errEl.textContent = ""; try { const resp = await apiFetch(`${CONFIG.BACKEND_URL}/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, nama_lengkap: nama, role, pin }) }); const data = await resp.json(); if (!resp.ok || !data.success) throw new Error(data.detail || data.error || "Gagal menambah user"); showToastMini(`✅ User ${username} berhasil dibuat`, "success"); closeAddUserModal(); loadUsers(); } catch (err) { console.error("[AddUser] Error:", err); errEl.textContent = `❌ ${err.message}`; } finally { btn.disabled = false; btn.innerHTML = '✅ Simpan'; } }
 
-function goToNotificationsScreen() { showToastMini("🔔 Fitur Notifikasi segera hadir!", "success"); }
+function goToNotificationsScreen() { 
+    // ✅ Redirect ke halaman Broadcast
+    goToBroadcastScreen();
+}
 function openPersonilModal() { document.getElementById("personilModal").classList.add("active"); loadPersonilList(); }
 function closePersonilModal(event) { if (event && event.target !== event.currentTarget) return; document.getElementById("personilModal").classList.remove("active"); }
 function openStreamlitInBrowser() { try { window.open(CONFIG.STREAMLIT_URL, "_blank"); } catch (e) { window.location.href = CONFIG.STREAMLIT_URL; } }
@@ -1354,24 +1357,29 @@ async function checkNewBroadcast() {
     try {
         const resp = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
         const data = await resp.json();
-        if (!data.success || !data.data || data.data.length === 0) return;
+        if (!data.success || !data.data || data.data.length === 0) {
+            // Sembunyiin badge kalau gak ada broadcast sama sekali
+            const badge = document.getElementById("notifBadge");
+            if (badge) badge.style.display = "none";
+            return;
+        }
         
-        // Ambil ID broadcast terbaru (paling atas, karena udah di-sort desc)
-        const latestBroadcast = data.data[0];
-        const latestId = latestBroadcast.id;
-        
-        // Ambil ID terakhir yang udah dibaca dari localStorage
+        // Ambil ID broadcast terakhir yang udah dibaca user ini
         const _user = getUser();
         const _key = _user ? `so_last_broadcast_${_user.username}` : "so_last_broadcast_guest";
-        const lastReadId = localStorage.getItem(_key);
+        const lastReadId = parseInt(localStorage.getItem(_key) || "0");
         
-        // Kalau ada broadcast baru, munculin badge
+        // ✅ HITUNG berapa broadcast baru (ID > lastReadId)
+        const unreadCount = data.data.filter(b => b.id > lastReadId).length;
+        
         const badge = document.getElementById("notifBadge");
-        if (badge && (!lastReadId || parseInt(lastReadId) < latestId)) {
-            badge.style.display = "block";
-            badge.textContent = "1"; // Atau hitung jumlah broadcast baru
-        } else if (badge) {
-            badge.style.display = "none";
+        if (badge) {
+            if (unreadCount > 0) {
+                badge.style.display = "block";
+                badge.textContent = unreadCount > 9 ? "9+" : String(unreadCount); // Max tampil 9+
+            } else {
+                badge.style.display = "none";
+            }
         }
     } catch (e) {
         console.warn("[Notif] Gagal cek broadcast:", e);
