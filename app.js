@@ -1565,6 +1565,9 @@ function startMentionPolling() {
 
             // Scan pesan-pesan terbaru
             data.data.forEach(m => {
+                // ✅ FIX BUG #2: Jangan catat notif kalau kita lagi buka room ini
+                if (currentRoomId == 1) return; 
+                
                 // Kalau pesan nge-tag username kita, DAN bukan dari kita sendiri
                 if (m.pesan.includes(`@${_user.username}`) && m.user_id !== _user.id) {
                     // Cek apakah pesan ini udah pernah dicatat
@@ -1576,7 +1579,8 @@ function startMentionPolling() {
                             room_id: 1,
                             room_name: "Server",
                             sender: m.users?.nama_lengkap || m.users?.username || "User",
-                            text: m.pesan
+                            text: m.pesan,
+                            timestamp: new Date(m.created_at || Date.now()).getTime() // ✅ FIX BUG #1: Tambahin timestamp!
                         });
                         hasNew = true;
                     }
@@ -1587,9 +1591,6 @@ function startMentionPolling() {
             if (hasNew) {
                 localStorage.setItem(mentionKey, JSON.stringify(savedMentions));
                 updateNotifBadge(); // Lonceng langsung nambah!
-                
-                // Optional: Bunyiin suara notif kalau ada
-                // playNotificationSound(); 
             }
 
         } catch (e) {
