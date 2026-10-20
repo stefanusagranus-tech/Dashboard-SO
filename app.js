@@ -171,7 +171,14 @@ function showScreen(screenId) {
         if (activeId) { const el = document.getElementById(activeId); if (el) { el.classList.add("active"); el.style.color = "#ff7b00"; } }
     }
 }
-function goToHomeScreen() { closeSidebar(); showScreen("homeScreen"); startLiveClock(); loadHomeDataLazy(); startDashboardAutoRefresh(); checkNewBroadcast();}
+function goToHomeScreen() { 
+    closeSidebar(); 
+    showScreen("homeScreen"); 
+    startLiveClock(); 
+    loadHomeDataLazy(); 
+    startDashboardAutoRefresh(); 
+    updateNotifBadge(); // ✅ GANTI DARI checkNewBroadcast() JADI INI
+}
 function goToChatScreen() { stopDashboardAutoRefresh(); showScreen("chatScreen"); if (!currentBot || !BOTS[currentBot]) currentBot = "yui"; switchBot(currentBot); }
 async function goToSettingsScreen() { closeSidebar(); await refreshUserData(); updateSettingsUserInfo(); updateAvatarUI(); showScreen("settingsScreen"); }
 function goToMasterShiftScreen() { closeSidebar(); stopDashboardAutoRefresh(); showScreen("masterShiftScreen"); loadShiftDataLazy(); }
@@ -1445,16 +1452,15 @@ async function loadNotifications() {
     container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat...</p></div>`;
     
     try {
-        // TARIK BROADCAST
+        const _user = getUser();
+        let html = "";
+
+        // 1. TARIK BROADCAST (Tampilin semua aja biar user bisa baca)
         const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
         const dataB = await respB.json();
         
-        let html = "";
-        
-        // Render Broadcast yang belum dibaca
         if (dataB.success && dataB.data) {
             dataB.data.forEach(b => {
-                // (Logika deteksi udah dibaca/belum sama kayak sebelumnya)
                 let icon = b.tipe === "update" ? "🚀" : (b.tipe === "warning" ? "⚠️" : "📢");
                 html += `
                     <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #ff7b00; cursor: pointer;" onclick="goToBroadcastScreen(); closeNotificationModal();">
@@ -1465,15 +1471,14 @@ async function loadNotifications() {
             });
         }
 
-        // TARIK MENTION (Kita asumsikan ada state localStorage buat nyimpen ID pesan yang nge-tag kita)
-        const _user = getUser();
+        // 2. TARIK MENTION DARI LOCALSTORAGE
         const mentionKey = `so_mention_${_user.username}`;
         const mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
         
         if (mentions.length > 0) {
             mentions.forEach(m => {
                 html += `
-                    <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #a259ff; cursor: pointer;" onclick="openRoomChat(${m.room_id}, '${m.room_name}'); closeNotificationModal();">
+                    <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #a259ff; cursor: pointer; background: rgba(162,89,255,0.1);" onclick="openRoomChat(${m.room_id}, '${m.room_name}'); closeNotificationModal();">
                         <div style="font-size: 14px; font-weight: bold; color: #a259ff;">🔔 Anda di-tag oleh ${escapeHtml(m.sender)}</div>
                         <div style="font-size: 12px; color: var(--text-muted);">"${escapeHtml(m.text)}"</div>
                     </div>
@@ -1488,7 +1493,8 @@ async function loadNotifications() {
         }
         
     } catch (e) {
-        container.innerHTML = `<p style="color: red;">Gagal load notifikasi.</p>`;
+        console.error("Gagal load notif:", e);
+        container.innerHTML = `<p style="color: red; text-align: center;">Gagal memuat notifikasi.</p>`;
     }
 }
 // Boot
