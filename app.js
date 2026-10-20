@@ -1017,7 +1017,11 @@ let currentRoomId = null;
 let roomRefreshInterval = null;
 
 async function openRoomChat(roomId, roomName) {
-    if (roomRefreshInterval) { clearInterval(roomRefreshInterval); roomRefreshInterval = null; }
+    // ✅ Clear interval lama biar gak spam request
+    if (roomRefreshInterval) { 
+        clearInterval(roomRefreshInterval); 
+        roomRefreshInterval = null; 
+    }
     
     currentRoomId = roomId;
     document.getElementById("roomChatTitle").textContent = `# ${roomName}`;
@@ -1027,11 +1031,12 @@ async function openRoomChat(roomId, roomName) {
     
     showScreen("roomChatScreen");
     
-    // ✅ PANGGIL INI
+    // ✅ Init sistem mention (autocomplete @)
     initMentionSystem(); 
     
     await loadRoomMessages();
     
+    // ✅ Auto refresh tiap 5 detik
     roomRefreshInterval = setInterval(loadRoomMessages, 5000);
 }
 
@@ -1046,20 +1051,22 @@ async function loadRoomMessages() {
         if (!data.success) throw new Error("Gagal load pesan");
         
         const _user = getUser();
+        const myUsername = _user?.username; // ✅ Ambil username buat cek tag
         const isFirstLoad = container.innerHTML.includes("loading-state") || container.innerHTML.trim() === "";
         
         const newHtml = data.data.map(m => {
-            const isBot = m.user_id === null; // ✅ Cek apakah Bot
+            const isBot = m.user_id === null;
             const isMe = m.user_id === _user?.id;
             const nama = isBot ? "🤖 Bot AI" : (m.users?.nama_lengkap || m.users?.username || "User");
             const avatarUrl = m.users?.avatar_url;
             
-            // ✅ Logika Avatar & Style
+            // ✅ CEK APAKAH PESAN INI NGE-TAG KITA
+            const isTagged = m.pesan.includes(`@${myUsername}`) && !isMe;
+            
             let wrapperClass = isMe ? "user" : "ai";
             let avatarHtml = "";
             
             if (isBot) {
-                // Style khusus Bot
                 wrapperClass = "ai";
                 avatarHtml = `<div class="chat-avatar" style="background: linear-gradient(135deg, #a259ff, #ff6b1a); font-size: 18px;">🤖</div>`;
             } else if (avatarUrl) {
@@ -1069,12 +1076,21 @@ async function loadRoomMessages() {
                 avatarHtml = `<div class="chat-avatar ${isMe ? "avatar-user" : ""}">${inisial}</div>`;
             }
 
+            // ✅ STYLE DEFAULT & STYLE KHUSUS MENTION
+            let bubbleStyle = isBot ? 'border: 1px solid #a259ff; background: rgba(162,89,255,0.1);' : '';
+            if (isTagged) {
+                // Warna ungu ngejreng kalau di-tag (mirip Discord)
+                bubbleStyle = 'border: 2px solid #a259ff; background: rgba(162,89,255,0.25); box-shadow: 0 0 10px rgba(162,89,255,0.4);';
+            }
+
             return `
                 <div class="chat-message-wrapper ${wrapperClass}" style="margin-bottom: 8px;">
                     ${avatarHtml}
                     <div class="bubble-content ${wrapperClass}">
-                        <div style="font-size: 10px; color: ${isBot ? '#a259ff' : 'var(--text-muted)'}; margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">${escapeHtml(nama)}</div>
-                        <div class="bubble bubble-${wrapperClass}" style="${isBot ? 'border: 1px solid #a259ff; background: rgba(162,89,255,0.1);' : ''}">${escapeHtml(m.pesan)}</div>
+                        <div style="font-size: 10px; color: ${isBot ? '#a259ff' : 'var(--text-muted)'}; margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">
+                            ${escapeHtml(nama)} ${isTagged ? '<span style="background:#a259ff; color:white; font-size:8px; padding:2px 4px; border-radius:4px; margin-left:4px;">TAG KAMU</span>' : ''}
+                        </div>
+                        <div class="bubble bubble-${wrapperClass}" style="${bubbleStyle}">${escapeHtml(m.pesan)}</div>
                         <div class="bubble-time">${formatTime(m.created_at)}</div>
                     </div>
                 </div>
@@ -1090,6 +1106,19 @@ async function loadRoomMessages() {
                 const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
                 container.innerHTML = newHtml;
                 if (wasNearBottom) container.scrollTop = container.scrollHeight;
+            }
+        }
+        
+        // ✅ HAPUS NOTIF MENTION DARI LOCALSTORAGE (Karena room udah dibuka)
+        if (_user) {
+            const mentionKey = `so_mention_${_user.username}`;
+            let mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
+            // Filter: hapus mention yang room_id-nya sama dengan currentRoomId
+            const filteredMentions = mentions.filter(m => m.room_id !== currentRoomId);
+            if (mentions.length !== filteredMentions.length) {
+                localStorage.setItem(mentionKey, JSON.stringify(filteredMentions));
+                // Update badge lonceng biar berkurang
+                if (typeof updateNotifBadge === 'function') updateNotifBadge();
             }
         }
         
@@ -1356,36 +1385,37 @@ function insertMention(username, atPos) {
 // =========================================================
 
 // Cek broadcast baru sejak terakhir user buka
-async function checkNewBroadcast() {
+async function updateNotifBadge() {
     try {
-        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
-        const data = await resp.json();
-        if (!data.success || !data.data || data.data.length === 0) {
-            // Sembunyiin badge kalau gak ada broadcast sama sekali
-            const badge = document.getElementById("notifBadge");
-            if (badge) badge.style.display = "none";
-            return;
+        let totalUnread = 0;
+        const _user = getUser();
+        
+        // 1. Cek Broadcast
+        const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
+        const dataB = await respB.json();
+        if (dataB.success && dataB.data) {
+            const key = `so_last_broadcast_${_user.username}`;
+            const lastRead = parseInt(localStorage.getItem(key) || "0");
+            totalUnread += dataB.data.filter(b => b.id > lastRead).length;
         }
         
-        // Ambil ID broadcast terakhir yang udah dibaca user ini
-        const _user = getUser();
-        const _key = _user ? `so_last_broadcast_${_user.username}` : "so_last_broadcast_guest";
-        const lastReadId = parseInt(localStorage.getItem(_key) || "0");
-        
-        // ✅ HITUNG berapa broadcast baru (ID > lastReadId)
-        const unreadCount = data.data.filter(b => b.id > lastReadId).length;
-        
+        // 2. Cek Mentionan (Dari localStorage sementara)
+        const mentionKey = `so_mention_${_user.username}`;
+        const mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
+        totalUnread += mentions.length;
+
+        // 3. Update UI Badge
         const badge = document.getElementById("notifBadge");
         if (badge) {
-            if (unreadCount > 0) {
+            if (totalUnread > 0) {
                 badge.style.display = "block";
-                badge.textContent = unreadCount > 9 ? "9+" : String(unreadCount); // Max tampil 9+
+                badge.textContent = totalUnread > 9 ? "9+" : String(totalUnread);
             } else {
                 badge.style.display = "none";
             }
         }
     } catch (e) {
-        console.warn("[Notif] Gagal cek broadcast:", e);
+        console.warn("[Notif] Gagal update badge:", e);
     }
 }
 
