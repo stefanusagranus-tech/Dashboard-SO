@@ -1447,9 +1447,9 @@ async function loadNotifications() {
     
     try {
         const _user = getUser();
-        let notifArray = []; // Tampung semua notif dulu biar bisa disortir
+        let notifArray = []; 
 
-        // 1. TARIK BROADCAST
+        // 1. TARIK BROADCAST (Tetep nampilin semua biar user bisa baca)
         const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
         const dataB = await respB.json();
         
@@ -1457,7 +1457,7 @@ async function loadNotifications() {
             dataB.data.forEach(b => {
                 notifArray.push({
                     type: "broadcast",
-                    timestamp: new Date(b.created_at).getTime(), // Sortir pakai milidetik
+                    timestamp: new Date(b.created_at).getTime(),
                     judul: b.judul,
                     pesan: b.pesan,
                     tipe: b.tipe
@@ -1465,24 +1465,25 @@ async function loadNotifications() {
             });
         }
 
-        // 2. TARIK MENTION DARI LOCALSTORAGE
-        const mentionKey = `so_mention_${_user.username}`;
-        const mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
+        // 2. TARIK MENTION DARI DATABASE (Ganti localStorage!)
+        // Kita panggil API baru yang tadi lo debug (atau bikin endpoint list)
+        const respM = await apiFetch(`${CONFIG.BACKEND_URL}/realtime/list/${_user.username}`, { method: "GET" });
+        const dataM = await respM.json();
         
-        if (mentions.length > 0) {
-            mentions.forEach(m => {
+        if (dataM.success && dataM.data) {
+            dataM.data.forEach(m => {
                 notifArray.push({
                     type: "mention",
-                    timestamp: m.timestamp || Date.now(), // Fallback kalau gak ada timestamp
-                    sender: m.sender,
-                    text: m.text,
-                    room_id: m.room_id,
-                    room_name: m.room_name
+                    timestamp: new Date(m.created_at).getTime(),
+                    sender: m.sender_name,
+                    text: m.message,
+                    room_id: m.room_id || 1,
+                    room_name: "Server"
                 });
             });
         }
 
-        // ✅ 3. SORTIR DARI YANG PALING BARU (DESCENDING)
+        // 3. SORTIR DARI YANG PALING BARU
         notifArray.sort((a, b) => b.timestamp - a.timestamp);
 
         // 4. RENDER KE HTML

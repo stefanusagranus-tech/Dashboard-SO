@@ -84,3 +84,21 @@ async def get_unread_count(username: str):
     except Exception as e:
         logger.error(f"Error unread count: {e}")
         return {"success": False, "count": 0, "error": str(e)}
+
+@router.get("/list/{username}")
+async def get_notif_list(username: str):
+    try:
+        sb = get_supabase()
+        if sb is None:
+            return {"success": False, "data": []}
+
+        response = sb.table("notifications") \
+            .select("*") \
+            .eq("target_username", username.upper()) \
+            .eq("is_read", False) \
+            .order("created_at", desc=True) \
+            .execute()
+        
+        return {"success": True, "data": response.data or []}
+    except Exception as e:
+        return {"success": False, "error": str(e), "data": []}
