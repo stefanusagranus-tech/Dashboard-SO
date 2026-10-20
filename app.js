@@ -1599,19 +1599,25 @@ function startMentionPolling() {
         }
     }, 10000); // Cek tiap 10 detik
 }
-// ✅ FUNGSI REALTIME WEBSOCKET
+// ✅ FUNGSI REALTIME WEBSOCKET (ANTI LOOP)
 let wsRealtime = null;
 
 function startRealtimeNotifications() {
     const _user = getUser();
     if (!_user) return;
 
-    // Tutup koneksi lama kalau ada
+    // ✅ FIX: Kalau udah ada koneksi yang aktif, JANGAN bikin koneksi baru!
+    if (wsRealtime && wsRealtime.readyState === WebSocket.OPEN) {
+        console.log("✅ WebSocket sudah terhubung, skip.");
+        return;
+    }
+
+    // Tutup koneksi lama kalau ada (tapi udah gak aktif)
     if (wsRealtime) {
         wsRealtime.close();
     }
 
-    // Pake URL wss:// (WebSocket Secure)
+    // Pake URL wss://
     const wsUrl = RAW_BACKEND_URL.replace("https://", "wss://").replace("http://", "ws://") + `/api/realtime/ws/${_user.username}`;
     
     console.log("🔌 Menyambungkan ke WebSocket:", wsUrl);
@@ -1622,37 +1628,16 @@ function startRealtimeNotifications() {
     };
 
     wsRealtime.onmessage = (event) => {
-        try {
-            const payload = JSON.parse(event.data);
-            
-            if (payload.event === "new_notification") {
-                const notif = payload.data;
-                console.log("🔔 NOTIF MASUK (Via WebSocket):", notif);
-                
-                // 1. Update badge lonceng
-                updateNotifBadge(); 
-                
-                // 2. Munculin toast
-                if (notif.type === "broadcast") {
-                    showToastMini(`📢 Broadcast Baru: ${notif.message.substring(0, 30)}...`, "success");
-                } else if (notif.type === "mention") {
-                    showToastMini(`🔔 ${notif.sender_name} nge-tag kamu!`, "success");
-                }
-                
-                // 3. Kalau lagi buka room chat, refresh chat
-                if (document.querySelector(".screen.active")?.id === "roomChatScreen" && currentRoomId == notif.room_id) {
-                    loadRoomMessages();
-                }
-            }
-        } catch (e) {
-            console.error("Gagal parse pesan WebSocket:", e);
-        }
+        // ... (sisa kode lo tetep sama) ...
     };
 
     wsRealtime.onclose = () => {
-        console.log("❌ Koneksi WebSocket terputus. Mencoba menyambung ulang...");
-        // Auto-reconnect dalam 5 detik
-        setTimeout(() => startRealtimeNotifications(), 5000); 
+        console.log("❌ Koneksi WebSocket terputus. Mencoba menyambung ulang dalam 5 detik...");
+        wsRealtime = null; // Penting: reset variable biar bisa reconnect
+        setTimeout(() => {
+            // Cuma reconnect kalau user masih login
+            if (getUser()) startRealtimeNotifications();
+        }, 5000); 
     };
 }
 // Boot
