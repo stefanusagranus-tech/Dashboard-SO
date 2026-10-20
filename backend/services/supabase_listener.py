@@ -9,13 +9,15 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 async def start_supabase_listener():
     try:
+        print("⏳ Memulai Supabase Realtime Listener...")
         # ✅ PAKAI acreate_client (async)
         supabase = await acreate_client(SUPABASE_URL, SUPABASE_KEY)
         
-        # Callback ini SINKRON, jadi kita lempar ke event loop async
         def handle_insert(payload):
             new_record = payload.get("new", {})
             target = new_record.get("target_username")
+            
+            print(f"🔔 [LISTENER] Notif baru masuk untuk: {target}")
             
             notif_data = {
                 "type": new_record.get("type"),
@@ -41,4 +43,4 @@ async def start_supabase_listener():
         await channel.subscribe()
         print("✅ Realtime Supabase Listener Aktif di Background (Async Mode)!")
     except Exception as e:
-        print(f"❌ Gagal start listener: {e}")
+        print(f"❌ GAGAL START LISTENER: {e}")
