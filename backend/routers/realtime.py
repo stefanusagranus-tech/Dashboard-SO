@@ -69,22 +69,29 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
 @router.get("/unread-count/{username}")
 async def get_unread_count(username: str):
     try:
-        sb = get_supabase() # ✅ Panggil fungsi get_supabase()
+        sb = get_supabase()
         if sb is None:
-            return {"success": False, "count": 0, "error": "Gagal koneksi database"}
+            return {"success": False, "count": 0, "error": "DB Error"}
 
-        # Hitung notif yang target_username = user ini DAN is_read = False
+        # ✅ DEBUG: Tarik SEMUA notif buat username ini, jangan filter apapun
         response = sb.table("notifications") \
-            .select("id", count="exact") \
+            .select("*") \
             .eq("target_username", username.upper()) \
-            .eq("is_read", False) \
             .execute()
         
-        return {"success": True, "count": response.count or 0}
-    except Exception as e:
-        logger.error(f"Error unread count: {e}")
-        return {"success": False, "count": 0, "error": str(e)}
+        print(f"[DEBUG] Data mentah dari DB buat {username}: {response.data}")
 
+        # Hitung manual dari data yang ditarik
+        unread_count = 0
+        for row in response.data:
+            # Cek apakah is_read itu False, 'false', atau null
+            if row.get("is_read") is False or row.get("is_read") == False or row.get("is_read") is None:
+                unread_count += 1
+        
+        return {"success": True, "count": unread_count, "debug_data": response.data}
+    except Exception as e:
+        return {"success": False, "count": 0, "error": str(e)}
+    
 @router.get("/list/{username}")
 async def get_notif_list(username: str):
     try:
