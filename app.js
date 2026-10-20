@@ -177,8 +177,9 @@ function goToHomeScreen() {
     startLiveClock(); 
     loadHomeDataLazy(); 
     startDashboardAutoRefresh();
-    startMentionPolling(); 
-    updateNotifBadge(); // ✅ GANTI DARI checkNewBroadcast() JADI INI
+    
+    startRealtimeNotifications(); // ✅ PASTIIN ADA INI
+    updateNotifBadge(); 
 }
 function goToChatScreen() { stopDashboardAutoRefresh(); showScreen("chatScreen"); if (!currentBot || !BOTS[currentBot]) currentBot = "yui"; switchBot(currentBot); }
 async function goToSettingsScreen() { closeSidebar(); await refreshUserData(); updateSettingsUserInfo(); updateAvatarUI(); showScreen("settingsScreen"); }
@@ -1597,6 +1598,62 @@ function startMentionPolling() {
             // Diam aja kalau error (biar gak nyampah di console)
         }
     }, 10000); // Cek tiap 10 detik
+}
+// ✅ FUNGSI REALTIME WEBSOCKET
+let wsRealtime = null;
+
+function startRealtimeNotifications() {
+    const _user = getUser();
+    if (!_user) return;
+
+    // Tutup koneksi lama kalau ada
+    if (wsRealtime) {
+        wsRealtime.close();
+    }
+
+    // Pake URL wss:// (WebSocket Secure)
+    const wsUrl = RAW_BACKEND_URL.replace("https://", "wss://").replace("http://", "ws://") + `/api/realtime/ws/${_user.username}`;
+    
+    console.log("🔌 Menyambungkan ke WebSocket:", wsUrl);
+    wsRealtime = new WebSocket(wsUrl);
+
+    wsRealtime.onopen = () => {
+        console.log("✅ Terhubung ke Realtime Server!");
+    };
+
+    wsRealtime.onmessage = (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            
+            if (payload.event === "new_notification") {
+                const notif = payload.data;
+                console.log("🔔 NOTIF MASUK (Via WebSocket):", notif);
+                
+                // 1. Update badge lonceng
+                updateNotifBadge(); 
+                
+                // 2. Munculin toast
+                if (notif.type === "broadcast") {
+                    showToastMini(`📢 Broadcast Baru: ${notif.message.substring(0, 30)}...`, "success");
+                } else if (notif.type === "mention") {
+                    showToastMini(`🔔 ${notif.sender_name} nge-tag kamu!`, "success");
+                }
+                
+                // 3. Kalau lagi buka room chat, refresh chat
+                if (document.querySelector(".screen.active")?.id === "roomChatScreen" && currentRoomId == notif.room_id) {
+                    loadRoomMessages();
+                }
+            }
+        } catch (e) {
+            console.error("Gagal parse pesan WebSocket:", e);
+        }
+    };
+
+    wsRealtime.onclose = () => {
+        console.log("❌ Koneksi WebSocket terputus. Mencoba menyambung ulang...");
+        // Auto-reconnect dalam 5 detik
+        setTimeout(() => startRealtimeNotifications(), 5000); 
+    };
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
