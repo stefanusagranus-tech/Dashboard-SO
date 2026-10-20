@@ -72,22 +72,12 @@ async def get_unread_count(username: str):
         sb = get_supabase()
         if sb is None:
             return {"success": False, "count": 0, "error": "DB Error"}
-
-        # ✅ DEBUG: Tarik SEMUA notif buat username ini
-        response = sb.table("notifications") \
-            .select("*") \
-            .eq("target_username", username.upper()) \
-            .execute()
         
-        print(f"[DEBUG] Data mentah dari DB buat {username}: {response.data}")
-
-        # Hitung manual dari data yang ditarik
-        unread_count = 0
-        for row in response.data:
-            if row.get("is_read") is False or row.get("is_read") == False or row.get("is_read") is None:
-                unread_count += 1
+        # Panggil SQL function langsung (bypass RLS)
+        response = sb.rpc("get_unread_count", {"p_username": username.upper()}).execute()
         
-        return {"success": True, "count": unread_count, "debug_data": response.data}
+        count = response.data if isinstance(response.data, int) else 0
+        return {"success": True, "count": count}
     except Exception as e:
         return {"success": False, "count": 0, "error": str(e)}
     
