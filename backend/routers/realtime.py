@@ -54,3 +54,16 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
         manager.disconnect(websocket, username)
     except Exception:
         manager.disconnect(websocket, username)
+
+from services.supabase_client import supabase  # Sesuaikan import-nya
+@router.get("/unread-count/{username}")
+async def get_unread_count(username: str):
+    try:
+        response = supabase.table("notifications") \
+            .select("id", count="exact") \
+            .eq("target_username", username.upper()) \
+            .eq("is_read", False) \
+            .execute()
+        return {"success": True, "count": response.count or 0}
+    except Exception as e:
+        return {"success": False, "count": 0, "error": str(e)}

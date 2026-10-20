@@ -1398,31 +1398,19 @@ function insertMention(username, atPos) {
 
 // Cek broadcast baru sejak terakhir user buka
 async function updateNotifBadge() {
-    try {
-        let totalUnread = 0;
-        const _user = getUser();
-        if (!_user) return;
-        
-        // Cek Broadcast Baru
-        const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
-        const dataB = await respB.json();
-        if (dataB.success && dataB.data) {
-            const key = `so_last_broadcast_${_user.username}`;
-            const lastRead = parseInt(localStorage.getItem(key) || "0");
-            totalUnread += dataB.data.filter(b => b.id > lastRead).length;
-        }
-        
-        // Cek Mention di LocalStorage
-        const mentionKey = `so_mention_${_user.username}`;
-        const mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
-        totalUnread += mentions.length;
+    const _user = getUser();
+    if (!_user) return;
 
-        // Update Angka Merah
+    try {
+        // ✅ Nembak API Backend (lewat proxy)
+        const resp = await apiFetch(`${CONFIG.BACKEND_URL}/realtime/unread-count/${_user.username}`, { method: "GET" });
+        const data = await resp.json();
+
         const badge = document.getElementById("notifBadge");
         if (badge) {
-            if (totalUnread > 0) {
+            if (data.success && data.count > 0) {
                 badge.style.display = "block";
-                badge.textContent = totalUnread > 9 ? "9+" : String(totalUnread);
+                badge.textContent = data.count > 9 ? "9+" : String(data.count);
             } else {
                 badge.style.display = "none";
             }
@@ -1628,17 +1616,32 @@ function startRealtimeNotifications() {
     };
 
     wsRealtime.onmessage = (event) => {
-        // ... (sisa kode lo tetep sama) ...
-    };
-
-    wsRealtime.onclose = () => {
-        console.log("❌ Koneksi WebSocket terputus. Mencoba menyambung ulang dalam 5 detik...");
-        wsRealtime = null; // Penting: reset variable biar bisa reconnect
-        setTimeout(() => {
-            // Cuma reconnect kalau user masih login
-            if (getUser()) startRealtimeNotifications();
-        }, 5000); 
-    };
+    try {
+        const payload = JSON.parse(event.data);
+        
+        if (payload.event === "new_notification") {
+            const notif = payload.data;
+            console.log("🔔 NOTIF MASUK (Via WebSocket):", notif);
+            
+            // 1. Update badge lonceng (panggil API lagi biar akurat)
+            updateNotifBadge(); 
+            
+            // 2. Munculin toast
+            if (notif.type === "broadcast") {
+                showToastMini(`📢 Broadcast Baru: ${notif.message.substring(0, 30)}...`, "success");
+            } else if (notif.type === "mention") {
+                showToastMini(`🔔 ${notif.sender_name} nge-tag kamu!`, "success");
+            }
+            
+            // 3. Kalau lagi buka room chat, refresh chat
+            if (document.querySelector(".screen.active")?.id === "roomChatScreen" && currentRoomId == notif.room_id) {
+                loadRoomMessages();
+            }
+        }
+    } catch (e) {
+        console.error("Gagal parse pesan WebSocket:", e);
+    }
+};
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
