@@ -1449,7 +1449,7 @@ async function loadNotifications() {
         const _user = getUser();
         let notifArray = []; 
 
-        // 1. TARIK BROADCAST (Tetep nampilin semua biar user bisa baca)
+        // 1. TARIK BROADCAST
         const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
         const dataB = await respB.json();
         
@@ -1465,8 +1465,7 @@ async function loadNotifications() {
             });
         }
 
-        // 2. TARIK MENTION DARI DATABASE (Ganti localStorage!)
-        // Kita panggil API baru yang tadi lo debug (atau bikin endpoint list)
+        // 2. TARIK MENTION DARI DATABASE (INI YANG BARU!)
         const respM = await apiFetch(`${CONFIG.BACKEND_URL}/realtime/list/${_user.username}`, { method: "GET" });
         const dataM = await respM.json();
         

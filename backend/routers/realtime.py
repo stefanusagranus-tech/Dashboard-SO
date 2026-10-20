@@ -88,6 +88,7 @@ async def get_notif_list(username: str):
         if sb is None:
             return {"success": False, "data": []}
 
+        # Tarik notif yang belum dibaca, urut dari yang terbaru
         response = sb.table("notifications") \
             .select("*") \
             .eq("target_username", username.upper()) \
@@ -97,4 +98,5 @@ async def get_notif_list(username: str):
         
         return {"success": True, "data": response.data or []}
     except Exception as e:
+        print(f"[LIST ERROR] {e}")
         return {"success": False, "error": str(e), "data": []}
