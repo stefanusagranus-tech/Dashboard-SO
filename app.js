@@ -176,7 +176,8 @@ function goToHomeScreen() {
     showScreen("homeScreen"); 
     startLiveClock(); 
     loadHomeDataLazy(); 
-    startDashboardAutoRefresh(); 
+    startDashboardAutoRefresh();
+    startMentionPolling(); 
     updateNotifBadge(); // ✅ GANTI DARI checkNewBroadcast() JADI INI
 }
 function goToChatScreen() { stopDashboardAutoRefresh(); showScreen("chatScreen"); if (!currentBot || !BOTS[currentBot]) currentBot = "yui"; switchBot(currentBot); }
@@ -1510,6 +1511,61 @@ function formatMentions(text) {
     return safeText.replace(regex, (match) => {
         return `<span style="color: #a259ff; font-weight: 700; background: rgba(162,89,255,0.15); padding: 2px 6px; border-radius: 6px; display: inline-block;">${match}</span>`;
     });
+}
+// ✅ SISTEM PENYADAP MENTION (REAL-TIME SIMULATION)
+let mentionPollingInterval = null;
+
+function startMentionPolling() {
+    if (mentionPollingInterval) clearInterval(mentionPollingInterval);
+    
+    mentionPollingInterval = setInterval(async () => {
+        const _user = getUser();
+        if (!_user) return;
+
+        try {
+            // Tarik pesan terbaru dari room 1 (asumsi room utama)
+            const resp = await apiFetch(`${CONFIG.BACKEND_URL}/room/messages/1`, { method: "GET" });
+            const data = await resp.json();
+            if (!data.success || !data.data) return;
+
+            const mentionKey = `so_mention_${_user.username}`;
+            let savedMentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
+            
+            let hasNew = false;
+
+            // Scan pesan-pesan terbaru
+            data.data.forEach(m => {
+                // Kalau pesan nge-tag username kita, DAN bukan dari kita sendiri
+                if (m.pesan.includes(`@${_user.username}`) && m.user_id !== _user.id) {
+                    // Cek apakah pesan ini udah pernah dicatat
+                    const isAlreadySaved = savedMentions.some(sm => sm.message_id === m.id);
+                    
+                    if (!isAlreadySaved) {
+                        savedMentions.push({
+                            message_id: m.id,
+                            room_id: 1,
+                            room_name: "Server",
+                            sender: m.users?.nama_lengkap || m.users?.username || "User",
+                            text: m.pesan
+                        });
+                        hasNew = true;
+                    }
+                }
+            });
+
+            // Kalau ada tag baru, simpan dan update lonceng!
+            if (hasNew) {
+                localStorage.setItem(mentionKey, JSON.stringify(savedMentions));
+                updateNotifBadge(); // Lonceng langsung nambah!
+                
+                // Optional: Bunyiin suara notif kalau ada
+                // playNotificationSound(); 
+            }
+
+        } catch (e) {
+            // Diam aja kalau error (biar gak nyampah di console)
+        }
+    }, 10000); // Cek tiap 10 detik
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
