@@ -1117,15 +1117,18 @@ async function loadRoomMessages() {
             }
         }
         
-        // ✅ HAPUS NOTIF MENTION DARI LOCALSTORAGE (Karena room udah dibuka)
+        // ✅ HAPUS NOTIF MENTION DARI LOCALSTORAGE & UPDATE BADGE
         if (_user) {
             const mentionKey = `so_mention_${_user.username}`;
             let mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
-            // Filter: hapus mention yang room_id-nya sama dengan currentRoomId
+            
+            // Filter: Buang SEMUA mention yang room_id-nya sama dengan room yang lagi dibuka
+            const initialLength = mentions.length;
             const filteredMentions = mentions.filter(m => m.room_id !== currentRoomId);
+            
             if (mentions.length !== filteredMentions.length) {
                 localStorage.setItem(mentionKey, JSON.stringify(filteredMentions));
-                // Update badge lonceng biar berkurang
+                // Update lonceng langsung!
                 if (typeof updateNotifBadge === 'function') updateNotifBadge();
             }
         }
@@ -1455,21 +1458,21 @@ async function loadNotifications() {
     
     try {
         const _user = getUser();
-        let html = "";
+        let notifArray = []; // Tampung semua notif dulu biar bisa disortir
 
-        // 1. TARIK BROADCAST (Tampilin semua aja biar user bisa baca)
+        // 1. TARIK BROADCAST
         const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
         const dataB = await respB.json();
         
         if (dataB.success && dataB.data) {
             dataB.data.forEach(b => {
-                let icon = b.tipe === "update" ? "🚀" : (b.tipe === "warning" ? "⚠️" : "📢");
-                html += `
-                    <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #ff7b00; cursor: pointer;" onclick="goToBroadcastScreen(); closeNotificationModal();">
-                        <div style="font-size: 14px; font-weight: bold; color: #ff7b00;">${icon} ${escapeHtml(b.judul)}</div>
-                        <div style="font-size: 12px; color: var(--text-muted);">${escapeHtml(b.pesan.substring(0, 50))}...</div>
-                    </div>
-                `;
+                notifArray.push({
+                    type: "broadcast",
+                    timestamp: new Date(b.created_at).getTime(), // Sortir pakai milidetik
+                    judul: b.judul,
+                    pesan: b.pesan,
+                    tipe: b.tipe
+                });
             });
         }
 
@@ -1479,26 +1482,53 @@ async function loadNotifications() {
         
         if (mentions.length > 0) {
             mentions.forEach(m => {
-                html += `
-                    <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #a259ff; cursor: pointer; background: rgba(162,89,255,0.1);" onclick="openRoomChat(${m.room_id}, '${m.room_name}'); closeNotificationModal();">
-                        <div style="font-size: 14px; font-weight: bold; color: #a259ff;">🔔 Anda di-tag oleh ${escapeHtml(m.sender)}</div>
-                        <div style="font-size: 12px; color: var(--text-muted);">"${escapeHtml(m.text)}"</div>
-                    </div>
-                `;
+                notifArray.push({
+                    type: "mention",
+                    timestamp: m.timestamp || Date.now(), // Fallback kalau gak ada timestamp
+                    sender: m.sender,
+                    text: m.text,
+                    room_id: m.room_id,
+                    room_name: m.room_name
+                });
             });
         }
 
-        if (html === "") {
-            container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 20px;">Belum ada notifikasi baru.</div>`;
+        // ✅ 3. SORTIR DARI YANG PALING BARU (DESCENDING)
+        notifArray.sort((a, b) => b.timestamp - a.timestamp);
+
+        // 4. RENDER KE HTML
+        let html = "";
+        if (notifArray.length === 0) {
+            html = `<div style="text-align: center; color: var(--text-muted); padding: 20px;">Belum ada notifikasi.</div>`;
         } else {
-            container.innerHTML = html;
+            notifArray.forEach(n => {
+                if (n.type === "broadcast") {
+                    let icon = n.tipe === "update" ? "🚀" : (n.tipe === "warning" ? "⚠️" : "📢");
+                    html += `
+                        <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #ff7b00; cursor: pointer;" onclick="goToBroadcastScreen(); closeNotificationModal();">
+                            <div style="font-size: 14px; font-weight: bold; color: #ff7b00;">${icon} ${escapeHtml(n.judul)}</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">${escapeHtml(n.pesan.substring(0, 50))}...</div>
+                        </div>
+                    `;
+                } else if (n.type === "mention") {
+                    html += `
+                        <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #a259ff; cursor: pointer; background: rgba(162,89,255,0.1);" onclick="openRoomChat(${n.room_id}, '${n.room_name}'); closeNotificationModal();">
+                            <div style="font-size: 14px; font-weight: bold; color: #a259ff;">🔔 Anda di-tag oleh ${escapeHtml(n.sender)}</div>
+                            <div style="font-size: 12px; color: var(--text-muted);">"${escapeHtml(n.text)}"</div>
+                        </div>
+                    `;
+                }
+            });
         }
+        
+        container.innerHTML = html;
         
     } catch (e) {
         console.error("Gagal load notif:", e);
         container.innerHTML = `<p style="color: red; text-align: center;">Gagal memuat notifikasi.</p>`;
     }
 }
+
 // ✅ FUNGSI BUAT MEWARNAI TAG @USERNAME
 function formatMentions(text) {
     // 1. Escape HTML dulu biar aman dari XSS
