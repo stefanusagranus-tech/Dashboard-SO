@@ -1097,7 +1097,7 @@ async function loadRoomMessages() {
                         <div style="font-size: 10px; color: ${isBot ? '#a259ff' : 'var(--text-muted)'}; margin-bottom: 2px; ${isMe ? "text-align: right;" : ""}">
                             ${escapeHtml(nama)} ${isTagged ? '<span style="background:#a259ff; color:white; font-size:8px; padding:2px 4px; border-radius:4px; margin-left:4px;">TAG KAMU</span>' : ''}
                         </div>
-                        <div class="bubble bubble-${wrapperClass}" style="${bubbleStyle}">${escapeHtml(m.pesan)}</div>
+                        <div class="bubble bubble-${wrapperClass}" style="${bubbleStyle}">${formatMentions(m.pesan)}</div>
                         <div class="bubble-time">${formatTime(m.created_at)}</div>
                     </div>
                 </div>
@@ -1497,6 +1497,19 @@ async function loadNotifications() {
         console.error("Gagal load notif:", e);
         container.innerHTML = `<p style="color: red; text-align: center;">Gagal memuat notifikasi.</p>`;
     }
+}
+// ✅ FUNGSI BUAT MEWARNAI TAG @USERNAME
+function formatMentions(text) {
+    // 1. Escape HTML dulu biar aman dari XSS
+    let safeText = escapeHtml(text);
+    
+    // 2. Cari pola @username (huruf, angka, underscore)
+    // Kita bungkus pakai <span> dengan warna ungu dan background transparan
+    const regex = /(@[a-zA-Z0-9_]+)/g;
+    
+    return safeText.replace(regex, (match) => {
+        return `<span style="color: #a259ff; font-weight: 700; background: rgba(162,89,255,0.15); padding: 2px 6px; border-radius: 6px; display: inline-block;">${match}</span>`;
+    });
 }
 // Boot
 document.addEventListener("DOMContentLoaded", initApp);
