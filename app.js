@@ -459,8 +459,11 @@ function closeAddUserModal() { document.getElementById("addUserModal").classList
 async function submitAddUser() { const btn = document.getElementById("btnSaveUser"), errEl = document.getElementById("addUserError"), username = document.getElementById("newUserUsername").value.trim().toUpperCase(), nama = document.getElementById("newUserNama").value.trim(), password = document.getElementById("newUserPassword").value, pin = document.getElementById("newUserPin").value, role = document.getElementById("newUserRole").value; if (!username || !nama || !password) { errEl.textContent = "❌ Semua field wajib diisi!"; return; } btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span> Menyimpan...'; errEl.textContent = ""; try { const resp = await apiFetch(`${CONFIG.BACKEND_URL}/auth/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, nama_lengkap: nama, role, pin }) }); const data = await resp.json(); if (!resp.ok || !data.success) throw new Error(data.detail || data.error || "Gagal menambah user"); showToastMini(`✅ User ${username} berhasil dibuat`, "success"); closeAddUserModal(); loadUsers(); } catch (err) { console.error("[AddUser] Error:", err); errEl.textContent = `❌ ${err.message}`; } finally { btn.disabled = false; btn.innerHTML = '✅ Simpan'; } }
 
 function goToNotificationsScreen() { 
-    // ✅ Redirect ke halaman Broadcast
-    goToBroadcastScreen();
+    document.getElementById("notificationModal").classList.add("active");
+    loadNotifications();
+}
+function closeNotificationModal() {
+    document.getElementById("notificationModal").classList.remove("active");
 }
 function openPersonilModal() { document.getElementById("personilModal").classList.add("active"); loadPersonilList(); }
 function closePersonilModal(event) { if (event && event.target !== event.currentTarget) return; document.getElementById("personilModal").classList.remove("active"); }
@@ -1405,6 +1408,57 @@ async function markBroadcastAsRead() {
         if (badge) badge.style.display = "none";
     } catch (e) {
         console.warn("[Notif] Gagal mark read:", e);
+    }
+}
+async function loadNotifications() {
+    const container = document.getElementById("notificationList");
+    container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Memuat...</p></div>`;
+    
+    try {
+        // TARIK BROADCAST
+        const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
+        const dataB = await respB.json();
+        
+        let html = "";
+        
+        // Render Broadcast yang belum dibaca
+        if (dataB.success && dataB.data) {
+            dataB.data.forEach(b => {
+                // (Logika deteksi udah dibaca/belum sama kayak sebelumnya)
+                let icon = b.tipe === "update" ? "🚀" : (b.tipe === "warning" ? "⚠️" : "📢");
+                html += `
+                    <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #ff7b00; cursor: pointer;" onclick="goToBroadcastScreen(); closeNotificationModal();">
+                        <div style="font-size: 14px; font-weight: bold; color: #ff7b00;">${icon} ${escapeHtml(b.judul)}</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">${escapeHtml(b.pesan.substring(0, 50))}...</div>
+                    </div>
+                `;
+            });
+        }
+
+        // TARIK MENTION (Kita asumsikan ada state localStorage buat nyimpen ID pesan yang nge-tag kita)
+        const _user = getUser();
+        const mentionKey = `so_mention_${_user.username}`;
+        const mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
+        
+        if (mentions.length > 0) {
+            mentions.forEach(m => {
+                html += `
+                    <div class="settings-card" style="padding: 12px; margin-bottom: 8px; border-left: 4px solid #a259ff; cursor: pointer;" onclick="openRoomChat(${m.room_id}, '${m.room_name}'); closeNotificationModal();">
+                        <div style="font-size: 14px; font-weight: bold; color: #a259ff;">🔔 Anda di-tag oleh ${escapeHtml(m.sender)}</div>
+                        <div style="font-size: 12px; color: var(--text-muted);">"${escapeHtml(m.text)}"</div>
+                    </div>
+                `;
+            });
+        }
+
+        if (html === "") {
+            container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 20px;">Belum ada notifikasi baru.</div>`;
+        } else {
+            container.innerHTML = html;
+        }
+        
+    } catch (e) {
+        container.innerHTML = `<p style="color: red;">Gagal load notifikasi.</p>`;
     }
 }
 // Boot

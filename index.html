@@ -1441,7 +1441,20 @@
         </div>
     </div>
 </div>
-
+<!-- ========================================================= -->
+<!-- MODAL — NOTIFICATION CENTER -->
+<!-- ========================================================= -->
+<div id="notificationModal" class="modal-overlay" onclick="closeNotificationModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 80vh; display: flex; flex-direction: column;">
+        <div class="modal-header">
+            <div class="modal-title">🔔 Notifikasi</div>
+            <button class="modal-close" onclick="closeNotificationModal()">✕</button>
+        </div>
+        <div class="modal-body" id="notificationList" style="overflow-y: auto; padding: 16px;">
+            <div class="loading-state"><div class="spinner"></div><p>Memuat notifikasi...</p></div>
+        </div>
+    </div>
+</div>
 <script src="app.js"></script>
 
 </body>
