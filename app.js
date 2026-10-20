@@ -1396,8 +1396,9 @@ async function updateNotifBadge() {
     try {
         let totalUnread = 0;
         const _user = getUser();
+        if (!_user) return;
         
-        // 1. Cek Broadcast
+        // Cek Broadcast Baru
         const respB = await apiFetch(`${CONFIG.BACKEND_URL}/broadcast/list`, { method: "GET" });
         const dataB = await respB.json();
         if (dataB.success && dataB.data) {
@@ -1406,12 +1407,12 @@ async function updateNotifBadge() {
             totalUnread += dataB.data.filter(b => b.id > lastRead).length;
         }
         
-        // 2. Cek Mentionan (Dari localStorage sementara)
+        // Cek Mention di LocalStorage
         const mentionKey = `so_mention_${_user.username}`;
         const mentions = JSON.parse(localStorage.getItem(mentionKey) || "[]");
         totalUnread += mentions.length;
 
-        // 3. Update UI Badge
+        // Update Angka Merah
         const badge = document.getElementById("notifBadge");
         if (badge) {
             if (totalUnread > 0) {
