@@ -73,7 +73,7 @@ async def get_unread_count(username: str):
         if sb is None:
             return {"success": False, "count": 0, "error": "DB Error"}
 
-        # ✅ DEBUG: Tarik SEMUA notif buat username ini, jangan filter apapun
+        # ✅ DEBUG: Tarik SEMUA notif buat username ini
         response = sb.table("notifications") \
             .select("*") \
             .eq("target_username", username.upper()) \
@@ -84,7 +84,6 @@ async def get_unread_count(username: str):
         # Hitung manual dari data yang ditarik
         unread_count = 0
         for row in response.data:
-            # Cek apakah is_read itu False, 'false', atau null
             if row.get("is_read") is False or row.get("is_read") == False or row.get("is_read") is None:
                 unread_count += 1
         
