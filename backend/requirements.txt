@@ -36,3 +36,5 @@ slowapi>=0.1.9
 python-dateutil>=2.9.0
 pytz>=2024.1
 pwdlib[bcrypt]>=0.2.0     # ← tambahkan ini
+websockets
+supabase
